@@ -78,7 +78,7 @@ def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
     df['datetime'] = pd.to_datetime(df['datetime'])
     df = df.sort_values('datetime').reset_index(drop=True)
 
-    logger.info(f"加载完成: {len(df)} 条K线, 时间范围 {df['datetime'].min()} ~ {df['datetime'].max()}")
+    logger.info(f"加载完成: {len(df)} 条K线, 时间范围 {df['datetime'].min().strftime('%Y-%m-%d')} ~ {df['datetime'].max().strftime('%Y-%m-%d')}")
     return df
 
 
@@ -217,8 +217,8 @@ def get_dataset_info(df: pd.DataFrame, name: str = "") -> Dict:
     return {
         'name': name,
         'count': len(df),
-        'start_date': str(df['datetime'].min()),
-        'end_date': str(df['datetime'].max()),
+        'start_date': df['datetime'].min().strftime('%Y-%m-%d %H:%M:%S'),
+        'end_date': df['datetime'].max().strftime('%Y-%m-%d %H:%M:%S'),
         'days': (df['datetime'].max() - df['datetime'].min()).days,
         'price_min': float(df['close'].min()),
         'price_max': float(df['close'].max()),

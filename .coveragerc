@@ -1,0 +1,19 @@
+[run]
+source = .
+omit =
+    tests/*
+    .plan/*
+    doc/*
+    */__pycache__/*
+    .vscode/*
+    main.py
+    strategies/gateways/*
+    data/exporter.py
+    backtest/backtest_engine.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    raise ImportError

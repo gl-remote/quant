@@ -1,0 +1,16 @@
+[MAIN]
+ignore=htmlcov
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    invalid-name,
+    broad-except,
+    too-many-arguments,
+    too-many-locals
