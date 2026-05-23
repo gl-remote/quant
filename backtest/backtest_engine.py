@@ -19,9 +19,9 @@ from dataclasses import dataclass
 import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
-from .data_loader import parse_symbol_exchange
+from .data_loader import parse_symbol_exchange, scan_csv_files
 from .report import generate_dataset_report, format_console_report
-from .comparison import compare_datasets, format_comparison_report
+from .comparison import compare_datasets, format_comparison_report, generate_merged_report
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +332,90 @@ class VnpyBacktestEngine:
             'val_report': val_report,
             'test_report': test_report,
             'comparison': comparison,
+        }
+
+    def run_multi_backtest(
+        self,
+        pattern: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        max_workers: int = 1,
+    ) -> Dict[str, Any]:
+        """执行多品种批量回测
+
+        扫描数据目录，对匹配的所有品种逐一执行完整回测流水线，
+        最后生成合并报告
+
+        Args:
+            pattern: 品种代码正则表达式，未提供则回测全部品种
+            start_date: 数据起始日期 (可选过滤)
+            end_date: 数据结束日期 (可选过滤)
+            max_workers: 并行线程数 (1=顺序执行, >1=并行回测)
+
+        Returns:
+            多品种回测结果字典:
+              - success: 总体是否成功
+              - total: 品种总数
+              - results: 各品种回测结果列表
+              - merged_report: 合并回测报告
+        """
+        symbols = scan_csv_files(self.data_dir, pattern)
+        if not symbols:
+            logger.error("未找到匹配的品种数据")
+            return {'success': False, 'error': '未找到匹配的品种数据',
+                    'total': 0, 'results': [], 'merged_report': {}}
+
+        logger.info(f"批量回测 {len(symbols)} 个品种: {[s for s, _ in symbols]}")
+
+        all_results = []
+        failed = []
+
+        if max_workers > 1:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            def _run_one(sym):
+                return self.run_full_pipeline(sym, start_date, end_date)
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {executor.submit(_run_one, sym): sym for sym, _ in symbols}
+                for future in as_completed(futures):
+                    sym = futures[future]
+                    try:
+                        result = future.result()
+                        all_results.append(result)
+                        if not result.get('success'):
+                            failed.append(sym)
+                    except Exception as e:
+                        logger.error(f"{sym} 回测异常: {e}", exc_info=True)
+                        all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
+                        failed.append(sym)
+        else:
+            for sym, _ in symbols:
+                try:
+                    result = self.run_full_pipeline(sym, start_date, end_date)
+                    all_results.append(result)
+                    if not result.get('success'):
+                        failed.append(sym)
+                except Exception as e:
+                    logger.error(f"{sym} 回测异常: {e}", exc_info=True)
+                    all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
+                    failed.append(sym)
+
+        succeeded = [r for r in all_results if r.get('success')]
+        logger.info(f"批量回测完成: {len(succeeded)}/{len(all_results)} 成功"
+                     + (f", 失败: {failed}" if failed else ""))
+
+        merged_report = {}
+        if succeeded:
+            merged_report = generate_merged_report(succeeded, self.report_dir)
+
+        return {
+            'success': len(succeeded) > 0,
+            'total': len(all_results),
+            'succeeded': len(succeeded),
+            'failed': failed,
+            'results': all_results,
+            'merged_report': merged_report,
         }
 
     def _run_backtest(

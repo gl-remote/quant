@@ -8,7 +8,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-from backtest.data_loader import split_datasets, get_dataset_info, parse_symbol_exchange
+from backtest.data_loader import split_datasets, get_dataset_info, parse_symbol_exchange, scan_csv_files
 
 
 class TestSplitDatasets:
@@ -109,3 +109,58 @@ class TestParseSymbolExchange:
     def test_multi_dot_symbol(self):
         pure, exchange = parse_symbol_exchange("A.B.c123")
         assert pure == "c123"
+
+
+class TestScanCsvFiles:
+    def test_empty_dir(self, tmp_path):
+        result = scan_csv_files(str(tmp_path))
+        assert result == []
+
+    def test_no_csv_files(self, tmp_path):
+        (tmp_path / "readme.txt").write_text("hello")
+        result = scan_csv_files(str(tmp_path))
+        assert result == []
+
+    def test_single_file(self, tmp_path):
+        (tmp_path / "DCE.m2509.csv").write_text("datetime,close\n2024-01-01,100")
+        result = scan_csv_files(str(tmp_path))
+        assert len(result) == 1
+        assert result[0][0] == "DCE.m2509"
+
+    def test_qilib_filename(self, tmp_path):
+        (tmp_path / "DCE.m2509_qlib.csv").write_text("datetime,close\n2024-01-01,100")
+        result = scan_csv_files(str(tmp_path))
+        assert len(result) == 1
+        assert result[0][0] == "DCE.m2509"
+
+    def test_multiple_files(self, tmp_path):
+        (tmp_path / "DCE.m2509.csv").write_text("d")
+        (tmp_path / "CZCE.TA509.csv").write_text("d")
+        (tmp_path / "SHFE.rb2410_qlib.csv").write_text("d")
+        result = scan_csv_files(str(tmp_path))
+        assert len(result) == 3
+        symbols = {s for s, _ in result}
+        assert symbols == {"DCE.m2509", "CZCE.TA509", "SHFE.rb2410"}
+
+    def test_pattern_filter(self, tmp_path):
+        (tmp_path / "DCE.m2509.csv").write_text("d")
+        (tmp_path / "DCE.m2601.csv").write_text("d")
+        (tmp_path / "CZCE.TA509.csv").write_text("d")
+        result = scan_csv_files(str(tmp_path), pattern=r"DCE\.m")
+        assert len(result) == 2
+
+    def test_pattern_no_match(self, tmp_path):
+        (tmp_path / "DCE.m2509.csv").write_text("d")
+        result = scan_csv_files(str(tmp_path), pattern=r"XXX")
+        assert result == []
+
+    def test_dedup_qilib_variant(self, tmp_path):
+        (tmp_path / "DCE.m2509.csv").write_text("d")
+        (tmp_path / "DCE.m2509_qlib.csv").write_text("d")
+        result = scan_csv_files(str(tmp_path))
+        assert len(result) == 1
+        assert result[0][0] == "DCE.m2509"
+
+    def test_nonexistent_dir(self):
+        result = scan_csv_files("/nonexistent/path")
+        assert result == []

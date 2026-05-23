@@ -56,8 +56,9 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
 
 
 def export_csv(symbol: str, start_date: str, end_date: str, db: Database,
-               config_manager, output_path: Optional[str] = None):
-    """导出 Qlib 格式 CSV，自动检测冲突并智能合并
+               config_manager, output_path: Optional[str] = None,
+               force: bool = False):
+    """导出 Qlib 格式 CSV
 
     Args:
         symbol: 品种代码 (e.g. DCE.m2509)
@@ -66,6 +67,7 @@ def export_csv(symbol: str, start_date: str, end_date: str, db: Database,
         db: Database 实例
         config_manager: ConfigManager 实例
         output_path: 自定义输出路径，优先级最高
+        force: 强制覆盖模式，跳过已有数据合并，直接覆盖 CSV 和元数据
     """
     dc = config_manager.get_data_config()
     ec = config_manager.get_export_config()
@@ -91,7 +93,9 @@ def export_csv(symbol: str, start_date: str, end_date: str, db: Database,
     # 2. 检查已有数据
     meta = db.get_metadata(symbol)
     merged_rows = len(new_df)
-    if meta and Path(meta['filepath']).exists():
+    if force:
+        logger.info("强制覆盖模式：跳过已有数据合并")
+    elif meta and Path(meta['filepath']).exists():
         logger.info(f"发现已有数据: {meta['filepath']} ({meta['total_rows']}条, "
                     f"{meta['min_dt']}~{meta['max_dt']})")
         try:

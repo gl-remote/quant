@@ -8,26 +8,36 @@ from typing import Dict, List, Optional, Any
 
 
 _SCHEMA = """
+-- ============================================================
+-- export_metadata: CSV 数据导出元数据
+-- 记录每次从天勤拉取并导出的数据文件信息，
+-- 用于数据去重合并、时间范围追踪和增量更新
+-- ============================================================
 CREATE TABLE IF NOT EXISTS export_metadata (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
-    filepath TEXT NOT NULL,
-    start_date TEXT,
-    end_date TEXT,
-    min_dt TEXT,
-    max_dt TEXT,
-    total_rows INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 自增主键
+    symbol TEXT NOT NULL,                   -- 品种代码 (e.g. DCE.m2509)
+    filepath TEXT NOT NULL,                -- CSV 文件绝对路径
+    start_date TEXT,                       -- 用户请求的起始日期 YYYY-MM-DD
+    end_date TEXT,                         -- 用户请求的结束日期 YYYY-MM-DD
+    min_dt TEXT,                           -- CSV 中实际最早时间戳
+    max_dt TEXT,                           -- CSV 中实际最晚时间戳
+    total_rows INTEGER DEFAULT 0,         -- CSV 总行数
+    created_at TEXT NOT NULL,              -- 记录创建时间 ISO8601
+    updated_at TEXT NOT NULL               -- 记录最后更新时间 ISO8601
 );
 
+-- ============================================================
+-- operation_logs: 系统操作日志
+-- 记录 export/backtest/live/test 等所有命令的执行历史，
+-- 用于操作审计、问题排查和运行回溯
+-- ============================================================
 CREATE TABLE IF NOT EXISTS operation_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    command TEXT NOT NULL,
-    symbol TEXT,
-    message TEXT,
-    status TEXT DEFAULT 'INFO',
-    created_at TEXT NOT NULL
+    id INTEGER PRIMARY KEY AUTOINCREMENT,  -- 自增主键
+    command TEXT NOT NULL,                  -- 命令名称 (export/backtest/live/test)
+    symbol TEXT,                           -- 相关品种代码 (可选)
+    message TEXT,                          -- 日志消息内容
+    status TEXT DEFAULT 'INFO',            -- 状态级别 (INFO/SUCCESS/WARNING/ERROR)
+    created_at TEXT NOT NULL               -- 日志创建时间 ISO8601
 );
 """
 

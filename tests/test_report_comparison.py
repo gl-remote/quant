@@ -18,6 +18,8 @@ from backtest.comparison import (
     _analyze_risk_increase,
     _assess_overfitting,
     format_comparison_report,
+    generate_merged_report,
+    format_merged_report,
 )
 
 
@@ -527,3 +529,161 @@ class TestFormatComparisonReport:
         result = format_comparison_report(comparison)
         assert isinstance(result, str)
         assert len(result) > 0
+
+
+class TestGenerateMergedReport:
+    def _make_result(self, symbol, ret, sharpe, dd, wr, trades, of_level='none', of_score=0):
+        return {
+            'success': True,
+            'symbol': symbol,
+            'comparison': {
+                'metrics_table': {
+                    'total_return': {'test': ret},
+                    'sharpe_ratio': {'test': sharpe},
+                    'max_drawdown': {'test': dd},
+                    'win_rate': {'test': wr},
+                    'profit_loss_ratio': {'test': 1.5},
+                    'total_trades': {'test': trades},
+                },
+                'overfitting_assessment': {
+                    'score': of_score,
+                    'level': of_level,
+                },
+            },
+        }
+
+    def test_empty_results(self, tmp_path):
+        merged = generate_merged_report([], str(tmp_path))
+        assert merged['meta']['symbol_count'] == 0
+        assert merged['symbols'] == []
+
+    def test_single_symbol(self, tmp_path):
+        results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
+        merged = generate_merged_report(results, str(tmp_path))
+        assert merged['meta']['symbol_count'] == 1
+        assert merged['symbols'][0]['symbol'] == 'DCE.m2509'
+        assert merged['aggregate']['total_return']['mean'] == pytest.approx(0.15)
+        assert merged['aggregate']['profitable_ratio'] == 1.0
+
+    def test_multiple_symbols(self, tmp_path):
+        results = [
+            self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
+            self._make_result('CZCE.TA509', 0.10, 1.2, 0.05, 0.55, 30),
+            self._make_result('SHFE.rb2410', -0.05, -0.5, 0.15, 0.35, 20),
+        ]
+        merged = generate_merged_report(results, str(tmp_path))
+        assert merged['meta']['symbol_count'] == 3
+        agg = merged['aggregate']
+        assert agg['profitable_ratio'] == pytest.approx(2 / 3)
+        assert agg['total_trades']['total'] == 100
+
+    def test_skips_failed_results(self, tmp_path):
+        results = [
+            self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
+            {'success': False, 'symbol': 'FAIL', 'error': 'no data'},
+        ]
+        merged = generate_merged_report(results, str(tmp_path))
+        assert merged['meta']['symbol_count'] == 1
+        assert 'FAIL' not in merged['meta']['symbols']
+
+    def test_saves_json_file(self, tmp_path):
+        results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
+        generate_merged_report(results, str(tmp_path))
+        report_path = tmp_path / 'merged_report.json'
+        assert report_path.exists()
+        with open(report_path) as f:
+            saved = json.load(f)
+        assert saved['meta']['symbol_count'] == 1
+
+    def test_ranking_by_return(self, tmp_path):
+        results = [
+            self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
+            self._make_result('B', 0.1, 1.0, 0.1, 0.5, 50),
+            self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
+        ]
+        merged = generate_merged_report(results, str(tmp_path))
+        ranking = merged['ranking']['total_return']
+        assert ranking[0]['symbol'] == 'A'
+        assert ranking[1]['symbol'] == 'C'
+        assert ranking[2]['symbol'] == 'B'
+
+    def test_ranking_by_drawdown_ascending(self, tmp_path):
+        results = [
+            self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
+            self._make_result('B', 0.1, 1.0, 0.15, 0.5, 50),
+            self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
+        ]
+        merged = generate_merged_report(results, str(tmp_path))
+        ranking = merged['ranking']['max_drawdown']
+        assert ranking[0]['symbol'] == 'A'
+
+    def test_overfitting_summary(self, tmp_path):
+        results = [
+            self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100, 'high', 70),
+            self._make_result('B', 0.1, 1.0, 0.1, 0.5, 50, 'low', 15),
+            self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75, 'none', 5),
+        ]
+        merged = generate_merged_report(results, str(tmp_path))
+        ofs = merged['overfitting_summary']
+        assert ofs['distribution']['high'] == 1
+        assert ofs['distribution']['low'] == 1
+        assert ofs['distribution']['none'] == 1
+        assert 'A' in ofs['high_risk_symbols']
+
+
+class TestFormatMergedReport:
+    def _make_merged(self):
+        return {
+            'meta': {
+                'symbol_count': 2,
+                'symbols': ['DCE.m2509', 'CZCE.TA509'],
+                'generated_at': '2024-01-01',
+            },
+            'symbols': [
+                {
+                    'symbol': 'DCE.m2509',
+                    'test_metrics': {
+                        'total_return': 0.15, 'sharpe_ratio': 1.5,
+                        'max_drawdown': 0.08, 'win_rate': 0.6, 'total_trades': 50,
+                    },
+                    'overfitting_level': 'low',
+                    'overfitting_score': 15,
+                },
+            ],
+            'aggregate': {
+                'total_return': {'mean': 0.15, 'median': 0.15, 'min': 0.15, 'max': 0.15},
+                'sharpe_ratio': {'mean': 1.5, 'median': 1.5, 'min': 1.5, 'max': 1.5},
+                'max_drawdown': {'mean': 0.08, 'median': 0.08, 'min': 0.08, 'max': 0.08},
+                'win_rate': {'mean': 0.6, 'median': 0.6, 'min': 0.6, 'max': 0.6},
+                'total_trades': {'total': 50, 'avg': 50, 'count': 1},
+                'profitable_ratio': 1.0,
+            },
+            'ranking': {
+                'total_return': [{'symbol': 'DCE.m2509', 'value': 0.15}],
+                'sharpe_ratio': [{'symbol': 'DCE.m2509', 'value': 1.5}],
+                'max_drawdown': [{'symbol': 'DCE.m2509', 'value': 0.08}],
+                'win_rate': [{'symbol': 'DCE.m2509', 'value': 0.6}],
+            },
+            'overfitting_summary': {
+                'distribution': {'high': 0, 'medium': 0, 'low': 1, 'none': 0},
+                'high_risk_symbols': [],
+                'total': 1,
+                'high_risk_ratio': 0.0,
+            },
+        }
+
+    def test_returns_non_empty_string(self):
+        merged = self._make_merged()
+        result = format_merged_report(merged)
+        assert isinstance(result, str)
+        assert len(result) > 0
+        assert '多品种合并回测报告' in result
+        assert 'DCE.m2509' in result
+
+    def test_contains_key_sections(self):
+        merged = self._make_merged()
+        result = format_merged_report(merged)
+        assert '品种关键指标' in result
+        assert '整体聚合统计' in result
+        assert '过拟合风险汇总' in result
+        assert '各指标排名' in result

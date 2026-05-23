@@ -1,6 +1,7 @@
 """数据加载与划分模块 - 从CSV加载历史数据并按科学比例划分训练/验证/测试集"""
 
 import logging
+import re
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -31,6 +32,54 @@ def parse_symbol_exchange(symbol: str):
         exchange = Exchange.CFFEX if Exchange else 'CFFEX'
 
     return pure_symbol, exchange
+
+
+def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[str, Path]]:
+    """扫描数据目录，匹配符合正则表达式的CSV文件并提取品种代码
+
+    文件命名规则:
+      - {symbol}.csv
+      - {symbol}_qlib.csv
+      - {symbol}_*.csv
+
+    Args:
+        data_dir: CSV文件存放目录
+        pattern: 可选的品种代码正则表达式，匹配从文件名提取的 symbol 部分
+                 未提供则匹配所有CSV文件
+
+    Returns:
+        [(symbol, filepath), ...] 按 symbol 排序的去重列表
+    """
+    csv_dir = Path(data_dir)
+    if not csv_dir.exists():
+        logger.warning(f"数据目录不存在: {data_dir}")
+        return []
+
+    files = sorted(csv_dir.glob("*.csv"))
+    if not files:
+        logger.warning(f"数据目录为空: {data_dir}")
+        return []
+
+    seen = set()
+    result = []
+    regex = re.compile(pattern) if pattern else None
+
+    for fp in files:
+        name = fp.stem
+        symbol = name.replace("_qlib", "")
+
+        if regex and not regex.search(symbol):
+            continue
+
+        if symbol not in seen:
+            seen.add(symbol)
+            result.append((symbol, fp))
+
+    if regex and not result:
+        logger.warning(f"没有文件匹配正则表达式: {pattern}")
+
+    logger.info(f"扫描到 {len(result)} 个品种: {[s for s, _ in result]}")
+    return result
 
 
 def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:

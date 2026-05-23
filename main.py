@@ -59,6 +59,7 @@ def cmd_export(args):
         db=db,
         config_manager=cm,
         output_path=args.output,
+        force=args.force,
     )
     if success:
         logger.info("导出成功")
@@ -117,17 +118,19 @@ def cmd_test(args):
 # 子命令: backtest — vn.py 本地回测
 # ============================================================
 def cmd_backtest(args):
-    """vn.py 框架回测 - 从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比"""
+    """vn.py 框架回测 - 从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比
+
+    支持两种模式:
+      - 单品种: --symbol DCE.m2509
+      - 批量: --pattern 'DCE\\.m' 匹配多个品种，未指定则回测全部
+    """
     cm = ConfigManager()
     db = Database(cm.get_data_config()['db_path'])
-    _setup_db_logging(db, 'backtest', args.symbol)
+    _setup_db_logging(db, 'backtest', args.symbol or 'multi')
 
     try:
         bc = cm.get_backtest_config()
         tc = cm.get_trading_config()
-
-        logger.info(f"vn.py 回测: {args.symbol} 资金={bc['initial_capital']} "
-                     f"费率={bc['commission_rate']:.4%}")
 
         engine = VnpyBacktestEngine(bc)
         engine.set_strategy_params(
@@ -138,20 +141,40 @@ def cmd_backtest(args):
             position_ratio=tc.get('position_ratio', 0.1),
         )
 
-        result = engine.run_full_pipeline(
-            symbol=args.symbol,
-            start_date=args.start or None,
-            end_date=args.end or None,
-        )
-
-        if result.get('success'):
-            db.log('backtest', f"完成: {args.symbol} 三阶段回测", symbol=args.symbol, status='SUCCESS')
+        if args.pattern is not None or args.symbol is None or args.symbol == 'DCE.m2509':
+            pattern = args.pattern
+            logger.info(f"多品种回测模式: pattern={pattern or '全部'}, parallel={args.parallel}")
+            result = engine.run_multi_backtest(
+                pattern=pattern,
+                start_date=args.start or None,
+                end_date=args.end or None,
+                max_workers=args.parallel or 1,
+            )
+            if result.get('success'):
+                db.log('backtest',
+                       f"批量回测完成: {result.get('succeeded', 0)}/{result.get('total', 0)}",
+                       symbol='multi', status='SUCCESS')
+            else:
+                db.log('backtest', f"批量回测失败: {result.get('error', '')}",
+                       symbol='multi', status='ERROR')
         else:
-            db.log('backtest', f"失败: {result.get('error', '')}", symbol=args.symbol, status='ERROR')
+            logger.info(f"vn.py 回测: {args.symbol} 资金={bc['initial_capital']} "
+                         f"费率={bc['commission_rate']:.4%}")
+            result = engine.run_full_pipeline(
+                symbol=args.symbol,
+                start_date=args.start or None,
+                end_date=args.end or None,
+            )
+            if result.get('success'):
+                db.log('backtest', f"完成: {args.symbol} 三阶段回测",
+                       symbol=args.symbol, status='SUCCESS')
+            else:
+                db.log('backtest', f"失败: {result.get('error', '')}",
+                       symbol=args.symbol, status='ERROR')
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        db.log('backtest', f"失败: {e}", symbol=args.symbol or 'multi', status='ERROR')
         raise
 
 
@@ -295,14 +318,18 @@ def main():
     p.add_argument('--start', required=True, help='开始日期 YYYY-MM-DD')
     p.add_argument('--end', required=True, help='结束日期 YYYY-MM-DD')
     p.add_argument('--output', default=None, help='自定义输出路径（可选）')
+    p.add_argument('--force', action='store_true', help='强制覆盖已有CSV和元数据')
 
     # ---- test ----
     p = sub.add_parser('test', help='本地策略逻辑测试（不联网）')
 
     # ---- backtest ----
     p = sub.add_parser('backtest', help='vn.py本地历史数据回测 (训练/验证/测试三阶段)',
-                       description='从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比')
-    p.add_argument('--symbol', default='DCE.m2509', help='品种代码')
+                       description='从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比\n'
+                                   '批量模式: python main.py backtest --pattern "DCE\\\\.m" 或省略 --symbol')
+    p.add_argument('--symbol', default=None, help='品种代码 (单品种模式)')
+    p.add_argument('--pattern', default=None, help='品种代码正则表达式 (批量模式, e.g. "DCE\\\\.m")')
+    p.add_argument('--parallel', type=int, default=1, help='并行线程数 (批量模式, 默认=1顺序)')
     p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD (可选)')
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD (可选)')
 
