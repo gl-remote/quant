@@ -72,6 +72,33 @@ class ConfigManager:
             'filename_template': ec.get('filename_template', '{symbol}_qlib.csv'),
         }
 
+    def get_backtest_config(self) -> Dict[str, Any]:
+        bc = self.config.get('backtest', {})
+        split_cfg = bc.get('split', {})
+        report_cfg = bc.get('report', {})
+        return {
+            'data_dir': bc.get('data_dir', '.quant_shared_data/csv'),
+            'initial_capital': bc.get('initial_capital', 100000.0),
+            'commission_rate': bc.get('commission_rate', 0.0003),
+            'slippage': bc.get('slippage', 1.0),
+            'price_tick': bc.get('price_tick', 1.0),
+            'contract_size': bc.get('contract_size', 10),
+            'interval': bc.get('interval', '1m'),
+            'split': {
+                'train_ratio': split_cfg.get('train_ratio', 0.6),
+                'val_ratio': split_cfg.get('val_ratio', 0.2),
+                'test_ratio': split_cfg.get('test_ratio', 0.2),
+                'random_seed': split_cfg.get('random_seed', 42),
+                'shuffle': split_cfg.get('shuffle', False),
+            },
+            'report': {
+                'output_dir': report_cfg.get('output_dir', '.quant_shared_data/reports'),
+                'save_trade_records': report_cfg.get('save_trade_records', True),
+                'save_equity_curve': report_cfg.get('save_equity_curve', True),
+                'format': report_cfg.get('format', 'json'),
+            },
+        }
+
     def validate_config(self) -> bool:
         try:
             tc = self.get_trading_config()

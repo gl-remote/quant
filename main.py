@@ -13,7 +13,7 @@ logging.basicConfig(
 
 from config import ConfigManager
 from strategies import MovingAverageStrategy
-from backtest import BacktestEngine, TradeRecord
+from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
 from data import Database, DBLogHandler, export_csv
 
 logger = logging.getLogger(__name__)
@@ -112,9 +112,53 @@ def cmd_test(args):
 
 
 # ============================================================
-# 子命令: backtest — TqSdk 回测
+# 子命令: backtest — vn.py 本地回测
 # ============================================================
 def cmd_backtest(args):
+    """vn.py 框架回测 - 从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比"""
+    cm = ConfigManager()
+    db = Database(cm.get_data_config()['db_path'])
+    _setup_db_logging(db, 'backtest', args.symbol)
+
+    try:
+        bc = cm.get_backtest_config()
+        tc = cm.get_trading_config()
+
+        logger.info(f"vn.py 回测: {args.symbol} 资金={bc['initial_capital']} "
+                     f"费率={bc['commission_rate']:.4%}")
+
+        engine = VnpyBacktestEngine(bc)
+        engine.set_strategy_params(
+            sma_short=tc.get('sma_short', 5),
+            sma_long=tc.get('sma_long', 20),
+            stop_loss_ratio=tc.get('stop_loss_ratio', 0.03),
+            take_profit_ratio=tc.get('take_profit_ratio', 0.05),
+            position_ratio=tc.get('position_ratio', 0.1),
+        )
+
+        result = engine.run_full_pipeline(
+            symbol=args.symbol,
+            start_date=args.start or None,
+            end_date=args.end or None,
+        )
+
+        if result.get('success'):
+            db.log('backtest', f"完成: {args.symbol} 三阶段回测", symbol=args.symbol, status='SUCCESS')
+        else:
+            db.log('backtest', f"失败: {result.get('error', '')}", symbol=args.symbol, status='ERROR')
+
+    except Exception as e:
+        logger.error(f"回测执行失败: {e}")
+        db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        import traceback; traceback.print_exc()
+        raise
+
+
+# ============================================================
+# 子命令: tq-backtest — TqSdk 回测 (兼容旧版)
+# ============================================================
+def cmd_tq_backtest(args):
+    """天勤SDK回测 (旧版兼容) - 使用天勤实时K线数据进行回测"""
     from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
     from tqsdk.exceptions import BacktestFinished
 
@@ -257,7 +301,14 @@ def main():
     p = sub.add_parser('test', help='本地策略逻辑测试（不联网）')
 
     # ---- backtest ----
-    p = sub.add_parser('backtest', help='TqSdk历史数据回测')
+    p = sub.add_parser('backtest', help='vn.py本地历史数据回测 (训练/验证/测试三阶段)',
+                       description='从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比')
+    p.add_argument('--symbol', default='DCE.m2509', help='品种代码')
+    p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD (可选)')
+    p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD (可选)')
+
+    # ---- tq-backtest ----
+    p = sub.add_parser('tq-backtest', help='TqSdk历史数据回测 (旧版兼容)')
     p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
     p.add_argument('--start', default='2024-01-01', help='开始日期')
     p.add_argument('--end', default='2024-12-31', help='结束日期')
@@ -274,7 +325,8 @@ def main():
 
     try:
         {'export': cmd_export, 'test': cmd_test,
-         'backtest': cmd_backtest, 'live': cmd_live}[args.command](args)
+         'backtest': cmd_backtest, 'tq-backtest': cmd_tq_backtest,
+         'live': cmd_live}[args.command](args)
     except KeyboardInterrupt:
         logger.info("\n用户中断程序")
     except Exception as e:

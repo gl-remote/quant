@@ -1,0 +1,212 @@
+"""数据加载与划分模块 - 从CSV加载历史数据并按科学比例划分训练/验证/测试集"""
+
+import logging
+import pandas as pd
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+
+def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
+    """从本地CSV目录加载历史K线数据
+
+    支持的文件命名模式:
+      - {symbol}.csv
+      - {symbol}_qlib.csv
+      - {symbol}_*.csv (匹配第一个)
+
+    Args:
+        data_dir: CSV文件存放目录
+        symbol: 品种代码 (e.g. DCE.m2509)
+
+    Returns:
+        DataFrame with columns: datetime, open, high, low, close, volume
+    """
+    csv_dir = Path(data_dir)
+    if not csv_dir.exists():
+        logger.error(f"数据目录不存在: {data_dir}")
+        return None
+
+    candidates = [
+        csv_dir / f"{symbol}.csv",
+        csv_dir / f"{symbol}_qlib.csv",
+    ] + sorted(csv_dir.glob(f"{symbol}_*.csv"))
+
+    filepath = None
+    for fp in candidates:
+        if fp.exists():
+            filepath = fp
+            break
+
+    if filepath is None:
+        logger.error(f"未找到 {symbol} 的数据文件于 {data_dir}")
+        return None
+
+    logger.info(f"加载数据: {filepath}")
+    df = pd.read_csv(filepath)
+
+    if 'datetime' not in df.columns:
+        logger.error(f"CSV缺少datetime列，实际列: {list(df.columns)}")
+        return None
+
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df = df.sort_values('datetime').reset_index(drop=True)
+
+    logger.info(f"加载完成: {len(df)} 条K线, 时间范围 {df['datetime'].min()} ~ {df['datetime'].max()}")
+    return df
+
+
+def split_datasets(
+    df: pd.DataFrame,
+    train_ratio: float = 0.6,
+    val_ratio: float = 0.2,
+    test_ratio: float = 0.2,
+    random_seed: int = 42,
+    shuffle: bool = False,
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """将完整数据集按科学比例随机划分为训练集、验证集和测试集
+
+    划分策略:
+      - 默认按时间顺序划分 (shuffle=False): 前60%训练, 中间20%验证, 后20%测试
+        适合时间序列数据，避免未来信息泄露
+      - 随机打乱划分 (shuffle=True): 适合跨品种/跨时间段的稳健性验证
+        注意：随机打乱可能引入前视偏差，仅在特定场景下使用
+
+    Args:
+        df: 完整历史数据集
+        train_ratio: 训练集比例 (默认0.6)
+        val_ratio: 验证集比例 (默认0.2)
+        test_ratio: 测试集比例 (默认0.2)
+        random_seed: 随机种子，保证可复现
+        shuffle: 是否随机打乱（True=随机采样, False=时间顺序划分）
+
+    Returns:
+        (train_df, val_df, test_df) 三个子数据集
+    """
+    total = train_ratio + val_ratio + test_ratio
+    if abs(total - 1.0) > 1e-9:
+        raise ValueError(f"划分比例之和必须为1.0，当前: {total}")
+
+    n = len(df)
+    if n < 10:
+        raise ValueError(f"数据量不足 ({n}条)，至少需要10条数据")
+
+    if shuffle:
+        df = df.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+
+    train_end = int(n * train_ratio)
+    val_end = train_end + int(n * val_ratio)
+
+    train_df = df.iloc[:train_end].reset_index(drop=True)
+    val_df = df.iloc[train_end:val_end].reset_index(drop=True)
+    test_df = df.iloc[val_end:].reset_index(drop=True)
+
+    logger.info(
+        f"数据集划分 (shuffle={shuffle}, seed={random_seed}): "
+        f"训练集 {len(train_df)}条 ({train_ratio:.0%}), "
+        f"验证集 {len(val_df)}条 ({val_ratio:.0%}), "
+        f"测试集 {len(test_df)}条 ({test_ratio:.0%})"
+    )
+
+    return train_df, val_df, test_df
+
+
+def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
+    """将DataFrame转换为vn.py回测引擎可用的 BarData 列表
+
+    将Qlib格式CSV (datetime, open, high, low, close, volume) 转换为
+    vnpy BarData 对象列表，可直接注入 BacktestingEngine.history_data
+
+    Args:
+        df: Qlib格式的K线数据
+        symbol: 合约代码 (vnpy格式: 品种.交易所, e.g. m2509.DCE)
+
+    Returns:
+        vnpy BarData 对象列表
+    """
+    required_cols = {'datetime', 'open', 'high', 'low', 'close', 'volume'}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"数据缺少必要列: {missing}")
+
+    try:
+        from vnpy.trader.object import BarData
+        from vnpy.trader.constant import Exchange, Interval
+    except ImportError:
+        logger.warning("vnpy未安装，返回字典格式数据")
+        bars = []
+        for _, row in df.iterrows():
+            dt = row['datetime']
+            if isinstance(dt, str):
+                dt = pd.to_datetime(dt)
+            bars.append({
+                'symbol': symbol,
+                'datetime': dt,
+                'open_price': float(row['open']),
+                'high_price': float(row['high']),
+                'low_price': float(row['low']),
+                'close_price': float(row['close']),
+                'volume': float(row['volume']),
+            })
+        return bars
+
+    exchange = Exchange.CFFEX
+    pure_symbol = symbol
+    if '.' in symbol:
+        parts = symbol.split('.')
+        pure_symbol = parts[-1]
+        try:
+            exchange = Exchange(parts[0])
+        except (ValueError, TypeError):
+            exchange = Exchange.CFFEX
+
+    bars = []
+    for _, row in df.iterrows():
+        dt = row['datetime']
+        if isinstance(dt, str):
+            dt = pd.to_datetime(dt)
+        bar = BarData(
+            symbol=pure_symbol,
+            exchange=exchange,
+            datetime=dt,
+            interval=Interval.DAILY,
+            open_price=float(row['open']),
+            high_price=float(row['high']),
+            low_price=float(row['low']),
+            close_price=float(row['close']),
+            volume=float(row['volume']),
+            gateway_name="CSV",
+        )
+        bars.append(bar)
+
+    logger.info(f"转换完成: {len(bars)} 条 BarData")
+    return bars
+
+
+def get_dataset_info(df: pd.DataFrame, name: str = "") -> Dict:
+    """获取数据集的基本统计信息
+
+    Args:
+        df: K线数据DataFrame
+        name: 数据集名称 (train/val/test)
+
+    Returns:
+        包含统计信息的字典
+    """
+    if df is None or df.empty:
+        return {'name': name, 'count': 0}
+
+    return {
+        'name': name,
+        'count': len(df),
+        'start_date': str(df['datetime'].min()),
+        'end_date': str(df['datetime'].max()),
+        'days': (df['datetime'].max() - df['datetime'].min()).days,
+        'price_min': float(df['close'].min()),
+        'price_max': float(df['close'].max()),
+        'price_mean': float(df['close'].mean()),
+        'price_std': float(df['close'].std()),
+        'volume_mean': float(df['volume'].mean()),
+    }
