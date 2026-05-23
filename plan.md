@@ -1,6 +1,6 @@
 # 项目改进计划
 
-> 版本: 3.0.0 | 生成日期: 2026-05-24 | 中危以上问题全部修复
+> 版本: 0.0.3 | 生成日期: 2026-05-24 | 中危以上问题全部修复
 
 ---
 
@@ -125,6 +125,6 @@
 
 | 版本 | 日期 | 变更 | 归档 |
 |------|------|------|------|
-| 3.0.0 | 2026-05-24 | 14 个中危以上问题全部修复 | [plan.3.0.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.3.0.0.log.md) |
-| 2.0.0 | 2026-05-24 | AI_BEHAVIOR_RULES 同步与版本追踪 | [plan.2.0.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.2.0.0.log.md) |
-| 1.0.0 | 2026-05-24 | 初始审计：17 问题 + 8 缺失 + 路线图 | [plan.1.0.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.1.0.0.log.md) |
+| 0.0.3 | 2026-05-24 | 14 个中危以上问题全部修复 | [plan.0.0.3.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.3.log.md) |
+| 0.0.2 | 2026-05-24 | AI_BEHAVIOR_RULES 同步与版本追踪 | [plan.0.0.2.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.2.log.md) |
+| 0.0.1 | 2026-05-24 | 初始审计：17 问题 + 8 缺失 + 路线图 | [plan.0.0.1.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.1.log.md) |

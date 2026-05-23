@@ -1,6 +1,6 @@
 # AI 行为规范约束
 
-> 版本: 2.1.0 | 更新日期: 2026-05-24
+> 版本: 0.0.3 | 更新日期: 2026-05-24
 
 ---
 
@@ -50,10 +50,11 @@ quant/
 ├── requirements.txt
 ├── plan.md                 # 项目改进计划（仅含未解决问题）
 ├── .plan/                  # 版本规划归档
-│   ├── plan.1.0.0.log.md   #   初始审计结果
-│   ├── plan.2.0.0.log.md   #   文档同步更新
-│   └── plan.3.0.0.log.md   #   中危以上问题修复记录
+│   ├── plan.0.0.1.log.md   #   初始审计结果
+│   ├── plan.0.0.2.log.md   #   文档同步更新
+│   └── plan.0.0.3.log.md   #   中危以上问题修复记录
 ├── AI_BEHAVIOR_RULES.md    # 本文档
+├── .memory_rules.md         # 知识图谱记忆规则
 ├── run.sh / activate_env.sh
 │
 ├── config/                 # 配置管理（YAML 分层合并）
@@ -243,6 +244,7 @@ def parse_symbol_exchange(symbol: str):
 | `README.md` | CLI 变更、新增/删除功能 |
 | `doc/*.md` | API 变更、配置参数增删、架构调整 |
 | `AI_BEHAVIOR_RULES.md` | 编码规范变更、新操作规则 |
+| `.memory_rules.md` | Knowledge Graph 实体/关系类型变更 |
 | `plan.md` | 新问题发现——已修复问题从 plan.md 移除，归档至 `.plan/plan.{version}.log.md` |
 
 ---
@@ -253,19 +255,61 @@ def parse_symbol_exchange(symbol: str):
 
 ```
 .plan/
-├── plan.1.0.0.log.md    # 初始审计：17 个问题 + 8 类缺失元素
-├── plan.2.0.0.log.md    # 文档同步：AI_BEHAVIOR_RULES 更新
-└── plan.3.0.0.log.md    # 问题修复：14 个中危以上问题全部解决
+├── plan.0.0.1.log.md    # 初始审计：17 个问题 + 8 类缺失元素
+├── plan.0.0.2.log.md    # 文档同步：AI_BEHAVIOR_RULES 更新
+└── plan.0.0.3.log.md    # 问题修复：14 个中危以上问题全部解决
 ```
 
 根目录 `plan.md` 仅保留**当前未解决问题**和未来规划。已修复的问题从 `plan.md` 移除，完整记录见对应版本日志文件。
 
 ---
 
-## 十一、版本记录
+## 十一、Knowledge Graph Memory
+
+### 规则 11.1: 知识图谱持久化（强制执行）
+
+项目使用 Knowledge Graph Memory 跨会话保持关键信息。详细规则见 [.memory_rules.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.memory_rules.md)。
+
+核心要求：
+
+| 场景 | 必须创建 |
+|------|---------|
+| 项目首次加载 | Module + Strategy 实体及依赖关系 |
+| 发现新问题 | Issue 实体 |
+| 修复问题 | Fix 实体 + `resolved_by` 关系 |
+| 新增模块/类 | 对应实体及关系 |
+| 文档变更 | 更新 Document 实体的 observations |
+
+### 规则 11.2: 实体类型
+
+| 类型 | 命名格式 | 示例 |
+|------|---------|------|
+| Module | `{子系统}/{模块名}` | `backtest/backtest_engine` |
+| Strategy | `{ClassName}` | `MaStrategyCore` |
+| Issue | `{issue_id}` | `C1` |
+| Fix | `fix-{issue_id}` | `fix-C1` |
+| Config | `{section}.{key}` | `backtest.initial_capital` |
+| Document | `{路径不含扩展名}` | `doc/architecture` |
+
+### 规则 11.3: 核心关系
+
+| 关系 | 含义 |
+|------|------|
+| `imports` | 模块导入依赖 |
+| `implements` | 网关实现核心策略 |
+| `depends_on` | 依赖外部框架 |
+| `found_in` | 问题所在文件 |
+| `resolved_by` | 问题被修复解决 |
+| `tracks` | 文档跟踪问题 |
+
+---
+
+## 十二、版本记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 2.2.0 | 2026-05-24 | 新增第十一章（Knowledge Graph Memory）；新增 `.memory_rules.md` 知识图谱规则文件；文档规范表新增 `.memory_rules.md` 条目 |
+| 0.0.3 | 2026-05-24 | 全局版本统一为 0.0.3；新增 Knowledge Graph Memory 规则；`.plan/` 归档文件名同步为 0.0.x 格式 |
 | 2.1.0 | 2026-05-24 | 新增规则 4.2（核心策略复用）、4.6（构造函数校验）、4.7（模块状态管理）、4.8（工具函数抽象）；新增第十章（规划文档归档规范） |
 | 2.0.0 | 2026-05-24 | 全面重写：新增项目结构、CLI 命令、编码规范、回测流水线、错误处理、Git 工作流、测试要求、文档规范 |
 | 1.0.0 | 2026-05-23 | 初始版本：Python 环境激活规则 |
