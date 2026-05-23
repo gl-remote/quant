@@ -11,6 +11,37 @@
 - ✅ 回测框架和绩效评估
 - ✅ 完整的日志记录和交易记录
 
+## 本地配置说明
+
+### ⚠️ 私人项目配置说明
+
+本项目保存了本地配置，注意以下路径问题：
+
+1. **Conda 环境路径**: `/usr/local/Caskroom/miniconda/base/envs/quant_trading`
+   - 如果你的 conda 安装位置不同，需要修改 `activate_env.sh` 和 `.vscode/settings.json`
+
+2. **Python 解释器路径**: 见 `.vscode/settings.json`
+   - 如果在新机器上，需要更新为你的实际 Python 路径
+
+3. **Pip 镜像源**: `.pip/pip.conf`
+   - 配置了清华镜像源，如需更换为其他镜像源，修改此文件
+
+4. **API 密钥**: `config.yaml`
+   - 包含了个人的天勤量化 API 密钥
+   - 如需更换账号，修改此文件中的 `api_key` 和 `api_secret`
+
+### 📝 配置检查清单
+
+在新机器上运行前，检查以下文件并根据需要修改：
+
+| 文件 | 可能需要修改的内容 |
+|------|--------------------|
+| `.vscode/settings.json` | Python 解释器路径 |
+| `.pip/pip.conf` | PyPI 镜像源 |
+| `activate_env.sh` | Conda 安装路径和环境名 |
+| `config.yaml` | 天勤量化 API 密钥 |
+| `AI_BEHAVIOR_RULES.md` | AI 行为规范（可选） |
+
 ## 项目结构
 
 ```

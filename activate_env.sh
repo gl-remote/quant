@@ -32,6 +32,8 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "运行回测:"
     echo "  python main.py --mode backtest --symbol DCE.m2109 --start 2024-01-01 --end 2024-12-31"
+    echo ""
+    echo "要退出环境，请输入: conda deactivate"
 else
     echo "错误: Conda环境激活失败"
     exit 1

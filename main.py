@@ -11,17 +11,17 @@ import os
 import argparse
 import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import ConfigManager, get_account_info
 from strategies import MovingAverageStrategy
 from backtest import BacktestEngine
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -208,15 +208,15 @@ def run_test_mode():
         logger.info(f"仓位控制: {strategy.config.position_ratio:.2%}")
         
         logger.info("\n测试: 模拟金叉买入")
-        test_data_short = [10, 11, 12, 13, 14]
-        test_data_long = [12, 12, 12, 12, 13]
+        test_data_short = [10, 11, 12, 13, 15]
+        test_data_long = [12, 12, 12, 12, 12]
         
         sma_short = strategy.calculate_sma(test_data_short, 5)
         sma_long = strategy.calculate_sma(test_data_long, 5)
         
         logger.info(f"测试数据 - SMA5: {sma_short:.2f}, SMA20: {sma_long:.2f}")
         
-        crossover = strategy.check_crossover(sma_short, sma_long, 11.5, 12.5)
+        crossover = strategy.check_crossover(sma_short, sma_long, 11.0, 12.0)
         logger.info(f"交叉检测: {crossover}")
         
         if crossover == 'golden_cross':

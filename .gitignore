@@ -30,7 +30,6 @@ env/
 # conda envs location: /usr/local/Caskroom/miniconda/base/envs/
 
 # IDE
-.vscode/
 .idea/
 *.swp
 *.swo
@@ -40,11 +39,11 @@ env/
 .DS_Store
 Thumbs.db
 
-# Sensitive files
-config.yaml              # 包含API密钥
-*.pem
-*.key
-credentials.json
+# Sensitive files - 注意：私人项目这些都保留了
+# config.yaml  # 私人项目保留，注意保护API密钥
+# *.pem
+# *.key
+# credentials.json
 
 # Logs
 *.log
@@ -68,6 +67,30 @@ htmlcov/
 dist/
 build/
 
-# Local configuration overrides
-local_config.yaml
-.env
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg
+.installed.cfg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Conda (保留envs和pkgs目录)
+# conda envs location: /usr/local/Caskroom/miniconda/base/envs/

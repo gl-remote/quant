@@ -20,20 +20,31 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-try:
-    from tqsdk import TqApi, TqAuth, TargetPosTask
-    from tqsdk.ta import SMA
-    from tqsdk.tradeable import Future
-except ImportError:
-    print("警告: 天勤量化API未安装，回测模式将使用模拟数据")
-    TqApi = None
-    TqAuth = None
-    TargetPosTask = None
-    SMA = None
-    Future = None
+TqApi = None
+TqAuth = None
+TargetPosTask = None
+SMA = None
+Future = None
 
 
 logger = logging.getLogger(__name__)
+
+
+def _import_tqsdk():
+    """延迟导入 tqsdk，避免测试模式下的慢导入"""
+    global TqApi, TqAuth, TargetPosTask, SMA, Future
+    try:
+        from tqsdk import TqApi as _TqApi, TqAuth as _TqAuth, TargetPosTask as _TargetPosTask
+        from tqsdk.ta import SMA as _SMA
+        from tqsdk.tradeable import Future as _Future
+        TqApi = _TqApi
+        TqAuth = _TqAuth
+        TargetPosTask = _TargetPosTask
+        SMA = _SMA
+        Future = _Future
+        return True
+    except ImportError:
+        return False
 
 
 class PositionStatus(Enum):
@@ -445,6 +456,9 @@ class MovingAverageStrategy:
             auth: 天勤认证对象
         """
         target_symbol = symbol if symbol else self.config.symbol
+        
+        if TqApi is None:
+            _import_tqsdk()
         
         if TqApi is None:
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
