@@ -1,0 +1,30 @@
+# 天勤量化交易系统依赖
+# 使用固定版本以避免依赖冲突
+
+# 天勤量化API - 核心交易框架
+tqsdk>=3.0.0
+
+# websockets是tqsdk的必需依赖
+websockets>=10.1
+
+# 配置文件解析
+pyyaml>=6.0
+
+# 数据处理（可选但推荐）
+numpy>=1.21.0
+
+# 数据可视化（可选，用于回测图表）
+matplotlib>=3.5.0
+
+# 日期时间处理
+python-dateutil>=2.8.0
+
+# 日志配置（Python标准库，无需安装）
+# logging - Python标准库
+
+# 单元测试
+pytest>=7.0.0
+
+# 代码质量检查
+flake8>=5.0.0
+pylint>=2.15.0
