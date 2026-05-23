@@ -14,12 +14,14 @@ import logging
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
+from .data_loader import parse_symbol_exchange
 from strategies.gateways import VnpyMaStrategy, HAS_VNPY
+from strategies.core.ma_strategy import MaStrategyCore, TradingConfig
 from .report import generate_dataset_report, format_console_report
 from .comparison import compare_datasets, format_comparison_report
 
@@ -188,12 +190,23 @@ class VnpyBacktestEngine:
                 - report: 报告输出参数
         """
         self.data_dir: str = config.get('data_dir', '.quant_shared_data/csv')
-        self.initial_capital: float = config.get('initial_capital', 100000.0)
-        self.commission_rate: float = config.get('commission_rate', 0.0003)
-        self.slippage: float = config.get('slippage', 1.0)
-        self.price_tick: float = config.get('price_tick', 1.0)
-        self.contract_size: int = config.get('contract_size', 10)
+        self.initial_capital: float = float(config.get('initial_capital', 100000.0))
+        self.commission_rate: float = float(config.get('commission_rate', 0.0003))
+        self.slippage: float = float(config.get('slippage', 1.0))
+        self.price_tick: float = float(config.get('price_tick', 1.0))
+        self.contract_size: int = int(config.get('contract_size', 10))
         self.interval: str = config.get('interval', '1m')
+
+        if self.initial_capital <= 0:
+            raise ValueError(f"initial_capital 必须大于 0，当前: {self.initial_capital}")
+        if not (0 <= self.commission_rate < 1):
+            raise ValueError(f"commission_rate 必须在 [0, 1) 范围内，当前: {self.commission_rate}")
+        if self.slippage < 0:
+            raise ValueError(f"slippage 不能为负数，当前: {self.slippage}")
+        if self.price_tick <= 0:
+            raise ValueError(f"price_tick 必须大于 0，当前: {self.price_tick}")
+        if self.contract_size <= 0:
+            raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
         split_cfg = config.get('split', {})
         self.train_ratio: float = split_cfg.get('train_ratio', 0.6)
@@ -357,18 +370,10 @@ class VnpyBacktestEngine:
     ) -> Dict[str, Any]:
         """使用 vnpy 原生 BacktestingEngine 执行回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
-        from vnpy.trader.constant import Interval, Exchange
+        from vnpy.trader.constant import Interval
 
-        exchange = Exchange.CFFEX
-        if '.' in symbol:
-            exchange_code = symbol.split('.')[0]
-            try:
-                exchange = Exchange(exchange_code)
-            except (ValueError, TypeError):
-                exchange = Exchange.CFFEX
-        pure_symbol = symbol.split('.')[-1] if '.' in symbol else symbol
-
-        vt_symbol = f"{pure_symbol}.{exchange.value}" if exchange else symbol
+        pure_symbol, exchange = parse_symbol_exchange(symbol)
+        vt_symbol = f"{pure_symbol}.{exchange.value}" if hasattr(exchange, 'value') else symbol
 
         interval_map = {
             '1m': Interval.MINUTE,
@@ -427,47 +432,49 @@ class VnpyBacktestEngine:
         使用内置的简单回测逻辑，保证系统可用性
         """
         engine = BacktestEngine(initial_capital=self.initial_capital)
-        prev_sma_short = prev_sma_long = 0.0
+        core = MaStrategyCore(TradingConfig(
+            sma_short=self.strategy_params.get('sma_short', 5),
+            sma_long=self.strategy_params.get('sma_long', 20),
+            stop_loss_ratio=self.strategy_params.get('stop_loss_ratio', 0.03),
+            take_profit_ratio=self.strategy_params.get('take_profit_ratio', 0.05),
+            position_ratio=self.strategy_params.get('position_ratio', 0.1),
+        ))
+        closes = [float(x) for x in df['close']]
 
         for i in range(len(df)):
             row = df.iloc[i]
-            close = float(row['close'])
+            close = closes[i]
             dt = row['datetime']
+            window = closes[:i + 1]
 
-            short_period = min(self.strategy_params.get('sma_short', 5), i + 1)
-            long_period = min(self.strategy_params.get('sma_long', 20), i + 1)
-
-            close_window = [float(x) for x in df['close'].iloc[max(0, i - long_period):i + 1]]
-
-            cur_short = sum(close_window[-short_period:]) / short_period if short_period else close
-            cur_long = sum(close_window[-long_period:]) / long_period if long_period else close
+            cur_short = core.calculate_sma(window, core.config.sma_short)
+            cur_long = core.calculate_sma(window, core.config.sma_long)
+            signal = core.check_crossover(cur_short, cur_long,
+                                          core.state.prev_sma_short,
+                                          core.state.prev_sma_long)
 
             if engine.current_position == 0:
-                if prev_sma_short <= prev_sma_long and cur_short > cur_long \
-                   and i >= long_period:
-                    qty = int((self.initial_capital * self.strategy_params.get('position_ratio', 0.1)) / close)
+                if signal == 'golden_cross' and i >= core.config.sma_long:
+                    qty = core.calc_position_size(close, self.initial_capital)
                     if qty > 0:
+                        core.on_enter(close, qty)
                         trade = TradeRecord(
-                            timestamp=dt,
-                            symbol=symbol,
-                            direction='buy',
-                            price=close,
-                            quantity=qty,
-                            reason="金叉买入",
+                            timestamp=dt, symbol=symbol, direction='buy',
+                            price=close, quantity=qty, reason="金叉买入",
                         )
                         engine.add_trade(trade)
             else:
                 entry = engine.entry_price
-                if (entry - close) / entry >= self.strategy_params.get('stop_loss_ratio', 0.03):
+                if (entry - close) / entry >= core.config.stop_loss_ratio:
                     reason = "止损"
-                elif (close - entry) / entry >= self.strategy_params.get('take_profit_ratio', 0.05):
+                elif (close - entry) / entry >= core.config.take_profit_ratio:
                     reason = "止盈"
-                elif prev_sma_short >= prev_sma_long and cur_short < cur_long:
+                elif signal == 'death_cross':
                     reason = "死叉卖出"
                 else:
                     reason = ""
                 if reason:
-                    profit = (close - entry) * engine.current_position
+                    profit = core.on_exit(close)
                     trade = TradeRecord(
                         timestamp=dt, symbol=symbol, direction='sell',
                         price=close, quantity=engine.current_position,
@@ -475,8 +482,8 @@ class VnpyBacktestEngine:
                     )
                     engine.add_trade(trade)
 
-            prev_sma_short = cur_short
-            prev_sma_long = cur_long
+            core.state.prev_sma_short = cur_short
+            core.state.prev_sma_long = cur_long
 
         result = engine.calculate_metrics()
         statistics = {

@@ -9,6 +9,7 @@
 """
 
 import logging
+import warnings
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
@@ -19,19 +20,37 @@ from ..core.ma_strategy import (
 
 logger = logging.getLogger(__name__)
 
-_tq_imports = {}
 
-def _import_tqsdk():
-    if _tq_imports:
-        return True
-    try:
-        from tqsdk import TqApi, TqAuth, TargetPosTask
-        from tqsdk.ta import SMA
-        _tq_imports.update(TqApi=TqApi, TqAuth=TqAuth,
-                           TargetPosTask=TargetPosTask, SMA=SMA)
-        return True
-    except ImportError:
-        return False
+class TqsdkImports:
+    """天勤 SDK 延迟导入管理器
+
+    避免模块级可变全局状态，按需导入 tqsdk 模块。
+    """
+
+    def __init__(self):
+        self._loaded: bool = False
+        self.TqApi: Any = None
+        self.TqAuth: Any = None
+        self.TargetPosTask: Any = None
+        self.SMA: Any = None
+
+    def ensure(self) -> bool:
+        if self._loaded:
+            return True
+        try:
+            from tqsdk import TqApi, TqAuth, TargetPosTask
+            from tqsdk.ta import SMA
+            self.TqApi = TqApi
+            self.TqAuth = TqAuth
+            self.TargetPosTask = TargetPosTask
+            self.SMA = SMA
+            self._loaded = True
+            return True
+        except ImportError:
+            return False
+
+
+_tqsdk = TqsdkImports()
 
 
 class TqsdkMaStrategy:
@@ -46,36 +65,28 @@ class TqsdkMaStrategy:
     def __init__(self, config: Optional[TradingConfig] = None):
         core_config = config or TradingConfig()
         self._core = MaStrategyCore(core_config)
-        self.config = core_config  # 兼容旧接口
+        self.config = core_config
 
-        self.api = None
-        self.account = None
-        self.signal: Optional[str] = None  # 'buy' / 'sell' / None
+        self.api: Any = None
+        self.account: Any = None
+        self.signal: Optional[str] = None
         self.signal_reason: str = ""
         self.trade_records: List[CoreTradeRecord] = []
         self.symbol: str = ""
 
     @property
     def state(self) -> StrategyState:
-        """向后兼容: 暴露核心策略状态"""
         return self._core.state
 
     @state.setter
-    def state(self, value):
+    def state(self, value: StrategyState):
         self._core.state = value
 
     def calculate_sma(self, data, period: int) -> float:
-        """计算SMA - 向后兼容旧接口
-
-        支持 list 和 tqsdk kline_serial 对象
-        """
-        if _import_tqsdk():
-            SMA = _tq_imports['SMA']
-            try:
-                result = SMA(data, period)
-                return float(result.iloc[-1]) if len(result) > 0 else 0.0
-            except Exception:
-                pass
+        warnings.warn(
+            "TqsdkMaStrategy.calculate_sma 已废弃，请直接使用 _core.calculate_sma",
+            DeprecationWarning, stacklevel=2,
+        )
         if isinstance(data, list):
             return self._core.calculate_sma(data, period)
         try:
@@ -86,16 +97,25 @@ class TqsdkMaStrategy:
 
     def check_crossover(self, short: float, long: float,
                         prev_short: float, prev_long: float) -> str:
-        """检测交叉信号 - 向后兼容旧接口"""
+        warnings.warn(
+            "TqsdkMaStrategy.check_crossover 已废弃，请直接使用 _core.check_crossover",
+            DeprecationWarning, stacklevel=2,
+        )
         return self._core.check_crossover(short, long, prev_short, prev_long)
 
     def execute_buy(self, symbol: str, price: float, volume: int, reason: str):
-        """执行买入 - 向后兼容旧接口"""
+        warnings.warn(
+            "TqsdkMaStrategy.execute_buy 已废弃，请使用 _record_trade",
+            DeprecationWarning, stacklevel=2,
+        )
         self.symbol = symbol
         self._record_trade('buy', price, reason, volume)
 
     def execute_sell(self, symbol: str, price: float, volume: int, reason: str):
-        """执行卖出 - 向后兼容旧接口"""
+        warnings.warn(
+            "TqsdkMaStrategy.execute_sell 已废弃，请使用 _record_trade",
+            DeprecationWarning, stacklevel=2,
+        )
         self.symbol = symbol
         self._record_trade('sell', price, reason, volume)
 
@@ -108,11 +128,6 @@ class TqsdkMaStrategy:
         )
 
     def on_bar(self, kline_data):
-        """处理一根K线 - 返回信号供外部使用
-
-        Args:
-            kline_data: tqsdk kline_serial 对象 (须有 .close 属性)
-        """
         self.signal = None
         self.signal_reason = ""
 
@@ -123,7 +138,7 @@ class TqsdkMaStrategy:
             closes = list(kline_data.close)
             current_price = float(kline_data.close.iloc[-1])
         except Exception as e:
-            logger.error(f"获取价格数据失败: {e}")
+            logger.error(f"获取价格数据失败: {e}", exc_info=True)
             return
 
         signal, reason = self._core.on_bar_signal(closes, current_price)
@@ -135,7 +150,7 @@ class TqsdkMaStrategy:
             self.signal, self.signal_reason = signal, reason
 
     def _record_trade(self, direction: str, price: float, reason: str,
-                     volume: int = 0):
+                      volume: int = 0):
         if direction == 'buy':
             if volume <= 0:
                 volume = self._calc_position_size(price)
@@ -147,12 +162,9 @@ class TqsdkMaStrategy:
             logger.info(f"买入: {self.symbol} @ {price}, 数量: {volume}, 原因: {reason}")
         elif direction == 'sell':
             profit = self._core.on_exit(price)
-            if volume <= 0:
-                volume = 0
             self.trade_records.append(CoreTradeRecord(
                 timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                direction="卖出", price=price,
-                volume=volume,
+                direction="卖出", price=price, volume=volume,
                 reason=reason, profit=profit,
             ))
             logger.info(f"卖出: {self.symbol} @ {price}, 原因: {reason}, 盈亏: {profit:.2f}")
@@ -168,16 +180,13 @@ class TqsdkMaStrategy:
         return self._core.get_performance(self.trade_records)
 
     def run(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
-        if not _import_tqsdk():
+        if not _tqsdk.ensure():
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
             return
 
-        TqApi = _tq_imports['TqApi']
-        TqAuth = _tq_imports['TqAuth']
-
         self.symbol = symbol or ""
         try:
-            api = TqApi(auth=auth or TqAuth("guest", ""))
+            api = _tqsdk.TqApi(auth=auth or _tqsdk.TqAuth("guest", ""))
             self.initialize(api)
             klines = api.get_kline_serial(self.symbol, 86400)
             logger.info(f"开始运行策略: {self.symbol}，按Ctrl+C停止")
@@ -187,7 +196,7 @@ class TqsdkMaStrategy:
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except Exception as e:
-            logger.error(f"策略运行错误: {e}")
+            logger.error(f"策略运行错误: {e}", exc_info=True)
         finally:
             if self.api:
                 self.api.close()
@@ -198,16 +207,13 @@ class TqsdkMaStrategy:
             )
 
     def run_with_gui(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
-        if not _import_tqsdk():
+        if not _tqsdk.ensure():
             logger.error("天勤量化API未安装")
             return
 
-        TqApi = _tq_imports['TqApi']
-        TqAuth = _tq_imports['TqAuth']
-
         self.symbol = symbol or ""
         try:
-            api = TqApi(auth=auth or TqAuth("guest", ""), web_gui=True)
+            api = _tqsdk.TqApi(auth=auth or _tqsdk.TqAuth("guest", ""), web_gui=True)
             self.initialize(api)
             klines = api.get_kline_serial(self.symbol, 86400)
             logger.info(f"启动图形界面: {self.symbol}，浏览器访问 http://127.0.0.1:9876")
@@ -217,7 +223,7 @@ class TqsdkMaStrategy:
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except Exception as e:
-            logger.error(f"策略运行错误: {e}")
+            logger.error(f"策略运行错误: {e}", exc_info=True)
         finally:
             if self.api:
                 self.api.close()

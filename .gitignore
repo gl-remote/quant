@@ -71,6 +71,5 @@ dist/
 build/
 
 # MCP related directories
-.memory/                  # 记忆相关的 MCP
-.quant_shared_data       # 量化共享数据相关的 MCP
+.memory/
 .quant_shared_data

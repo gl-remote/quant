@@ -7,7 +7,7 @@
 
 import logging
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Any, List, Optional
 
 from ..core.ma_strategy import MaStrategyCore, TradingConfig, TradeRecord as CoreTradeRecord
 
@@ -95,7 +95,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         )
         self._core = MaStrategyCore(core_config)
 
-    def on_init(self):
+    def on_init(self) -> None:
         logger.info(
             f"[{self.strategy_name}] 策略初始化: SMA({self.sma_short},{self.sma_long}) "
             f"止损={self.stop_loss_ratio:.0%} 止盈={self.take_profit_ratio:.0%}"
@@ -104,12 +104,12 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
             self.write_log(f"策略初始化: SMA({self.sma_short},{self.sma_long})")
             self.load_bar(10)
 
-    def on_start(self):
+    def on_start(self) -> None:
         logger.info(f"[{self.strategy_name}] 策略启动")
         if HAS_VNPY:
             self.write_log("策略启动")
 
-    def on_stop(self):
+    def on_stop(self) -> None:
         logger.info(
             f"[{self.strategy_name}] 策略停止 | "
             f"交易{self.trade_count}次 胜{self.win_count} "
@@ -118,7 +118,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         if HAS_VNPY:
             self.write_log(f"策略停止: 交易{self.trade_count}次 总盈亏{self.total_profit:.2f}")
 
-    def on_bar(self, bar):
+    def on_bar(self, bar: Any) -> None:
         close_price = bar.close_price if hasattr(bar, 'close_price') else bar.get('close_price', 0)
         self._close_history.append(close_price)
 
@@ -132,7 +132,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         elif signal == 'sell' and self.pos > 0:
             self._execute_sell(bar, reason)
 
-    def _execute_buy(self, bar):
+    def _execute_buy(self, bar: Any) -> None:
         volume = self._calc_volume(bar.close_price)
         if volume <= 0:
             return
@@ -146,7 +146,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
             f"@{bar.close_price:.2f} x{volume}"
         )
 
-    def _execute_sell(self, bar, reason):
+    def _execute_sell(self, bar: Any, reason: str) -> None:
         pos = abs(self.pos) if HAS_VNPY and hasattr(self, 'pos') else self._core.state.current_position
         if HAS_VNPY:
             self.sell(bar.close_price, pos)
@@ -164,18 +164,18 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         capital = self.cta_engine.capital if hasattr(self.cta_engine, 'capital') else 100000
         return self._core.calc_position_size(price, capital)
 
-    def on_tick(self, tick: TickData):
+    def on_tick(self, tick: Any) -> None:
         pass
 
-    def on_order(self, order: OrderData):
+    def on_order(self, order: Any) -> None:
         if HAS_VNPY:
             super().on_order(order)
 
-    def on_trade(self, trade: TradeData):
+    def on_trade(self, trade: Any) -> None:
         if HAS_VNPY:
             super().on_trade(trade)
 
-    def get_performance(self) -> Dict:
+    def get_performance(self) -> Dict[str, Any]:
         return {
             'trade_count': self.trade_count,
             'win_count': self.win_count,

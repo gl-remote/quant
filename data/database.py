@@ -4,7 +4,7 @@ import sqlite3
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 
 _SCHEMA = """
@@ -45,14 +45,14 @@ class Database:
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
             conn.commit()
 
     # ---- 操作日志 ----
-    def log(self, command: str, message: str, symbol: str = None,
-            status: str = "INFO"):
+    def log(self, command: str, message: str, symbol: Optional[str] = None,
+            status: str = "INFO") -> None:
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO operation_logs (command, symbol, message, status, created_at) "
@@ -60,7 +60,7 @@ class Database:
                 (command, symbol, message, status, datetime.now().isoformat()))
             conn.commit()
 
-    def get_logs(self, limit: int = 100) -> List[Dict]:
+    def get_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id, command, symbol, message, status, created_at "
@@ -70,7 +70,7 @@ class Database:
                 for r in rows]
 
     # ---- 导出元数据 ----
-    def get_metadata(self, symbol: str) -> Optional[Dict]:
+    def get_metadata(self, symbol: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, symbol, filepath, start_date, end_date, "
@@ -84,7 +84,7 @@ class Database:
              'min_dt', 'max_dt', 'total_rows', 'created_at', 'updated_at'], row))
 
     def upsert_metadata(self, symbol: str, filepath: str, start_date: str,
-                        end_date: str, min_dt: str, max_dt: str, total_rows: int):
+                        end_date: str, min_dt: str, max_dt: str, total_rows: int) -> None:
         now = datetime.now().isoformat()
         existing = self.get_metadata(symbol)
         with self._connect() as conn:

@@ -9,6 +9,30 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
+def parse_symbol_exchange(symbol: str):
+    try:
+        from vnpy.trader.constant import Exchange
+    except ImportError:
+        Exchange = None
+
+    if '.' in symbol:
+        parts = symbol.split('.')
+        pure_symbol = parts[-1]
+        exchange_code = parts[0]
+        if Exchange:
+            try:
+                exchange = Exchange(exchange_code)
+            except (ValueError, TypeError):
+                exchange = Exchange.CFFEX
+        else:
+            exchange = 'CFFEX'
+    else:
+        pure_symbol = symbol
+        exchange = Exchange.CFFEX if Exchange else 'CFFEX'
+
+    return pure_symbol, exchange
+
+
 def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
     """从本地CSV目录加载历史K线数据
 
@@ -152,15 +176,7 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
             })
         return bars
 
-    exchange = Exchange.CFFEX
-    pure_symbol = symbol
-    if '.' in symbol:
-        parts = symbol.split('.')
-        pure_symbol = parts[-1]
-        try:
-            exchange = Exchange(parts[0])
-        except (ValueError, TypeError):
-            exchange = Exchange.CFFEX
+    pure_symbol, exchange = parse_symbol_exchange(symbol)
 
     bars = []
     for _, row in df.iterrows():

@@ -55,8 +55,12 @@ def compare_datasets(
 
 
 def _safe_name(report: Dict) -> str:
-    m = report.get('meta', {})
-    return m.get('dataset', m.get('name', 'unknown'))
+    if not isinstance(report, dict):
+        return 'unknown'
+    m = report.get('meta')
+    if not isinstance(m, dict):
+        return 'unknown'
+    return m.get('dataset') or m.get('name') or 'unknown'
 
 
 def _build_metrics_table(

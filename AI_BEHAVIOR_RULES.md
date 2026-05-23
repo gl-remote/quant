@@ -1,6 +1,6 @@
 # AI 行为规范约束
 
-> 版本: 2.0.0 | 更新日期: 2026-05-24
+> 版本: 2.1.0 | 更新日期: 2026-05-24
 
 ---
 
@@ -48,7 +48,11 @@ quant/
 ├── conf.local.yaml         # 本地密钥覆盖（不提交，.gitignore 已排除）
 ├── conf.example.yaml       # 配置模板
 ├── requirements.txt
-├── plan.md                 # 项目改进计划
+├── plan.md                 # 项目改进计划（仅含未解决问题）
+├── .plan/                  # 版本规划归档
+│   ├── plan.1.0.0.log.md   #   初始审计结果
+│   ├── plan.2.0.0.log.md   #   文档同步更新
+│   └── plan.3.0.0.log.md   #   中危以上问题修复记录
 ├── AI_BEHAVIOR_RULES.md    # 本文档
 ├── run.sh / activate_env.sh
 │
@@ -90,36 +94,95 @@ python main.py <子命令> [参数]
 **核心+网关模式是强制性架构约束。** 所有策略业务逻辑必须写入 `strategies/core/`，不得包含任何框架依赖。框架集成代码仅允许存在于 `strategies/gateways/`。
 
 ```
-strategies/core/ma_strategy.py   ← 允许: 纯算法（SMA计算、信号检测）
-strategies/gateways/vnpy_gateway.py  ← 允许: vn.py 适配
-strategies/gateways/tqsdk_gateway.py ← 允许: 天勤适配
+strategies/core/ma_strategy.py      ← 允许: 纯算法（SMA计算、信号检测）
+strategies/gateways/vnpy_gateway.py ← 允许: vn.py 适配
+strategies/gateways/tqsdk_gateway.py← 允许: 天勤适配
 ```
 
 新增网关时必须：继承核心策略 → 转换数据格式 → 委托调用核心方法。
 
-### 规则 4.2: 命名约定
+### 规则 4.2: 核心策略复用（强制执行）
+
+任何需要执行 SMA 计算、金叉/死叉检测、止盈止损判断的代码，**必须**通过 `MaStrategyCore` 或 `TradingConfig` 调用，严禁手动实现等效逻辑。
+
+```
+✅ core.calculate_sma(closes, period)        # 使用核心方法
+✅ core.check_crossover(short, long, p1, p2) # 使用核心方法
+❌ sum(closes[-period:]) / period            # 禁止手写 SMA
+❌ prev_short <= prev_long and short > long  # 禁止手写信号检测
+```
+
+降级引擎（`_run_fallback_backtest`）同样受此约束，已通过 `MaStrategyCore` 实现。
+
+### 规则 4.3: 命名约定
 
 | 类别 | 规范 | 示例 |
 |------|------|------|
 | 文件名 | `snake_case` | `data_loader.py`, `config_manager.py` |
-| 类名 | `PascalCase` | `VnpyBacktestEngine`, `MaStrategyCore` |
-| 函数/方法 | `snake_case` | `run_full_pipeline`, `load_csv_data` |
+| 类名 | `PascalCase` | `VnpyBacktestEngine`, `MaStrategyCore`, `TqsdkImports` |
+| 函数/方法 | `snake_case` | `run_full_pipeline`, `parse_symbol_exchange` |
 | 私有方法 | `_` 前缀 | `_run_single_backtest`, `_calc_max_drawdown` |
-| 常量 | `UPPER_SNAKE_CASE` | `HAS_VNPY`, `Qlib_COLUMNS` |
+| 常量 | `UPPER_SNAKE_CASE` | `HAS_VNPY` |
 
-### 规则 4.3: 代码风格
+### 规则 4.4: 代码风格
 
 - **禁止**添加注释，除非用户明确要求
 - 缩进：4 空格
-- 文档字符串：保持现有风格一致（中文或英文按上下文）
+- 文档字符串：保持现有风格一致
 - 导入顺序：标准库 → 第三方库 → 项目内部模块
 - 类型注解：所有公开方法必须标注参数和返回值类型
 
-### 规则 4.4: 配置管理
+### 规则 4.5: 配置管理
 
 - API 密钥、密码等敏感信息**必须**写入 `conf.local.yaml`，严禁写入 `conf.yaml`
 - `conf.local.yaml` 已通过 `.gitignore` 排除，严禁手动 `git add`
 - 新增配置参数应提供默认值，遵循 `.get(key, default)` 模式
+
+### 规则 4.6: 构造函数输入校验
+
+所有接收外部配置的构造函数（特别是引擎类）**必须**在初始化阶段校验参数合法性：
+
+```python
+class VnpyBacktestEngine:
+    def __init__(self, config):
+        self.initial_capital = float(config.get('initial_capital', 100000.0))
+        if self.initial_capital <= 0:
+            raise ValueError(f"initial_capital 必须大于 0")
+        # ... 其他参数同理
+```
+
+### 规则 4.7: 模块状态管理
+
+**禁止**使用模块级可变字典或列表管理全局状态。改用类封装：
+
+```python
+# ❌ 禁止
+_tq_imports = {}
+def _import_tqsdk():
+    if _tq_imports:
+        return True
+    _tq_imports.update(...)
+
+# ✅ 允许
+class TqsdkImports:
+    def __init__(self):
+        self._loaded = False
+        self.TqApi = None
+    def ensure(self) -> bool:
+        ...
+```
+
+### 规则 4.8: 工具函数抽象
+
+跨模块复用的解析逻辑**必须**提取为独立函数，禁止内联重复实现：
+
+```python
+# ✅ 统一入口：backtest/data_loader.py
+def parse_symbol_exchange(symbol: str):
+    ...
+```
+
+`data_loader.py` 和 `backtest_engine.py` 均通过此函数解析品种代码与交易所。
 
 ---
 
@@ -145,8 +208,8 @@ strategies/gateways/tqsdk_gateway.py ← 允许: 天勤适配
 |------|------|
 | 关键错误 | 使用 `raise` 抛出明确异常，附带描述信息 |
 | 可恢复错误 | 使用 `logger.error()` + 返回 `None` 或错误字典 |
-| 禁止模式 | 禁止 `import traceback; traceback.print_exc()` 混入业务逻辑 |
-| 异常处理 | 在所有 try/except 中记录堆栈：`logger.error("msg", exc_info=True)` |
+| 堆栈记录 | 所有 try/except 中使用 `logger.error("msg", exc_info=True)` |
+| 禁止模式 | 禁止 `import traceback; traceback.print_exc()` |
 
 ---
 
@@ -180,13 +243,29 @@ strategies/gateways/tqsdk_gateway.py ← 允许: 天勤适配
 | `README.md` | CLI 变更、新增/删除功能 |
 | `doc/*.md` | API 变更、配置参数增删、架构调整 |
 | `AI_BEHAVIOR_RULES.md` | 编码规范变更、新操作规则 |
-| `plan.md` | 问题修复完成、里程碑达成、新问题发现 |
+| `plan.md` | 新问题发现——已修复问题从 plan.md 移除，归档至 `.plan/plan.{version}.log.md` |
 
 ---
 
-## 十、版本记录
+## 十、规划文档归档规范
+
+`.plan/` 目录存放各版本的规划快照，文件命名格式为 `plan.{version}.log.md`：
+
+```
+.plan/
+├── plan.1.0.0.log.md    # 初始审计：17 个问题 + 8 类缺失元素
+├── plan.2.0.0.log.md    # 文档同步：AI_BEHAVIOR_RULES 更新
+└── plan.3.0.0.log.md    # 问题修复：14 个中危以上问题全部解决
+```
+
+根目录 `plan.md` 仅保留**当前未解决问题**和未来规划。已修复的问题从 `plan.md` 移除，完整记录见对应版本日志文件。
+
+---
+
+## 十一、版本记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| 2.0.0 | 2026-05-24 | 全面重写：新增项目结构、CLI 命令、编码规范、回测流水线约束、错误处理、Git 工作流、测试要求、文档规范 |
+| 2.1.0 | 2026-05-24 | 新增规则 4.2（核心策略复用）、4.6（构造函数校验）、4.7（模块状态管理）、4.8（工具函数抽象）；新增第十章（规划文档归档规范） |
+| 2.0.0 | 2026-05-24 | 全面重写：新增项目结构、CLI 命令、编码规范、回测流水线、错误处理、Git 工作流、测试要求、文档规范 |
 | 1.0.0 | 2026-05-23 | 初始版本：Python 环境激活规则 |

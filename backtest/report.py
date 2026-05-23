@@ -70,7 +70,25 @@ def generate_dataset_report(
 
 
 def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Dict:
-    """提取绩效指标"""
+    if not isinstance(statistics, dict) or not statistics:
+        logger.warning("回测统计数据为空，返回默认绩效指标")
+        return {
+            'initial_capital': initial_capital,
+            'final_equity': initial_capital,
+            'total_return': '0.00%',
+            'total_return_abs': 0.0,
+            'total_trades': 0,
+            'winning_trades': 0,
+            'losing_trades': 0,
+            'win_rate': '0.00%',
+            'win_rate_abs': 0.0,
+            'avg_profit': 0,
+            'avg_loss': 0,
+            'profit_loss_ratio': 0,
+            'sharpe_ratio': 0,
+            'annual_return': '0.00%',
+            'annual_return_abs': 0,
+        }
     final_balance = statistics.get('end_balance', initial_capital)
     total_return = (final_balance - initial_capital) / initial_capital if initial_capital > 0 else 0
 

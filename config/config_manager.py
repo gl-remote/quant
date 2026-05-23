@@ -108,6 +108,29 @@ class ConfigManager:
                 return False
             if tc['sma_short'] >= tc['sma_long']:
                 return False
+
+            bc = self.get_backtest_config()
+            if bc['initial_capital'] <= 0:
+                return False
+            if not (0 <= bc['commission_rate'] < 1):
+                return False
+            if bc['slippage'] < 0:
+                return False
+            if bc['price_tick'] <= 0:
+                return False
+            if bc['contract_size'] <= 0:
+                return False
+            ratio = bc['split']['train_ratio'] + bc['split']['val_ratio'] + bc['split']['test_ratio']
+            if abs(ratio - 1.0) > 1e-9:
+                return False
+
             return True
         except Exception:
             return False
+
+    def get_system_logging_config(self) -> Dict[str, str]:
+        sl = self.config.get('system', {}).get('logging', {})
+        return {
+            'level': sl.get('level', 'INFO'),
+            'format': sl.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s'),
+        }

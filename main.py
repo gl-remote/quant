@@ -6,12 +6,14 @@ import argparse
 import logging
 from datetime import datetime
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
 from config import ConfigManager
+
+cm = ConfigManager()
+log_cfg = cm.get_system_logging_config()
+logging.basicConfig(
+    level=getattr(logging, log_cfg.get('level', 'INFO'), logging.INFO),
+    format=log_cfg.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+)
 from strategies import MovingAverageStrategy
 from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
 from data import Database, DBLogHandler, export_csv
@@ -22,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # 公共工具
 # ============================================================
-def _apply_trading_config(strategy, tc, symbol):
+def _apply_trading_config(strategy, tc: Dict, symbol: str):
     cfg = strategy.config
     cfg.sma_short = tc['sma_short']
     cfg.sma_long = tc['sma_long']
@@ -32,7 +34,7 @@ def _apply_trading_config(strategy, tc, symbol):
     strategy.symbol = symbol
 
 
-def _setup_db_logging(db: Database, command: str, symbol: str = None):
+def _setup_db_logging(db, command: str, symbol: str = None):
     handler = DBLogHandler(db, command=command, symbol=symbol)
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
     logging.getLogger().addHandler(handler)
@@ -148,9 +150,8 @@ def cmd_backtest(args):
             db.log('backtest', f"失败: {result.get('error', '')}", symbol=args.symbol, status='ERROR')
 
     except Exception as e:
-        logger.error(f"回测执行失败: {e}")
+        logger.error(f"回测执行失败: {e}", exc_info=True)
         db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
-        import traceback; traceback.print_exc()
         raise
 
 
@@ -237,9 +238,8 @@ def cmd_tq_backtest(args):
             except BacktestFinished:
                 pass
     except Exception as e:
-        logger.error(f"回测执行失败: {e}")
+        logger.error(f"回测执行失败: {e}", exc_info=True)
         db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
-        import traceback; traceback.print_exc()
         raise
     finally:
         if api:
@@ -273,9 +273,8 @@ def cmd_live(args):
 
         db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status='SUCCESS')
     except Exception as e:
-        logger.error(f"实盘交易失败: {e}")
+        logger.error(f"实盘交易失败: {e}", exc_info=True)
         db.log('live', f"失败: {e}", symbol=args.symbol, status='ERROR')
-        import traceback; traceback.print_exc()
         raise
 
 
