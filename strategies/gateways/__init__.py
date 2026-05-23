@@ -1,4 +1,4 @@
-from .vnpy_gateway import VnpyMaStrategy, HAS_VNPY
+from .vnpy_gateway import VnpyMaStrategy
 from .tqsdk_gateway import TqsdkMaStrategy
 
-__all__ = ['VnpyMaStrategy', 'HAS_VNPY', 'TqsdkMaStrategy']
+__all__ = ['VnpyMaStrategy', 'TqsdkMaStrategy']

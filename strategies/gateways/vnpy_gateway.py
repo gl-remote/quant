@@ -3,31 +3,23 @@
 使 MaStrategyCore 可在 vnpy BacktestingEngine 中运行。
 回测引擎通过此网关调用策略，网关将 vnpy BarData 转换为核心层输入，
 并将核心层信号转换为 vnpy self.buy() / self.sell() 调用。
+
+vn.py 为强制依赖，不再支持无依赖兼容模式。
 """
 
 import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
+from vnpy_ctastrategy import CtaTemplate
+from vnpy.trader.object import BarData, TickData, OrderData, TradeData
+
 from ..core.ma_strategy import MaStrategyCore, TradingConfig, TradeRecord as CoreTradeRecord
 
 logger = logging.getLogger(__name__)
 
-try:
-    from vnpy_ctastrategy import CtaTemplate
-    from vnpy.trader.object import BarData, TickData, OrderData, TradeData
-    HAS_VNPY = True
-except ImportError:
-    HAS_VNPY = False
-    logger.warning("vnpy未安装，策略将运行在兼容模式")
-    CtaTemplate = object
-    BarData = object
-    TickData = object
-    OrderData = object
-    TradeData = object
 
-
-class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
+class VnpyMaStrategy(CtaTemplate):
     """双均线交叉CTA策略 (vn.py 网关)
 
     vn.py 标准策略接口:
@@ -59,12 +51,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
     ]
 
     def __init__(self, cta_engine, strategy_name: str, vt_symbol: str, setting: dict):
-        if HAS_VNPY:
-            super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-        else:
-            self.cta_engine = cta_engine
-            self.strategy_name = strategy_name
-            self.vt_symbol = vt_symbol
+        super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
         self.sma_short: int = setting.get('sma_short', 5)
         self.sma_long: int = setting.get('sma_long', 20)
@@ -100,14 +87,12 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
             f"[{self.strategy_name}] 策略初始化: SMA({self.sma_short},{self.sma_long}) "
             f"止损={self.stop_loss_ratio:.0%} 止盈={self.take_profit_ratio:.0%}"
         )
-        if HAS_VNPY:
-            self.write_log(f"策略初始化: SMA({self.sma_short},{self.sma_long})")
-            self.load_bar(10)
+        self.write_log(f"策略初始化: SMA({self.sma_short},{self.sma_long})")
+        self.load_bar(10)
 
     def on_start(self) -> None:
         logger.info(f"[{self.strategy_name}] 策略启动")
-        if HAS_VNPY:
-            self.write_log("策略启动")
+        self.write_log("策略启动")
 
     def on_stop(self) -> None:
         logger.info(
@@ -115,8 +100,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
             f"交易{self.trade_count}次 胜{self.win_count} "
             f"总盈亏{self.total_profit:.2f}"
         )
-        if HAS_VNPY:
-            self.write_log(f"策略停止: 交易{self.trade_count}次 总盈亏{self.total_profit:.2f}")
+        self.write_log(f"策略停止: 交易{self.trade_count}次 总盈亏{self.total_profit:.2f}")
 
     def on_bar(self, bar: Any) -> None:
         close_price = bar.close_price if hasattr(bar, 'close_price') else bar.get('close_price', 0)
@@ -136,8 +120,7 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         volume = self._calc_volume(bar.close_price)
         if volume <= 0:
             return
-        if HAS_VNPY:
-            self.buy(bar.close_price, volume)
+        self.buy(bar.close_price, volume)
         self.entry_price = bar.close_price
         self._core.on_enter(bar.close_price, volume)
         self.trade_count += 1
@@ -147,9 +130,8 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         )
 
     def _execute_sell(self, bar: Any, reason: str) -> None:
-        pos = abs(self.pos) if HAS_VNPY and hasattr(self, 'pos') else self._core.state.current_position
-        if HAS_VNPY:
-            self.sell(bar.close_price, pos)
+        pos = abs(self.pos)
+        self.sell(bar.close_price, pos)
         profit = self._core.on_exit(bar.close_price)
         self.total_profit += profit
         self.entry_price = 0.0
@@ -168,12 +150,10 @@ class VnpyMaStrategy(CtaTemplate if HAS_VNPY else object):
         pass
 
     def on_order(self, order: Any) -> None:
-        if HAS_VNPY:
-            super().on_order(order)
+        super().on_order(order)
 
     def on_trade(self, trade: Any) -> None:
-        if HAS_VNPY:
-            super().on_trade(trade)
+        super().on_trade(trade)
 
     def get_performance(self) -> Dict[str, Any]:
         return {

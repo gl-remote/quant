@@ -145,30 +145,9 @@ run_full_pipeline(
 }
 ```
 
----
+## 策略网关 API
 
-## 降级回测引擎
-
-### BacktestEngine
-
-当 vn.py 不可用时，系统自动切换至此内置引擎，提供相同的核心功能。
-
-```python
-from backtest import BacktestEngine, TradeRecord
-
-engine = BacktestEngine(initial_capital=100000.0)
-engine.add_trade(TradeRecord(...))
-result = engine.calculate_metrics()
-report = engine.generate_report()
-```
-
-| 方法 | 说明 |
-|------|------|
-| `add_trade(trade: TradeRecord)` | 添加交易记录，同步更新资金与持仓 |
-| `calculate_metrics() -> BacktestResult` | 计算全部绩效指标 |
-| `generate_report() -> str` | 生成控制台格式的文本报告 |
-
----
+### VnpyMaStrategy
 
 ## 数据加载模块
 

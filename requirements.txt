@@ -1,12 +1,12 @@
 # 天勤量化交易系统依赖
-# 使用固定版本以避免依赖冲突
+# tqsdk 和 vnpy 为强制依赖，不再支持无依赖降级模式
 
-# 天勤量化API - 核心交易框架
-tqsdk>=3.0.0
+# 天勤量化API - 核心交易框架（强制依赖）
+tqsdk==3.0.0
 
-# vn.py 量化交易框架 - 回测引擎
-vnpy>=3.8.0
-vnpy_ctastrategy>=1.2.0
+# vn.py 量化交易框架 - 回测引擎（强制依赖）
+vnpy==3.8.0
+vnpy_ctastrategy==1.2.0
 
 # websockets是tqsdk的必需依赖
 websockets>=10.1

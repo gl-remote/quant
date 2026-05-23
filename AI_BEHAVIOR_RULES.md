@@ -34,8 +34,7 @@ python --version
 ```bash
 pip install -r requirements.txt
 ```
-
-vn.py 为可选依赖，未安装时系统自动启用降级引擎。
+vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 
 ---
 
@@ -113,8 +112,6 @@ strategies/gateways/tqsdk_gateway.py← 允许: 天勤适配
 ❌ prev_short <= prev_long and short > long  # 禁止手写信号检测
 ```
 
-降级引擎（`_run_fallback_backtest`）同样受此约束，已通过 `MaStrategyCore` 实现。
-
 ### 规则 4.3: 命名约定
 
 | 类别 | 规范 | 示例 |
@@ -123,7 +120,7 @@ strategies/gateways/tqsdk_gateway.py← 允许: 天勤适配
 | 类名 | `PascalCase` | `VnpyBacktestEngine`, `MaStrategyCore`, `TqsdkImports` |
 | 函数/方法 | `snake_case` | `run_full_pipeline`, `parse_symbol_exchange` |
 | 私有方法 | `_` 前缀 | `_run_single_backtest`, `_calc_max_drawdown` |
-| 常量 | `UPPER_SNAKE_CASE` | `HAS_VNPY` |
+| 常量 | `UPPER_SNAKE_CASE` | `MAX_RETRIES` |
 
 ### 规则 4.4: 代码风格
 

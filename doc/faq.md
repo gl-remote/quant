@@ -6,17 +6,17 @@
 
 ## 安装与环境
 
-### Q1: 未安装 vn.py，回测系统还能用吗？
+### Q1: vn.py 和 tqsdk 是必需的吗？
 
-可以。系统内置了降级引擎 [BacktestEngine](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/backtest_engine.py)，在 vn.py 不可用时自动启用。降级引擎与 vn.py 引擎使用相同的策略核心 `MaStrategyCore`，提供的绩效指标一致（总收益、夏普比率、最大回撤、胜率等），仅在回测模拟精度上略有差异。
+vn.py 和 tqsdk 均为强制依赖，不再支持降级模式。安装方式见 [README](file:///Users/REDACTED_API_KEY/Documents/src/quant/README.md)。
 
 ### Q2: vn.py 安装失败怎么办？
 
-vn.py 依赖较多，推荐以下方案：
+vn.py 依赖较多，推荐使用 conda 环境：
 
-1. **使用 conda 环境**：`conda create -n vnpy_env python=3.10` → `conda activate vnpy_env` → `pip install vnpy vnpy_ctastrategy`
-2. **分步安装**：`pip install vnpy --no-deps` → `pip install vnpy_ctastrategy`
-3. **不安装 vn.py**：系统自动降级，不影响核心功能
+1. `conda create -n vnpy_env python=3.10`
+2. `conda activate vnpy_env`
+3. `pip install vnpy==3.8.0 vnpy_ctastrategy==1.2.0`
 
 ### Q3: 支持的 Python 版本？
 

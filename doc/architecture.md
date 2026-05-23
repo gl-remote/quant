@@ -84,32 +84,13 @@
 
 默认比例为 60-20-20，遵循机器学习领域经典划分标准。
 
-### 双引擎降级策略
-
-```
-_run_single_backtest()
-      │
-      ▼
-┌─ HAS_VNPY? ─┐
-│ YES         │ NO
-▼             ▼
-vnpy          内置 BacktestEngine
-Backtesting    (纯 Python 实现)
-Engine         SMA计算 + 资金管理
-│              + 绩效统计
-▼              ▼
-statistics    statistics
-```
-
-当 vn.py 未安装时，系统自动切换至内置引擎。内置引擎使用相同的策略核心 `MaStrategyCore`，提供的统计指标与 vnpy 引擎一致（总收益、夏普比率、最大回撤、胜率等），仅在计算精度上略有差异。
-
 ## 模块职责
 
 ### `backtest/` — 回测子系统
 
 | 模块 | 职责 |
 |------|------|
-| [backtest_engine.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/backtest_engine.py) | 核心编排器，协调五阶段流水线；内置降级引擎 |
+| [backtest_engine.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/backtest_engine.py) | 核心编排器，协调五阶段流水线 |
 | [data_loader.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/data_loader.py) | CSV 加载、数据集划分、vnpy BarData 格式转换 |
 | [report.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/report.py) | 单数据集报告生成，包含绩效、风险、交易统计 |
 | [comparison.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/comparison.py) | 三阶段对比分析，过拟合风险评估 |
@@ -226,7 +207,7 @@ quant/
 │       └── tqsdk_gateway.py      # 天勤网关
 │
 ├── backtest/                     # 回测子系统
-│   ├── backtest_engine.py        # 核心引擎 + 降级引擎
+│   ├── backtest_engine.py        # 核心引擎
 │   ├── data_loader.py            # 数据加载与划分
 │   ├── report.py                 # 报告生成
 │   └── comparison.py             # 对比分析

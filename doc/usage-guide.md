@@ -13,13 +13,7 @@ cd /path/to/quant
 pip install -r requirements.txt
 ```
 
-核心依赖：`numpy`, `pandas`, `pyyaml`。vn.py 为可选依赖，系统在 vn.py 不可用时自动使用内置回测引擎。
-
-安装 vn.py 以获得更精确的回测模拟：
-
-```bash
-pip install vnpy vnpy_ctastrategy
-```
+vn.py 和 tqsdk 为强制依赖，安装后即可使用全部功能。
 
 ### 配置天勤账号
 

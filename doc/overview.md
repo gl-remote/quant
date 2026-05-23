@@ -44,7 +44,7 @@
 
 - **Python** 3.8+（推荐 3.10/3.11）
 - **数据**: pandas, numpy
-- **回测框架**: vn.py（可选），内置降级引擎保证可用性
+- **回测框架**: vn.py BacktestingEngine
 - **数据源**: 天勤量化 SDK (tqsdk)
 - **配置**: YAML 分层合并 (PyYAML)
 - **存储**: SQLite (操作日志与元数据), CSV/JSON (行情与报告)

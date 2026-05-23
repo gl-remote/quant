@@ -7,7 +7,7 @@
   4. 生成详细的交易报告
   5. 提供三阶段对比分析与过拟合风险评估
 
-保留原始回测引擎作为 vn.py 不可用时的降级方案。
+vn.py 为强制依赖，不再支持降级模式。
 """
 
 import logging
@@ -20,8 +20,7 @@ import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
 from .data_loader import parse_symbol_exchange
-from strategies.gateways import VnpyMaStrategy, HAS_VNPY
-from strategies.core.ma_strategy import MaStrategyCore, TradingConfig
+from strategies.gateways import VnpyMaStrategy
 from .report import generate_dataset_report, format_console_report
 from .comparison import compare_datasets, format_comparison_report
 
@@ -29,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 原始回测引擎 (vn.py 不可用时的降级方案)
+# 交易记录与绩效统计 (用于 tq-backtest 实盘/模拟跟踪)
 # ============================================================
 
 @dataclass
@@ -61,7 +60,7 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    """原始回测引擎 - 执行历史数据回测并生成绩效报告 (降级方案)"""
+    """简单交易跟踪器 - 用于 tq-backtest 实盘/模拟模式"""
 
     def __init__(self, initial_capital: float = 100000.0):
         self.initial_capital = initial_capital
@@ -163,9 +162,6 @@ class BacktestEngine:
 # ============================================================
 # vn.py 框架回测引擎
 # ============================================================
-
-
-class VnpyBacktestEngine:
     """vn.py 框架回测引擎
 
     封装完整的回测流程：数据加载 → 划分 → 回测 → 报告 → 对比
@@ -298,13 +294,13 @@ class VnpyBacktestEngine:
 
         # ---- 步骤3: 三阶段回测 ----
         logger.info("\n>>> 阶段一: 训练集回测")
-        train_result = self._run_single_backtest(train_df, symbol, 'train')
+        train_result = self._run_backtest(train_df, symbol, 'train')
 
         logger.info("\n>>> 阶段二: 验证集回测")
-        val_result = self._run_single_backtest(val_df, symbol, 'val')
+        val_result = self._run_backtest(val_df, symbol, 'val')
 
         logger.info("\n>>> 阶段三: 测试集回测")
-        test_result = self._run_single_backtest(test_df, symbol, 'test')
+        test_result = self._run_backtest(test_df, symbol, 'test')
 
         # ---- 步骤4: 生成报告 ----
         logger.info("\n>>> 生成回测报告")
@@ -316,11 +312,9 @@ class VnpyBacktestEngine:
         logger.info("\n>>> 三阶段对比分析")
         comparison = compare_datasets(train_report, val_report, test_report, symbol)
 
-        # 输出对比报告
         comparison_text = format_comparison_report(comparison)
         print(comparison_text)
 
-        # 保存对比报告
         comp_path = Path(self.report_dir) / f"{symbol}_comparison.json"
         with open(comp_path, 'w', encoding='utf-8') as f:
             json.dump(comparison, f, ensure_ascii=False, indent=2, default=str)
@@ -339,36 +333,13 @@ class VnpyBacktestEngine:
             'comparison': comparison,
         }
 
-    def _run_single_backtest(
+    def _run_backtest(
         self,
         df: 'pd.DataFrame',
         symbol: str,
         dataset_name: str,
     ) -> Dict[str, Any]:
-        """在单个数据集上执行回测
-
-        优先使用 vnpy BacktestingEngine，如果 vnpy 不可用则降级为内置引擎
-
-        Args:
-            df: K线数据
-            symbol: 合约代码
-            dataset_name: 数据集名称
-
-        Returns:
-            回测结果统计字典
-        """
-        if HAS_VNPY:
-            return self._run_vnpy_backtest(df, symbol, dataset_name)
-        else:
-            return self._run_fallback_backtest(df, symbol, dataset_name)
-
-    def _run_vnpy_backtest(
-        self,
-        df: 'pd.DataFrame',
-        symbol: str,
-        dataset_name: str,
-    ) -> Dict[str, Any]:
-        """使用 vnpy 原生 BacktestingEngine 执行回测"""
+        """在单个数据集上执行 vnpy 回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
 
@@ -419,99 +390,6 @@ class VnpyBacktestEngine:
             'dataset_name': dataset_name,
             'statistics': statistics,
             'daily_results': daily_results.to_dict('records') if daily_results is not None else [],
-        }
-
-    def _run_fallback_backtest(
-        self,
-        df: 'pd.DataFrame',
-        symbol: str,
-        dataset_name: str,
-    ) -> Dict[str, Any]:
-        """vnpy 不可用时的降级回测引擎
-
-        使用内置的简单回测逻辑，保证系统可用性
-        """
-        engine = BacktestEngine(initial_capital=self.initial_capital)
-        core = MaStrategyCore(TradingConfig(
-            sma_short=self.strategy_params.get('sma_short', 5),
-            sma_long=self.strategy_params.get('sma_long', 20),
-            stop_loss_ratio=self.strategy_params.get('stop_loss_ratio', 0.03),
-            take_profit_ratio=self.strategy_params.get('take_profit_ratio', 0.05),
-            position_ratio=self.strategy_params.get('position_ratio', 0.1),
-        ))
-        closes = [float(x) for x in df['close']]
-
-        for i in range(len(df)):
-            row = df.iloc[i]
-            close = closes[i]
-            dt = row['datetime']
-            window = closes[:i + 1]
-
-            cur_short = core.calculate_sma(window, core.config.sma_short)
-            cur_long = core.calculate_sma(window, core.config.sma_long)
-            signal = core.check_crossover(cur_short, cur_long,
-                                          core.state.prev_sma_short,
-                                          core.state.prev_sma_long)
-
-            if engine.current_position == 0:
-                if signal == 'golden_cross' and i >= core.config.sma_long:
-                    qty = core.calc_position_size(close, self.initial_capital)
-                    if qty > 0:
-                        core.on_enter(close, qty)
-                        trade = TradeRecord(
-                            timestamp=dt, symbol=symbol, direction='buy',
-                            price=close, quantity=qty, reason="金叉买入",
-                        )
-                        engine.add_trade(trade)
-            else:
-                entry = engine.entry_price
-                if (entry - close) / entry >= core.config.stop_loss_ratio:
-                    reason = "止损"
-                elif (close - entry) / entry >= core.config.take_profit_ratio:
-                    reason = "止盈"
-                elif signal == 'death_cross':
-                    reason = "死叉卖出"
-                else:
-                    reason = ""
-                if reason:
-                    profit = core.on_exit(close)
-                    trade = TradeRecord(
-                        timestamp=dt, symbol=symbol, direction='sell',
-                        price=close, quantity=engine.current_position,
-                        profit=profit, reason=reason,
-                    )
-                    engine.add_trade(trade)
-
-            core.state.prev_sma_short = cur_short
-            core.state.prev_sma_long = cur_long
-
-        result = engine.calculate_metrics()
-        statistics = {
-            'start_date': str(df['datetime'].iloc[0]),
-            'end_date': str(df['datetime'].iloc[-1]),
-            'total_days': (df['datetime'].iloc[-1] - df['datetime'].iloc[0]).days,
-            'total_trades': result.total_trades,
-            'win_trades': result.winning_trades,
-            'loss_trades': result.losing_trades,
-            'win_rate': result.win_rate,
-            'total_net_pnl': result.total_profit,
-            'end_balance': result.final_equity,
-            'max_drawdown': result.max_drawdown,
-            'sharpe_ratio': result.sharpe_ratio,
-            'annual_return': ((result.final_equity / self.initial_capital) - 1)
-            / max(statistics.get('total_days', 1) / 365, 1e-9)
-            if 'total_days' in locals() else 0,
-            'average_win': result.avg_profit,
-            'average_loss': result.avg_loss,
-            'win_loss_ratio': result.profit_factor,
-        }
-        if 'total_days' not in locals():
-            statistics['total_days'] = (df['datetime'].iloc[-1] - df['datetime'].iloc[0]).days
-
-        return {
-            'dataset_name': dataset_name,
-            'statistics': statistics,
-            'daily_results': [],
         }
 
     def _format_and_save_report(

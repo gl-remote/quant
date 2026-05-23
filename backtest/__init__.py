@@ -4,7 +4,7 @@
 
 基于 vn.py 框架的回测引擎，提供:
   - VnpyBacktestEngine: 主回测引擎 (CSV数据加载、划分、三阶段回测、报告对比)
-  - BacktestEngine: 原始回测引擎 (vn.py 不可用时的降级方案)
+  - BacktestEngine: 交易跟踪器 (tq-backtest 实盘/模拟模式)
   - TradeRecord / BacktestResult: 交易记录与结果数据结构
 """
 
