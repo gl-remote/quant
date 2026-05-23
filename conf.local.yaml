@@ -1,0 +1,29 @@
+# ============================================================
+# 本地覆盖配置 - 不提交到git
+# 此文件包含敏感信息和本地环境配置
+# ============================================================
+
+# 第三方服务配置
+third_party:
+  services:
+    - name: "tqsdk"                  # 天勤量化
+      provider: "tianqin"
+      api_key: 'REDACTED_API_KEY'             # 替换为你的API Key
+      api_secret: 'REDACTED_API_SECRET' # 替换为你的API Secret
+      enabled: true
+
+# 本地开发环境覆盖
+environment:
+  name: "local"
+  debug: true
+
+# 未来可扩展的配置
+# strategy_params:
+#   custom_params: []
+
+# 第三方服务密钥
+# third_party:
+#   services:
+#     - name: "binance"
+#       api_key: "xxx"
+#       api_secret: "xxx"

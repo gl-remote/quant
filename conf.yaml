@@ -1,0 +1,79 @@
+# 天勤量化交易系统 - 通用配置文件
+# 此文件提交到版本控制，包含通用配置和占位符
+
+# ============================================================
+# 基础配置
+# ============================================================
+app:
+  name: "天勤量化交易系统"
+  version: "1.0.0"
+  mode: "test"                # test/backtest/live
+
+# ============================================================
+# 环境配置
+# ============================================================
+environment:
+  name: "development"         # development/test/production
+  debug: true
+
+# ============================================================
+# 交易策略配置
+# ============================================================
+strategy:
+  type: "sma"               # sma/rsi/macd/other
+  enabled: true
+
+# 均线策略参数
+strategy_params:
+  sma_short: 5              # 短期均线周期
+  sma_long: 20              # 长期均线周期
+
+# ============================================================
+# 风险管理配置
+# ============================================================
+risk:
+  enabled: true
+  stop_loss_ratio: 0.03     # 止损比例 (0.03 = 3%)
+  take_profit_ratio: 0.05  # 止盈比例 (0.05 = 5%)
+  position_ratio: 0.1       # 仓位比例 (0.1 = 10%)
+
+# ============================================================
+# 数据源配置
+# ============================================================
+data:
+  provider: "tqsdk"          # 数据提供商
+  cache_enabled: false      # 是否启用缓存
+
+# ============================================================
+# 第三方服务配置
+# ============================================================
+third_party:
+  services:
+    - name: "tqsdk"                  # 天勤量化
+      provider: "tianqin"            # 提供商
+      api_key: "PLACEHOLDER_API_KEY" # 请在 conf.local.yaml 中填写真实密钥
+      api_secret: "PLACEHOLDER_API_SECRET"
+      enabled: true
+      # 未来可扩展更多服务：
+      # - name: "binance"
+      #   provider: "binance"
+      #   api_key: ""
+      #   api_secret: ""
+      #   enabled: false
+      # - name: "netease"
+      #   provider: "netease"
+      #   api_key: ""
+      #   api_secret: ""
+      #   enabled: false
+
+# ============================================================
+# 系统配置
+# ============================================================
+system:
+  modules: []               # 未来可扩展：
+                          # - backtest: 回测引擎
+                          # - visualization: 可视化
+                          # - alerts: 报警通知
+  logging:
+    level: "INFO"
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

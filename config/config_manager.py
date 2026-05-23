@@ -12,7 +12,7 @@
 
 import os
 import yaml
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 
@@ -33,11 +33,11 @@ class ConfigManager:
         初始化配置管理器
         
         Args:
-            config_path: 配置文件路径，默认使用项目根目录下的config.yaml
+            config_path: 配置文件路径，默认使用项目根目录下的conf.yaml
         """
         if config_path is None:
             project_root = Path(__file__).parent.parent
-            config_path = project_root / "config.yaml"
+            config_path = project_root / "conf.yaml"
         
         self.config_path = Path(config_path)
         self._config: Optional[Dict[str, Any]] = None
@@ -77,11 +77,31 @@ class ConfigManager:
             self._config = self._load_config()
         return self._config
     
+    def get_service_config(self, service_name: str) -> Optional[Dict[str, Any]]:
+        """
+        获取指定第三方服务的配置
+        
+        Args:
+            service_name: 服务名称（如 'tqsdk', 'binance'）
+            
+        Returns:
+            服务配置字典，如果服务不存在返回 None
+        """
+        config = self.load_config()
+        third_party = config.get('third_party', {})
+        services: List[Dict[str, Any]] = third_party.get('services', [])
+        
+        for service in services:
+            if service.get('name') == service_name:
+                return service
+        
+        return None
+    
     def get_account_info(self) -> Dict[str, str]:
         """
         获取天勤量化账号信息
         
-        获取api_key和api_secret等账号标识信息。
+        从third_party.services中读取tqsdk服务的API密钥。
         注意：此方法不返回密码类敏感信息。
         
         Returns:
@@ -97,18 +117,21 @@ class ConfigManager:
         config = self.load_config()
         
         try:
-            account_config = config.get('tq_account', {})
+            tq_service = self.get_service_config('tqsdk')
+            
+            if not tq_service:
+                raise KeyError("配置文件中缺少 tqsdk 服务配置")
             
             account_info = {
-                'api_key': account_config.get('api_key', ''),
-                'api_secret': account_config.get('api_secret', '')
+                'api_key': tq_service.get('api_key', ''),
+                'api_secret': tq_service.get('api_secret', '')
             }
             
-            if not account_info['api_key']:
-                raise KeyError("配置文件中缺少 api_key 字段")
+            if not account_info['api_key'] or account_info['api_key'] == 'PLACEHOLDER_API_KEY':
+                raise KeyError("配置文件中缺少有效的 api_key，请检查 conf.local.yaml")
             
-            if not account_info['api_secret']:
-                raise KeyError("配置文件中缺少 api_secret 字段")
+            if not account_info['api_secret'] or account_info['api_secret'] == 'PLACEHOLDER_API_SECRET':
+                raise KeyError("配置文件中缺少有效的 api_secret，请检查 conf.local.yaml")
             
             return account_info
             

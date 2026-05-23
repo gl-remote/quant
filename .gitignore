@@ -40,10 +40,13 @@ env/
 Thumbs.db
 
 # Sensitive files - 注意：私人项目这些都保留了
-# config.yaml  # 私人项目保留，注意保护API密钥
+# config.yaml  # 旧配置文件，已迁移到 conf.yaml
 # *.pem
 # *.key
 # credentials.json
+
+# 本地配置文件（包含敏感信息）
+conf.local.yaml           # 本地覆盖配置，包含API密钥等敏感信息
 
 # Logs
 *.log
@@ -66,31 +69,3 @@ htmlcov/
 *.egg-info/
 dist/
 build/
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-develop-eggs/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg
-.installed.cfg
-
-# Virtual Environment
-.venv/
-venv/
-ENV/
-env/
-
-# Conda (保留envs和pkgs目录)
-# conda envs location: /usr/local/Caskroom/miniconda/base/envs/

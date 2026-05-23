@@ -2,23 +2,25 @@
 
 ## 核心规则
 
-### 规则 1: 激活正确的 Conda 环境（强制执行）
+### 规则 1: 执行 Python 命令前确保环境正确（强制执行）
 
-**每次执行 Python 命令前，必须激活正确的 Conda 环境：**
+**每次执行 Python 命令前，必须确保处于正确的 Conda 环境中：**
+
+#### 方法1：使用脚本激活（推荐）
 
 ```bash
 ./activate_env.sh
 ```
 
-或者直接激活：
+#### 方法2：直接激活
 
 ```bash
 source /usr/local/Caskroom/miniconda/base/bin/activate quant_trading
 ```
 
-### 规则 2: 验证环境
+#### 激活后验证
 
-激活环境后，确认 Python 路径和版本：
+确认使用的是正确的 Python 环境：
 
 ```bash
 which python
