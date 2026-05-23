@@ -20,7 +20,6 @@ import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
 from .data_loader import parse_symbol_exchange
-from strategies.gateways import VnpyMaStrategy
 from .report import generate_dataset_report, format_console_report
 from .comparison import compare_datasets, format_comparison_report
 
@@ -162,6 +161,8 @@ class BacktestEngine:
 # ============================================================
 # vn.py 框架回测引擎
 # ============================================================
+
+class VnpyBacktestEngine:
     """vn.py 框架回测引擎
 
     封装完整的回测流程：数据加载 → 划分 → 回测 → 报告 → 对比
@@ -342,6 +343,7 @@ class BacktestEngine:
         """在单个数据集上执行 vnpy 回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
+        from strategies.gateways import VnpyMaStrategy
 
         pure_symbol, exchange = parse_symbol_exchange(symbol)
         vt_symbol = f"{pure_symbol}.{exchange.value}" if hasattr(exchange, 'value') else symbol

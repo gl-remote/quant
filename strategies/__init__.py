@@ -6,7 +6,7 @@
   - core/            纯业务逻辑 (无框架依赖)
   - gateways/        框架网关适配器 (vnpy / tqsdk)
 
-vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
+vn.py 和 tqsdk 为强制依赖，仅在包导入层面做 try/except 以支持测试隔离。
 
 使用方式:
   from strategies import VnpyMaStrategy    # vn.py 回测策略
@@ -15,7 +15,16 @@ vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 """
 
 from .core import MaStrategyCore, TradingConfig, StrategyState, TradeRecord, PositionStatus
-from .gateways import VnpyMaStrategy, TqsdkMaStrategy
+
+try:
+    from .gateways import VnpyMaStrategy
+except ImportError:
+    VnpyMaStrategy = None
+
+try:
+    from .gateways import TqsdkMaStrategy
+except ImportError:
+    TqsdkMaStrategy = None
 
 MovingAverageStrategy = TqsdkMaStrategy
 
