@@ -1,200 +1,145 @@
 # API 接口文档
 
-> 版本: 1.0.0 | 更新日期: 2026-05-23
+> 版本: 1.0.0 | 更新日期: 2026-05-24
 
 ---
 
-## 1. 核心类
+## 核心回测引擎
 
-### 1.1 VnpyBacktestEngine
+### VnpyBacktestEngine
 
-```python
-class VnpyBacktestEngine:
-    """vn.py 框架回测引擎 — 封装完整回测流水线"""
-```
-
-位于 `backtest/backtest_engine.py`，通过 `backtest/__init__.py` 导出：
+[VnpyBacktestEngine](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/backtest_engine.py) 是整个回测子系统的编排器，封装了从数据加载到过拟合评估的完整流水线。
 
 ```python
 from backtest import VnpyBacktestEngine
+
+engine = VnpyBacktestEngine(config)
+engine.set_strategy_params(sma_short=5, sma_long=20)
+result = engine.run_full_pipeline(symbol='DCE.m2509')
 ```
 
-#### 构造方法
+#### 构造函数
 
 ```python
-def __init__(self, config: Dict[str, Any])
+VnpyBacktestEngine(config: Dict[str, Any])
 ```
 
-**参数:**
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `config` | `Dict` | 回测配置字典，结构同 `conf.yaml` 中的 `backtest` 段 |
+`config` 字典结构参见 [参数配置说明](configuration.md) 中的 `backtest` 段。
 
-支持的配置键:
-
-| 键 | 类型 | 默认值 | 说明 |
-|---|------|--------|------|
-| `data_dir` | `str` | `.quant_shared_data/csv` | CSV 数据目录 |
-| `initial_capital` | `float` | `100000.0` | 初始资金 |
-| `commission_rate` | `float` | `0.0003` | 手续费率 |
-| `slippage` | `float` | `1.0` | 滑点 (跳) |
-| `price_tick` | `float` | `1.0` | 最小价格变动 |
-| `contract_size` | `int` | `10` | 合约乘数 |
-| `interval` | `str` | `1m` | K线周期 |
-| `split` | `Dict` | (见下) | 数据划分参数 |
-| `report` | `Dict` | (见下) | 报告输出参数 |
-
-`split` 子配置:
-
-| 键 | 类型 | 默认值 | 说明 |
-|---|------|--------|------|
-| `train_ratio` | `float` | `0.6` | 训练集比例 |
-| `val_ratio` | `float` | `0.2` | 验证集比例 |
-| `test_ratio` | `float` | `0.2` | 测试集比例 |
-| `random_seed` | `int` | `42` | 随机种子 |
-| `shuffle` | `bool` | `False` | 是否随机打乱 |
-
-`report` 子配置:
-
-| 键 | 类型 | 默认值 | 说明 |
-|---|------|--------|------|
-| `output_dir` | `str` | `.quant_shared_data/reports` | 报告输出目录 |
-| `save_trade_records` | `bool` | `True` | 是否保存交易记录 |
-| `save_equity_curve` | `bool` | `True` | 是否保存资金曲线 |
-
-#### 方法
-
-##### set_strategy_params
+#### set_strategy_params
 
 ```python
-def set_strategy_params(self, **kwargs)
+set_strategy_params(**kwargs)
 ```
 
-设置传递给回测策略的参数。
+支持的参数：`sma_short`(int), `sma_long`(int), `stop_loss_ratio`(float), `take_profit_ratio`(float), `position_ratio`(float)
 
-**支持的参数:**
-
-| 参数 | 类型 | 默认值 | 说明 |
-|------|------|--------|------|
-| `sma_short` | `int` | `5` | 短期均线周期 |
-| `sma_long` | `int` | `20` | 长期均线周期 |
-| `stop_loss_ratio` | `float` | `0.03` | 止损比例 (3%) |
-| `take_profit_ratio` | `float` | `0.05` | 止盈比例 (5%) |
-| `position_ratio` | `float` | `0.1` | 仓位比例 (10%) |
-
-##### run_full_pipeline
+#### run_full_pipeline
 
 ```python
-def run_full_pipeline(
-    self,
+run_full_pipeline(
     symbol: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
 ) -> Dict[str, Any]
 ```
 
-执行完整的回测流水线：加载 → 划分 → 回测 ×3 → 报告 → 对比。
-
-**参数:**
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `symbol` | `str` | 合约代码，如 `DCE.m2509` |
-| `start_date` | `Optional[str]` | 数据起始日期，`YYYY-MM-DD` 格式 |
-| `end_date` | `Optional[str]` | 数据结束日期，`YYYY-MM-DD` 格式 |
-
-**返回值:**
+执行完整五阶段流水线，返回结果字典：
 
 ```python
 {
-    'success': bool,           # 是否成功
-    'symbol': str,             # 合约代码
-    'datasets': {              # 数据集信息
+    'success': bool,
+    'symbol': str,
+    'datasets': {                     # 数据集信息
         'train': {...},
         'val': {...},
         'test': {...},
     },
-    'train': {                 # 训练集回测结果
+    'train': {                        # 训练集回测原始结果
         'dataset_name': str,
-        'statistics': {...},   # 回传统计
+        'statistics': {...},
         'daily_results': [...],
     },
-    'val': {...},              # 验证集回测结果 (结构同上)
-    'test': {...},             # 测试集回测结果 (结构同上)
-    'train_report': {...},     # 训练集格式化报告
-    'val_report': {...},       # 验证集格式化报告
-    'test_report': {...},      # 测试集格式化报告
-    'comparison': {...},       # 三阶段对比分析
+    'val': {...},                     # 验证集结果（同上结构）
+    'test': {...},                    # 测试集结果（同上结构）
+    'train_report': {...},            # 训练集格式化报告
+    'val_report': {...},              # 验证集格式化报告
+    'test_report': {...},             # 测试集格式化报告
+    'comparison': {...},              # 三阶段对比分析
 }
 ```
 
-**statistics 结构:**
+### 回传统计结构 `statistics`
 
 ```python
 {
-    'start_date': str,
-    'end_date': str,
-    'total_days': int,
-    'total_trades': int,
-    'win_trades': int,
-    'loss_trades': int,
-    'win_rate': float,
-    'total_net_pnl': float,
-    'end_balance': float,
-    'max_drawdown': float,
-    'sharpe_ratio': float,
-    'annual_return': float,
-    'average_win': float,
-    'average_loss': float,
-    'win_loss_ratio': float,
+    'start_date': str,           # YYYY-MM-DD
+    'end_date': str,             # YYYY-MM-DD
+    'total_days': int,           # 总交易日
+    'total_trades': int,         # 总交易次数
+    'win_trades': int,           # 盈利次数
+    'loss_trades': int,          # 亏损次数
+    'win_rate': float,           # 胜率
+    'total_net_pnl': float,      # 总净盈亏
+    'end_balance': float,        # 期末权益
+    'max_drawdown': float,       # 最大回撤比例
+    'sharpe_ratio': float,       # 年化夏普比率
+    'annual_return': float,      # 年化收益率
+    'average_win': float,        # 平均盈利
+    'average_loss': float,       # 平均亏损
+    'win_loss_ratio': float,     # 盈亏比
 }
 ```
 
-**comparison 结构:**
+### 对比分析结构 `comparison`
 
 ```python
 {
     'meta': {
         'symbol': str,
-        'train': str,
-        'val': str,
-        'test': str,
+        'train': str, 'val': str, 'test': str,
     },
-    'metrics_table': {
-        'total_return': {'train': float, 'val': float, 'test': float},
-        'annual_return': {...},
-        'sharpe_ratio': {...},
-        'max_drawdown': {...},
-        'win_rate': {...},
+    'metrics_table': {                    # 七项指标的三阶段值
+        'total_return':   {'train': float, 'val': float, 'test': float},
+        'annual_return':  {...},
+        'sharpe_ratio':   {...},
+        'max_drawdown':   {...},
+        'win_rate':       {...},
         'profit_loss_ratio': {...},
-        'total_trades': {...},
+        'total_trades':   {...},
     },
-    'return_degradation': {
+    'return_degradation': {               # 收益递减分析
+        'train_to_val': float,            # 百分比差值
+        'val_to_test': float,
+        'train_to_test': float,
+        'risk_level': str,                # high/medium/low/none
+        'message': str,                   # 中文解读
+    },
+    'risk_increase': {                    # 风险递增分析
         'train_to_val': float,
         'val_to_test': float,
         'train_to_test': float,
-        'risk_level': str,        # 'high' / 'medium' / 'low' / 'none'
+        'risk_level': str,
         'message': str,
     },
-    'risk_increase': {...},
-    'stability_analysis': {
-        'return_cv': float,
+    'stability_analysis': {               # 稳定性分析
+        'return_cv': float,               # 收益率变异系数
         'sharpe_cv': float,
         'winrate_cv': float,
         'drawdown_cv': float,
-        'avg_cv': float,
-        'stability': str,         # 'high' / 'medium' / 'low'
+        'avg_cv': float,                  # 平均变异系数
+        'stability': str,                 # high/medium/low
         'message': str,
     },
-    'overfitting_assessment': {
-        'score': int,             # 0-100
-        'level': str,             # 'high' / 'medium' / 'low' / 'none'
+    'overfitting_assessment': {           # 过拟合综合评估
+        'score': int,                     # 0-100
+        'level': str,                     # high/medium/low/none
         'advice': str,
         'details': {
-            'return_degradation': str,
-            'drawdown_increase': str,
-            'sharpe_decline': str,
-            'winrate_decline': str,
+            'return_degradation': str,    # 收益率下降比例
+            'drawdown_increase': str,     # 回撤增加比例
+            'sharpe_decline': str,        # 夏普下降比例
+            'winrate_decline': str,       # 胜率下降比例
         },
     },
 }
@@ -202,52 +147,117 @@ def run_full_pipeline(
 
 ---
 
-### 1.2 BacktestEngine (降级引擎)
+## 降级回测引擎
+
+### BacktestEngine
+
+当 vn.py 不可用时，系统自动切换至此内置引擎，提供相同的核心功能。
 
 ```python
-class BacktestEngine:
-    """原始回测引擎 — vnpy 不可用时的降级方案"""
+from backtest import BacktestEngine, TradeRecord
+
+engine = BacktestEngine(initial_capital=100000.0)
+engine.add_trade(TradeRecord(...))
+result = engine.calculate_metrics()
+report = engine.generate_report()
 ```
-
-位于同一文件中，当 `vnpy` 未安装时自动启用。
-
-```python
-from backtest import BacktestEngine
-```
-
-#### 构造方法
-
-```python
-def __init__(self, initial_capital: float = 100000.0)
-```
-
-#### 方法
 
 | 方法 | 说明 |
 |------|------|
-| `add_trade(trade: TradeRecord)` | 添加一笔交易记录，更新资金和持仓 |
-| `calculate_metrics() -> BacktestResult` | 计算绩效指标 |
-| `generate_report() -> str` | 生成格式化报告字符串 |
+| `add_trade(trade: TradeRecord)` | 添加交易记录，同步更新资金与持仓 |
+| `calculate_metrics() -> BacktestResult` | 计算全部绩效指标 |
+| `generate_report() -> str` | 生成控制台格式的文本报告 |
 
 ---
 
-### 1.3 数据类
+## 数据加载模块
 
-#### TradeRecord
+位于 [backtest/data_loader.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/data_loader.py)。
+
+| 函数 | 说明 |
+|------|------|
+| `load_csv_data(data_dir, symbol) -> Optional[DataFrame]` | 从 CSV 目录加载品种数据 |
+| `split_datasets(df, train_ratio, val_ratio, test_ratio, random_seed, shuffle) -> Tuple[DataFrame, DataFrame, DataFrame]` | 划分三数据集 |
+| `df_to_vnpy_datalines(df, symbol) -> list` | DataFrame 转 vnpy BarData 列表 |
+| `get_dataset_info(df, name) -> Dict` | 获取数据集统计摘要 |
+
+---
+
+## 报告与对比分析模块
+
+### 报告生成 (report.py)
+
+| 函数 | 说明 |
+|------|------|
+| `generate_dataset_report(statistics, daily_results, dataset_name, symbol, initial_capital, output_dir, save_trades, save_equity) -> Dict` | 生成单数据集报告并序列化为 JSON |
+| `format_console_report(report, dataset_name) -> str` | 格式化控制台输出 |
+
+### 对比分析 (comparison.py)
+
+| 函数 | 说明 |
+|------|------|
+| `compare_datasets(train_report, val_report, test_report, symbol) -> Dict` | 三阶段对比分析主入口 |
+| `format_comparison_report(comparison) -> str` | 格式化对比报告 |
+
+---
+
+## 策略核心
+
+### MaStrategyCore
+
+位于 [strategies/core/ma_strategy.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/core/ma_strategy.py)，纯业务逻辑，无框架依赖。
+
+```python
+from strategies.core import MaStrategyCore, TradingConfig
+
+config = TradingConfig(sma_short=5, sma_long=20)
+core = MaStrategyCore(config)
+
+signal, reason = core.on_bar_signal(closes=[...], current_price=100.5)
+if signal == 'buy':
+    core.on_enter(price=100.5, volume=10)
+elif signal == 'sell':
+    profit = core.on_exit(exit_price=102.0)
+```
+
+| 方法 | 说明 |
+|------|------|
+| `calculate_sma(data, period) -> float` | 计算 SMA |
+| `check_crossover(short, long, prev_short, prev_long) -> str` | 检测金叉/死叉 |
+| `check_stop_loss(current_price) -> bool` | 止损判断 |
+| `check_take_profit(current_price) -> bool` | 止盈判断 |
+| `on_bar_signal(closes, current_price) -> Tuple[Optional[str], str]` | 综合信号生成（含风控） |
+| `on_enter(price, volume)` | 仓位入场 |
+| `on_exit(exit_price) -> float` | 仓位出场，返回盈亏 |
+
+### 策略网关
+
+| 类 | 位置 | 用途 |
+|----|------|------|
+| `VnpyMaStrategy` | [gateways/vnpy_gateway.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/gateways/vnpy_gateway.py) | vn.py CtaTemplate 适配器 |
+| `TqsdkMaStrategy` | [gateways/tqsdk_gateway.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/gateways/tqsdk_gateway.py) | 天勤 SDK 适配器 |
+
+两者均委托调用 `MaStrategyCore`，仅负责框架侧的数据转换与订单执行。
+
+---
+
+## 数据结构定义
+
+### TradeRecord
 
 ```python
 @dataclass
 class TradeRecord:
     timestamp: datetime
     symbol: str
-    direction: str              # 'buy' or 'sell'
+    direction: str       # 'buy' | 'sell'
     price: float
     quantity: int
-    profit: float = 0.0
-    reason: str = ""
+    profit: float = 0.0  # 卖出时有效
+    reason: str = ""     # 交易原因：金叉买入/死叉卖出/止损/止盈
 ```
 
-#### BacktestResult
+### BacktestResult
 
 ```python
 @dataclass
@@ -265,97 +275,33 @@ class BacktestResult:
     final_equity: float = 0.0
 ```
 
----
-
-## 2. 数据加载模块
-
-位于 `backtest/data_loader.py`。
-
-### load_csv_data
+### TradingConfig（策略核心）
 
 ```python
-def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]
-```
-
-从指定目录加载品种的历史 CSV 数据。
-
-### split_datasets
-
-```python
-def split_datasets(
-    df: pd.DataFrame,
-    train_ratio: float = 0.6,
-    val_ratio: float = 0.2,
-    test_ratio: float = 0.2,
-    random_seed: int = 42,
-    shuffle: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]
-```
-
-将 DataFrame 按比例划分为训练/验证/测试集。
-
-### df_to_vnpy_datalines
-
-```python
-def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list
-```
-
-将 DataFrame 转换为 vnpy BarData 对象列表。
-
-### get_dataset_info
-
-```python
-def get_dataset_info(df: pd.DataFrame, name: str = "") -> Dict
-```
-
-获取数据集基本统计信息。
-
----
-
-## 3. 报告模块
-
-位于 `backtest/report.py`。
-
-### generate_dataset_report
-
-```python
-def generate_dataset_report(
-    statistics: Dict[str, Any],
-    daily_results: Optional[List[Dict]] = None,
-    dataset_name: str = "unknown",
-    symbol: str = "",
-    initial_capital: float = 100000.0,
-    output_dir: str = ".quant_shared_data/reports",
-    save_trades: bool = True,
-    save_equity: bool = True,
-) -> Dict[str, Any]
-```
-
-### format_console_report
-
-```python
-def format_console_report(report: Dict, dataset_name: str) -> str
+@dataclass
+class TradingConfig:
+    sma_short: int = 5
+    sma_long: int = 20
+    stop_loss_ratio: float = 0.03
+    take_profit_ratio: float = 0.05
+    position_ratio: float = 0.1
 ```
 
 ---
 
-## 4. 对比分析模块
+## 配置管理
 
-位于 `backtest/comparison.py`。
-
-### compare_datasets
+### ConfigManager
 
 ```python
-def compare_datasets(
-    train_report: Dict,
-    val_report: Dict,
-    test_report: Dict,
-    symbol: str = "",
-) -> Dict[str, Any]
-```
+from config import ConfigManager
 
-### format_comparison_report
+cm = ConfigManager()                        # 加载 conf.yaml + conf.local.yaml
+cm = ConfigManager(config_file='custom.yaml')  # 加载指定配置文件
 
-```python
-def format_comparison_report(comparison: Dict) -> str
+tc = cm.get_trading_config()                # 策略 + 风控参数
+bc = cm.get_backtest_config()               # 回测引擎参数
+dc = cm.get_data_config()                   # 数据存储路径
+ac = cm.get_account_info()                  # 天勤账号信息
+cm.validate_config()                        # 参数合法性校验
 ```

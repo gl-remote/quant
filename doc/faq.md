@@ -1,235 +1,163 @@
-# 常见问题解答 (FAQ)
+# 常见问题解答
 
-> 版本: 1.0.0 | 更新日期: 2026-05-23
+> 版本: 1.0.0 | 更新日期: 2026-05-24
 
 ---
 
 ## 安装与环境
 
-### Q1: 我没有安装 vnpy，回测系统还能用吗？
+### Q1: 未安装 vn.py，回测系统还能用吗？
 
-**可以。** 系统内置了降级方案。当检测到 vnpy 未安装时，会自动使用内置的 `BacktestEngine` 执行回测。核心功能完全相同，仅在统计指标的计算精度上可能略有差异。
+可以。系统内置了降级引擎 [BacktestEngine](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/backtest_engine.py)，在 vn.py 不可用时自动启用。降级引擎与 vn.py 引擎使用相同的策略核心 `MaStrategyCore`，提供的绩效指标一致（总收益、夏普比率、最大回撤、胜率等），仅在回测模拟精度上略有差异。
 
-安装 vnpy 可获得更精确的回测模拟：
-```bash
-pip install vnpy vnpy_ctastrategy
-```
+### Q2: vn.py 安装失败怎么办？
 
----
+vn.py 依赖较多，推荐以下方案：
 
-### Q2: 安装 vnpy 时报错怎么办？
+1. **使用 conda 环境**：`conda create -n vnpy_env python=3.10` → `conda activate vnpy_env` → `pip install vnpy vnpy_ctastrategy`
+2. **分步安装**：`pip install vnpy --no-deps` → `pip install vnpy_ctastrategy`
+3. **不安装 vn.py**：系统自动降级，不影响核心功能
 
-vnpy 依赖较多，在部分环境下可能安装失败。常见解决方案：
+### Q3: 支持的 Python 版本？
 
-1. **使用 conda 环境**:
-```bash
-conda create -n vnpy_env python=3.10
-conda activate vnpy_env
-pip install vnpy vnpy_ctastrategy
-```
-
-2. **分步安装**:
-```bash
-pip install vnpy --no-deps
-pip install vnpy_ctastrategy
-```
-
-3. **不安装 vnpy**: 系统会自动降级，不影响使用。
-
----
-
-### Q3: 需要哪些 Python 版本？
-
-推荐 Python 3.8 ~ 3.11。核心依赖 `numpy`、`pandas`、`pyyaml` 对 Python 版本要求较宽松。
+推荐 Python 3.8 ~ 3.11。核心依赖 `numpy`、`pandas`、`pyyaml` 对此范围兼容良好。
 
 ---
 
 ## 数据相关
 
-### Q4: 数据文件应该是什么格式？
+### Q4: CSV 数据文件格式要求？
 
-CSV 文件需包含以下列：
+必须包含以下列：
 
 | 列名 | 类型 | 示例 |
 |------|------|------|
-| `datetime` | 时间戳 | `2024-01-15 09:00:00` |
-| `open` | 开盘价 | `3012.0` |
-| `high` | 最高价 | `3025.0` |
-| `low` | 最低价 | `3008.0` |
-| `close` | 收盘价 | `3018.0` |
-| `volume` | 成交量 | `125000` |
+| `datetime` | datetime/str | `2024-01-15 09:00:00` |
+| `open` | float | `3012.0` |
+| `high` | float | `3025.0` |
+| `low` | float | `3008.0` |
+| `close` | float | `3018.0` |
+| `volume` | float/int | `125000` |
 
-可用内置导出命令自动生成：
-```bash
-python main.py export --symbol DCE.m2509 --start 2024-01-01 --end 2025-12-31
-```
+使用 `python main.py export` 命令可自动生成标准格式的 CSV 文件。
 
----
+### Q5: 文件命名规则？
 
-### Q5: 文件命名有什么要求？
+系统按以下优先级搜索数据文件：`{symbol}.csv` → `{symbol}_qlib.csv` → `{symbol}_*.csv`。推荐使用 `{symbol}_qlib.csv`（如 `DCE.m2509_qlib.csv`），这是导出命令的默认命名。
 
-系统按以下优先级搜索数据文件：
+### Q6: 多次导出同一品种会重复吗？
 
-1. `{symbol}.csv` (如 `DCE.m2509.csv`)
-2. `{symbol}_qlib.csv` (如 `DCE.m2509_qlib.csv`)
-3. `{symbol}_*.csv` (匹配第一个找到的文件)
-
-将文件放入 `.quant_shared_data/csv/` 目录即可。
-
----
-
-### Q6: 数据量太少怎么办？
-
-数据量不足 10 条时，系统会抛出 `ValueError`。
-
-- 扩大数据时间范围：`--start` 和 `--end` 参数
-- 使用更低周期的数据 (如 1 分钟线) 以增加数据点
-- 合并多个品种的数据进行测试
+不会。`export` 命令内置智能合并逻辑：检测已有 CSV → 加载并合并 → 按 `datetime` 去重 → 保留最新数据。导出后自动更新 SQLite 元数据记录。
 
 ---
 
 ## 回测相关
 
-### Q7: 为什么训练集收益很高但测试集很差？
+### Q7: 训练集收益高但测试集很差，是什么原因？
 
-这是典型的**过拟合**现象。说明策略在历史数据上过度拟合，对未知数据的泛化能力不足。
+这是典型的**过拟合**现象。策略在历史数据上过度拟合了噪声模式，导致对未知数据的泛化能力不足。系统会在对比分析报告中给出过拟合评分和针对性建议。
 
-系统会通过对比分析报告中的"过拟合综合评估"给出风险评分和建议。常见优化方向：
+常见优化方向：
+- 减少策略参数复杂度（如固定均线周期）
+- 收紧止损止盈参数
+- 增加历史数据覆盖范围
+- 使用验证集进行参数选择而非训练集
 
-- 减少策略参数 (如固定均线周期)
-- 增加止损止盈风控
-- 使用更多历史数据
-- 在验证集上进行参数选择，而非训练集
+### Q8: `shuffle: true` 和 `false` 如何选择？
 
----
+| 模式 | 原理 | 适用场景 | 风险 |
+|------|------|---------|------|
+| `false` | 按时间顺序划分（前→中→后） | 时间序列金融数据 | 可能受特定时间段特征影响 |
+| `true` | 随机采样分配 | 跨品种/跨时段稳健性检验 | 可能引入前视偏差 |
 
-### Q8: shuffle: true 和 false 有什么区别？
+**强烈建议**：对期货/股票等时间序列数据使用 `shuffle: false`。
 
-| 模式 | 工作原理 | 优点 | 风险 |
-|------|---------|------|------|
-| `false` | 按时间顺序划分 | 避免未来信息泄露 | 可能受时间段特征影响 |
-| `true` | 随机采样划分 | 跨时段稳健性验证 | 可能引入前视偏差 |
+### Q9: 变异系数 (CV) 的含义？
 
-**强烈建议**: 对时间序列金融数据使用 `shuffle: false`，确保回测结果可靠。
+CV = 标准差 / 均值，衡量指标在训练/验证/测试三阶段上的波动程度。
 
----
+- CV < 0.5：策略表现稳定，不同时期表现一致
+- CV 0.5 ~ 1.0：有一定波动，可接受
+- CV > 1.0：波动较大，策略不稳定，需关注
 
-### Q9: 报告中的变异系数 (CV) 是什么意思？
+### Q10: 过拟合评分如何计算？
 
-变异系数 (Coefficient of Variation) = 标准差 / 均值，用于衡量指标在三阶段 (训练/验证/测试) 上的波动程度。
+系统从四个维度综合评估（每项触发即加分）：
 
-- **CV < 0.5**: 策略表现稳定
-- **CV 0.5 ~ 1.0**: 有一定波动，可接受
-- **CV > 1.0**: 波动较大，策略不稳定
-
----
-
-### Q10: 过拟合评分是如何计算的？
-
-评分范围 0-100，基于以下四个维度：
-
-| 维度 | 触发条件 | 加分 |
+| 维度 | 严重阈值 | 加分 |
 |------|---------|------|
-| 收益下降 > 50% | 训练→测试收益率腰斩 | +40 |
-| 收益下降 20-50% | 明显下降 | +20 |
-| 回撤增加 > 10% | 风险显著上升 | +30 |
-| 回撤增加 5-10% | 风险有所上升 | +15 |
-| 夏普下降 > 50% | 风险调整收益暴跌 | +20 |
-| 胜率下降 > 30% | 信号质量下降 | +10 |
+| 训练→测试 收益率下降 >50% | 收益腰斩 | +40 |
+| 训练→测试 收益率下降 20-50% | 明显下降 | +20 |
+| 测试集回撤比训练集增加 >10% | 风险失控 | +30 |
+| 测试集回撤比训练集增加 5-10% | 风险上升 | +15 |
+| 夏普比率下降 >50% | 超额收益失效 | +20 |
+| 胜率下降 >30% | 信号质量退化 | +10 |
 
-- 0-9 分: 无过拟合风险
-- 10-29 分: 轻微过拟合
-- 30-59 分: 中等风险
-- 60-100 分: 严重过拟合
-
----
-
-### Q11: 如何批量测试不同策略参数？
-
-编写脚本循环调用 API：
-
-```python
-from backtest import VnpyBacktestEngine
-
-config = {...}  # 基础配置
-
-for short, long in [(5, 20), (10, 30), (20, 60)]:
-    engine = VnpyBacktestEngine(config)
-    engine.set_strategy_params(sma_short=short, sma_long=long)
-    result = engine.run_full_pipeline(symbol='DCE.m2509')
-    
-    score = result['comparison']['overfitting_assessment']['score']
-    sharpe = result['test']['statistics']['sharpe_ratio']
-    print(f"SMA({short},{long}): sharpe={sharpe:.2f}, of_score={score}")
-```
+0-9 无风险，10-29 轻微，30-59 中等，60-100 严重。
 
 ---
 
 ## 报告相关
 
-### Q12: 报告文件保存在哪里？
+### Q11: 报告文件保存在哪里？
 
-默认保存在 `.quant_shared_data/reports/` 目录。
+默认路径 `.quant_shared_data/reports/`。可通过 `conf.yaml` 中的 `backtest.report.output_dir` 修改。
 
-可通过 `conf.yaml` 中的 `backtest.report.output_dir` 修改：
-```yaml
-backtest:
-  report:
-    output_dir: "/path/to/custom/reports"
-```
+每个品种每阶段生成三个文件：`{symbol}_{dataset}_report.json`（结构化报告）、`{symbol}_{dataset}_trades.json`（交易明细）、`{symbol}_{dataset}_equity.json`（资金曲线），外加 `{symbol}_comparison.json`（对比分析）。
 
----
-
-### Q13: 交易记录中的字段含义？
-
-`{symbol}_*_trades.json` 中的每笔交易记录包含：
+### Q12: 交易记录的字段含义？
 
 | 字段 | 说明 |
 |------|------|
 | `timestamp` | 交易时间 |
 | `symbol` | 品种代码 |
-| `direction` | 方向 (buy/sell) |
+| `direction` | buy/sell |
 | `price` | 成交价格 |
 | `quantity` | 交易数量 |
-| `profit` | 盈亏金额 (卖出时有效) |
-| `reason` | 交易原因 (金叉/死叉/止损/止盈) |
+| `profit` | 盈亏金额（仅卖出时有效） |
+| `reason` | 交易原因：金叉买入 / 死叉卖出 / 止损 / 止盈 |
+
+### Q13: 资金曲线数据包含什么？
+
+每条记录包含：`date`（日期）、`equity`（当日权益）、`daily_return`（当日盈亏）、`drawdown`（当日回撤比例）。可用于 matplotlib 可视化或 Excel 分析。
 
 ---
 
-### Q14: 资金曲线如何解读？
+## 策略开发
 
-`{symbol}_*_equity.json` 中每条记录包含：
+### Q14: 如何添加新策略？
 
-| 字段 | 说明 |
-|------|------|
-| `date` | 日期 |
-| `equity` | 当日收盘后总权益 |
-| `daily_return` | 当日盈亏 |
-| `drawdown` | 当日回撤比例 |
+1. 在 `strategies/core/` 下创建新策略核心类（参考 `MaStrategyCore`）
+2. 在 `strategies/gateways/` 下创建对应的 vn.py 和天勤网关适配器
+3. 在 `VnpyBacktestEngine` 中添加策略切换逻辑
 
-资金曲线可用于后续可视化 (如 matplotlib 绘图)，也可直接导入 Excel 分析。
+架构设计详见 [系统架构设计](architecture.md)。
 
----
+### Q15: 如何在回测中使用自定义策略参数？
 
-## 兼容性
+通过 `set_strategy_params()` 动态传入：
 
-### Q15: 旧版 TqSdk 回测还能用吗？
-
-可以。使用 `tq-backtest` 子命令保留旧版兼容：
-
-```bash
-python main.py tq-backtest --symbol DCE.m2109 --start 2024-01-01 --end 2024-12-31
+```python
+engine.set_strategy_params(
+    sma_short=10,
+    sma_long=30,
+    stop_loss_ratio=0.02,
+    take_profit_ratio=0.08,
+    position_ratio=0.15,
+)
 ```
 
-新版本 `backtest` 子命令使用 vn.py 引擎，功能更丰富。
-
 ---
 
-### Q16: 如何贡献新的策略？
+## 运行相关
 
-1. 在 `backtest/strategies/` 下创建新策略文件
-2. 继承 `vnpy_ctastrategy.CtaTemplate` (或 `BacktestEngine` 客户类)
-3. 实现 `on_bar()` 方法
-4. 在 `VnpyBacktestEngine` 中添加策略切换逻辑
+### Q16: export 命令需要联网吗？
 
-详见 [架构设计文档](architecture.md) 了解模块结构。
+需要。`export` 通过天勤 SDK 从服务器拉取历史 K 线数据，需要有效的网络连接和天勤账号。`test` 和 `backtest`（使用本地 CSV 数据）不需要联网。
+
+### Q17: 实盘交易 (live) 的前提条件？
+
+1. `conf.local.yaml` 中配置有效的天勤账号（开户后获取）
+2. 已安装 `tqsdk` 包（`pip install tqsdk`）
+3. 网络可连接天勤服务器
+4. 交易时段内运行（非交易时段无法执行真实订单）
