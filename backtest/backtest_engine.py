@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
-from .strategies.vnpy_ma_strategy import VnpyMaStrategy, HAS_VNPY
+from strategies.gateways import VnpyMaStrategy, HAS_VNPY
 from .report import generate_dataset_report, format_console_report
 from .comparison import compare_datasets, format_comparison_report
 

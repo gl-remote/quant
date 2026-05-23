@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 # ============================================================
 def _apply_trading_config(strategy, tc, symbol):
     cfg = strategy.config
-    cfg.symbol = symbol
-    for k in ('sma_short_period', 'sma_long_period'):
-        setattr(cfg, k, tc['sma_short' if 'short' in k else 'sma_long'])
+    cfg.sma_short = tc['sma_short']
+    cfg.sma_long = tc['sma_long']
     cfg.stop_loss_ratio = tc['stop_loss_ratio']
     cfg.take_profit_ratio = tc['take_profit_ratio']
     cfg.position_ratio = tc['position_ratio']
+    strategy.symbol = symbol
 
 
 def _setup_db_logging(db: Database, command: str, symbol: str = None):
