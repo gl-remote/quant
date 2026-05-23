@@ -5,6 +5,6 @@
 提供回测引擎和绩效分析功能。
 """
 
-from .backtest_engine import BacktestEngine, BacktestResult
+from .backtest_engine import BacktestEngine, BacktestResult, TradeRecord
 
-__all__ = ['BacktestEngine', 'BacktestResult']
+__all__ = ['BacktestEngine', 'BacktestResult', 'TradeRecord']

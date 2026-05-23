@@ -51,7 +51,7 @@ class PositionStatus(Enum):
     """持仓状态枚举"""
     NO_POSITION = "no_position"
     LONG_POSITION = "long_position"
-    
+
 
 @dataclass
 class TradingConfig:
@@ -63,7 +63,7 @@ class TradingConfig:
     position_ratio: float = 0.1
     
     symbol: str = "DCE.m2109"
-    
+
 
 @dataclass
 class TradeRecord:
@@ -101,6 +101,8 @@ class MovingAverageStrategy:
         config: 交易配置
         state: 策略状态
         api: 天勤API实例
+        signal: 当前信号 ('buy', 'sell', None)
+        signal_reason: 信号原因
     """
     
     def __init__(self, config: Optional[TradingConfig] = None):
@@ -115,6 +117,9 @@ class MovingAverageStrategy:
         self.api = None
         self.account = None
         self.position = None
+        
+        self.signal = None
+        self.signal_reason = ""
         
         self._setup_logging()
         
@@ -182,6 +187,8 @@ class MovingAverageStrategy:
         try:
             if hasattr(data, 'close'):
                 prices = list(data.close)[-period:]
+            elif isinstance(data, dict) and 'close' in data:
+                prices = [data['close']]
             elif isinstance(data, list):
                 prices = data[-period:]
             else:
@@ -189,6 +196,8 @@ class MovingAverageStrategy:
                 
             if len(prices) >= period:
                 return sum(prices) / period
+            elif len(prices) > 0:
+                return sum(prices) / len(prices)
         except Exception as e:
             logger.error(f"手动计算SMA失败: {e}")
             
@@ -328,14 +337,31 @@ class MovingAverageStrategy:
         Args:
             kline_data: K线数据对象
         """
-        if not kline_data:
+        if kline_data.empty:
             return
             
+        self.signal = None
+        self.signal_reason = ""
+        
+        closes = []
+        current_price = 0.0
+        
+        try:
+            if hasattr(kline_data, 'close'):
+                closes = list(kline_data.close)
+                current_price = float(kline_data.close.iloc[-1])
+            elif isinstance(kline_data, dict) and 'close' in kline_data:
+                closes.append(kline_data['close'])
+                current_price = kline_data['close']
+        except Exception as e:
+            logger.error(f"获取价格数据失败: {e}")
+            return
+        
         self.state.current_sma_short = self.calculate_sma(
-            kline_data, self.config.sma_short_period
+            closes, self.config.sma_short_period
         )
         self.state.current_sma_long = self.calculate_sma(
-            kline_data, self.config.sma_long_period
+            closes, self.config.sma_long_period
         )
         
         crossover = self.check_crossover(
@@ -345,18 +371,10 @@ class MovingAverageStrategy:
             self.state.prev_sma_long
         )
         
-        current_price = 0.0
-        try:
-            if hasattr(kline_data, 'close'):
-                current_price = float(kline_data.close.iloc[-1])
-            elif hasattr(kline_data, 'close'):
-                current_price = float(list(kline_data.close)[-1])
-        except Exception as e:
-            logger.error(f"获取当前价格失败: {e}")
-            return
-        
         if self.state.position_status == PositionStatus.LONG_POSITION:
             if self.check_stop_loss(current_price):
+                self.signal = 'sell'
+                self.signal_reason = "止损"
                 self.execute_sell(
                     self.config.symbol,
                     current_price,
@@ -364,6 +382,8 @@ class MovingAverageStrategy:
                     "止损"
                 )
             elif self.check_take_profit(current_price):
+                self.signal = 'sell'
+                self.signal_reason = "止盈"
                 self.execute_sell(
                     self.config.symbol,
                     current_price,
@@ -371,6 +391,8 @@ class MovingAverageStrategy:
                     "止盈"
                 )
             elif crossover == 'death_cross':
+                self.signal = 'sell'
+                self.signal_reason = "死叉卖出"
                 self.execute_sell(
                     self.config.symbol,
                     current_price,
@@ -379,13 +401,8 @@ class MovingAverageStrategy:
                 )
         else:
             if crossover == 'golden_cross':
-                position_size = self._calculate_position_size(current_price)
-                self.execute_buy(
-                    self.config.symbol,
-                    current_price,
-                    position_size,
-                    "金叉买入"
-                )
+                self.signal = 'buy'
+                self.signal_reason = "金叉买入"
         
         self.state.prev_sma_short = self.state.current_sma_short
         self.state.prev_sma_long = self.state.current_sma_long
@@ -434,16 +451,17 @@ class MovingAverageStrategy:
                 'total_profit': 0.0
             }
             
-        winning_trades = [r for r in self.state.trade_records if r.direction == "卖出" and r.profit > 0]
-        losing_trades = [r for r in self.state.trade_records if r.direction == "卖出" and r.profit < 0]
+        sell_records = [r for r in self.state.trade_records if r.direction == "卖出"]
+        winning_trades = [r for r in sell_records if r.profit > 0]
+        losing_trades = [r for r in sell_records if r.profit < 0]
         
-        total_profit = sum(r.profit for r in self.state.trade_records if r.profit != 0)
+        total_profit = sum(r.profit for r in sell_records)
         
         return {
-            'total_trades': len(self.state.trade_records),
+            'total_trades': len(sell_records),
             'winning_trades': len(winning_trades),
             'losing_trades': len(losing_trades),
-            'win_rate': len(winning_trades) / len(self.state.trade_records) * 2 if self.state.trade_records else 0,
+            'win_rate': len(winning_trades) / len(sell_records) if sell_records else 0,
             'total_profit': total_profit
         }
     
