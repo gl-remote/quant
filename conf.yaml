@@ -38,11 +38,21 @@ risk:
   position_ratio: 0.1       # 仓位比例 (0.1 = 10%)
 
 # ============================================================
-# 数据源配置
+# 数据源与存储配置
 # ============================================================
 data:
-  provider: "tqsdk"          # 数据提供商
-  cache_enabled: false      # 是否启用缓存
+  provider: "tqsdk"
+  cache_enabled: false
+  base_dir: ".quant_shared_data"
+  export_dir: ".quant_shared_data/csv"
+  db_path: ".quant_shared_data/quant_shared.db"
+
+# ============================================================
+# 数据导出配置
+# ============================================================
+export:
+  default_dir: ".quant_shared_data/csv"
+  filename_template: "{symbol}_qlib.csv"  # Qlib 标准命名
 
 # ============================================================
 # 第三方服务配置

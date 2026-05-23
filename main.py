@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""天勤量化交易系统 - 均线交叉策略回测与实盘交易入口"""
+"""天勤量化交易系统 - 均线交叉策略，支持数据导出、回测、实盘交易"""
 
 import sys
 import argparse
@@ -14,132 +14,76 @@ logging.basicConfig(
 from config import ConfigManager
 from strategies import MovingAverageStrategy
 from backtest import BacktestEngine, TradeRecord
+from data import Database, DBLogHandler, export_csv
 
 logger = logging.getLogger(__name__)
 
 
-def _apply_trading_config(strategy, trading_config, symbol):
-    """将交易配置应用到策略对象"""
+# ============================================================
+# 公共工具
+# ============================================================
+def _apply_trading_config(strategy, tc, symbol):
     cfg = strategy.config
     cfg.symbol = symbol
-    cfg.sma_short_period = trading_config['sma_short']
-    cfg.sma_long_period = trading_config['sma_long']
-    cfg.stop_loss_ratio = trading_config['stop_loss_ratio']
-    cfg.take_profit_ratio = trading_config['take_profit_ratio']
-    cfg.position_ratio = trading_config['position_ratio']
+    for k in ('sma_short_period', 'sma_long_period'):
+        setattr(cfg, k, tc['sma_short' if 'short' in k else 'sma_long'])
+    cfg.stop_loss_ratio = tc['stop_loss_ratio']
+    cfg.take_profit_ratio = tc['take_profit_ratio']
+    cfg.position_ratio = tc['position_ratio']
 
 
-def run_live_trading(symbol: str, config_file: str = None, show_gui: bool = False):
-    try:
-        cm = ConfigManager(config_file)
-        cm.validate_config()
-        account = cm.get_account_info()
-        if not account:
-            logger.error("请先在 conf.local.yaml 中配置天勤账号信息"); return
-
-        from tqsdk import TqAuth
-        auth = TqAuth(account['api_key'], account['api_secret'])
-
-        strategy = MovingAverageStrategy()
-        _apply_trading_config(strategy, cm.get_trading_config(), symbol)
-        (strategy.run_with_gui if show_gui else strategy.run)(symbol=symbol, auth=auth)
-    except Exception as e:
-        logger.error(f"实盘交易启动失败: {e}")
-        import traceback; traceback.print_exc()
-        raise
+def _setup_db_logging(db: Database, command: str, symbol: str = None):
+    handler = DBLogHandler(db, command=command, symbol=symbol)
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(handler)
 
 
-def run_backtest(symbol: str, start_date: str, end_date: str,
-                 initial_capital: float = 100000.0, show_gui: bool = False):
-    from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
-    from tqsdk.exceptions import BacktestFinished
+# ============================================================
+# 子命令: export — 数据导出（最高优先级）
+# ============================================================
+def cmd_export(args):
+    cm = ConfigManager()
+    db = Database(cm.get_data_config()['db_path'])
+    _setup_db_logging(db, 'export', args.symbol)
 
-    api = None
-    try:
-        cm = ConfigManager()
-        tc = cm.get_trading_config()
-        account = cm.get_account_info()
+    logger.info(f"数据导出: {args.symbol} {args.start} ~ {args.end}")
+    db.log('export', f"开始: {args.symbol} {args.start}~{args.end}",
+           symbol=args.symbol, status='INFO')
 
-        kline_duration = tc['kline_period'] * 60
-        logger.info(f"回测: {symbol} {start_date}~{end_date} 资金={initial_capital} "
-                    f"K线={tc['kline_period']}min SMA=({tc['sma_short']},{tc['sma_long']}) GUI={show_gui}")
-
-        auth = TqAuth(account['api_key'], account['api_secret']) if account.get('api_key') else None
-        api = TqApi(backtest=TqBacktest(start_dt=datetime.strptime(start_date, '%Y-%m-%d'),
-                                         end_dt=datetime.strptime(end_date, '%Y-%m-%d')),
-                    auth=auth, web_gui=show_gui)
-        klines = api.get_kline_serial(symbol, duration_seconds=kline_duration)
-
-        strategy = MovingAverageStrategy()
-        _apply_trading_config(strategy, tc, symbol)
-        engine = BacktestEngine(initial_capital=initial_capital)
-        target_pos = TargetPosTask(api, symbol)
-
-        while True:
-            api.wait_update()
-            if api.is_changing(klines):
-                bar = {
-                    'datetime': datetime.fromtimestamp(klines['datetime'].iloc[-1] / 10**9),
-                    'close': float(klines['close'].iloc[-1]),
-                    'open': float(klines['open'].iloc[-1]),
-                    'high': float(klines['high'].iloc[-1]),
-                    'low': float(klines['low'].iloc[-1]),
-                    'volume': int(klines['volume'].iloc[-1])
-                }
-                strategy.on_bar(klines)
-
-                if strategy.signal == 'buy' and engine.current_position == 0:
-                    qty = int((engine.current_capital * strategy.config.position_ratio) / bar['close'])
-                    if qty > 0:
-                        engine.add_trade(TradeRecord(
-                            timestamp=bar['datetime'], symbol=symbol, direction='buy',
-                            price=bar['close'], quantity=qty, reason="金叉买入"))
-                        target_pos.set_target_volume(qty)
-                        strategy.signal = None
-                elif strategy.signal == 'sell' and engine.current_position > 0:
-                    profit = (bar['close'] - engine.entry_price) * engine.current_position
-                    engine.add_trade(TradeRecord(
-                        timestamp=bar['datetime'], symbol=symbol, direction='sell',
-                        price=bar['close'], quantity=engine.current_position,
-                        profit=profit, reason=strategy.signal_reason))
-                    target_pos.set_target_volume(0)
-                    strategy.signal = None
-
-    except BacktestFinished:
-        print(engine.generate_report())
-        if engine.trade_history:
-            logger.info("\n交易记录:")
-            for t in engine.trade_history:
-                ts = t.timestamp.strftime('%Y-%m-%d')
-                if t.direction == 'buy':
-                    logger.info(f"  {ts} 买入 {t.symbol} @ {t.price:.2f} x {t.quantity}")
-                else:
-                    logger.info(f"  {ts} 卖出 {t.symbol} @ {t.price:.2f} x {t.quantity} 盈亏: {t.profit:.2f}")
-        if show_gui:
-            logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
-            try:
-                while True: api.wait_update()
-            except BacktestFinished:
-                pass
-    except Exception as e:
-        logger.error(f"回测执行失败: {e}")
-        import traceback; traceback.print_exc()
-        raise
-    finally:
-        if api: api.close()
+    success = export_csv(
+        symbol=args.symbol,
+        start_date=args.start,
+        end_date=args.end,
+        db=db,
+        config_manager=cm,
+        output_path=args.output,
+    )
+    if success:
+        logger.info("导出成功")
+    else:
+        logger.error("导出失败")
+        sys.exit(1)
 
 
-def run_test_mode():
+# ============================================================
+# 子命令: test — 策略逻辑测试
+# ============================================================
+def cmd_test(args):
+    cm = ConfigManager()
+    db = Database(cm.get_data_config()['db_path'])
+    _setup_db_logging(db, 'test')
+
     logger.info("=" * 60)
     logger.info("测试模式 - 策略逻辑验证")
     logger.info("=" * 60)
+    db.log('test', "测试开始", status='INFO')
+
     try:
-        cm = ConfigManager()
         tc = cm.get_trading_config()
         strategy = MovingAverageStrategy()
         _apply_trading_config(strategy, tc, 'DCE.m2109')
         logger.info(f"策略参数: SMA({tc['sma_short']},{tc['sma_long']}) "
-                    f"止损={tc['stop_loss_ratio']:.0%} 止盈={tc['take_profit_ratio']:.0%} 仓位={tc['position_ratio']:.0%}")
+                    f"止损={tc['stop_loss_ratio']:.0%} 止盈={tc['take_profit_ratio']:.0%}")
 
         sma_short = strategy.calculate_sma([10, 11, 12, 13, 15], 5)
         sma_long = strategy.calculate_sma([12, 12, 12, 12, 12], 5)
@@ -148,41 +92,189 @@ def run_test_mode():
         crossover = strategy.check_crossover(sma_short, sma_long, 11.0, 12.0)
         if crossover == 'golden_cross':
             strategy.execute_buy('TEST.SYMBOL', 14.0, 10, "测试金叉买入")
-            logger.info(f"止损价={strategy.state.entry_price * (1 - tc['stop_loss_ratio']):.2f} "
-                        f"止盈价={strategy.state.entry_price * (1 + tc['take_profit_ratio']):.2f}")
+            stop = strategy.state.entry_price * (1 - tc['stop_loss_ratio'])
+            take = strategy.state.entry_price * (1 + tc['take_profit_ratio'])
+            logger.info(f"止损价={stop:.2f} 止盈价={take:.2f}")
             strategy.state.current_position = 10
-            strategy.execute_sell('TEST.SYMBOL',
-                                  strategy.state.entry_price * (1 + tc['take_profit_ratio']),
-                                  10, "测试止盈")
+            strategy.execute_sell('TEST.SYMBOL', take, 10, "测试止盈")
             logger.info(f"测试盈亏: {strategy.state.trade_records[-1].profit:.2f}")
 
-        logger.info(f"绩效摘要: {strategy.get_performance_summary()}")
+        perf = strategy.get_performance_summary()
+        logger.info(f"绩效摘要: {perf}")
+        db.log('test', f"完成: {perf}", status='SUCCESS')
         logger.info("\n" + "=" * 60)
         logger.info("测试模式完成")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"测试失败: {e}")
+        db.log('test', f"失败: {e}", status='ERROR')
         raise
 
 
+# ============================================================
+# 子命令: backtest — TqSdk 回测
+# ============================================================
+def cmd_backtest(args):
+    from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
+    from tqsdk.exceptions import BacktestFinished
+
+    cm = ConfigManager()
+    db = Database(cm.get_data_config()['db_path'])
+    _setup_db_logging(db, 'backtest', args.symbol)
+
+    api = None
+    try:
+        tc = cm.get_trading_config()
+        account = cm.get_account_info()
+        logger.info(f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
+                    f"SMA=({tc['sma_short']},{tc['sma_long']}) GUI={args.gui}")
+        db.log('backtest',
+               f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital}",
+               symbol=args.symbol, status='INFO')
+
+        auth = TqAuth(account['api_key'], account['api_secret']) if account.get('api_key') else None
+        api = TqApi(
+            backtest=TqBacktest(start_dt=datetime.strptime(args.start, '%Y-%m-%d'),
+                                end_dt=datetime.strptime(args.end, '%Y-%m-%d')),
+            auth=auth, web_gui=args.gui)
+        klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
+
+        strategy = MovingAverageStrategy()
+        _apply_trading_config(strategy, tc, args.symbol)
+        engine = BacktestEngine(initial_capital=args.capital)
+        target_pos = TargetPosTask(api, args.symbol)
+
+        while True:
+            api.wait_update()
+            if api.is_changing(klines):
+                bar = {
+                    'datetime': datetime.fromtimestamp(klines['datetime'].iloc[-1] / 10 ** 9),
+                    'close': float(klines['close'].iloc[-1]),
+                    'open': float(klines['open'].iloc[-1]),
+                    'high': float(klines['high'].iloc[-1]),
+                    'low': float(klines['low'].iloc[-1]),
+                    'volume': int(klines['volume'].iloc[-1]),
+                }
+                strategy.on_bar(klines)
+
+                if strategy.signal == 'buy' and engine.current_position == 0:
+                    qty = int((engine.current_capital * strategy.config.position_ratio) / bar['close'])
+                    if qty > 0:
+                        engine.add_trade(TradeRecord(
+                            timestamp=bar['datetime'], symbol=args.symbol, direction='buy',
+                            price=bar['close'], quantity=qty, reason="金叉买入"))
+                        target_pos.set_target_volume(qty)
+                        strategy.signal = None
+                elif strategy.signal == 'sell' and engine.current_position > 0:
+                    profit = (bar['close'] - engine.entry_price) * engine.current_position
+                    engine.add_trade(TradeRecord(
+                        timestamp=bar['datetime'], symbol=args.symbol, direction='sell',
+                        price=bar['close'], quantity=engine.current_position,
+                        profit=profit, reason=strategy.signal_reason))
+                    target_pos.set_target_volume(0)
+                    strategy.signal = None
+
+    except BacktestFinished:
+        report = engine.generate_report()
+        print(report)
+        db.log('backtest', f"完成:\n{report}", symbol=args.symbol, status='SUCCESS')
+        if engine.trade_history:
+            logger.info("\n交易记录:")
+            for t in engine.trade_history:
+                ts = t.timestamp.strftime('%Y-%m-%d')
+                tag = "买入" if t.direction == 'buy' else "卖出"
+                extra = f" 盈亏: {t.profit:.2f}" if t.direction == 'sell' else ""
+                logger.info(f"  {ts} {tag} {t.symbol} @ {t.price:.2f} x {t.quantity}{extra}")
+        if args.gui:
+            logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
+            try:
+                while True:
+                    api.wait_update()
+            except BacktestFinished:
+                pass
+    except Exception as e:
+        logger.error(f"回测执行失败: {e}")
+        db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        import traceback; traceback.print_exc()
+        raise
+    finally:
+        if api:
+            api.close()
+
+
+# ============================================================
+# 子命令: live — 实盘/模拟交易
+# ============================================================
+def cmd_live(args):
+    cm = ConfigManager(args.config)
+    db = Database(cm.get_data_config()['db_path'])
+    _setup_db_logging(db, 'live', args.symbol)
+
+    try:
+        cm.validate_config()
+        account = cm.get_account_info()
+        if not account:
+            logger.error("请先在 conf.local.yaml 中配置天勤账号信息")
+            db.log('live', "配置缺失", symbol=args.symbol, status='ERROR')
+            sys.exit(1)
+
+        from tqsdk import TqAuth
+        auth = TqAuth(account['api_key'], account['api_secret'])
+        logger.info(f"实盘交易: {args.symbol} GUI={args.gui}")
+        db.log('live', f"开始: {args.symbol}", symbol=args.symbol, status='INFO')
+
+        strategy = MovingAverageStrategy()
+        _apply_trading_config(strategy, cm.get_trading_config(), args.symbol)
+        (strategy.run_with_gui if args.gui else strategy.run)(symbol=args.symbol, auth=auth)
+
+        db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status='SUCCESS')
+    except Exception as e:
+        logger.error(f"实盘交易失败: {e}")
+        db.log('live', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        import traceback; traceback.print_exc()
+        raise
+
+
+# ============================================================
+# 主入口
+# ============================================================
 def main():
-    parser = argparse.ArgumentParser(description='天勤量化均线交叉策略交易系统')
-    parser.add_argument('--mode', choices=['live', 'backtest', 'test'], default='test')
-    parser.add_argument('--symbol', default='DCE.m2109')
-    parser.add_argument('--config', default=None)
-    parser.add_argument('--start', default='2024-01-01')
-    parser.add_argument('--end', default='2024-12-31')
-    parser.add_argument('--capital', type=float, default=100000.0)
-    parser.add_argument('--gui', action='store_true', default=False)
+    parser = argparse.ArgumentParser(
+        description='天勤量化均线交叉策略交易系统',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="示例: python main.py export --symbol DCE.m2509 --start 2025-06-01 --end 2025-08-31")
+    sub = parser.add_subparsers(dest='command', title='子命令', required=True)
+
+    # ---- export ----
+    p = sub.add_parser('export', help='导出Qlib格式CSV数据（含去重合并）',
+                       description='从天勤获取K线数据，导出为Qlib标准CSV格式')
+    p.add_argument('--symbol', required=True, help='品种代码，如 DCE.m2509')
+    p.add_argument('--start', required=True, help='开始日期 YYYY-MM-DD')
+    p.add_argument('--end', required=True, help='结束日期 YYYY-MM-DD')
+    p.add_argument('--output', default=None, help='自定义输出路径（可选）')
+
+    # ---- test ----
+    p = sub.add_parser('test', help='本地策略逻辑测试（不联网）')
+
+    # ---- backtest ----
+    p = sub.add_parser('backtest', help='TqSdk历史数据回测')
+    p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
+    p.add_argument('--start', default='2024-01-01', help='开始日期')
+    p.add_argument('--end', default='2024-12-31', help='结束日期')
+    p.add_argument('--capital', type=float, default=100000.0, help='初始资金')
+    p.add_argument('--gui', action='store_true', help='启用图形界面')
+
+    # ---- live ----
+    p = sub.add_parser('live', help='实盘/模拟交易')
+    p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
+    p.add_argument('--gui', action='store_true', help='启用图形界面')
+    p.add_argument('--config', default=None, help='配置文件路径')
 
     args = parser.parse_args()
+
     try:
-        if args.mode == 'live':
-            run_live_trading(args.symbol, args.config, args.gui)
-        elif args.mode == 'backtest':
-            run_backtest(args.symbol, args.start, args.end, args.capital, args.gui)
-        else:
-            run_test_mode()
+        {'export': cmd_export, 'test': cmd_test,
+         'backtest': cmd_backtest, 'live': cmd_live}[args.command](args)
     except KeyboardInterrupt:
         logger.info("\n用户中断程序")
     except Exception as e:

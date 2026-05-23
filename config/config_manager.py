@@ -57,6 +57,21 @@ class ConfigManager:
                 return s
         return None
 
+    def get_data_config(self) -> Dict[str, str]:
+        dc = self.config.get('data', {})
+        return {
+            'base_dir': dc.get('base_dir', '.quant_shared_data'),
+            'export_dir': dc.get('export_dir', '.quant_shared_data/csv'),
+            'db_path': dc.get('db_path', '.quant_shared_data/quant_shared.db'),
+        }
+
+    def get_export_config(self) -> Dict[str, str]:
+        ec = self.config.get('export', {})
+        return {
+            'default_dir': ec.get('default_dir', '.quant_shared_data/csv'),
+            'filename_template': ec.get('filename_template', '{symbol}_qlib.csv'),
+        }
+
     def validate_config(self) -> bool:
         try:
             tc = self.get_trading_config()
