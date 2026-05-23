@@ -258,7 +258,7 @@ def cmd_live(args):
         cm.validate_config()
         account = cm.get_account_info()
         if not account:
-            logger.error("请先在 conf.local.yaml 中配置天勤账号信息")
+            logger.error("请先在 config/conf.local.yaml 中配置天勤账号信息")
             db.log('live', "配置缺失", symbol=args.symbol, status='ERROR')
             sys.exit(1)
 

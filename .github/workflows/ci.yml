@@ -30,4 +30,4 @@ jobs:
         continue-on-error: true
 
       - name: Test with pytest
-        run: pytest tests/ --cov=. --cov-report=term --cov-config=.coveragerc
+        run: pytest tests/ --cov=. --cov-report=term

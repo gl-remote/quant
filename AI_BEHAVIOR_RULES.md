@@ -43,25 +43,24 @@ vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 ```
 quant/
 ├── main.py                 # 命令行入口（子命令模式）
-├── conf.yaml               # 基础配置（提交版本控制）
-├── conf.local.yaml         # 本地密钥覆盖（不提交，.gitignore 已排除）
-├── conf.example.yaml       # 配置模板
-├── requirements.txt
 ├── plan.md                 # 项目改进计划（仅含未解决问题）
+├── AI_BEHAVIOR_RULES.md    # 本文档
+├── .memory_rules.md         # 知识图谱记忆规则
+├── run.sh / activate_env.sh
 ├── .plan/                  # 版本规划归档
 │   ├── plan.0.0.1.log.md   #   初始审计结果
 │   ├── plan.0.0.2.log.md   #   文档同步更新
 │   ├── plan.0.0.3.log.md   #   中危以上问题修复记录
 │   ├── plan.0.0.4.log.md   #   测试框架建立
 │   ├── plan.0.0.5.log.md   #   规划行为模式建立
-│   └── plan.0.0.6.log.md   #   M2 工程化深度规划
-├── pytest.ini              # pytest 配置
-├── tests/                  # 测试目录 (86 用例)
-├── AI_BEHAVIOR_RULES.md    # 本文档
-├── .memory_rules.md         # 知识图谱记忆规则
-├── run.sh / activate_env.sh
+│   ├── plan.0.0.6.log.md   #   M2 工程化深度规划
+│   └── plan.0.0.7.log.md   #   归档优先规范落地
+├── tests/                  # 测试目录 (127 用例)
 │
 ├── config/                 # 配置管理（YAML 分层合并）
+│   ├── conf.yaml           #   基础配置（提交版本控制）
+│   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
+│   └── conf.example.yaml   #   配置模板
 ├── strategies/             # 策略子系统
 │   ├── core/               #   纯业务逻辑，零框架依赖
 │   └── gateways/           #   vn.py / 天勤 网关适配器

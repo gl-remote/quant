@@ -13,10 +13,10 @@ class ConfigManager:
         self._load(config_file)
 
     def _load(self, config_file: Optional[str] = None):
-        base = Path(config_file or 'conf.yaml')
+        base = Path(config_file or (Path(__file__).parent / 'conf.yaml'))
         if base.exists():
             self.config = yaml.safe_load(open(base, encoding='utf-8')) or {}
-        local = Path('conf.local.yaml')
+        local = Path(__file__).parent / 'conf.local.yaml'
         if local.exists():
             self._merge(self.config, yaml.safe_load(open(local, encoding='utf-8')) or {})
 

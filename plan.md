@@ -1,6 +1,6 @@
 # 项目改进计划
 
-> 版本: 0.0.8 | 生成日期: 2026-05-24 | 当前阶段: M3 功能增强
+> 版本: 0.0.9 | 生成日期: 2026-05-24 | 当前阶段: M3 功能增强
 
 ---
 
@@ -91,6 +91,7 @@
 
 | 版本 | 日期 | 变更 | 归档 |
 |------|------|------|------|
+| 0.0.9 | 2026-05-24 | 根目录瘦身：删除 5 冗余文件 + conf*.yaml 归入 config/ | [plan.0.0.9.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.9.log.md) |
 | 0.0.8 | 2026-05-24 | M2 工程化完成：L1-L3 解决，A3-A10 完成，覆盖率 82%，M3 启动 | [plan.0.0.8.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.8.log.md) |
 | 0.0.7 | 2026-05-24 | 归档优先规范落地：重写为干净行动指南，移除所有已完成项 | [plan.0.0.7.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.7.log.md) |
 | 0.0.6 | 2026-05-24 | M2 阶段细化：行动项重新编号、增加交付物与验收标准 | [plan.0.0.6.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.6.log.md) |

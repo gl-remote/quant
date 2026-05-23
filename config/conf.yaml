@@ -61,7 +61,7 @@ third_party:
   services:
     - name: "tqsdk"                  # 天勤量化
       provider: "tianqin"            # 提供商
-      api_key: "PLACEHOLDER_API_KEY" # 请在 conf.local.yaml 中填写真实密钥
+      api_key: "PLACEHOLDER_API_KEY" # 请在 config/conf.local.yaml 中填写真实密钥
       api_secret: "PLACEHOLDER_API_SECRET"
       enabled: true
       # 未来可扩展更多服务：

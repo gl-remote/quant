@@ -190,15 +190,14 @@ pandas DataFrame (全部历史数据)
 ```
 quant/
 ├── main.py                       # 命令行统一入口
-├── conf.yaml                     # 基础配置（版本控制）
-├── conf.local.yaml               # 本地密钥覆盖（不提交）
-├── conf.example.yaml             # 配置模板
-├── requirements.txt              # Python 依赖
 ├── run.sh                        # 快捷运行脚本
 ├── activate_env.sh               # 环境激活
 │
 ├── config/                       # 配置管理
-│   └── config_manager.py         # YAML 分层合并
+│   ├── config_manager.py         #   YAML 分层合并
+│   ├── conf.yaml                 #   基础配置（版本控制）
+│   ├── conf.local.yaml           #   本地密钥覆盖（不提交）
+│   └── conf.example.yaml         #   配置模板
 │
 ├── strategies/                   # 策略子系统
 │   ├── core/ma_strategy.py       # 纯算法核心

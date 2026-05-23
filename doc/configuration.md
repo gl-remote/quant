@@ -10,9 +10,9 @@
 
 | 文件 | 用途 | 版本控制 |
 |------|------|---------|
-| `conf.yaml` | 基础配置，含策略参数、风控、回测设置 | 提交 |
-| `conf.example.yaml` | 配置模板，供新用户参考 | 提交 |
-| `conf.local.yaml` | 本地密钥与个性化覆盖 | **不提交** |
+| `config/conf.yaml` | 基础配置，含策略参数、风控、回测设置 | 提交 |
+| `config/conf.example.yaml` | 配置模板，供新用户参考 | 提交 |
+| `config/conf.local.yaml` | 本地密钥与个性化覆盖 | **不提交** |
 
 合并策略为递归深度合并：`conf.local.yaml` 中的键值会覆盖 `conf.yaml` 中同路径的值，嵌套字典逐层合并。`ConfigManager` 在初始化时自动完成此过程。
 
@@ -120,7 +120,7 @@ third_party:
       enabled: true
 ```
 
-> 密钥信息应写入 `conf.local.yaml`，`conf.yaml` 中仅保留占位符。
+> 密钥信息应写入 `config/conf.local.yaml`，`config/conf.yaml` 中仅保留占位符。
 
 ## 配置示例
 

@@ -16,16 +16,16 @@
 ```
 quant/
 ├── main.py                 # 命令行入口
-├── conf.yaml               # 基础配置（提交版本控制）
-├── conf.local.yaml         # 本地密钥覆盖（不提交）
-├── conf.example.yaml       # 配置模板
-├── requirements.txt
+├── config/                 # YAML 分层配置管理
+│   ├── conf.yaml           #   基础配置（提交版本控制）
+│   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
+│   ├── conf.example.yaml   #   配置模板
+│   └── config_manager.py   #   配置加载与合并
 ├── strategies/             # 策略模块（核心算法 + 网关适配器）
 │   ├── core/               #   纯业务逻辑（无框架依赖）
 │   └── gateways/           #   vn.py / 天勤 网关
 ├── backtest/               # 回测引擎、数据加载、报告对比
 ├── data/                   # 数据导出、SQLite 管理
-├── config/                 # YAML 分层配置管理
 └── doc/                    # 文档
 ```
 
@@ -34,7 +34,7 @@ quant/
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[dev]"
 ```
 
 推荐安装 vn.py 以获得更好的回测精度（可选）：
@@ -46,10 +46,10 @@ pip install vnpy vnpy_ctastrategy
 ### 2. 配置天勤账号
 
 ```bash
-cp conf.example.yaml conf.local.yaml
+cp config/conf.example.yaml config/conf.local.yaml
 ```
 
-编辑 `conf.local.yaml`，填入天勤 API Key 和 Secret。仅数据导出和实盘交易需要此配置，离线测试和本地 CSV 回测不需要。
+编辑 `config/conf.local.yaml`，填入天勤 API Key 和 Secret。仅数据导出和实盘交易需要此配置，离线测试和本地 CSV 回测不需要。
 
 ### 3. 导出历史数据
 
@@ -79,7 +79,7 @@ python main.py backtest --symbol DCE.m2509
 
 ## 关键配置
 
-回测参数通过 `conf.yaml` 中的 `backtest` 段管理：
+回测参数通过 `config/conf.yaml` 中的 `backtest` 段管理：
 
 ```yaml
 backtest:
