@@ -84,7 +84,7 @@ class VnpyBacktestEngine:
         在 __init__ 返回后直接注入 _core 和 price_tick，
         避免 bridge 的 __init__ 感知 context 参数。
         """
-        ctx = self.context
+        ctx = getattr(self, '_backtest_context', self.context)
 
         class _InjectedStrategy(base_cls):
             def _load_default_core(inner_self, setting):
@@ -307,15 +307,19 @@ class VnpyBacktestEngine:
                 capital=self.initial_capital,
                 contract_size=self.contract_size,
             ))
-            self.context = TradingContext(
+            local_context = TradingContext(
                 strategy=strategy,
                 symbol=vt_symbol,
                 capital=self.initial_capital,
                 price_tick=self.price_tick,
             )
+        else:
+            local_context = self.context
 
-        self.context.strategy.reset()
+        local_context.strategy.reset()
 
+        # 临时挂到 self 上供 _wrap_injected_strategy 的闭包捕获
+        self._backtest_context = local_context
         strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge)
         engine.add_strategy(strategy_cls, setting)
 

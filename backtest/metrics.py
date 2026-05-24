@@ -26,7 +26,7 @@ def calc_max_drawdown(equity_curve: List[float]) -> float:
     for equity in equity_curve[1:]:
         if equity > peak:
             peak = equity
-        dd = (peak - equity) / peak if peak != 0 else 0.0
+        dd = (peak - equity) / peak if peak > 0 else 0.0
         if dd > max_dd:
             max_dd = dd
     return max_dd
@@ -47,5 +47,8 @@ def calc_sharpe_ratio(equity_curve: List[float], annual_factor: int = 252) -> fl
     returns = np.diff(equity_curve) / np.array(equity_curve[:-1])
     if len(returns) == 0:
         return 0.0
-    std = np.std(returns)
-    return 0.0 if std == 0 else (np.mean(returns) / std) * np.sqrt(annual_factor)
+    std = np.std(returns, ddof=1)  # 样本标准差 (量化金融惯例)
+    if std == 0:
+        # 零波动正收益 → 极高回报/风险比，返回大值而非 0
+        return 999.0 if np.mean(returns) > 0 else 0.0
+    return (np.mean(returns) / std) * np.sqrt(annual_factor)

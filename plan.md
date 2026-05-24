@@ -99,13 +99,21 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-11 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
 | DEF-12 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py:114-157` | 实盘运行无对天勤连接断开的自动检测与重连 |
 
-### 3.2 🟡 backtest 模块缺陷 (低优先级, 3 项)
+### 3.2 🟡 backtest 模块缺陷 (低优先级, 3 项 + 6 项已修复)
 
 | 编号 | 分类 | 问题 | 文件 | 说明 |
 |------|------|------|------|------|
 | DEF-13 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `metrics.py:47-51` | 假设 rfr=0，对中国期货影响小但应文档化 |
 | DEF-14 | 架构 | context 为空时硬编码策略类型 | `vnpy_backtest_engine.py:278-289` | 回退到 MaStrategyCore，使用其他策略需显式传 context |
 | DEF-15 | 指标 | 缺少 Sortino/Calmar/基准对比 | `types.py`/`metrics.py` | 缺下行风险指标、年化收益/回撤比、buy-and-hold 基准 |
+
+> **2026-05-24 第二轮审计修复 (6/6)** ✅:
+> - ~~DEF-BT16~~: `np.std` 改用 `ddof=1` 样本标准差 + 零波动正收益返回 999.0
+> - ~~DEF-BT17~~: 回撤守卫 `peak != 0` → `peak > 0`，修复负权益场景
+> - ~~DEF-BT18~~: `walk_forward_split_by_ratio` 中 `test_size` 改为 `window_total - train_size - val_size`，消除 int 截断丢行
+> - ~~DEF-BT19~~: `_run_backtest` 中 `self.context = TradingContext(...)` 改为局部变量，消除读操作副作用
+> - ~~DEF-BT20~~: 多次买入时 `entry_price` 改为加权平均成本价，避免最后一次价格覆盖
+> - ~~DEF-BT21~~: `abs(dd_val) <= 1` 启发式改为归一化: `>1` 则 `/100` 再格式化为百分比
 
 ### 3.3 功能缺失 (与原 S1-S4 规划重叠)
 

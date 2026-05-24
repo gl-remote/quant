@@ -319,7 +319,8 @@ def walk_forward_split_by_ratio(
 
     train_size = int(window_total * train_ratio)
     val_size = int(window_total * val_ratio)
-    test_size = int(window_total * test_ratio)
+    # 用剩余行数兜底，避免多次 int 截断导致每个窗口丢 1~2 行
+    test_size = window_total - train_size - val_size
     step = max(1, int(window_total * step_ratio))
 
     # 修正浮点导致的窗口总大小偏差

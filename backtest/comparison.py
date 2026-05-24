@@ -160,7 +160,10 @@ def format_merged_report(merged: Dict) -> str:
         ret = f"{float(m.get('total_return', 0)):.2%}"
         sharpe = f"{float(m.get('sharpe_ratio', 0)):.2f}"
         dd_val = float(m.get('max_drawdown', 0))
-        dd = f"{dd_val:.2%}" if abs(dd_val) <= 1 else f"{dd_val:.2f}"
+        # 归一化: >1 视为百分比值 (如 15.0=15%), 转换为比值
+        if abs(dd_val) > 1:
+            dd_val = dd_val / 100.0
+        dd = f"{dd_val:.2%}"
         wr = f"{float(m.get('win_rate', 0)):.2%}"
         trades = f"{int(m.get('total_trades', 0))}"
         lines.append(f"  {s['symbol']:<18} {ret:>8} {sharpe:>7} {dd:>7} "

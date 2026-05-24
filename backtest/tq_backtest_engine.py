@@ -48,9 +48,16 @@ class TQBacktestEngine:
         """
         self.trade_history.append(trade)
         if trade.direction == 'buy':
+            old_pos = self.current_position
             self.current_position += trade.quantity
-            self.entry_price = trade.price
             self.current_capital -= trade.price * trade.quantity
+            # 加权平均成本价，避免多次买入时被最后一次价格覆盖
+            if old_pos == 0:
+                self.entry_price = trade.price
+            else:
+                self.entry_price = (
+                    old_pos * self.entry_price + trade.quantity * trade.price
+                ) / self.current_position
         elif trade.direction == 'sell':
             self.current_position -= trade.quantity
             # 只加回卖出金额，profit 为信息字段，价差已体现在 (sell - entry) 中
