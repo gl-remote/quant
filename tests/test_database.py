@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 import logging
 import io
-from data.database import Database, DBLogHandler
+from data.database import Database, DBLogHandler, _MAX_OPERATION_LOG_ROWS, _PRUNE_CHECK_INTERVAL
 
 
 class TestDatabaseInit:
@@ -147,3 +147,55 @@ class TestDBLogHandler:
 
         logs = db.get_logs(limit=1)
         assert logs[0]['status'] == 'INFO'
+
+
+class TestLogPruning:
+    """日志自动清理测试"""
+
+    def test_no_prune_below_threshold(self, temp_db_path, monkeypatch):
+        """未超过阈值时不触发清理"""
+        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 100)
+        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        db = Database(temp_db_path)
+        for i in range(10):
+            db.log('test', f'message {i}')
+        logs = db.get_logs(limit=200)
+        assert len(logs) == 10
+
+    def test_prune_triggers_above_threshold(self, temp_db_path, monkeypatch):
+        """超过阈值后自动清理旧记录，总量被限制"""
+        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
+        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        db = Database(temp_db_path)
+
+        for i in range(20):
+            db.log('test', f'message {i}')
+
+        logs = db.get_logs(limit=200)
+        # 有清理发生时，记录数 < 写入数，且最新消息在顶部
+        assert len(logs) < 20
+        assert len(logs) <= 10  # 不应超过阈值
+        assert 'message 19' in logs[0]['message']
+
+    def test_multiple_prune_cycles(self, temp_db_path, monkeypatch):
+        """多次清理周期后总量始终受控"""
+        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
+        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        db = Database(temp_db_path)
+
+        for i in range(50):
+            db.log('test', f'message {i}')
+
+        logs = db.get_logs(limit=200)
+        assert len(logs) <= 10
+        assert 'message 49' in logs[0]['message']
+
+    def test_prune_idempotent(self, temp_db_path, monkeypatch):
+        """手动多次调用 _prune_old_logs 不抛异常"""
+        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
+        db = Database(temp_db_path)
+        for i in range(5):
+            db.log('test', f'message {i}')
+        # 多次调用应安全
+        assert db._prune_old_logs() >= 0
+        assert db._prune_old_logs() >= 0
