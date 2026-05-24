@@ -1,13 +1,14 @@
 """多品种合并报告模块 — 横向比较多品种回测表现并排名"""
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
 
 import numpy as np
 
-from backtest.aggregator import rank_by_key
-from common.stats import compute_summary_stats
+from common.stats import SymbolSummary, compute_summary_stats, rank_by_key
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def generate_merged_report(
         return {'meta': {'symbol_count': 0}, 'symbols': [], 'aggregate': {},
                 'ranking': {}}
 
-    symbols_data = []
+    symbols_data: list[SymbolSummary] = []
     for r in all_results:
         if not r.get('success'):
             continue
@@ -48,15 +49,13 @@ def generate_merged_report(
 
         symbols_data.append({
             'symbol': r.get('symbol', 'unknown'),
-            'metrics': {
-                'total_return': perf.get('total_return_abs', 0),
-                'annual_return': perf.get('annual_return_abs', 0),
-                'sharpe_ratio': perf.get('sharpe_ratio', 0),
-                'max_drawdown': risk.get('max_drawdown_abs', 0),
-                'win_rate': perf.get('win_rate_abs', 0),
-                'profit_loss_ratio': perf.get('profit_loss_ratio', 0),
-                'total_trades': perf.get('total_trades', 0),
-            },
+            'total_return': float(perf.get('total_return_abs', 0)),
+            'annual_return': float(perf.get('annual_return_abs', 0)),
+            'sharpe_ratio': float(perf.get('sharpe_ratio', 0)),
+            'max_drawdown': float(risk.get('max_drawdown_abs', 0)),
+            'win_rate': float(perf.get('win_rate_abs', 0)),
+            'profit_loss_ratio': float(perf.get('profit_loss_ratio', 0)),
+            'total_trades': int(perf.get('total_trades', 0)),
         })
 
     ranking = _build_ranking(symbols_data)
@@ -86,19 +85,19 @@ def generate_merged_report(
     return merged
 
 
-def _build_ranking(symbols_data: list[dict]) -> dict[str, list[dict]]:
+def _build_ranking(symbols_data: list[SymbolSummary]) -> dict[str, list[dict]]:
     """构建各指标排名"""
     if not symbols_data:
         return {}
     return {
-        'total_return': rank_by_key(symbols_data, 'total_return'),
-        'sharpe_ratio': rank_by_key(symbols_data, 'sharpe_ratio'),
-        'max_drawdown': rank_by_key(symbols_data, 'max_drawdown', reverse=False),
-        'win_rate': rank_by_key(symbols_data, 'win_rate'),
+        'total_return': rank_by_key(symbols_data, 'total_return'),  # type: ignore[arg-type]
+        'sharpe_ratio': rank_by_key(symbols_data, 'sharpe_ratio'),  # type: ignore[arg-type]
+        'max_drawdown': rank_by_key(symbols_data, 'max_drawdown', reverse=False),  # type: ignore[arg-type]
+        'win_rate': rank_by_key(symbols_data, 'win_rate'),  # type: ignore[arg-type]
     }
 
 
-def _build_aggregate(symbols_data: list[dict]) -> dict:
+def _build_aggregate(symbols_data: list[SymbolSummary]) -> dict:
     """计算整体聚合统计"""
     if not symbols_data:
         return {}
@@ -110,17 +109,16 @@ def _build_aggregate(symbols_data: list[dict]) -> dict:
     trades_list: list[int] = []
 
     for s in symbols_data:
-        m = s['metrics']
-        if m.get('total_return') is not None:
-            returns.append(float(m['total_return']))
-        if m.get('sharpe_ratio') is not None:
-            sharpes.append(float(m['sharpe_ratio']))
-        if m.get('max_drawdown') is not None:
-            drawdowns.append(float(m['max_drawdown']))
-        if m.get('win_rate') is not None:
-            win_rates.append(float(m['win_rate']))
-        if m.get('total_trades') is not None:
-            trades_list.append(int(m['total_trades']))
+        if s.get('total_return') is not None:
+            returns.append(float(s['total_return']))
+        if s.get('sharpe_ratio') is not None:
+            sharpes.append(float(s['sharpe_ratio']))
+        if s.get('max_drawdown') is not None:
+            drawdowns.append(float(s['max_drawdown']))
+        if s.get('win_rate') is not None:
+            win_rates.append(float(s['win_rate']))
+        if s.get('total_trades') is not None:
+            trades_list.append(int(s['total_trades']))
 
     return_stats = compute_summary_stats(returns)
     return {
@@ -157,16 +155,15 @@ def format_merged_report(merged: dict) -> str:
     ]
 
     for s in merged.get('symbols', []):
-        m = s['metrics']
-        ret = f"{float(m.get('total_return', 0)):.2%}"
-        sharpe = f"{float(m.get('sharpe_ratio', 0)):.2f}"
-        dd_val = float(m.get('max_drawdown', 0))
+        ret = f"{float(s.get('total_return', 0)):.2%}"
+        sharpe = f"{float(s.get('sharpe_ratio', 0)):.2f}"
+        dd_val = float(s.get('max_drawdown', 0))
         # 归一化: >1 视为百分比值 (如 15.0=15%), 转换为比值
         if abs(dd_val) > 1:
             dd_val = dd_val / 100.0
         dd = f"{dd_val:.2%}"
-        wr = f"{float(m.get('win_rate', 0)):.2%}"
-        trades = f"{int(m.get('total_trades', 0))}"
+        wr = f"{float(s.get('win_rate', 0)):.2%}"
+        trades = f"{int(s.get('total_trades', 0))}"
         lines.append(f"  {s['symbol']:<18} {ret:>8} {sharpe:>7} {dd:>7} "
                       f"{wr:>7} {trades:>6}")
 
@@ -195,7 +192,7 @@ def format_merged_report(merged: dict) -> str:
     for metric, label in [('total_return', '收益率'), ('sharpe_ratio', '夏普比率'),
                            ('max_drawdown', '回撤(低)'), ('win_rate', '胜率')]:
         items = ranking.get(metric, [])[:3]
-        names = [f"{i['symbol']}({i['value']:.2%})" for i in items]
+        names = [f"{i['symbol']}({i[metric]:.2%})" for i in items]
         lines.append(f"  {label}: {' > '.join(names) if names else 'N/A'}")
 
     lines += [

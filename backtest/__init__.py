@@ -20,7 +20,6 @@ from .data_loader import walk_forward_split, walk_forward_split_by_ratio, scan_c
 
 # 向后兼容 re-export: 纯函数工具已移入 common/
 from common.metrics import calc_max_drawdown, calc_sharpe_ratio
-from .aggregator import rank_by_key, aggregate_walk_forward
 
 __all__ = [
     'VnpyBacktestEngine',
@@ -33,6 +32,4 @@ __all__ = [
     'filter_dataframe_by_date',
     'calc_max_drawdown',       # re-export from common.metrics
     'calc_sharpe_ratio',       # re-export from common.metrics
-    'rank_by_key',
-    'aggregate_walk_forward',
 ]

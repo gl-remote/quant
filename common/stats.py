@@ -27,6 +27,22 @@ class SummaryStats(TypedDict):
     negative_count: int
 
 
+class SymbolSummary(TypedDict):
+    """单品种聚合指标 — comparison_reporter 中间数据结构
+
+    从 run_full_pipeline 返回的 performance/risk 字段中提取，
+    所有值均为数值类型，用于排名、聚合统计和格式化输出。
+    """
+    symbol: str
+    total_return: float
+    annual_return: float
+    sharpe_ratio: float
+    max_drawdown: float
+    win_rate: float
+    profit_loss_ratio: float
+    total_trades: int
+
+
 def compute_summary_stats(values: list[float]) -> SummaryStats | dict[str, object]:
     """计算数值列表的描述性统计
 

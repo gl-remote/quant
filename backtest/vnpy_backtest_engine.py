@@ -19,7 +19,6 @@ from strategies.core.context import TradingContext
 
 from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
 from report.dataset_reporter import generate_dataset_report, format_console_report
-from .aggregator import aggregate_walk_forward
 from common.formatting import parse_percentage
 
 logger = logging.getLogger(__name__)
@@ -238,21 +237,44 @@ class VnpyBacktestEngine:
                 'statistics_is': train_result.get('statistics', {}),
             })
 
-        # 聚合所有窗口的 OOS 测试集指标
-        aggregate = aggregate_walk_forward(window_results)
+        # 聚合所有窗口的 OOS/IS 指标
+        returns: list[float] = []
+        sharpes: list[float] = []
+        drawdowns: list[float] = []
+        win_rates: list[float] = []
+        is_returns: list[float] = []
+        oos_returns: list[float] = []
 
-        # 计算 IS-OOS 平均差距 (过拟合检测)
-        is_returns = [
-            parse_percentage(w.get('statistics_is', {}).get('total_return', 0))
-            for w in window_results
-        ]
-        oos_returns = [
-            parse_percentage(w.get('statistics', {}).get('total_return', 0))
-            for w in window_results
-        ]
+        for w in window_results:
+            stats = w.get('statistics', {})
+            is_stats = w.get('statistics_is', {})
+            returns.append(parse_percentage(stats.get('total_return', 0)))
+            sharpes.append(float(stats.get('sharpe_ratio', 0)))
+            drawdowns.append(parse_percentage(stats.get('max_drawdown', 0)))
+            win_rates.append(parse_percentage(stats.get('win_rate', 0)))
+            is_returns.append(parse_percentage(is_stats.get('total_return', 0)))
+            oos_returns.append(parse_percentage(stats.get('total_return', 0)))
+
+        arr_returns = np.array(returns, dtype=float)
+
         is_mean = float(np.mean(is_returns)) if is_returns else 0.0
         oos_mean = float(np.mean(oos_returns)) if oos_returns else 0.0
-        aggregate['is_oos_return_gap'] = is_mean - oos_mean
+
+        aggregate = {
+            'return_mean': float(np.mean(arr_returns)),
+            'return_std': float(np.std(arr_returns)),
+            'sharpe_mean': float(np.mean(sharpes)),
+            'sharpe_std': float(np.std(sharpes)),
+            'max_drawdown_mean': float(np.mean(drawdowns)),
+            'max_drawdown_worst': float(np.max(drawdowns)),
+            'win_rate_mean': float(np.mean(win_rates)),
+            'win_rate_std': float(np.std(win_rates)),
+            'positive_window_ratio': float(np.sum(arr_returns > 0) / len(arr_returns)),
+            'stability_score': float(max(0.0, min(1.0,
+                1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9)
+            ))),
+            'is_oos_return_gap': is_mean - oos_mean,
+        }
 
         logger.info(
             f"Walk-Forward 汇总 ({len(windows)} 窗口): "

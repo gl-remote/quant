@@ -389,10 +389,8 @@ class TestFormatMergedReport:
             'symbols': [
                 {
                     'symbol': 'DCE.m2509',
-                    'metrics': {
-                        'total_return': 0.15, 'sharpe_ratio': 1.5,
-                        'max_drawdown': 0.08, 'win_rate': 0.6, 'total_trades': 50,
-                    },
+                    'total_return': 0.15, 'sharpe_ratio': 1.5,
+                    'max_drawdown': 0.08, 'win_rate': 0.6, 'total_trades': 50,
                 },
             ],
             'aggregate': {
@@ -404,10 +402,10 @@ class TestFormatMergedReport:
                 'profitable_ratio': 1.0,
             },
             'ranking': {
-                'total_return': [{'symbol': 'DCE.m2509', 'value': 0.15}],
-                'sharpe_ratio': [{'symbol': 'DCE.m2509', 'value': 1.5}],
-                'max_drawdown': [{'symbol': 'DCE.m2509', 'value': 0.08}],
-                'win_rate': [{'symbol': 'DCE.m2509', 'value': 0.6}],
+                'total_return': [{'symbol': 'DCE.m2509', 'total_return': 0.15}],
+                'sharpe_ratio': [{'symbol': 'DCE.m2509', 'sharpe_ratio': 1.5}],
+                'max_drawdown': [{'symbol': 'DCE.m2509', 'max_drawdown': 0.08}],
+                'win_rate': [{'symbol': 'DCE.m2509', 'win_rate': 0.6}],
             },
         }
 

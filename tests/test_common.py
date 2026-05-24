@@ -3,7 +3,7 @@
 import pytest
 from common.metrics import calc_max_drawdown, calc_sharpe_ratio
 from common.stats import compute_summary_stats, rank_by_key
-from common.formatting import format_pct, format_float, ensure_float
+from common.formatting import format_pct, format_float, ensure_float, parse_percentage
 
 
 # ═══════════════════════════════════════════════════════════
@@ -228,3 +228,20 @@ class TestEnsureFloat:
 
     def test_string_int(self):
         assert ensure_float('100') == 100.0
+
+
+class TestParsePercentage:
+    def test_string_with_percent(self):
+        assert parse_percentage('15.00%') == pytest.approx(0.15)
+
+    def test_string_negative(self):
+        assert parse_percentage('-8.50%') == pytest.approx(-0.085)
+
+    def test_float_input(self):
+        assert parse_percentage(0.42) == 0.42
+
+    def test_int_input(self):
+        assert parse_percentage(1) == 1.0
+
+    def test_zero_string(self):
+        assert parse_percentage('0.00%') == 0.0
