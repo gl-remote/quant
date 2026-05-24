@@ -3,7 +3,7 @@
 纯函数聚合工具
 
 无副作用、无 I/O 的统计汇总与排名函数。
-compute_summary_stats 来自 lib.stats，其余函数供 comparison.py 和
+compute_summary_stats 来自 common.stats，其余函数供 comparison.py 和
 vnpy_backtest_engine.py Walk-Forward 聚合复用。
 """
 
@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from lib.stats import compute_summary_stats  # noqa: F401 — re-export
+from common.stats import compute_summary_stats  # noqa: F401 — re-export
 
 
 # ── 排名 (backtest 专用: 操作 {symbol, metrics: {}} 结构) ─
@@ -23,7 +23,7 @@ def rank_by_key(
 ) -> list[dict]:
     """对背靠 symbols_data 列表按 metrics 内键排序
 
-    与 lib.stats.rank_by_key 不同: 此函数操作 {symbol, metrics: {}} 嵌套结构。
+    与 common.stats.rank_by_key 不同: 此函数操作 {symbol, metrics: {}} 嵌套结构。
 
     Args:
         items: 含 'symbol' 和 'metrics' 字段的字典列表

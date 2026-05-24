@@ -1,6 +1,6 @@
 """基于 SQLite 数据库的回测报告生成器
 
-完全解耦：仅依赖 data.database.Database (只读查询) + lib (纯函数工具)，
+完全解耦：仅依赖 data.database.Database (只读查询) + common (纯函数工具)，
 不 import backtest / strategies / data.exporter 等业务模块。
 """
 
@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 
 from data.database import Database
-from lib.stats import compute_summary_stats, rank_by_key
-from lib.formatting import format_pct, format_float, ensure_float
+from common.stats import compute_summary_stats, rank_by_key
+from common.formatting import format_pct, format_float, ensure_float
 
 logger = logging.getLogger(__name__)
 
