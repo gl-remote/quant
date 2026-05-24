@@ -274,15 +274,16 @@ class VnpyBacktestEngine:
         pure_symbol, exchange_code = parse_symbol_exchange(symbol)
         vt_symbol = f"{pure_symbol}.{exchange_code}"
 
-        interval_map = {
-            '1m': Interval.MINUTE,
-            '5m': Interval.MINUTE,
-            '15m': Interval.MINUTE,
-            '30m': Interval.MINUTE,
+        # 优先使用 vnpy 细分 Interval (MINUTE_5/MINUTE_15 等)，不存在则回退到 MINUTE
+        _interval_map = {
+            '1m': getattr(Interval, 'MINUTE', Interval.MINUTE),
+            '5m': getattr(Interval, 'MINUTE_5', Interval.MINUTE),
+            '15m': getattr(Interval, 'MINUTE_15', Interval.MINUTE),
+            '30m': getattr(Interval, 'MINUTE_30', Interval.MINUTE),
             '1h': Interval.HOUR,
             'd': Interval.DAILY,
         }
-        interval = interval_map.get(self.interval, Interval.DAILY)
+        interval = _interval_map.get(self.interval, Interval.DAILY)
 
         engine = BacktestingEngine()
         engine.set_parameters(
