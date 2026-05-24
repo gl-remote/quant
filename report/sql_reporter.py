@@ -1,6 +1,6 @@
 """基于 SQLite 数据库的回测报告生成器
 
-完全解耦：仅依赖 data.database.Database (只读查询)，
+完全解耦：仅依赖 data.database.Database (只读查询) + lib (纯函数工具)，
 不 import backtest / strategies / data.exporter 等业务模块。
 """
 
@@ -10,65 +10,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-import numpy as np
-
 from data.database import Database
+from lib.stats import compute_summary_stats, rank_by_key
+from lib.formatting import format_pct, format_float, ensure_float
 
 logger = logging.getLogger(__name__)
-
-
-# ── 纯函数: 描述性统计 (避免依赖 backtest.aggregator) ────────────
-
-def _compute_summary_stats(values: List[float]) -> Dict[str, Any]:
-    """计算数值列表的描述性统计"""
-    if not values:
-        return {}
-    arr = np.array(values, dtype=float)
-    return {
-        'mean': float(np.mean(arr)),
-        'median': float(np.median(arr)),
-        'std': float(np.std(arr, ddof=1)),
-        'min': float(np.min(arr)),
-        'max': float(np.max(arr)),
-        'count': len(values),
-        'positive_count': int(np.sum(arr > 0)),
-        'negative_count': int(np.sum(arr < 0)),
-    }
-
-
-def _rank_by_key(
-    items: List[Dict],
-    key: str,
-    reverse: bool = True,
-) -> List[Dict]:
-    """按指定键排序"""
-    valid = [it for it in items if it.get(key) is not None]
-    return sorted(valid, key=lambda it: it.get(key, 0), reverse=reverse)
-
-
-def _format_pct(value: Optional[float]) -> str:
-    """安全格式化百分比"""
-    if value is None:
-        return 'N/A'
-    v = float(value)
-    # >1 视为百分比值，先归一化
-    if abs(v) > 1:
-        v = v / 100.0
-    return f"{v:.2%}"
-
-
-def _format_float(value: Optional[float], fmt: str = '.2f') -> str:
-    """安全格式化浮点数"""
-    if value is None:
-        return 'N/A'
-    return f"{float(value):{fmt}}"
-
-
-def _ensure_float(v: Any, default: float = 0.0) -> float:
-    """安全转为 float"""
-    if v is None:
-        return default
-    return float(v)
 
 
 # ── 单次报告 ──────────────────────────────────────────────────
@@ -119,8 +65,8 @@ def format_single_report(db: Database, backtest_id: int) -> str:
         f"  交易日数:   {bt.get('total_days', 'N/A')}",
         "",
         "【引擎参数】",
-        f"  初始资金:   {_ensure_float(bt.get('initial_capital')):,.0f}",
-        f"  手续费率:   {_ensure_float(bt.get('commission_rate')):.4%}",
+        f"  初始资金:   {ensure_float(bt.get('initial_capital')):,.0f}",
+        f"  手续费率:   {ensure_float(bt.get('commission_rate')):.4%}",
         f"  滑点:       {bt.get('slippage', 'N/A')}",
         f"  合约乘数:   {bt.get('contract_size', 'N/A')}",
         f"  K线周期:    {bt.get('kline_interval', 'N/A')}",
@@ -136,26 +82,26 @@ def format_single_report(db: Database, backtest_id: int) -> str:
     lines += [
         "",
         "【资金概况】",
-        f"  最终权益:   {_ensure_float(bt.get('end_balance')):,.0f}",
-        f"  总收益率:   {_format_pct(bt.get('total_return'))}",
-        f"  年化收益:   {_format_pct(bt.get('annual_return'))}",
+        f"  最终权益:   {ensure_float(bt.get('end_balance')):,.0f}",
+        f"  总收益率:   {format_pct(bt.get('total_return'))}",
+        f"  年化收益:   {format_pct(bt.get('annual_return'))}",
         "",
         "【交易统计】",
         f"  总交易次数: {bt.get('total_trades', 0)}",
-        f"  盈利交易:   {bt.get('win_trades', 0)}  ({_format_pct(bt.get('win_rate'))})",
+        f"  盈利交易:   {bt.get('win_trades', 0)}  ({format_pct(bt.get('win_rate'))})",
         f"  亏损交易:   {bt.get('loss_trades', 0)}",
-        f"  平均盈利:   {_format_float(bt.get('average_win'), ',.0f')}",
-        f"  平均亏损:   {_format_float(bt.get('average_loss'), ',.0f')}",
-        f"  盈亏比:     {_format_float(bt.get('win_loss_ratio'))}",
+        f"  平均盈利:   {format_float(bt.get('average_win'), ',.0f')}",
+        f"  平均亏损:   {format_float(bt.get('average_loss'), ',.0f')}",
+        f"  盈亏比:     {format_float(bt.get('win_loss_ratio'))}",
         f"  最大连胜:   {bt.get('max_consecutive_win', 0)}",
         f"  最大连亏:   {bt.get('max_consecutive_loss', 0)}",
         "",
         "【风险评估】",
-        f"  夏普比率:   {_format_float(bt.get('sharpe_ratio'))}",
-        f"  最大回撤:   {_format_pct(bt.get('max_drawdown'))}",
+        f"  夏普比率:   {format_float(bt.get('sharpe_ratio'))}",
+        f"  最大回撤:   {format_pct(bt.get('max_drawdown'))}",
         f"  回撤天数:   {bt.get('max_drawdown_duration', 0)}",
-        f"  日波动率:   {_format_float(bt.get('daily_std'), '.4f')}",
-        f"  收益回撤比: {_format_float(bt.get('return_drawdown_ratio'))}",
+        f"  日波动率:   {format_float(bt.get('daily_std'), '.4f')}",
+        f"  收益回撤比: {format_float(bt.get('return_drawdown_ratio'))}",
         "",
         "【交易明细】",
         f"  成交笔数:   {len(trades)} (开仓{buy_count} / 平仓{sell_count})",
@@ -176,7 +122,7 @@ def format_single_report(db: Database, backtest_id: int) -> str:
                 f"  {t.get('datetime', 'N/A'):<20} "
                 f"{t.get('symbol', 'N/A'):<16} "
                 f"{d_tag:>5} {o_tag:>4} "
-                f"{_ensure_float(t.get('price')):>9.2f} "
+                f"{ensure_float(t.get('price')):>9.2f} "
                 f"{t.get('volume', 0):>4}"
             )
 
@@ -219,12 +165,12 @@ def format_comparison_report(
             'id': bt['id'],
             'symbol': bt.get('symbol', 'N/A'),
             'strategy': bt.get('strategy', 'N/A'),
-            'total_return': _ensure_float(bt.get('total_return')),
-            'annual_return': _ensure_float(bt.get('annual_return')),
-            'sharpe_ratio': _ensure_float(bt.get('sharpe_ratio')),
-            'max_drawdown': _ensure_float(bt.get('max_drawdown')),
-            'win_rate': _ensure_float(bt.get('win_rate')),
-            'win_loss_ratio': _ensure_float(bt.get('win_loss_ratio')),
+            'total_return': ensure_float(bt.get('total_return')),
+            'annual_return': ensure_float(bt.get('annual_return')),
+            'sharpe_ratio': ensure_float(bt.get('sharpe_ratio')),
+            'max_drawdown': ensure_float(bt.get('max_drawdown')),
+            'win_rate': ensure_float(bt.get('win_rate')),
+            'win_loss_ratio': ensure_float(bt.get('win_loss_ratio')),
             'total_trades': bt.get('total_trades', 0) or 0,
             'created_at': bt.get('created_at', ''),
         })
@@ -236,10 +182,10 @@ def format_comparison_report(
     win_rates = [s['win_rate'] for s in symbols_data]
 
     agg = {
-        'total_return': _compute_summary_stats(returns),
-        'sharpe_ratio': _compute_summary_stats(sharpes),
-        'max_drawdown': _compute_summary_stats(drawdowns),
-        'win_rate': _compute_summary_stats(win_rates),
+        'total_return': compute_summary_stats(returns),
+        'sharpe_ratio': compute_summary_stats(sharpes),
+        'max_drawdown': compute_summary_stats(drawdowns),
+        'win_rate': compute_summary_stats(win_rates),
         'total_trades': sum(s.get('total_trades', 0) for s in symbols_data),
         'symbol_count': len(symbols_data),
         'profitable_ratio': (sum(1 for v in returns if v > 0) / len(returns)) if returns else 0,
@@ -247,10 +193,10 @@ def format_comparison_report(
 
     # 排名
     ranking = {
-        'total_return': _rank_by_key(symbols_data, 'total_return'),
-        'sharpe_ratio': _rank_by_key(symbols_data, 'sharpe_ratio'),
-        'max_drawdown': _rank_by_key(symbols_data, 'max_drawdown', reverse=False),
-        'win_rate': _rank_by_key(symbols_data, 'win_rate'),
+        'total_return': rank_by_key(symbols_data, 'total_return'),
+        'sharpe_ratio': rank_by_key(symbols_data, 'sharpe_ratio'),
+        'max_drawdown': rank_by_key(symbols_data, 'max_drawdown', reverse=False),
+        'win_rate': rank_by_key(symbols_data, 'win_rate'),
     }
 
     # 保存 JSON
@@ -291,10 +237,10 @@ def format_comparison_report(
             dd_val = dd_val / 100.0
         lines.append(
             f"  {s['id']:>4} {s['symbol']:<18} "
-            f"{_format_pct(s['total_return']):>8} "
-            f"{_format_float(s['sharpe_ratio']):>7} "
+            f"{format_pct(s['total_return']):>8} "
+            f"{format_float(s['sharpe_ratio']):>7} "
             f"{dd_val:.2%} "
-            f"{_format_pct(s['win_rate']):>7} "
+            f"{format_pct(s['win_rate']):>7} "
             f"{s['total_trades']:>6}"
         )
 
@@ -312,15 +258,15 @@ def format_comparison_report(
         s = agg.get(metric_name, {})
         if s and fmt.startswith('.2%'):
             lines.append(
-                f"  {label}: 均值={_format_pct(s.get('mean'))}  "
-                f"中位数={_format_pct(s.get('median'))}  "
-                f"范围=[{_format_pct(s.get('min'))}, {_format_pct(s.get('max'))}]"
+                f"  {label}: 均值={format_pct(s.get('mean'))}  "
+                f"中位数={format_pct(s.get('median'))}  "
+                f"范围=[{format_pct(s.get('min'))}, {format_pct(s.get('max'))}]"
             )
         elif s:
             lines.append(
-                f"  {label}: 均值={_format_float(s.get('mean'))}  "
-                f"中位数={_format_float(s.get('median'))}  "
-                f"范围=[{_format_float(s.get('min'))}, {_format_float(s.get('max'))}]"
+                f"  {label}: 均值={format_float(s.get('mean'))}  "
+                f"中位数={format_float(s.get('median'))}  "
+                f"范围=[{format_float(s.get('min'))}, {format_float(s.get('max'))}]"
             )
 
     lines += [
@@ -389,17 +335,17 @@ def format_summary_report(
     ]
 
     for bt in records:
-        dd_val = _ensure_float(bt.get('max_drawdown'))
+        dd_val = ensure_float(bt.get('max_drawdown'))
         if abs(dd_val) > 1:
             dd_val = dd_val / 100.0
         lines.append(
             f"  {bt['id']:>5} "
             f"{bt.get('symbol', 'N/A'):<18} "
             f"{bt.get('strategy', 'N/A'):<6} "
-            f"{_format_pct(bt.get('total_return')):>8} "
-            f"{_format_float(bt.get('sharpe_ratio')):>7} "
+            f"{format_pct(bt.get('total_return')):>8} "
+            f"{format_float(bt.get('sharpe_ratio')):>7} "
             f"{dd_val:.2%}  "
-            f"{_format_pct(bt.get('win_rate')):>7} "
+            f"{format_pct(bt.get('win_rate')):>7} "
             f"{bt.get('total_trades', 0) or 0:>5} "
             f"{str(bt.get('created_at', ''))[:16]:<16}"
         )

@@ -3,49 +3,27 @@
 纯函数聚合工具
 
 无副作用、无 I/O 的统计汇总与排名函数。
-供 comparison.py 多品种横向对比 和 vnpy_backtest_engine.py Walk-Forward 聚合复用。
+compute_summary_stats 来自 lib.stats，其余函数供 comparison.py 和
+vnpy_backtest_engine.py Walk-Forward 聚合复用。
 """
 
 from typing import Any
 
 import numpy as np
 
-
-# ── 通用数值统计 ──────────────────────────────────────────
-
-def compute_summary_stats(values: list[float]) -> dict[str, float | int]:
-    """计算数值列表的描述性统计
-
-    Args:
-        values: 数值列表
-
-    Returns:
-        {mean, median, std, min, max, positive_count, negative_count}
-        空列表返回 {}
-    """
-    if not values:
-        return {}
-    arr = np.array(values, dtype=float)
-    pos = int(np.sum(arr > 0))
-    return {
-        'mean': float(np.mean(arr)),
-        'median': float(np.median(arr)),
-        'std': float(np.std(arr)),
-        'min': float(np.min(arr)),
-        'max': float(np.max(arr)),
-        'positive_count': pos if any(v != 0 for v in arr) else 0,
-        'negative_count': int(np.sum(arr < 0)),
-    }
+from lib.stats import compute_summary_stats  # noqa: F401 — re-export
 
 
-# ── 排名 ──────────────────────────────────────────────────
+# ── 排名 (backtest 专用: 操作 {symbol, metrics: {}} 结构) ─
 
 def rank_by_key(
     items: list[dict],
     key: str,
     reverse: bool = True,
 ) -> list[dict]:
-    """按指定键对项目列表排序
+    """对背靠 symbols_data 列表按 metrics 内键排序
+
+    与 lib.stats.rank_by_key 不同: 此函数操作 {symbol, metrics: {}} 嵌套结构。
 
     Args:
         items: 含 'symbol' 和 'metrics' 字段的字典列表

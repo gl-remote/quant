@@ -35,6 +35,7 @@
 - **移除 `.plan/*.log.md` 归档**，重要改动统一记录在 CHANGELOG.md
 - AI_BEHAVIOR_RULES.md: 更新行为规范，CHANGELOG.md 替代 .plan/ 归档
 - **回测执行与报告解耦**: 回测结果写入 SQLite 数据库，报告通过独立 `report` 命令生成
+- **提取 lib/ 通用纯函数模块**: `metrics.py` + `stats.py` + `formatting.py`，消除 backtest/report 间的代码重复
 
 ### 新增
 
