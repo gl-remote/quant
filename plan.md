@@ -108,7 +108,31 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-11 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
 | DEF-12 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py:114-157` | 实盘运行无对天勤连接断开的自动检测与重连 |
 
-### 3.3 功能缺失 (与原 S1-S4 规划重叠)
+### 3.3 🔴 backtest 模块 Bug (必须修复, 9 项)
+
+> 审计日期: 2026-05-24 | 模块: `backtest/` (9 个文件, ~1200 行)
+
+| 编号 | 问题 | 文件 | 说明 |
+|------|------|------|------|
+| BUG-BT01 | 卖出资金双重计算 | `tq_backtest_engine.py:56` | `capital += price*qty + profit` 中 profit 若为净盈亏则本金被加两次 |
+| BUG-BT02 | Walk-Forward train/val 数据丢弃 | `vnpy_backtest_engine.py:204` | `walk_forward_split` 生成 (train,val,test) 三元组，但只有 test 被回测 |
+| BUG-BT03 | `_qlib` 后缀替换过于粗暴 | `data_loader.py:68` | `replace("_qlib", "")` 替换所有出现，多段 `_qlib` 文件名会损坏 |
+| BUG-BT04 | exchange 类型不一致 | `data_loader.py:28,31` | vnpy 可用时是 Exchange 枚举，不可用时是裸字符串 `'CFFEX'` |
+| BUG-BT05 | profit_factor 公式非行业标准 | `tq_backtest_engine.py:90` | 用 `abs(avg_profit/avg_loss)` 而非 `gross_profit/abs(gross_loss)` |
+| BUG-BT06 | stability_score 不裁剪 | `aggregator.py:122-124` | 公式可产生远小于 0 的值，应裁剪到 [0,1] |
+| BUG-BT07 | interval_map 粒度丢失 | `vnpy_backtest_engine.py:252-259` | 5m/15m/30m 全部映射为 `Interval.MINUTE` |
+| BUG-BT08 | equity curve 未用 vnpy balance | `report.py:173-176` | running sum of net_pnl 可能漏掉手续费/滑点影响 |
+| BUG-BT09 | BarData Interval 硬编码为 DAILY | `data_loader.py:183` | 所有 CSV 数据均标记为日线，与实际周期不匹配 |
+
+### 3.4 🟡 backtest 模块缺陷 (低优先级, 3 项)
+
+| 编号 | 分类 | 问题 | 文件 | 说明 |
+|------|------|------|------|------|
+| DEF-13 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `metrics.py:47-51` | 假设 rfr=0，对中国期货影响小但应文档化 |
+| DEF-14 | 架构 | context 为空时硬编码策略类型 | `vnpy_backtest_engine.py:278-289` | 回退到 MaStrategyCore，使用其他策略需显式传 context |
+| DEF-15 | 指标 | 缺少 Sortino/Calmar/基准对比 | `types.py`/`metrics.py` | 缺下行风险指标、年化收益/回撤比、buy-and-hold 基准 |
+
+### 3.5 功能缺失 (与原 S1-S4 规划重叠)
 
 | 功能 | 归属 | 优先级 |
 |------|------|--------|
@@ -121,7 +145,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 多数据源 | S4 (A18) | 低 |
 | Docker 支持 | S4 (A16) | 低 |
 
-### 3.4 文档缺失
+### 3.6 文档缺失
 
 | 元素 | 说明 |
 |------|------|
@@ -138,7 +162,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 风险 | 可能性 | 影响 | 对应编号 | 缓解措施 |
 |------|--------|------|----------|---------|
-| — | — | — | — | **所有 Bug 已修复** ✅ |
+| backtest 模块 9 项 Bug 待修复 | 高 | 🟡 中 | BUG-BT01~09 | 本次迭代逐项修复 |
 | 实盘无风控裸奔 | 中 | 🔴 高 | DEF-10 | 后续实现 S3-A15 风控熔断 |
 | Bridge 层无测试覆盖 | 高 | 🟡 中 | DEF-03 | 后续补充 mock 测试 |
 
@@ -165,7 +189,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 夏普比率 (测试集) | — | — | ≥ 0.5 | ≥ 0.5 |
 | 过拟合评分 | — | — | < 15 | < 15 |
 | CI 状态 | 已配置 | 通过 | 通过 | 通过 |
-| 代码审计问题数 | **Bug 全部修复 (3/3)** ✅ + 缺陷 12 项 (低优先级) | — | — | — |
+| 代码审计问题数 | Bug 12 项 (待修复) + 缺陷 15 项 (低优先级) | — | — | — |
 
 ---
 
