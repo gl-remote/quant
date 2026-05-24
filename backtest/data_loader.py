@@ -65,7 +65,7 @@ def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[s
 
     for fp in files:
         name = fp.stem
-        symbol = name.replace("_qlib", "")
+        symbol = name[:-5] if name.endswith('_qlib') else name
 
         if regex and not regex.search(symbol):
             continue
