@@ -5,10 +5,10 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
-from strategies.core.ma_strategy import (
+from strategies.ma_strategy import (
     MaStrategyCore, TradingConfig, StrategyState,
-    TradeRecord, PositionStatus,
 )
+from strategies.core import TradeRecord, PositionStatus
 
 
 class TestSma:

@@ -62,7 +62,9 @@ quant/
 │   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
 │   └── conf.example.yaml   #   配置模板
 ├── strategies/             # 策略子系统
-│   ├── core/               #   纯业务逻辑，零框架依赖
+│   ├── core/               #   策略基类接口 (Strategy ABC)
+│   │   └── base.py         #     抽象基类定义
+│   ├── ma_strategy.py      #   均线交叉策略 (顶层，供 --strategy 发现)
 │   └── gateways/           #   vn.py / 天勤 网关适配器
 ├── backtest/               # 回测子系统（引擎+数据+报告+对比）
 ├── data/                   # 数据子系统（导出+SQLite）
@@ -82,10 +84,17 @@ python main.py <子命令> [参数]
 | 子命令 | 用途 | 示例 |
 |--------|------|------|
 | `export` | 从天勤导出历史 K 线 CSV | `python main.py export --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01` |
-| `test` | 离线策略逻辑验证（不联网） | `python main.py test` |
-| `backtest` | vn.py 三阶段回测 | `python main.py backtest --symbol DCE.m2509` |
-| `tq-backtest` | 天勤 SDK 回测（旧版兼容） | `python main.py tq-backtest --symbol DCE.m2109 --gui` |
-| `live` | 实盘/模拟交易 | `python main.py live --symbol DCE.m2509 --gui` |
+| `test` | 离线策略逻辑验证（不联网） | `python main.py test --strategy ma` |
+| `backtest` | vn.py 三阶段回测 | `python main.py backtest --symbol DCE.m2509 --strategy ma` |
+| `tq-backtest` | 天勤 SDK 回测（旧版兼容） | `python main.py tq-backtest --symbol DCE.m2109 --gui --strategy ma` |
+| `live` | 实盘/模拟交易 | `python main.py live --symbol DCE.m2509 --gui --strategy ma` |
+
+`--strategy` 参数支持三种传入方式:
+- 简化名: `ma` → 找 `strategies/ma_strategy.py`
+- 完整名: `ma_strategy` → 找 `strategies/ma_strategy.py`
+- 带扩展名: `ma_strategy.py` → 找 `strategies/ma_strategy.py`
+
+不指定 `--strategy` 时默认使用 ma 策略。
 
 > **禁止**使用旧版 `--mode backtest` 格式，该格式已废弃。
 
@@ -95,15 +104,16 @@ python main.py <子命令> [参数]
 
 ### 规则 4.1: 架构约束
 
-**核心+网关模式是强制性架构约束。** 所有策略业务逻辑必须写入 `strategies/core/`，不得包含任何框架依赖。框架集成代码仅允许存在于 `strategies/gateways/`。
+**核心+网关模式是强制性架构约束。** 所有策略必须继承 `strategies.core.base.Strategy` 接口，策略文件放 `strategies/` 顶层。框架集成代码仅允许存在于 `strategies/gateways/`。
 
 ```
-strategies/core/ma_strategy.py      ← 允许: 纯算法（SMA计算、信号检测）
-strategies/gateways/vnpy_gateway.py ← 允许: vn.py 适配
-strategies/gateways/tqsdk_gateway.py← 允许: 天勤适配
+strategies/core/base.py              ← 策略抽象接口 (Strategy ABC)
+strategies/ma_strategy.py            ← 均线策略实现 (继承 Strategy)
+strategies/gateways/vnpy_gateway.py  ← vn.py 适配 (接收 Strategy 实例)
+strategies/gateways/tqsdk_gateway.py ← 天勤适配 (接收 Strategy 实例)
 ```
 
-新增网关时必须：继承核心策略 → 转换数据格式 → 委托调用核心方法。
+新增策略时：继承 `Strategy` → 实现全部抽象方法。新增网关时：接收 `Strategy` 实例 → 转换数据格式 → 委托调用核心方法。
 
 ### 规则 4.2: 核心策略复用（强制执行）
 

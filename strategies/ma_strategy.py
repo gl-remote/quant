@@ -2,19 +2,17 @@
 
 不依赖任何外部框架 (vn.py / tqsdk)，仅包含 SMA 计算、信号检测、
 止盈止损判断等核心算法。供各网关适配器调用。
+
+实现 strategies.core.base.Strategy 接口。
 """
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
-from enum import Enum
+
+from .core.base import Strategy, PositionStatus, TradeRecord
 
 logger = logging.getLogger(__name__)
-
-
-class PositionStatus(Enum):
-    NO_POSITION = "no_position"
-    LONG_POSITION = "long_position"
 
 
 @dataclass
@@ -35,17 +33,7 @@ class StrategyState:
     prev_sma_long: float = 0.0
 
 
-@dataclass
-class TradeRecord:
-    timestamp: str = ""
-    direction: str = ""
-    price: float = 0.0
-    volume: int = 0
-    reason: str = ""
-    profit: float = 0.0
-
-
-class MaStrategyCore:
+class MaStrategyCore(Strategy):
     """均线交叉策略核心 - 纯算法逻辑，无框架依赖
 
     负责:
@@ -60,9 +48,27 @@ class MaStrategyCore:
       - 框架生命周期 (由网关处理)
     """
 
+    name: str = "ma"
+
     def __init__(self, config: Optional[TradingConfig] = None):
-        self.config = config or TradingConfig()
-        self.state = StrategyState()
+        self._config = config or TradingConfig()
+        self._state = StrategyState()
+
+    @property
+    def config(self) -> TradingConfig:
+        return self._config
+
+    @config.setter
+    def config(self, value: TradingConfig):
+        self._config = value
+
+    @property
+    def state(self) -> StrategyState:
+        return self._state
+
+    @state.setter
+    def state(self, value: StrategyState):
+        self._state = value
 
     def calculate_sma(self, data: List[float], period: int) -> float:
         if not data or period <= 0:
@@ -79,31 +85,20 @@ class MaStrategyCore:
         return 'none'
 
     def check_stop_loss(self, current_price: float) -> bool:
-        if (self.state.position_status != PositionStatus.LONG_POSITION
-                or self.state.entry_price <= 0):
+        if (self._state.position_status != PositionStatus.LONG_POSITION
+                or self._state.entry_price <= 0):
             return False
-        return ((self.state.entry_price - current_price) /
-                self.state.entry_price >= self.config.stop_loss_ratio)
+        return ((self._state.entry_price - current_price) /
+                self._state.entry_price >= self.config.stop_loss_ratio)
 
     def check_take_profit(self, current_price: float) -> bool:
-        if (self.state.position_status != PositionStatus.LONG_POSITION
-                or self.state.entry_price <= 0):
+        if (self._state.position_status != PositionStatus.LONG_POSITION
+                or self._state.entry_price <= 0):
             return False
-        return ((current_price - self.state.entry_price) /
-                self.state.entry_price >= self.config.take_profit_ratio)
+        return ((current_price - self._state.entry_price) /
+                self._state.entry_price >= self.config.take_profit_ratio)
 
     def on_bar_signal(self, closes: List[float], current_price: float) -> Tuple[Optional[str], str]:
-        """处理一根K线，返回交易信号和原因
-
-        Args:
-            closes: 历史收盘价序列 (含当前)
-            current_price: 当前收盘价
-
-        Returns:
-            (signal, reason):
-              signal: 'buy' / 'sell' / None
-              reason: 'golden_cross' / 'death_cross' / 'stop_loss' / 'take_profit' / ''
-        """
         if not closes:
             return None, ''
 
@@ -111,13 +106,13 @@ class MaStrategyCore:
         cur_long = self.calculate_sma(closes, self.config.sma_long)
         crossover = self.check_crossover(
             cur_short, cur_long,
-            self.state.prev_sma_short, self.state.prev_sma_long,
+            self._state.prev_sma_short, self._state.prev_sma_long,
         )
 
         signal = None
         reason = ''
 
-        if self.state.position_status == PositionStatus.LONG_POSITION:
+        if self._state.position_status == PositionStatus.LONG_POSITION:
             if self.check_stop_loss(current_price):
                 signal, reason = 'sell', 'stop_loss'
             elif self.check_take_profit(current_price):
@@ -127,27 +122,25 @@ class MaStrategyCore:
         elif crossover == 'golden_cross':
             signal, reason = 'buy', 'golden_cross'
 
-        self.state.prev_sma_short = cur_short
-        self.state.prev_sma_long = cur_long
+        self._state.prev_sma_short = cur_short
+        self._state.prev_sma_long = cur_long
         return signal, reason
 
     def on_enter(self, price: float, volume: int):
-        """持仓入场"""
-        self.state.position_status = PositionStatus.LONG_POSITION
-        self.state.entry_price = price
-        self.state.current_position = volume
+        self._state.position_status = PositionStatus.LONG_POSITION
+        self._state.entry_price = price
+        self._state.current_position = volume
 
     def on_exit(self, exit_price: float) -> float:
-        """持仓出场，返回盈亏金额"""
-        if self.state.entry_price <= 0 or self.state.current_position <= 0:
-            self.state.position_status = PositionStatus.NO_POSITION
-            self.state.entry_price = 0.0
-            self.state.current_position = 0
+        if self._state.entry_price <= 0 or self._state.current_position <= 0:
+            self._state.position_status = PositionStatus.NO_POSITION
+            self._state.entry_price = 0.0
+            self._state.current_position = 0
             return 0.0
-        profit = (exit_price - self.state.entry_price) * self.state.current_position
-        self.state.position_status = PositionStatus.NO_POSITION
-        self.state.entry_price = 0.0
-        self.state.current_position = 0
+        profit = (exit_price - self._state.entry_price) * self._state.current_position
+        self._state.position_status = PositionStatus.NO_POSITION
+        self._state.entry_price = 0.0
+        self._state.current_position = 0
         return profit
 
     def calc_position_size(self, price: float, capital: float,

@@ -1,3 +1,4 @@
-from .ma_strategy import MaStrategyCore, TradingConfig, StrategyState, TradeRecord, PositionStatus
+from .base import Strategy, PositionStatus, TradeRecord
+from .context import TradingContext
 
-__all__ = ['MaStrategyCore', 'TradingConfig', 'StrategyState', 'TradeRecord', 'PositionStatus']
+__all__ = ['Strategy', 'PositionStatus', 'TradeRecord', 'TradingContext']

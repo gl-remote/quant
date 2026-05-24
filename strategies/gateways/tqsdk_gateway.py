@@ -1,31 +1,26 @@
-"""tqsdk 框架网关适配器 - 将纯业务逻辑策略适配为天勤SDK可执行策略
+"""tqsdk 框架网关适配器 - 将任意 Strategy 接口实现适配为天勤SDK可执行策略
 
-使 MaStrategyCore 可在 tqsdk 环境中运行 (实盘、模拟、天勤回测)。
-网关负责:
+网关职责:
+  - 接收 TradingContext，从中提取 Strategy 实例和运行参数
   - 天勤 API 的连接与认证
-  - K线数据的获取与转换
+  - K线数据的获取与转换，传递给核心层 Strategy
   - 将核心层信号发送至天勤下单接口
   - 图形界面的启动与控制
+  - 不直接依赖任何具体策略实现类，全部通过 Strategy 接口调用
 """
 
 import logging
-import warnings
 from datetime import datetime
 from typing import Dict, Optional, Any, List
 
-from ..core.ma_strategy import (
-    MaStrategyCore, TradingConfig, StrategyState,
-    TradeRecord as CoreTradeRecord, PositionStatus,
-)
+from ..core.base import Strategy, TradeRecord as CoreTradeRecord
+from ..core.context import TradingContext
 
 logger = logging.getLogger(__name__)
 
 
 class TqsdkImports:
-    """天勤 SDK 延迟导入管理器
-
-    避免模块级可变全局状态，按需导入 tqsdk 模块。
-    """
+    """天勤 SDK 延迟导入管理器"""
 
     def __init__(self):
         self._loaded: bool = False
@@ -53,79 +48,51 @@ class TqsdkImports:
 _tqsdk = TqsdkImports()
 
 
-class TqsdkMaStrategy:
-    """双均线交叉策略 (天勤网关)
+class TqsdkStrategyGateway:
+    """天勤策略网关 - 将 Strategy 接口实现适配为天勤可执行策略
 
-    支持三种运行模式:
+    策略由调用方通过 TradingContext 注入，网关自身不加载任何默认策略。
+
+    运行模式:
       - 实盘/模拟: run() 方法
       - 图形界面: run_with_gui() 方法
       - 纯信号生成: on_bar() 方法 (供外部驱动，如天勤回测)
     """
 
-    def __init__(self, config: Optional[TradingConfig] = None):
-        core_config = config or TradingConfig()
-        self._core = MaStrategyCore(core_config)
-        self.config = core_config
+    def __init__(self, context: TradingContext):
+        """初始化天勤策略网关
+
+        Args:
+            context: 交易上下文 (必需)，提供 Strategy 实例和交易参数，
+                     包含 symbol/capital/account 等运行所需信息
+        """
+        self._context = context
+        self._core = context.strategy
+        self.symbol: str = context.symbol
+        self._capital = context.capital
 
         self.api: Any = None
         self.account: Any = None
         self.signal: Optional[str] = None
         self.signal_reason: str = ""
         self.trade_records: List[CoreTradeRecord] = []
-        self.symbol: str = ""
 
     @property
-    def state(self) -> StrategyState:
+    def config(self):
+        return self._core.config
+
+    @property
+    def state(self):
         return self._core.state
 
     @state.setter
-    def state(self, value: StrategyState):
+    def state(self, value):
         self._core.state = value
-
-    def calculate_sma(self, data, period: int) -> float:
-        warnings.warn(
-            "TqsdkMaStrategy.calculate_sma 已废弃，请直接使用 _core.calculate_sma",
-            DeprecationWarning, stacklevel=2,
-        )
-        if isinstance(data, list):
-            return self._core.calculate_sma(data, period)
-        try:
-            closes = list(data.close)[-period:]
-            return sum(closes) / len(closes) if closes else 0.0
-        except Exception:
-            return 0.0
-
-    def check_crossover(self, short: float, long: float,
-                        prev_short: float, prev_long: float) -> str:
-        warnings.warn(
-            "TqsdkMaStrategy.check_crossover 已废弃，请直接使用 _core.check_crossover",
-            DeprecationWarning, stacklevel=2,
-        )
-        return self._core.check_crossover(short, long, prev_short, prev_long)
-
-    def execute_buy(self, symbol: str, price: float, volume: int, reason: str):
-        warnings.warn(
-            "TqsdkMaStrategy.execute_buy 已废弃，请使用 _record_trade",
-            DeprecationWarning, stacklevel=2,
-        )
-        self.symbol = symbol
-        self._record_trade('buy', price, reason, volume)
-
-    def execute_sell(self, symbol: str, price: float, volume: int, reason: str):
-        warnings.warn(
-            "TqsdkMaStrategy.execute_sell 已废弃，请使用 _record_trade",
-            DeprecationWarning, stacklevel=2,
-        )
-        self.symbol = symbol
-        self._record_trade('sell', price, reason, volume)
 
     def initialize(self, api: Optional[Any] = None):
         self.api = api
         if api:
             self.account = api.get_account()
-        logger.info(
-            f"策略初始化: SMA({self.config.sma_short},{self.config.sma_long})"
-        )
 
     def on_bar(self, kline_data):
         self.signal = None
@@ -173,7 +140,7 @@ class TqsdkMaStrategy:
         if self.account and hasattr(self.account, 'available'):
             fund = float(self.account.available)
         else:
-            fund = 100000.0
+            fund = self._capital
         return self._core.calc_position_size(price, fund)
 
     def get_performance_summary(self) -> Dict[str, Any]:
@@ -184,7 +151,14 @@ class TqsdkMaStrategy:
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
             return
 
-        self.symbol = symbol or ""
+        symbol = symbol or self.symbol or ""
+        if not auth and self._context and self._context.account:
+            auth = _tqsdk.TqAuth(
+                self._context.account['api_key'],
+                self._context.account['api_secret'],
+            )
+
+        self.symbol = symbol
         try:
             api = _tqsdk.TqApi(auth=auth or _tqsdk.TqAuth("guest", ""))
             self.initialize(api)
@@ -211,7 +185,14 @@ class TqsdkMaStrategy:
             logger.error("天勤量化API未安装")
             return
 
-        self.symbol = symbol or ""
+        symbol = symbol or self.symbol or ""
+        if not auth and self._context and self._context.account:
+            auth = _tqsdk.TqAuth(
+                self._context.account['api_key'],
+                self._context.account['api_secret'],
+            )
+
+        self.symbol = symbol
         try:
             api = _tqsdk.TqApi(auth=auth or _tqsdk.TqAuth("guest", ""), web_gui=True)
             self.initialize(api)

@@ -25,7 +25,8 @@ quant/
 │   ├── conf.example.yaml   #   配置模板
 │   └── config_manager.py   #   配置加载与合并
 ├── strategies/             # 策略模块（核心算法 + 网关适配器）
-│   ├── core/               #   纯业务逻辑（无框架依赖）
+│   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
+│   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
 │   └── gateways/           #   vn.py / 天勤 网关
 ├── backtest/               # 回测引擎、数据加载、报告对比
 ├── data/                   # 数据导出、SQLite 管理

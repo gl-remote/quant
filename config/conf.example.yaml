@@ -23,11 +23,15 @@ environment:
   debug: true                      # 是否启用调试模式
 
 # ============================================================
-# 可选：自定义策略参数
+# 可选：自定义策略参数 (conf.local.yaml 中覆盖)
 # ============================================================
-# strategy_params:
-#   sma_short: 5
-#   sma_long: 20
+# strategies:
+#   - name: ma
+#     sma_short: 5
+#     sma_long: 20
+#     stop_loss_ratio: 0.03
+#     take_profit_ratio: 0.05
+#     position_ratio: 0.1
 
 # ============================================================
 # 可选：第三方服务配置

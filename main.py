@@ -4,7 +4,10 @@
 import sys
 import argparse
 import logging
+import importlib
+from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 from config import ConfigManager
 
@@ -14,7 +17,8 @@ logging.basicConfig(
     level=getattr(logging, log_cfg.get('level', 'INFO'), logging.INFO),
     format=log_cfg.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 )
-from strategies import MovingAverageStrategy
+from strategies import TqsdkStrategyGateway
+from strategies.core import Strategy, TradingContext
 from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
 from data import Database, DBLogHandler, export_csv
 
@@ -22,18 +26,107 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# 策略动态加载
+# ============================================================
+def load_strategy(strategy_name: Optional[str]) -> Strategy:
+    """根据名称动态加载策略实例
+
+    支持三种传入方式:
+      - 简化名: "ma" → 找 strategies/ma_strategy.py
+      - 完整名: "ma_strategy" → 找 strategies/ma_strategy.py
+      - 带扩展名: "ma_strategy.py" → 找 strategies/ma_strategy.py
+
+    Args:
+        strategy_name: 策略名称，None 则默认使用 ma
+
+    Returns:
+        Strategy 实例
+
+    Raises:
+        FileNotFoundError: 策略文件不存在
+    """
+    if not strategy_name:
+        strategy_name = "ma"
+
+    name = strategy_name
+    if name.endswith('.py'):
+        name = name[:-3]
+    if not name.endswith('_strategy'):
+        name = f"{name}_strategy"
+
+    strategies_dir = Path(__file__).parent / 'strategies'
+    strategy_file = strategies_dir / f"{name}.py"
+
+    if not strategy_file.exists():
+        available = [f.stem for f in strategies_dir.glob('*_strategy.py')]
+        raise FileNotFoundError(
+            f"策略文件 {name}.py 不存在，可用策略: {', '.join(available)}"
+        )
+
+    spec = importlib.util.spec_from_file_location(name, strategy_file)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    for attr_name in dir(module):
+        attr = getattr(module, attr_name)
+        if (isinstance(attr, type) and
+                issubclass(attr, Strategy) and
+                attr is not Strategy and
+                attr_name != 'Strategy'):
+            return attr()
+
+    raise ValueError(f"策略文件 {name}.py 中未找到 Strategy 实现类")
+
+
+def _get_strategy_class_name(strategy: Strategy) -> str:
+    """获取策略类名用于日志显示"""
+    return type(strategy).__name__
+
+
+# ============================================================
+# TradingContext 构建
+# ============================================================
+def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
+                   capital: float = 100000.0) -> TradingContext:
+    """从 ConfigManager 构建统一的 TradingContext
+
+    Args:
+        strategy: 策略实例
+        symbol: 品种代码
+        cm: 配置管理器
+        capital: 初始资金 (可被 backtest config 覆盖)
+
+    Returns:
+        TradingContext 实例
+    """
+    bc = cm.get_backtest_config()
+    account = cm.get_account_info()
+
+    return TradingContext(
+        strategy=strategy,
+        symbol=symbol,
+        capital=capital,
+        kline_period=cm.get_strategy_config().get('kline_period', 5),
+        commission_rate=bc.get('commission_rate', 0.0003),
+        slippage=bc.get('slippage', 1.0),
+        price_tick=bc.get('price_tick', 1.0),
+        contract_size=bc.get('contract_size', 10),
+        account=account if account else None,
+    )
+
+
+def _apply_strategy_config(strategy: Strategy, cm: ConfigManager):
+    """将配置文件中的策略参数应用到策略实例的 config 上"""
+    sc = cm.get_strategy_config(strategy.name)
+    cfg = strategy.config
+    for key, value in sc.items():
+        if hasattr(cfg, key):
+            setattr(cfg, key, value)
+
+
+# ============================================================
 # 公共工具
 # ============================================================
-def _apply_trading_config(strategy, tc: Dict, symbol: str):
-    cfg = strategy.config
-    cfg.sma_short = tc['sma_short']
-    cfg.sma_long = tc['sma_long']
-    cfg.stop_loss_ratio = tc['stop_loss_ratio']
-    cfg.take_profit_ratio = tc['take_profit_ratio']
-    cfg.position_ratio = tc['position_ratio']
-    strategy.symbol = symbol
-
-
 def _setup_db_logging(db, command: str, symbol: str = None):
     handler = DBLogHandler(db, command=command, symbol=symbol)
     handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
@@ -76,42 +169,63 @@ def cmd_test(args):
     db = Database(cm.get_data_config()['db_path'])
     _setup_db_logging(db, 'test')
 
-    logger.info("=" * 60)
-    logger.info("测试模式 - 策略逻辑验证")
-    logger.info("=" * 60)
-    db.log('test', "测试开始", status='INFO')
-
-    try:
-        tc = cm.get_trading_config()
-        strategy = MovingAverageStrategy()
-        _apply_trading_config(strategy, tc, 'DCE.m2109')
-        logger.info(f"策略参数: SMA({tc['sma_short']},{tc['sma_long']}) "
-                    f"止损={tc['stop_loss_ratio']:.0%} 止盈={tc['take_profit_ratio']:.0%}")
-
-        sma_short = strategy.calculate_sma([10, 11, 12, 13, 15], 5)
-        sma_long = strategy.calculate_sma([12, 12, 12, 12, 12], 5)
-        logger.info(f"SMA5={sma_short:.2f} SMA20={sma_long:.2f}")
-
-        crossover = strategy.check_crossover(sma_short, sma_long, 11.0, 12.0)
-        if crossover == 'golden_cross':
-            strategy.execute_buy('TEST.SYMBOL', 14.0, 10, "测试金叉买入")
-            stop = strategy.state.entry_price * (1 - tc['stop_loss_ratio'])
-            take = strategy.state.entry_price * (1 + tc['take_profit_ratio'])
-            logger.info(f"止损价={stop:.2f} 止盈价={take:.2f}")
-            strategy.state.current_position = 10
-            strategy.execute_sell('TEST.SYMBOL', take, 10, "测试止盈")
-            logger.info(f"测试盈亏: {strategy.state.trade_records[-1].profit:.2f}")
-
-        perf = strategy.get_performance_summary()
-        logger.info(f"绩效摘要: {perf}")
-        db.log('test', f"完成: {perf}", status='SUCCESS')
-        logger.info("\n" + "=" * 60)
-        logger.info("测试模式完成")
+    if args.strategy:
+        strategy = load_strategy(args.strategy)
+        _apply_strategy_config(strategy, cm)
         logger.info("=" * 60)
-    except Exception as e:
-        logger.error(f"测试失败: {e}")
-        db.log('test', f"失败: {e}", status='ERROR')
-        raise
+        logger.info(f"测试模式 - 策略: {_get_strategy_class_name(strategy)}")
+        logger.info("=" * 60)
+        db.log('test', f"开始: strategy={_get_strategy_class_name(strategy)}", status='INFO')
+
+        try:
+            signal, reason = strategy.on_bar_signal(
+                [10, 11, 12, 13, 15], 15.0)
+            logger.info(f"信号测试: signal={signal} reason={reason}")
+
+            strategy.on_enter(14.0, 10)
+            profit = strategy.on_exit(16.0)
+            logger.info(f"损益测试: 入场14.0 出场16.0 盈亏={profit:.2f}")
+
+            perf = strategy.get_performance([])
+            logger.info(f"绩效接口测试: {perf}")
+            db.log('test', f"完成: strategy={_get_strategy_class_name(strategy)}", status='SUCCESS')
+            logger.info("\n" + "=" * 60)
+            logger.info("测试模式完成")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error(f"测试失败: {e}")
+            db.log('test', f"失败: {e}", status='ERROR')
+            raise
+    else:
+        strategy = load_strategy(None)
+        _apply_strategy_config(strategy, cm)
+        logger.info("=" * 60)
+        logger.info(f"测试模式 - 策略逻辑验证 ({_get_strategy_class_name(strategy)})")
+        logger.info("=" * 60)
+        db.log('test', f"开始: strategy={_get_strategy_class_name(strategy)}", status='INFO')
+
+        try:
+            tc = cm.get_trading_config()
+            logger.info(f"策略参数: SMA({tc['sma_short']},{tc['sma_long']}) "
+                        f"止损={tc['stop_loss_ratio']:.0%} 止盈={tc['take_profit_ratio']:.0%}")
+
+            signal, reason = strategy.on_bar_signal([10, 11, 12, 13, 15], 15.0)
+            logger.info(f"信号测试: signal={signal} reason={reason}")
+
+            strategy.on_enter(14.0, 10)
+            profit = strategy.on_exit(16.0)
+            logger.info(f"损益测试: 入场14.0 出场16.0 盈亏={profit:.2f}")
+
+            perf = strategy.get_performance([])
+            logger.info(f"绩效接口测试: {perf}")
+            db.log('test', f"完成: strategy={_get_strategy_class_name(strategy)}", status='SUCCESS')
+            logger.info("\n" + "=" * 60)
+            logger.info("测试模式完成")
+            logger.info("=" * 60)
+        except Exception as e:
+            logger.error(f"测试失败: {e}")
+            db.log('test', f"失败: {e}", status='ERROR')
+            raise
 
 
 # ============================================================
@@ -130,20 +244,17 @@ def cmd_backtest(args):
 
     try:
         bc = cm.get_backtest_config()
-        tc = cm.get_trading_config()
+        strategy = load_strategy(args.strategy)
+        _apply_strategy_config(strategy, cm)
 
-        engine = VnpyBacktestEngine(bc)
-        engine.set_strategy_params(
-            sma_short=tc.get('sma_short', 5),
-            sma_long=tc.get('sma_long', 20),
-            stop_loss_ratio=tc.get('stop_loss_ratio', 0.03),
-            take_profit_ratio=tc.get('take_profit_ratio', 0.05),
-            position_ratio=tc.get('position_ratio', 0.1),
-        )
+        context = _build_context(strategy, args.symbol or "", cm,
+                                 capital=bc.get('initial_capital', 100000.0))
+        engine = VnpyBacktestEngine(bc, context=context)
 
         if args.pattern is not None or args.symbol is None or args.symbol == 'DCE.m2509':
             pattern = args.pattern
-            logger.info(f"多品种回测模式: pattern={pattern or '全部'}, parallel={args.parallel}")
+            logger.info(f"多品种回测模式: pattern={pattern or '全部'}, parallel={args.parallel} "
+                        f"strategy={_get_strategy_class_name(strategy)}")
             result = engine.run_multi_backtest(
                 pattern=pattern,
                 start_date=args.start or None,
@@ -159,7 +270,8 @@ def cmd_backtest(args):
                        symbol='multi', status='ERROR')
         else:
             logger.info(f"vn.py 回测: {args.symbol} 资金={bc['initial_capital']} "
-                         f"费率={bc['commission_rate']:.4%}")
+                         f"费率={bc['commission_rate']:.4%} "
+                         f"strategy={_get_strategy_class_name(strategy)}")
             result = engine.run_full_pipeline(
                 symbol=args.symbol,
                 start_date=args.start or None,
@@ -194,10 +306,18 @@ def cmd_tq_backtest(args):
     try:
         tc = cm.get_trading_config()
         account = cm.get_account_info()
+        strategy_core = load_strategy(args.strategy)
+        _apply_strategy_config(strategy_core, cm)
+        strategy_cls = _get_strategy_class_name(strategy_core)
+
+        context = _build_context(strategy_core, args.symbol, cm, capital=args.capital)
+        gateway = TqsdkStrategyGateway(context=context)
+
         logger.info(f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
-                    f"SMA=({tc['sma_short']},{tc['sma_long']}) GUI={args.gui}")
+                    f"strategy={strategy_cls} GUI={args.gui}")
         db.log('backtest',
-               f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital}",
+               f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
+               f"strategy={strategy_cls}",
                symbol=args.symbol, status='INFO')
 
         auth = TqAuth(account['api_key'], account['api_secret']) if account.get('api_key') else None
@@ -207,8 +327,8 @@ def cmd_tq_backtest(args):
             auth=auth, web_gui=args.gui)
         klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
 
-        strategy = MovingAverageStrategy()
-        _apply_trading_config(strategy, tc, args.symbol)
+        gateway.initialize(api)
+
         engine = BacktestEngine(initial_capital=args.capital)
         target_pos = TargetPosTask(api, args.symbol)
 
@@ -223,24 +343,24 @@ def cmd_tq_backtest(args):
                     'low': float(klines['low'].iloc[-1]),
                     'volume': int(klines['volume'].iloc[-1]),
                 }
-                strategy.on_bar(klines)
+                gateway.on_bar(klines)
 
-                if strategy.signal == 'buy' and engine.current_position == 0:
-                    qty = int((engine.current_capital * strategy.config.position_ratio) / bar['close'])
+                if gateway.signal == 'buy' and engine.current_position == 0:
+                    qty = int((engine.current_capital * gateway.config.position_ratio) / bar['close'])
                     if qty > 0:
                         engine.add_trade(TradeRecord(
                             timestamp=bar['datetime'], symbol=args.symbol, direction='buy',
                             price=bar['close'], quantity=qty, reason="金叉买入"))
                         target_pos.set_target_volume(qty)
-                        strategy.signal = None
-                elif strategy.signal == 'sell' and engine.current_position > 0:
+                        gateway.signal = None
+                elif gateway.signal == 'sell' and engine.current_position > 0:
                     profit = (bar['close'] - engine.entry_price) * engine.current_position
                     engine.add_trade(TradeRecord(
                         timestamp=bar['datetime'], symbol=args.symbol, direction='sell',
                         price=bar['close'], quantity=engine.current_position,
-                        profit=profit, reason=strategy.signal_reason))
+                        profit=profit, reason=gateway.signal_reason))
                     target_pos.set_target_volume(0)
-                    strategy.signal = None
+                    gateway.signal = None
 
     except BacktestFinished:
         report = engine.generate_report()
@@ -287,12 +407,18 @@ def cmd_live(args):
 
         from tqsdk import TqAuth
         auth = TqAuth(account['api_key'], account['api_secret'])
-        logger.info(f"实盘交易: {args.symbol} GUI={args.gui}")
-        db.log('live', f"开始: {args.symbol}", symbol=args.symbol, status='INFO')
+        strategy = load_strategy(args.strategy)
+        _apply_strategy_config(strategy, cm)
+        strategy_cls = _get_strategy_class_name(strategy)
 
-        strategy = MovingAverageStrategy()
-        _apply_trading_config(strategy, cm.get_trading_config(), args.symbol)
-        (strategy.run_with_gui if args.gui else strategy.run)(symbol=args.symbol, auth=auth)
+        context = _build_context(strategy, args.symbol, cm)
+        gateway = TqsdkStrategyGateway(context=context)
+
+        logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
+        db.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
+               symbol=args.symbol, status='INFO')
+
+        (gateway.run_with_gui if args.gui else gateway.run)(symbol=args.symbol, auth=auth)
 
         db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status='SUCCESS')
     except Exception as e:
@@ -308,7 +434,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='天勤量化均线交叉策略交易系统',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="示例: python main.py export --symbol DCE.m2509 --start 2025-06-01 --end 2025-08-31")
+        epilog="示例: python main.py backtest --strategy ma --symbol DCE.m2509")
     sub = parser.add_subparsers(dest='command', title='子命令', required=True)
 
     # ---- export ----
@@ -322,6 +448,8 @@ def main():
 
     # ---- test ----
     p = sub.add_parser('test', help='本地策略逻辑测试（不联网）')
+    p.add_argument('--strategy', default=None,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     # ---- backtest ----
     p = sub.add_parser('backtest', help='vn.py本地历史数据回测 (训练/验证/测试三阶段)',
@@ -332,6 +460,8 @@ def main():
     p.add_argument('--parallel', type=int, default=1, help='并行线程数 (批量模式, 默认=1顺序)')
     p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD (可选)')
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD (可选)')
+    p.add_argument('--strategy', default=None,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     # ---- tq-backtest ----
     p = sub.add_parser('tq-backtest', help='TqSdk历史数据回测 (旧版兼容)')
@@ -340,12 +470,16 @@ def main():
     p.add_argument('--end', default='2024-12-31', help='结束日期')
     p.add_argument('--capital', type=float, default=100000.0, help='初始资金')
     p.add_argument('--gui', action='store_true', help='启用图形界面')
+    p.add_argument('--strategy', default=None,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     # ---- live ----
     p = sub.add_parser('live', help='实盘/模拟交易')
     p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
     p.add_argument('--gui', action='store_true', help='启用图形界面')
     p.add_argument('--config', default=None, help='配置文件路径')
+    p.add_argument('--strategy', default=None,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     args = parser.parse_args()
 

@@ -68,7 +68,7 @@ class TestValidateConfig:
         assert cm.validate_config() is True
 
     def test_invalid_stop_loss_ratio(self, base_config_dict):
-        base_config_dict['trading']['stop_loss_ratio'] = 0.0
+        base_config_dict['strategies'][0]['stop_loss_ratio'] = 0.0
         fd, path = tempfile.mkstemp(suffix='.yaml')
         with open(fd, 'w', encoding='utf-8') as f:
             yaml.dump(base_config_dict, f)
@@ -77,8 +77,8 @@ class TestValidateConfig:
         os.unlink(path)
 
     def test_invalid_sma_ordering(self, base_config_dict):
-        base_config_dict['trading']['sma_short'] = 30
-        base_config_dict['trading']['sma_long'] = 10
+        base_config_dict['strategies'][0]['sma_short'] = 30
+        base_config_dict['strategies'][0]['sma_long'] = 10
         fd, path = tempfile.mkstemp(suffix='.yaml')
         with open(fd, 'w', encoding='utf-8') as f:
             yaml.dump(base_config_dict, f)

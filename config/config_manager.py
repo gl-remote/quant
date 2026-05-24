@@ -27,16 +27,50 @@ class ConfigManager:
             else:
                 base[k] = v
 
-    def get_trading_config(self) -> Dict[str, float]:
+    def get_strategy_config(self, strategy_name: str = "ma") -> Dict[str, Any]:
+        """获取指定策略的配置参数
+
+        支持多种 YAML 配置格式，按优先级查找:
+          1. strategies 列表 (新格式): 按 name 字段匹配
+          2. strategy_params + risk (旧 conf.yaml 格式)
+          3. trading (测试兼容格式)
+
+        Args:
+            strategy_name: 策略名称，如 "ma"、"rsi"
+
+        Returns:
+            策略配置字典，包含该策略所有可配置参数
+        """
+        strategies = self.config.get('strategies')
+        if isinstance(strategies, list):
+            for item in strategies:
+                if isinstance(item, dict) and item.get('name') == strategy_name:
+                    return {k: v for k, v in item.items()
+                            if k not in ('name', 'enabled')}
+
+        sp = self.config.get('strategy_params', {})
+        risk = self.config.get('risk', {})
         tc = self.config.get('trading', {})
-        return {
-            'stop_loss_ratio': tc.get('stop_loss_ratio', 0.03),
-            'take_profit_ratio': tc.get('take_profit_ratio', 0.05),
-            'position_ratio': tc.get('position_ratio', 0.1),
-            'sma_short': tc.get('sma_short', 5),
-            'sma_long': tc.get('sma_long', 20),
-            'kline_period': tc.get('kline_period', 5),
+
+        defaults = {
+            'stop_loss_ratio': 0.03,
+            'take_profit_ratio': 0.05,
+            'position_ratio': 0.1,
+            'kline_period': 5,
         }
+        if strategy_name == 'ma':
+            defaults['sma_short'] = 5
+            defaults['sma_long'] = 20
+
+        for k, default in defaults.items():
+            if k not in tc and k not in sp and k not in risk:
+                tc[k] = default
+
+        return {**defaults, **sp, **risk, **tc}
+
+    def get_trading_config(self) -> Dict[str, Any]:
+        """获取交易配置 (兼容旧接口，委托给 get_strategy_config)"""
+        return self.get_strategy_config('ma')
 
     def get_account_info(self) -> Dict[str, str]:
         try:
@@ -101,12 +135,12 @@ class ConfigManager:
 
     def validate_config(self) -> bool:
         try:
-            tc = self.get_trading_config()
-            if not (0 < tc['stop_loss_ratio'] <= 1 and 0 < tc['take_profit_ratio'] <= 1):
+            sc = self.get_strategy_config('ma')
+            if not (0 < sc['stop_loss_ratio'] <= 1 and 0 < sc['take_profit_ratio'] <= 1):
                 return False
-            if not (0 < tc['position_ratio'] <= 1):
+            if not (0 < sc['position_ratio'] <= 1):
                 return False
-            if tc['sma_short'] >= tc['sma_long']:
+            if 'sma_short' in sc and 'sma_long' in sc and sc['sma_short'] >= sc['sma_long']:
                 return False
 
             bc = self.get_backtest_config()

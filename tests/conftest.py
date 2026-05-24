@@ -32,16 +32,19 @@ def trading_config_dict():
 
 @pytest.fixture
 def base_config_dict():
-    """基础配置字典（模拟 conf.yaml）"""
+    """基础配置字典（模拟 conf.yaml 新格式）"""
     return {
-        'trading': {
-            'stop_loss_ratio': 0.03,
-            'take_profit_ratio': 0.05,
-            'position_ratio': 0.1,
-            'sma_short': 5,
-            'sma_long': 20,
-            'kline_period': 5,
-        },
+        'strategies': [
+            {
+                'name': 'ma',
+                'sma_short': 5,
+                'sma_long': 20,
+                'stop_loss_ratio': 0.03,
+                'take_profit_ratio': 0.05,
+                'position_ratio': 0.1,
+                'kline_period': 5,
+            },
+        ],
         'data': {
             'base_dir': '.quant_shared_data',
             'db_path': '.quant_shared_data/quant_shared.db',

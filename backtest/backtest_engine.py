@@ -22,6 +22,7 @@ from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, ge
 from .data_loader import parse_symbol_exchange, scan_csv_files
 from .report import generate_dataset_report, format_console_report
 from .comparison import compare_datasets, format_comparison_report, generate_merged_report
+from strategies.core.context import TradingContext
 
 logger = logging.getLogger(__name__)
 
@@ -170,28 +171,33 @@ class VnpyBacktestEngine:
     使用方式:
         engine = VnpyBacktestEngine(config)
         engine.run_full_pipeline()
+    或:
+        engine = VnpyBacktestEngine(config, context=trading_context)
+        engine.run_full_pipeline()
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], context: Optional[TradingContext] = None):
         """
         Args:
-            config: 回测配置字典，结构参考 conf.yaml 中 backtest 段:
-                - data_dir: CSV数据目录
-                - initial_capital: 初始资金
-                - commission_rate: 手续费率
-                - slippage: 滑点
-                - price_tick: 最小价格变动
-                - contract_size: 合约乘数
-                - interval: K线周期
-                - split: 数据集划分参数
-                - report: 报告输出参数
+            config: 回测配置字典，结构参考 conf.yaml 中 backtest 段
+            context: 交易上下文 (可选)，提供策略实例和交易参数
         """
+        self.context = context
+
+        if context is not None:
+            self.initial_capital = context.capital
+            self.commission_rate = context.commission_rate
+            self.slippage = context.slippage
+            self.price_tick = context.price_tick
+            self.contract_size = context.contract_size
+        else:
+            self.initial_capital: float = float(config.get('initial_capital', 100000.0))
+            self.commission_rate: float = float(config.get('commission_rate', 0.0003))
+            self.slippage: float = float(config.get('slippage', 1.0))
+            self.price_tick: float = float(config.get('price_tick', 1.0))
+            self.contract_size: int = int(config.get('contract_size', 10))
+
         self.data_dir: str = config.get('data_dir', '.quant_shared_data/csv')
-        self.initial_capital: float = float(config.get('initial_capital', 100000.0))
-        self.commission_rate: float = float(config.get('commission_rate', 0.0003))
-        self.slippage: float = float(config.get('slippage', 1.0))
-        self.price_tick: float = float(config.get('price_tick', 1.0))
-        self.contract_size: int = int(config.get('contract_size', 10))
         self.interval: str = config.get('interval', '1m')
 
         if self.initial_capital <= 0:
@@ -217,20 +223,25 @@ class VnpyBacktestEngine:
         self.save_trades: bool = report_cfg.get('save_trade_records', True)
         self.save_equity: bool = report_cfg.get('save_equity_curve', True)
 
-        self.strategy_params: Dict = {}
+    def _wrap_injected_strategy(self, base_cls):
+        """创建包装了上下文的网关策略类
 
-    def set_strategy_params(self, **kwargs):
-        """设置策略参数，将传递给 VnpyMaStrategy
-
-        支持的参数:
-            sma_short: int - 短期均线周期
-            sma_long: int - 长期均线周期
-            stop_loss_ratio: float - 止损比例
-            take_profit_ratio: float - 止盈比例
-            position_ratio: float - 仓位比例
+        _InjectedStrategy 覆写 _load_default_core 为 no-op，
+        在 __init__ 返回后直接注入 _core 和 price_tick，
+        避免 gateway 的 __init__ 感知 context 参数。
         """
-        self.strategy_params.update(kwargs)
-        logger.info(f"策略参数: {self.strategy_params}")
+        ctx = self.context
+
+        class _InjectedStrategy(base_cls):
+            def _load_default_core(inner_self, setting):
+                pass
+
+            def __init__(inner_self, cta_engine, strategy_name, vt_symbol, setting):
+                super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+                inner_self.price_tick = ctx.price_tick
+                inner_self._core = ctx.strategy
+
+        return _InjectedStrategy
 
     def run_full_pipeline(
         self,
@@ -418,6 +429,9 @@ class VnpyBacktestEngine:
             'merged_report': merged_report,
         }
 
+    def _build_setting(self) -> Dict[str, Any]:
+        return {'price_tick': self.price_tick}
+
     def _run_backtest(
         self,
         df: 'pd.DataFrame',
@@ -427,7 +441,7 @@ class VnpyBacktestEngine:
         """在单个数据集上执行 vnpy 回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
-        from strategies.gateways import VnpyMaStrategy
+        from strategies.gateways import VnpyStrategyGateway
 
         pure_symbol, exchange = parse_symbol_exchange(symbol)
         vt_symbol = f"{pure_symbol}.{exchange.value}" if hasattr(exchange, 'value') else symbol
@@ -455,15 +469,20 @@ class VnpyBacktestEngine:
             capital=int(self.initial_capital),
         )
 
-        setting = {
-            'sma_short': self.strategy_params.get('sma_short', 5),
-            'sma_long': self.strategy_params.get('sma_long', 20),
-            'stop_loss_ratio': self.strategy_params.get('stop_loss_ratio', 0.03),
-            'take_profit_ratio': self.strategy_params.get('take_profit_ratio', 0.05),
-            'position_ratio': self.strategy_params.get('position_ratio', 0.1),
-            'price_tick': self.price_tick,
-        }
-        engine.add_strategy(VnpyMaStrategy, setting)
+        setting = self._build_setting()
+
+        if self.context is None:
+            from strategies.ma_strategy import MaStrategyCore, TradingConfig
+            from strategies.core.context import TradingContext
+            self.context = TradingContext(
+                strategy=MaStrategyCore(TradingConfig()),
+                symbol=vt_symbol,
+                capital=self.initial_capital,
+                price_tick=self.price_tick,
+            )
+
+        strategy_cls = self._wrap_injected_strategy(VnpyStrategyGateway)
+        engine.add_strategy(strategy_cls, setting)
 
         bars = df_to_vnpy_datalines(df, vt_symbol)
         engine.history_data = {vt_symbol: bars}

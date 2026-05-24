@@ -1,11 +1,11 @@
 try:
-    from .vnpy_gateway import VnpyMaStrategy
+    from .vnpy_gateway import VnpyStrategyGateway
 except ImportError:
-    VnpyMaStrategy = None
+    VnpyStrategyGateway = None
 
 try:
-    from .tqsdk_gateway import TqsdkMaStrategy
+    from .tqsdk_gateway import TqsdkStrategyGateway
 except ImportError:
-    TqsdkMaStrategy = None
+    TqsdkStrategyGateway = None
 
-__all__ = ['VnpyMaStrategy', 'TqsdkMaStrategy']
+__all__ = ['VnpyStrategyGateway', 'TqsdkStrategyGateway']

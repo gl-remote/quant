@@ -1,94 +1,57 @@
-"""vn.py 框架网关适配器 - 将纯业务逻辑策略适配为 vnpy CtaTemplate
+"""vn.py 框架网关适配器 - 将 Strategy 接口实现适配为 vnpy CtaTemplate
 
-使 MaStrategyCore 可在 vnpy BacktestingEngine 中运行。
-回测引擎通过此网关调用策略，网关将 vnpy BarData 转换为核心层输入，
-并将核心层信号转换为 vnpy self.buy() / self.sell() 调用。
+网关职责 (纯粹的适配层):
+  - 将 vnpy BarData 转换后传递给 Strategy.on_bar_signal()
+  - 将 Strategy 返回的信号 (buy/sell) 转换为 vnpy self.buy() / self.sell()
+  - 记录交易统计 (trade_count/win_count/total_profit)
 
-vn.py 为强制依赖，不再支持无依赖兼容模式。
+策略由调用方 (backtest_engine) 通过 _InjectedStrategy 在构造后注入。
+网关自身不持有也不加载任何默认策略。
+
+vn.py 为强制依赖。
 """
 
 import logging
-from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 from vnpy_ctastrategy import CtaTemplate
 from vnpy.trader.object import BarData, TickData, OrderData, TradeData
 
-from ..core.ma_strategy import MaStrategyCore, TradingConfig, TradeRecord as CoreTradeRecord
+from ..core.base import TradeRecord as CoreTradeRecord
 
 logger = logging.getLogger(__name__)
 
 
-class VnpyMaStrategy(CtaTemplate):
-    """双均线交叉CTA策略 (vn.py 网关)
+class VnpyStrategyGateway(CtaTemplate):
 
-    vn.py 标准策略接口:
-      - on_init(): 策略初始化
-      - on_start(): 策略启动
-      - on_stop(): 策略停止
-      - on_bar(bar): K线回调 (核心交易逻辑)
-      - on_tick(tick): Tick回调
+    """vn.py 策略网关 - 将任意 Strategy 接口实现适配为 vnpy CtaTemplate
 
-    策略参数 (通过 add_strategy 的 setting 字典传入):
-      - sma_short: 短期均线周期
-      - sma_long: 长期均线周期
-      - stop_loss_ratio: 止损比例
-      - take_profit_ratio: 止盈比例
-      - position_ratio: 仓位比例
-      - price_tick: 最小价格变动
+
+    self._core 和 self.price_tick 由 _InjectedStrategy (定义在 backtest_engine)
+    在 __init__ 返回后注入，网关本身不加载任何默认策略。
+
+    vnpy 通过 add_strategy(cls, setting) 传入 4 个参数，这是 vnpy 框架强制约定。
     """
 
     author = "Quant System"
 
-    parameters = [
-        "sma_short", "sma_long",
-        "stop_loss_ratio", "take_profit_ratio",
-        "position_ratio", "price_tick"
-    ]
-    variables = [
-        "entry_price", "pos", "sma_short_val",
-        "sma_long_val", "prev_sma_short", "prev_sma_long"
-    ]
+    parameters = ["price_tick"]
+    variables = ["pos", "entry_price"]
 
     def __init__(self, cta_engine, strategy_name: str, vt_symbol: str, setting: dict):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-
-        self.sma_short: int = setting.get('sma_short', 5)
-        self.sma_long: int = setting.get('sma_long', 20)
-        self.stop_loss_ratio: float = setting.get('stop_loss_ratio', 0.03)
-        self.take_profit_ratio: float = setting.get('take_profit_ratio', 0.05)
-        self.position_ratio: float = setting.get('position_ratio', 0.1)
-        self.price_tick: float = setting.get('price_tick', 1.0)
-
+        self.price_tick = setting.get('price_tick', 1.0)
         self.entry_price: float = 0.0
-        self.sma_short_val: float = 0.0
-        self.sma_long_val: float = 0.0
-        self.prev_sma_short: float = 0.0
-        self.prev_sma_long: float = 0.0
-
         self._close_history: list = []
-        self._trades: list = []
-
         self.trade_count: int = 0
         self.win_count: int = 0
         self.total_profit: float = 0.0
 
-        core_config = TradingConfig(
-            sma_short=self.sma_short,
-            sma_long=self.sma_long,
-            stop_loss_ratio=self.stop_loss_ratio,
-            take_profit_ratio=self.take_profit_ratio,
-            position_ratio=self.position_ratio,
-        )
-        self._core = MaStrategyCore(core_config)
-
     def on_init(self) -> None:
-        logger.info(
-            f"[{self.strategy_name}] 策略初始化: SMA({self.sma_short},{self.sma_long}) "
-            f"止损={self.stop_loss_ratio:.0%} 止盈={self.take_profit_ratio:.0%}"
-        )
-        self.write_log(f"策略初始化: SMA({self.sma_short},{self.sma_long})")
-        self.load_bar(10)
+        cfg = self._core.config
+        logger.info(f"[{self.strategy_name}] 策略初始化: {self._core.name}")
+        self.write_log(f"策略初始化: {self._core.name}")
+        self.load_bar(getattr(cfg, 'sma_long', 20))
 
     def on_start(self) -> None:
         logger.info(f"[{self.strategy_name}] 策略启动")
@@ -106,9 +69,6 @@ class VnpyMaStrategy(CtaTemplate):
         close_price = bar.close_price if hasattr(bar, 'close_price') else bar.get('close_price', 0)
         self._close_history.append(close_price)
 
-        if len(self._close_history) < self.sma_long:
-            return
-
         signal, reason = self._core.on_bar_signal(self._close_history, close_price)
 
         if signal == 'buy' and self.pos == 0:
@@ -117,7 +77,10 @@ class VnpyMaStrategy(CtaTemplate):
             self._execute_sell(bar, reason)
 
     def _execute_buy(self, bar: Any) -> None:
-        volume = self._calc_volume(bar.close_price)
+        volume = self._core.calc_position_size(
+            bar.close_price,
+            self.cta_engine.capital if hasattr(self.cta_engine, 'capital') else 100000,
+        )
         if volume <= 0:
             return
         self.buy(bar.close_price, volume)
@@ -125,7 +88,7 @@ class VnpyMaStrategy(CtaTemplate):
         self._core.on_enter(bar.close_price, volume)
         self.trade_count += 1
         logger.info(
-            f"[{self.strategy_name}] {bar.datetime} 金叉买入 "
+            f"[{self.strategy_name}] {bar.datetime} 买入 "
             f"@{bar.close_price:.2f} x{volume}"
         )
 
@@ -141,10 +104,6 @@ class VnpyMaStrategy(CtaTemplate):
             f"[{self.strategy_name}] {bar.datetime} {reason}卖出 "
             f"@{bar.close_price:.2f} 盈亏{profit:.2f}"
         )
-
-    def _calc_volume(self, price: float) -> int:
-        capital = self.cta_engine.capital if hasattr(self.cta_engine, 'capital') else 100000
-        return self._core.calc_position_size(price, capital)
 
     def on_tick(self, tick: Any) -> None:
         pass
