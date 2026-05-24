@@ -1,6 +1,6 @@
 # AI 行为规范约束
 
-> 版本: 0.1.0 | 更新日期: 2026-05-24
+> 版本: 0.2.0-dev | 更新日期: 2026-05-24
 
 ---
 
@@ -223,6 +223,7 @@ def parse_symbol_exchange(symbol: str):
 | 提交信息 | `类型: 简述` 格式（如 `docs:`, `fix:`, `feat:`, `refactor:`） |
 | 禁止提交 | `conf.local.yaml`、`*.csv`、`*.log`、`__pycache__/` |
 | 提交前检查 | 确保代码可运行，基本功能无回归 |
+| 版本变动 | **仅在合并到 main 分支时**更新版本号（pyproject.toml、AI_BEHAVIOR_RULES.md、plan.md），日常开发提交不改变版本号 |
 
 ---
 

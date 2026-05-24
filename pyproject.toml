@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant"
-version = "0.1.0"
+version = "0.2.0-dev"
 description = "天勤量化交易系统 - 均线交叉策略回测与实盘"
 readme = "README.md"
 requires-python = ">=3.10"
