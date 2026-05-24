@@ -3,18 +3,19 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Any
+
 import numpy as np
 
-from .aggregator import compute_summary_stats, rank_by_key
+from backtest.aggregator import rank_by_key
+from common.stats import compute_summary_stats
 
 logger = logging.getLogger(__name__)
 
 
 def generate_merged_report(
-    all_results: List[Dict],
+    all_results: list[dict],
     output_dir: str = ".quant_shared_data/reports",
-) -> Dict[str, Any]:
+) -> dict:
     """生成多品种合并回测报告
 
     将所有品种的回测结果汇总，计算整体统计指标，
@@ -85,7 +86,7 @@ def generate_merged_report(
     return merged
 
 
-def _build_ranking(symbols_data: List[Dict]) -> Dict[str, List[Dict]]:
+def _build_ranking(symbols_data: list[dict]) -> dict[str, list[dict]]:
     """构建各指标排名"""
     if not symbols_data:
         return {}
@@ -97,16 +98,16 @@ def _build_ranking(symbols_data: List[Dict]) -> Dict[str, List[Dict]]:
     }
 
 
-def _build_aggregate(symbols_data: List[Dict]) -> Dict:
+def _build_aggregate(symbols_data: list[dict]) -> dict:
     """计算整体聚合统计"""
     if not symbols_data:
         return {}
 
-    returns = []
-    sharpes = []
-    drawdowns = []
-    win_rates = []
-    trades_list = []
+    returns: list[float] = []
+    sharpes: list[float] = []
+    drawdowns: list[float] = []
+    win_rates: list[float] = []
+    trades_list: list[int] = []
 
     for s in symbols_data:
         m = s['metrics']
@@ -136,7 +137,7 @@ def _build_aggregate(symbols_data: List[Dict]) -> Dict:
     }
 
 
-def format_merged_report(merged: Dict) -> str:
+def format_merged_report(merged: dict) -> str:
     """格式化合并报告为控制台文本"""
     meta = merged.get('meta', {})
     agg = merged.get('aggregate', {})

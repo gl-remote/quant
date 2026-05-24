@@ -18,9 +18,9 @@ from .tq_backtest_engine import TQBacktestEngine
 from .vnpy_backtest_engine import VnpyBacktestEngine
 from .data_loader import walk_forward_split, walk_forward_split_by_ratio, scan_csv_files, filter_dataframe_by_date
 
-# 向后兼容: metrics 和 aggregator 函数已移入 common/，此处保留 re-export
-from .metrics import calc_max_drawdown, calc_sharpe_ratio
-from .aggregator import compute_summary_stats, rank_by_key, parse_percentage, aggregate_walk_forward
+# 向后兼容 re-export: 纯函数工具已移入 common/
+from common.metrics import calc_max_drawdown, calc_sharpe_ratio
+from .aggregator import rank_by_key, aggregate_walk_forward
 
 __all__ = [
     'VnpyBacktestEngine',
@@ -31,10 +31,8 @@ __all__ = [
     'walk_forward_split_by_ratio',
     'scan_csv_files',
     'filter_dataframe_by_date',
-    'calc_max_drawdown',
-    'calc_sharpe_ratio',
-    'compute_summary_stats',
+    'calc_max_drawdown',       # re-export from common.metrics
+    'calc_sharpe_ratio',       # re-export from common.metrics
     'rank_by_key',
-    'parse_percentage',
     'aggregate_walk_forward',
 ]

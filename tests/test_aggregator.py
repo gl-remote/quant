@@ -3,10 +3,10 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
+from common.stats import compute_summary_stats
+from common.formatting import parse_percentage
 from backtest.aggregator import (
-    compute_summary_stats,
     rank_by_key,
-    parse_percentage,
     aggregate_walk_forward,
 )
 

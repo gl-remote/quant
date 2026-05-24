@@ -57,3 +57,15 @@ def ensure_float(v: float | int | str | None, default: float = 0.0) -> float:
     if v is None:
         return default
     return float(v)
+
+
+def parse_percentage(value: str | float | int) -> float:
+    """将百分比字符串或数值统一转为 float 比值
+
+    '15.00%' → 0.15
+    0.15     → 0.15
+    15       → 15.0 (不解为 0.15，调用方自行判断语义)
+    """
+    if isinstance(value, str):
+        return float(value.rstrip('%')) / 100.0
+    return float(value)

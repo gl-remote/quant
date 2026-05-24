@@ -18,8 +18,9 @@ import numpy as np
 from strategies.core.context import TradingContext
 
 from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
-from .report import generate_dataset_report, format_console_report
-from .aggregator import aggregate_walk_forward, parse_percentage
+from report.dataset_reporter import generate_dataset_report, format_console_report
+from .aggregator import aggregate_walk_forward
+from common.formatting import parse_percentage
 
 logger = logging.getLogger(__name__)
 

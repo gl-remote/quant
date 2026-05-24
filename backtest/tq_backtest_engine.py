@@ -16,7 +16,7 @@
 from typing import List
 
 from .types import TradeRecord, BacktestResult
-from .metrics import calc_max_drawdown, calc_sharpe_ratio
+from common.metrics import calc_max_drawdown, calc_sharpe_ratio
 
 
 class TQBacktestEngine:

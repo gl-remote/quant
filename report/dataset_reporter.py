@@ -1,25 +1,26 @@
-"""报告生成模块 - 为回测结果生成详细的交易报告"""
+"""数据集报告生成模块 — 为单个回测结果生成详细 JSON 交易报告"""
 
 import json
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Any
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
 def generate_dataset_report(
-    statistics: Dict[str, Any],
-    daily_results: Optional[List[Dict]] = None,
+    statistics: dict[str, Any],
+    daily_results: list[dict] | None = None,
     dataset_name: str = "unknown",
     symbol: str = "",
     initial_capital: float = 100000.0,
     output_dir: str = ".quant_shared_data/reports",
     save_trades: bool = True,
     save_equity: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """为单个回测结果生成详细报告
 
     Args:
@@ -69,7 +70,7 @@ def generate_dataset_report(
     return report
 
 
-def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Dict:
+def _extract_performance_metrics(statistics: dict, initial_capital: float) -> dict:
     """提取绩效指标。当 statistics 为空或无交易时返回安全默认值，避免 vnpy 的垃圾数据污染报告。"""
     _ZERO_RETURN = {
         'initial_capital': initial_capital,
@@ -120,7 +121,7 @@ def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Di
     }
 
 
-def _extract_risk_metrics(statistics: Dict) -> Dict:
+def _extract_risk_metrics(statistics: dict) -> dict:
     """提取风险指标。0 交易时 vnpy 回撤/波动率等不可信，返回安全默认值。"""
     total_trades = statistics.get('total_trades', 0) if isinstance(statistics, dict) else 0
     if total_trades == 0:
@@ -140,7 +141,7 @@ def _extract_risk_metrics(statistics: Dict) -> Dict:
     }
 
 
-def _extract_trade_summary(statistics: Dict) -> Dict:
+def _extract_trade_summary(statistics: dict) -> dict:
     """提取交易统计摘要"""
     return {
         'total_trades': statistics.get('total_trades', 0),
@@ -155,7 +156,7 @@ def _extract_trade_summary(statistics: Dict) -> Dict:
     }
 
 
-def _save_trade_records(daily_results: List[Dict], filepath: Path):
+def _save_trade_records(daily_results: list[dict], filepath: Path):
     """保存详细交易记录"""
     trades = []
     for day in daily_results:
@@ -166,7 +167,7 @@ def _save_trade_records(daily_results: List[Dict], filepath: Path):
     logger.info(f"交易记录已保存: {filepath}")
 
 
-def _save_equity_curve(daily_results: List[Dict], filepath: Path,
+def _save_equity_curve(daily_results: list[dict], filepath: Path,
                        initial_capital: float):
     """保存资金曲线数据
 
@@ -201,7 +202,7 @@ def _save_equity_curve(daily_results: List[Dict], filepath: Path,
 
 
 def format_console_report(
-    report: Dict,
+    report: dict,
     title: str,
 ) -> str:
     """格式化控制台报告文本

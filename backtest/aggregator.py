@@ -1,64 +1,76 @@
 # -*- coding: utf-8 -*-
-"""
-纯函数聚合工具
+"""纯函数聚合工具
 
-无副作用、无 I/O 的统计汇总与排名函数。
-compute_summary_stats 来自 common.stats，其余函数供 comparison.py 和
+无副作用、无 I/O 的统计汇总与排名函数，供 comparison_reporter 和
 vnpy_backtest_engine.py Walk-Forward 聚合复用。
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TypedDict, cast
 
 import numpy as np
 
-from common.stats import compute_summary_stats  # noqa: F401 — re-export
+from common.formatting import parse_percentage  # noqa: F401 — re-export for backcompat
+
+
+# ── 类型 ─────────────────────────────────────────────────
+
+class SymbolMetricItem(TypedDict):
+    """{symbol, metrics: {key: value}} — 回测结果中的单品种聚合条目"""
+    symbol: str
+    metrics: dict[str, object]
+
+
+class RankPair(TypedDict):
+    """rank_by_key 返回的 {symbol, value} 排名条目"""
+    symbol: str
+    value: float
 
 
 # ── 排名 (backtest 专用: 操作 {symbol, metrics: {}} 结构) ─
 
+def _sortable(metrics: dict[str, object], key: str) -> float:
+    """提取排序键。调用方已通过 filter 确保 key 值非 None。
+    
+    float() 转换在运行时安全：所有值均为数值类型（float/int）。
+    """
+    return float(metrics[key])  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
+
+
 def rank_by_key(
-    items: list[dict],
+    items: list[SymbolMetricItem],
     key: str,
     reverse: bool = True,
-) -> list[dict]:
-    """对背靠 symbols_data 列表按 metrics 内键排序
+) -> list[RankPair]:
+    """从嵌套结构中提取指定指标并按值排名
 
-    与 common.stats.rank_by_key 不同: 此函数操作 {symbol, metrics: {}} 嵌套结构。
-
-    Args:
-        items: 含 'symbol' 和 'metrics' 字段的字典列表
-        key: metrics 中的排序键名
-        reverse: True=降序(越大越好), False=升序(越小越好)
-
-    Returns:
-        [{symbol, value}, ...] 排序后的列表，跳过 key 为 None 的项目
+    与 common.stats.rank_by_key 不同:
+      - 输入要求 {symbol, metrics: {key: value}} 嵌套结构
+      - 返回瘦身后的 {symbol, value} 对（丢弃其他指标字段）
+      - 跳过 key 值为 None 的条目，metrics 缺失时安全跳过
     """
-    valid = [it for it in items if it['metrics'].get(key) is not None]
+    # 过滤: 跳过 metrics 缺失或 key 值为 None 的项
+    # 用 .get('metrics', {}) 代替 [] → 防 KeyError
+    valid: list[SymbolMetricItem] = [
+        it for it in items
+        if it.get('metrics', {}).get(key) is not None
+    ]
+    # 排序: 所有条目已确保 key 存在且非 None
     sorted_items = sorted(
         valid,
-        key=lambda it: it['metrics'].get(key, 0),
+        key=lambda it: _sortable(it['metrics'], key),  # type: ignore
         reverse=reverse,
     )
-    return [{'symbol': it['symbol'], 'value': it['metrics'].get(key, 0)}
-            for it in sorted_items]
-
-
-# ── 百分比字符串解析 ─────────────────────────────────────
-
-def parse_percentage(value: Any) -> float:
-    """将百分比字符串或数值统一转为 float 比值
-
-    '15.00%' → 0.15
-    0.15     → 0.15
-    """
-    if isinstance(value, str):
-        return float(value.rstrip('%')) / 100.0
-    return float(value)
+    return [
+        RankPair(symbol=it['symbol'], value=cast(float, it['metrics'][key]))
+        for it in sorted_items
+    ]
 
 
 # ── Walk-Forward 聚合 ────────────────────────────────────
 
-def aggregate_walk_forward(window_results: list[dict]) -> dict[str, float]:
+def aggregate_walk_forward(window_results: list[dict[str, object]]) -> dict[str, float]:
     """聚合 Walk-Forward 所有窗口的测试集指标
 
     从各窗口的 statistics 中提取收益率/夏普/回撤/胜率，
@@ -98,6 +110,6 @@ def aggregate_walk_forward(window_results: list[dict]) -> dict[str, float]:
         'win_rate_std': float(np.std(win_rates)),
         'positive_window_ratio': float(np.sum(arr_returns > 0) / len(arr_returns)),
         'stability_score': float(max(0.0, min(1.0,
-            1.0 - np.std(arr_returns) / max(abs(np.mean(arr_returns)), 1e-9)
+            1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9)
         ))),
     }

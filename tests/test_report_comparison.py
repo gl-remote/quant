@@ -4,14 +4,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import json
 import pytest
-from backtest.report import (
+from report.dataset_reporter import (
     _extract_performance_metrics,
     _extract_risk_metrics,
     _extract_trade_summary,
     format_console_report,
     generate_dataset_report,
 )
-from backtest.comparison import (
+from report.comparison_reporter import (
     generate_merged_report,
     format_merged_report,
 )
