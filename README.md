@@ -24,10 +24,10 @@ quant/
 │   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
 │   ├── conf.example.yaml   #   配置模板
 │   └── config_manager.py   #   配置加载与合并
-├── strategies/             # 策略模块（核心算法 + 网关适配器）
+├── strategies/             # 策略模块（核心算法 + 桥接器）
 │   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
 │   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
-│   └── gateways/           #   vn.py / 天勤 网关
+│   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测引擎、数据加载、报告对比
 ├── data/                   # 数据导出、SQLite 管理
 └── doc/                    # 文档

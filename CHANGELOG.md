@@ -40,6 +40,6 @@
 
 - 项目初始化：天勤均线交叉策略交易系统
 - 策略核心：MovingAverageStrategy（SMA 金叉/死叉 + 止损止盈）
-- vn.py 网关适配器、天勤 SDK 网关适配器
+- vn.py 桥接器、天勤 SDK 桥接器
 - 基础回测跟踪器（BacktestEngine + TradeRecord + BacktestResult）
 - 初始审计：17 个问题 + 8 个缺失项 + 路线图

@@ -65,7 +65,7 @@ quant/
 │   ├── core/               #   策略基类接口 (Strategy ABC)
 │   │   └── base.py         #     抽象基类定义
 │   ├── ma_strategy.py      #   均线交叉策略 (顶层，供 --strategy 发现)
-│   └── gateways/           #   vn.py / 天勤 网关适配器
+│   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测子系统（引擎+数据+报告+对比）
 ├── data/                   # 数据子系统（导出+SQLite）
 └── doc/                    # 项目文档
@@ -104,16 +104,16 @@ python main.py <子命令> [参数]
 
 ### 规则 4.1: 架构约束
 
-**核心+网关模式是强制性架构约束。** 所有策略必须继承 `strategies.core.base.Strategy` 接口，策略文件放 `strategies/` 顶层。框架集成代码仅允许存在于 `strategies/gateways/`。
+**核心+桥接器模式是强制性架构约束。** 所有策略必须继承 `strategies.core.base.Strategy` 接口，策略文件放 `strategies/` 顶层。框架集成代码仅允许存在于 `strategies/bridges/`。
 
 ```
 strategies/core/base.py              ← 策略抽象接口 (Strategy ABC)
 strategies/ma_strategy.py            ← 均线策略实现 (继承 Strategy)
-strategies/gateways/vnpy_gateway.py  ← vn.py 适配 (接收 Strategy 实例)
-strategies/gateways/tqsdk_gateway.py ← 天勤适配 (接收 Strategy 实例)
+strategies/bridges/vnpy_bridge.py    ← vn.py 桥接器 (接收 Strategy 实例)
+strategies/bridges/tqsdk_bridge.py   ← 天勤桥接器 (接收 Strategy 实例)
 ```
 
-新增策略时：继承 `Strategy` → 实现全部抽象方法。新增网关时：接收 `Strategy` 实例 → 转换数据格式 → 委托调用核心方法。
+新增策略时：继承 `Strategy` → 实现全部抽象方法。新增桥接器时：接收 `Strategy` 实例 → 转换数据格式 → 委托调用核心方法。
 
 ### 规则 4.2: 核心策略复用（强制执行）
 

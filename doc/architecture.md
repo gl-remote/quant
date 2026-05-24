@@ -6,7 +6,7 @@
 
 ## 架构总览
 
-系统的核心设计原则是**业务逻辑与执行框架分离**。策略算法不依赖任何外部框架，通过网关适配器接入不同的运行环境。
+系统的核心设计原则是**业务逻辑与执行框架分离**。策略算法不依赖任何外部框架，通过桥接器接入不同的运行环境。
 
 ```
                         ┌──────────────────────┐
@@ -23,8 +23,8 @@
          │                      │                      │
          ▼                      ▼                      ▼
 ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐
-│   data/exporter  │   │  VnpyBacktest    │   │  TqsdkMaStrategy │
-│   天勤→CSV       │   │  Engine          │   │  天勤网关适配器    │
+│   data/exporter  │   │  VnpyBacktest    │   │  TqsdkStrategy    │
+│   天勤→CSV       │   │  Engine          │   │  Bridge 桥接器     │
 └────────┬─────────┘   └────────┬─────────┘   └────────┬─────────┘
          │                      │                      │
          │              ┌───────┼───────┐              │
@@ -38,26 +38,26 @@
 ┌──────────────────────────────────────────────────────────────┐
 │                    strategies/                                │
 │  ┌─────────────────┐  ┌──────────────┐  ┌───────────────┐   │
-│  │ MaStrategyCore  │◀─│ VnpyMaStrategy│  │TqsdkMaStrategy│   │
-│  │   纯业务逻辑     │  │  vn.py 网关    │  │  天勤网关      │   │
+│  │ MaStrategyCore  │◀─│VnpyStrategyBridge│TqsdkStrategyBridge│
+│  │   纯业务逻辑     │  │  vn.py 桥接器   │  天勤桥接器       │
 │  └─────────────────┘  └──────────────┘  └───────────────┘   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## 核心架构模式：核心 + 网关
+## 核心架构模式：核心 + 桥接器
 
-这是系统最重要的设计决策。策略的核心算法（SMA 计算、交叉检测、止盈止损判断）集中在 [MaStrategyCore](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/core/ma_strategy.py) 中，完全独立于任何交易框架。两个网关适配器分别负责将该核心接入 vn.py 回测引擎和天勤实盘环境。
+这是系统最重要的设计决策。策略的核心算法（SMA 计算、交叉检测、止盈止损判断）集中在 [MaStrategyCore](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/ma_strategy.py) 中，完全独立于任何交易框架。两个桥接器分别负责将该核心接入 vn.py 回测引擎和天勤实盘环境。
 
 **为什么这样设计**：
 
 1. **策略一致性** — 回测和实盘使用同一份算法代码，消除因实现差异导致的回测偏差
-2. **框架可替换** — 更换交易框架只需新增网关适配器，核心代码零改动
+2. **框架可替换** — 更换交易框架只需新增桥接器，核心代码零改动
 3. **测试便利** — 核心算法可脱离框架独立测试，无需启动完整回测环境
 
-### 网关适配器对比
+### 桥接器对比
 
-| 特性 | VnpyMaStrategy | TqsdkMaStrategy |
-|------|---------------|-----------------|
+| 特性 | VnpyStrategyBridge | TqsdkStrategyBridge |
+|------|-------------------|---------------------|
 | **用途** | vn.py 回测 | 天勤实盘/模拟/回测 |
 | **生命周期** | on_init/start/stop/bar | 手动管理 |
 | **订单执行** | self.buy/sell (vnpy) | 手动交易记录 |
@@ -100,10 +100,12 @@
 ```
 strategies/
 ├── core/
-│   └── ma_strategy.py    ← MaStrategyCore (纯算法)
-└── gateways/
-    ├── vnpy_gateway.py   ← VnpyMaStrategy (vn.py 适配)
-    └── tqsdk_gateway.py  ← TqsdkMaStrategy (天勤适配)
+│   ├── base.py           ← Strategy ABC + TradeRecord
+│   └── context.py        ← TradingContext
+├── ma_strategy.py        ← MaStrategyCore (纯算法)
+└── bridges/
+    ├── vnpy_bridge.py    ← VnpyStrategyBridge (vn.py 桥接)
+    └── tqsdk_bridge.py   ← TqsdkStrategyBridge (天勤桥接)
 ```
 
 ### `data/` — 数据子系统
@@ -200,10 +202,11 @@ quant/
 │   └── conf.example.yaml         #   配置模板
 │
 ├── strategies/                   # 策略子系统
-│   ├── core/ma_strategy.py       # 纯算法核心
-│   └── gateways/                 # 框架适配器
-│       ├── vnpy_gateway.py       # vn.py 网关
-│       └── tqsdk_gateway.py      # 天勤网关
+│   ├── core/                     #   抽象接口 (Strategy ABC)
+│   ├── ma_strategy.py            #   均线策略核心
+│   └── bridges/                  #   框架桥接器
+│       ├── vnpy_bridge.py        #     vn.py 桥接
+│       └── tqsdk_bridge.py       #     天勤桥接
 │
 ├── backtest/                     # 回测子系统
 │   ├── backtest_engine.py        # 核心引擎

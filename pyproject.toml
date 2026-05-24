@@ -84,7 +84,7 @@ omit = [
     "*/__pycache__/*",
     ".vscode/*",
     "main.py",
-    "strategies/gateways/*",
+    "strategies/bridges/*",
     "data/exporter.py",
     "backtest/backtest_engine.py",
 ]

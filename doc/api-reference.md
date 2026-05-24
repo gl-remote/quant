@@ -145,9 +145,9 @@ run_full_pipeline(
 }
 ```
 
-## 策略网关 API
+## 策略桥接器 API
 
-### VnpyMaStrategy
+### VnpyStrategyBridge
 
 ## 数据加载模块
 
@@ -184,7 +184,7 @@ run_full_pipeline(
 
 ### MaStrategyCore
 
-位于 [strategies/core/ma_strategy.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/core/ma_strategy.py)，纯业务逻辑，无框架依赖。
+位于 [strategies/ma_strategy.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/ma_strategy.py)，纯业务逻辑，无框架依赖。
 
 ```python
 from strategies.core import MaStrategyCore, TradingConfig
@@ -209,12 +209,12 @@ elif signal == 'sell':
 | `on_enter(price, volume)` | 仓位入场 |
 | `on_exit(exit_price) -> float` | 仓位出场，返回盈亏 |
 
-### 策略网关
+### 策略桥接器
 
 | 类 | 位置 | 用途 |
 |----|------|------|
-| `VnpyMaStrategy` | [gateways/vnpy_gateway.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/gateways/vnpy_gateway.py) | vn.py CtaTemplate 适配器 |
-| `TqsdkMaStrategy` | [gateways/tqsdk_gateway.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/gateways/tqsdk_gateway.py) | 天勤 SDK 适配器 |
+| `VnpyStrategyBridge` | [bridges/vnpy_bridge.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/vnpy_bridge.py) | vn.py CtaTemplate 桥接器 |
+| `TqsdkStrategyBridge` | [bridges/tqsdk_bridge.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/tqsdk_bridge.py) | 天勤 SDK 桥接器 |
 
 两者均委托调用 `MaStrategyCore`，仅负责框架侧的数据转换与订单执行。
 
