@@ -176,7 +176,8 @@ def format_merged_report(merged: Dict) -> str:
         m = s['metrics']
         ret = f"{float(m.get('total_return', 0)):.2%}"
         sharpe = f"{float(m.get('sharpe_ratio', 0)):.2f}"
-        dd = f"{float(m.get('max_drawdown', 0)):.2%}"
+        dd_val = float(m.get('max_drawdown', 0))
+        dd = f"{dd_val:.2%}" if abs(dd_val) <= 1 else f"{dd_val:.2f}"
         wr = f"{float(m.get('win_rate', 0)):.2%}"
         trades = f"{int(m.get('total_trades', 0))}"
         lines.append(f"  {s['symbol']:<18} {ret:>8} {sharpe:>7} {dd:>7} "
@@ -187,13 +188,15 @@ def format_merged_report(merged: Dict) -> str:
         "【整体聚合统计】",
     ]
 
-    for metric_name, label in [('total_return', '总收益率'), ('sharpe_ratio', '夏普比率'),
-                                ('max_drawdown', '最大回撤'), ('win_rate', '胜率')]:
+    for metric_name, label, fmt in [('total_return', '总收益率', '.2%'),
+                                     ('sharpe_ratio', '夏普比率', '.2f'),
+                                     ('max_drawdown', '最大回撤', '.2%'),
+                                     ('win_rate', '胜率', '.2%')]:
         s = agg.get(metric_name, {})
         if s:
-            lines.append(f"  {label}: 均值={s.get('mean', 0):.2%}  "
-                          f"中位数={s.get('median', 0):.2%}  "
-                          f"范围=[{s.get('min', 0):.2%}, {s.get('max', 0):.2%}]")
+            lines.append(f"  {label}: 均值={s.get('mean', 0):{fmt}}  "
+                          f"中位数={s.get('median', 0):{fmt}}  "
+                          f"范围=[{s.get('min', 0):{fmt}}, {s.get('max', 0):{fmt}}]")
 
     lines += [
         f"  盈利品种比例: {agg.get('profitable_ratio', 0):.0%}",

@@ -95,6 +95,7 @@ class TestExtractPerformanceMetrics:
 class TestExtractRiskMetrics:
     def test_valid_risk_stats(self):
         stats = {
+            'total_trades': 10,
             'max_drawdown': 0.15,
             'max_ddpercent_duration': 10,
             'daily_std': 0.02,

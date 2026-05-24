@@ -70,25 +70,34 @@ def generate_dataset_report(
 
 
 def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Dict:
+    """提取绩效指标。当 statistics 为空或无交易时返回安全默认值，避免 vnpy 的垃圾数据污染报告。"""
+    _ZERO_RETURN = {
+        'initial_capital': initial_capital,
+        'final_equity': initial_capital,
+        'total_return': '0.00%',
+        'total_return_abs': 0.0,
+        'total_trades': 0,
+        'winning_trades': 0,
+        'losing_trades': 0,
+        'win_rate': '0.00%',
+        'win_rate_abs': 0.0,
+        'avg_profit': 0,
+        'avg_loss': 0,
+        'profit_loss_ratio': 0,
+        'sharpe_ratio': 0.0,
+        'annual_return': '0.00%',
+        'annual_return_abs': 0.0,
+    }
+
     if not isinstance(statistics, dict) or not statistics:
         logger.warning("回测统计数据为空，返回默认绩效指标")
-        return {
-            'initial_capital': initial_capital,
-            'final_equity': initial_capital,
-            'total_return': '0.00%',
-            'total_return_abs': 0.0,
-            'total_trades': 0,
-            'winning_trades': 0,
-            'losing_trades': 0,
-            'win_rate': '0.00%',
-            'win_rate_abs': 0.0,
-            'avg_profit': 0,
-            'avg_loss': 0,
-            'profit_loss_ratio': 0,
-            'sharpe_ratio': 0,
-            'annual_return': '0.00%',
-            'annual_return_abs': 0,
-        }
+        return _ZERO_RETURN
+
+    total_trades = statistics.get('total_trades', 0)
+    if total_trades == 0:
+        logger.warning("总交易次数为 0，vnpy 统计值不可信，使用安全默认值")
+        return _ZERO_RETURN
+
     final_balance = statistics.get('end_balance', initial_capital)
     total_return = (final_balance - initial_capital) / initial_capital if initial_capital > 0 else 0
 
@@ -97,11 +106,11 @@ def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Di
         'final_equity': final_balance,
         'total_return': f"{total_return:.2%}",
         'total_return_abs': final_balance - initial_capital,
-        'total_trades': statistics.get('total_trades', 0),
+        'total_trades': total_trades,
         'winning_trades': statistics.get('win_trades', 0),
         'losing_trades': statistics.get('loss_trades', 0),
-        'win_rate': f"{statistics.get('win_trades', 0) / max(statistics.get('total_trades', 1), 1):.2%}",
-        'win_rate_abs': statistics.get('win_trades', 0) / max(statistics.get('total_trades', 1), 1),
+        'win_rate': f"{statistics.get('win_trades', 0) / max(total_trades, 1):.2%}",
+        'win_rate_abs': statistics.get('win_trades', 0) / max(total_trades, 1),
         'avg_profit': statistics.get('average_win', 0),
         'avg_loss': statistics.get('average_loss', 0),
         'profit_loss_ratio': statistics.get('win_loss_ratio', 0),
@@ -112,7 +121,16 @@ def _extract_performance_metrics(statistics: Dict, initial_capital: float) -> Di
 
 
 def _extract_risk_metrics(statistics: Dict) -> Dict:
-    """提取风险指标"""
+    """提取风险指标。0 交易时 vnpy 回撤/波动率等不可信，返回安全默认值。"""
+    total_trades = statistics.get('total_trades', 0) if isinstance(statistics, dict) else 0
+    if total_trades == 0:
+        return {
+            'max_drawdown': '0.00%',
+            'max_drawdown_abs': 0.0,
+            'max_drawdown_duration': 0,
+            'daily_std': 0.0,
+            'return_drawdown_ratio': 0.0,
+        }
     return {
         'max_drawdown': f"{statistics.get('max_drawdown', 0):.2%}",
         'max_drawdown_abs': statistics.get('max_drawdown', 0),
