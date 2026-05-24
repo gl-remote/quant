@@ -123,16 +123,21 @@ class Signal:
 
 ## 三、注册到回测引擎
 
-### 3.1 在 vnpy_backtest_engine 中注册
+### 3.1 编程方式
 
-在 `backtest/vnpy_backtest_engine.py` 的 `_wrap_injected_strategy` 或上下文构建处添加你的策略类：
+构造 `TradingContext`，将策略实例直接注入回测引擎：
 
 ```python
+from strategies.core.context import TradingContext
 from strategies.core.my_strategy import MyStrategy, MyConfig
+from backtest import VnpyBacktestEngine
 
-# 在回测上下文构建中
 context = TradingContext(strategy=MyStrategy(MyConfig(param_a=15)))
+engine = VnpyBacktestEngine(config, context=context)
+result = engine.run_full_pipeline(symbol='DCE.m2509')
 ```
+
+适合脚本或 Notebook 中手动调用。
 
 ### 3.2 CLI 动态加载
 
