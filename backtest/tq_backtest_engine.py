@@ -53,7 +53,8 @@ class TQBacktestEngine:
             self.current_capital -= trade.price * trade.quantity
         elif trade.direction == 'sell':
             self.current_position -= trade.quantity
-            self.current_capital += trade.price * trade.quantity + trade.profit
+            # 只加回卖出金额，profit 为信息字段，价差已体现在 (sell - entry) 中
+            self.current_capital += trade.price * trade.quantity
 
         equity = self.current_capital + (self.current_position * self.entry_price
                                           if self.current_position > 0 else 0)
