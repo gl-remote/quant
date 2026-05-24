@@ -13,9 +13,10 @@
 from .types import TradeRecord, BacktestResult
 from .tq_backtest_engine import TQBacktestEngine
 from .vnpy_backtest_engine import VnpyBacktestEngine
-from .data_loader import walk_forward_split, walk_forward_split_by_ratio, scan_csv_files
+from .data_loader import walk_forward_split, walk_forward_split_by_ratio, scan_csv_files, filter_dataframe_by_date
 from .comparison import generate_merged_report
 from .metrics import calc_max_drawdown, calc_sharpe_ratio
+from .aggregator import compute_summary_stats, rank_by_key, parse_percentage, aggregate_walk_forward
 
 __all__ = [
     'VnpyBacktestEngine',
@@ -25,7 +26,12 @@ __all__ = [
     'walk_forward_split',
     'walk_forward_split_by_ratio',
     'scan_csv_files',
+    'filter_dataframe_by_date',
     'generate_merged_report',
     'calc_max_drawdown',
     'calc_sharpe_ratio',
+    'compute_summary_stats',
+    'rank_by_key',
+    'parse_percentage',
+    'aggregate_walk_forward',
 ]

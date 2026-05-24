@@ -7,8 +7,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-from backtest.data_loader import parse_symbol_exchange, scan_csv_files
+from datetime import datetime, timedelta, timedelta
+from backtest.data_loader import parse_symbol_exchange, scan_csv_files, filter_dataframe_by_date
 
 
 class TestParseSymbolExchange:
@@ -82,3 +82,41 @@ class TestScanCsvFiles:
     def test_nonexistent_dir(self):
         result = scan_csv_files("/nonexistent/path")
         assert result == []
+
+
+class TestFilterDataframeByDate:
+    def test_no_filter_returns_copy(self, sample_kline_df):
+        result = filter_dataframe_by_date(sample_kline_df)
+        assert len(result) == len(sample_kline_df)
+        # must be a reindexed copy, not same object
+        assert result.index[0] == 0
+
+    def test_start_date_only(self, sample_kline_df):
+        mid_date = sample_kline_df['datetime'].iloc[50]
+        result = filter_dataframe_by_date(sample_kline_df, start_date=str(mid_date)[:10])
+        assert len(result) <= 50
+        assert (result['datetime'] >= mid_date).all()
+
+    def test_end_date_only(self, sample_kline_df):
+        mid_date = sample_kline_df['datetime'].iloc[49]
+        result = filter_dataframe_by_date(sample_kline_df, end_date=str(mid_date)[:10])
+        assert len(result) <= 50
+        assert (result['datetime'] <= mid_date).all()
+
+    def test_both_dates(self, sample_kline_df):
+        start = sample_kline_df['datetime'].iloc[20]
+        end = sample_kline_df['datetime'].iloc[60]
+        result = filter_dataframe_by_date(sample_kline_df, start_date=str(start)[:10], end_date=str(end)[:10])
+        assert len(result) >= 0
+        assert (result['datetime'] >= start).all()
+        assert (result['datetime'] <= end).all()
+
+    def test_out_of_range_start_returns_empty(self, sample_kline_df):
+        far_future = (sample_kline_df['datetime'].max() + timedelta(days=1000)).strftime('%Y-%m-%d')
+        result = filter_dataframe_by_date(sample_kline_df, start_date=far_future)
+        assert result.empty
+
+    def test_resets_index(self, sample_kline_df):
+        result = filter_dataframe_by_date(sample_kline_df)
+        assert result.index.is_monotonic_increasing
+        assert result.index[0] == 0

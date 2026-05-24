@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, List, Any
 import numpy as np
 
+from .aggregator import compute_summary_stats, rank_by_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,17 +89,11 @@ def _build_ranking(symbols_data: List[Dict]) -> Dict[str, List[Dict]]:
     """构建各指标排名"""
     if not symbols_data:
         return {}
-
-    def _rank(key, reverse=True):
-        valid = [s for s in symbols_data if s['metrics'].get(key) is not None]
-        sorted_items = sorted(valid, key=lambda s: s['metrics'].get(key, 0), reverse=reverse)
-        return [{'symbol': s['symbol'], 'value': s['metrics'].get(key, 0)} for s in sorted_items]
-
     return {
-        'total_return': _rank('total_return'),
-        'sharpe_ratio': _rank('sharpe_ratio'),
-        'max_drawdown': _rank('max_drawdown', reverse=False),
-        'win_rate': _rank('win_rate'),
+        'total_return': rank_by_key(symbols_data, 'total_return'),
+        'sharpe_ratio': rank_by_key(symbols_data, 'sharpe_ratio'),
+        'max_drawdown': rank_by_key(symbols_data, 'max_drawdown', reverse=False),
+        'win_rate': rank_by_key(symbols_data, 'win_rate'),
     }
 
 
@@ -125,31 +121,18 @@ def _build_aggregate(symbols_data: List[Dict]) -> Dict:
         if m.get('total_trades') is not None:
             trades_list.append(int(m['total_trades']))
 
-    def _stats(values):
-        if not values:
-            return {}
-        arr = np.array(values, dtype=float)
-        return {
-            'mean': float(np.mean(arr)),
-            'median': float(np.median(arr)),
-            'std': float(np.std(arr)),
-            'min': float(np.min(arr)),
-            'max': float(np.max(arr)),
-            'positive_count': int(np.sum(arr > 0)) if any(v != 0 for v in arr) else 0,
-            'negative_count': int(np.sum(arr < 0)),
-        }
-
+    return_stats = compute_summary_stats(returns)
     return {
-        'total_return': _stats(returns),
-        'sharpe_ratio': _stats(sharpes),
-        'max_drawdown': _stats(drawdowns),
-        'win_rate': _stats(win_rates),
+        'total_return': compute_summary_stats(returns),
+        'sharpe_ratio': compute_summary_stats(sharpes),
+        'max_drawdown': compute_summary_stats(drawdowns),
+        'win_rate': compute_summary_stats(win_rates),
         'total_trades': {
             'total': int(sum(trades_list)),
             'avg': int(np.mean(trades_list)) if trades_list else 0,
             'count': len(trades_list),
         },
-        'profitable_ratio': _stats(returns).get('positive_count', 0) / len(returns) if returns else 0,
+        'profitable_ratio': return_stats.get('positive_count', 0) / len(returns) if returns else 0,
     }
 
 

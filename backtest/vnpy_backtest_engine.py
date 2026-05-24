@@ -13,12 +13,11 @@ vn.py 批量回测引擎
 import logging
 from typing import Any, Optional
 
-import numpy as np
-
 from strategies.core.context import TradingContext
 
-from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange
+from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
 from .report import generate_dataset_report, format_console_report
+from .aggregator import aggregate_walk_forward
 
 logger = logging.getLogger(__name__)
 
@@ -131,11 +130,7 @@ class VnpyBacktestEngine:
             logger.error("数据加载失败，终止回测")
             return {'success': False, 'error': '数据加载失败'}
 
-        if start_date:
-            df = df[df['datetime'] >= start_date]
-        if end_date:
-            df = df[df['datetime'] <= end_date]
-        df = df.reset_index(drop=True)
+        df = filter_dataframe_by_date(df, start_date, end_date)
         logger.info(f"数据加载完成: {len(df)} 条, "
                      f"{df['datetime'].iloc[0]} ~ {df['datetime'].iloc[-1]}")
 
@@ -190,11 +185,7 @@ class VnpyBacktestEngine:
         if df is None or df.empty:
             return {'success': False, 'error': '数据加载失败', 'windows': 0}
 
-        if start_date:
-            df = df[df['datetime'] >= start_date]
-        if end_date:
-            df = df[df['datetime'] <= end_date]
-        df = df.reset_index(drop=True)
+        df = filter_dataframe_by_date(df, start_date, end_date)
 
         if train_size is not None and val_size is not None and test_size is not None:
             step_val = step or max(1, test_size // 2)
@@ -224,34 +215,7 @@ class VnpyBacktestEngine:
             })
 
         # 聚合所有窗口的测试集指标
-        returns = []
-        sharpes = []
-        drawdowns = []
-        win_rates = []
-        for wr in window_results:
-            stats = wr.get('statistics', {})
-            tr = stats.get('total_return', 0)
-            sr = stats.get('sharpe_ratio', 0)
-            dd = stats.get('max_drawdown', 0)
-            wr_rate = stats.get('win_rate', 0)
-            returns.append(float(str(tr).rstrip('%')) / 100 if isinstance(tr, str) else float(tr))
-            sharpes.append(float(sr))
-            drawdowns.append(float(str(dd).rstrip('%')) / 100 if isinstance(dd, str) else float(dd))
-            win_rates.append(float(str(wr_rate).rstrip('%')) / 100 if isinstance(wr_rate, str) else float(wr_rate))
-
-        total_returns = np.array(returns)
-        aggregate = {
-            'return_mean': float(np.mean(total_returns)),
-            'return_std': float(np.std(total_returns)),
-            'sharpe_mean': float(np.mean(sharpes)),
-            'sharpe_std': float(np.std(sharpes)),
-            'max_drawdown_mean': float(np.mean(drawdowns)),
-            'max_drawdown_worst': float(np.max(drawdowns)),
-            'win_rate_mean': float(np.mean(win_rates)),
-            'win_rate_std': float(np.std(win_rates)),
-            'positive_window_ratio': float(np.sum(total_returns > 0) / len(total_returns)),
-            'stability_score': float(1.0 - np.std(total_returns) / max(abs(np.mean(total_returns)), 1e-9)),
-        }
+        aggregate = aggregate_walk_forward(window_results)
 
         logger.info(
             f"Walk-Forward 汇总 ({len(windows)} 窗口): "

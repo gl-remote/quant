@@ -194,6 +194,33 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
     return bars
 
 
+# ── 日期过滤 ──────────────────────────────────────────────
+
+def filter_dataframe_by_date(
+    df: 'pd.DataFrame',
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> 'pd.DataFrame':
+    """按日期范围过滤 DataFrame，重置索引
+
+    纯函数，不修改原 DataFrame。适用于 run_full_pipeline
+    和 run_walk_forward 的数据裁剪。
+
+    Args:
+        df: 含 'datetime' 列的 K 线 DataFrame
+        start_date: 可选起始日期 (闭区间)
+        end_date: 可选结束日期 (闭区间)
+
+    Returns:
+        过滤后的 DataFrame (copy, reindexed)
+    """
+    if start_date:
+        df = df[df['datetime'] >= start_date]
+    if end_date:
+        df = df[df['datetime'] <= end_date]
+    return df.reset_index(drop=True)
+
+
 # ============================================================
 # Walk-Forward 时间序列交叉验证
 # ============================================================
