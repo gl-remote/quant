@@ -271,8 +271,8 @@ class VnpyBacktestEngine:
         from vnpy.trader.constant import Interval
         from strategies.bridges import VnpyStrategyBridge
 
-        pure_symbol, exchange = parse_symbol_exchange(symbol)
-        vt_symbol = f"{pure_symbol}.{exchange.value}" if hasattr(exchange, 'value') else symbol
+        pure_symbol, exchange_code = parse_symbol_exchange(symbol)
+        vt_symbol = f"{pure_symbol}.{exchange_code}"
 
         interval_map = {
             '1m': Interval.MINUTE,

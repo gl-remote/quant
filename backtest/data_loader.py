@@ -9,28 +9,24 @@ from typing import List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 
-def parse_symbol_exchange(symbol: str):
-    try:
-        from vnpy.trader.constant import Exchange
-    except ImportError:
-        Exchange = None
+def parse_symbol_exchange(symbol: str) -> tuple[str, str]:
+    """解析品种代码中的交易所信息，统一返回字符串类型
 
+    Args:
+        symbol: 完整合约代码 (e.g. DCE.m2509)
+
+    Returns:
+        (pure_symbol, exchange_code) 均为字符串
+    """
     if '.' in symbol:
         parts = symbol.split('.')
         pure_symbol = parts[-1]
         exchange_code = parts[0]
-        if Exchange:
-            try:
-                exchange = Exchange(exchange_code)
-            except (ValueError, TypeError):
-                exchange = Exchange.CFFEX
-        else:
-            exchange = 'CFFEX'
     else:
         pure_symbol = symbol
-        exchange = Exchange.CFFEX if Exchange else 'CFFEX'
+        exchange_code = 'CFFEX'
 
-    return pure_symbol, exchange
+    return pure_symbol, exchange_code
 
 
 def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[str, Path]]:
@@ -169,7 +165,8 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
             })
         return bars
 
-    pure_symbol, exchange = parse_symbol_exchange(symbol)
+    pure_symbol, exchange_code = parse_symbol_exchange(symbol)
+    exchange = Exchange(exchange_code) if Exchange else exchange_code
 
     bars = []
     for _, row in df.iterrows():
