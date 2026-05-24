@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from .core.base import Strategy
-from .core.types import Bar, Signal, Fill, Position as CorePosition, Performance
+from .core.types import Bar, Signal, Fill, StrategyPosition, Performance
 
 
 @dataclass
@@ -25,6 +25,8 @@ class TradingConfig:
     position_ratio: float = 0.1
     contract_size: int = 10
     capital: float = 100000.0
+    commission_rate: float = 0.0003   # 手续费率 (0.03%)
+    slippage: float = 1.0             # 滑点 (最小变动价位)
 
 
 class MaStrategyCore(Strategy):
@@ -37,7 +39,7 @@ class MaStrategyCore(Strategy):
 
     def __init__(self, config: Optional[TradingConfig] = None):
         self._config = config or TradingConfig()
-        self._position = CorePosition()
+        self._position = StrategyPosition()
         self._fills: List[Fill] = []
         self._close_history: List[float] = []
         self._prev_sma_short: float = 0.0
@@ -54,15 +56,20 @@ class MaStrategyCore(Strategy):
         self._config = value
 
     @property
-    def position(self) -> CorePosition:
+    def position(self) -> StrategyPosition:
         return self._position
+
+    @property
+    def fills(self) -> List[Fill]:
+        """交易成交记录 (只读副本)"""
+        return list(self._fills)
 
     @property
     def performance(self) -> Performance:
         return self._calc_performance()
 
     def reset(self) -> None:
-        self._position = CorePosition()
+        self._position = StrategyPosition()
         self._fills.clear()
         self._close_history.clear()
         self._prev_sma_short = 0.0
@@ -106,13 +113,13 @@ class MaStrategyCore(Strategy):
     def on_fill(self, fill: Fill) -> None:
         """成交回执 — Bridge 在下单成交后调用"""
         if fill.action == 'buy':
-            self._position = CorePosition(
+            self._position = StrategyPosition(
                 direction='long',
                 entry_price=fill.price,
                 volume=fill.volume,
             )
         elif fill.action == 'sell':
-            self._position = CorePosition()
+            self._position = StrategyPosition()
         self._fills.append(fill)
 
     # ---- 内部算法 ----
@@ -153,16 +160,29 @@ class MaStrategyCore(Strategy):
         if not sells:
             return Performance()
 
-        wins = [f for f in sells if (f.price - self._get_entry_for_fill(f)) > 0]
-        total_profit = sum(
-            (f.price - self._get_entry_for_fill(f)) * f.volume
-            for f in sells
-        )
+        c = self._config
+        wins = 0
+        total_profit = 0.0
+
+        for f in sells:
+            entry_price = self._get_entry_for_fill(f)
+            if entry_price <= 0:
+                continue
+            gross = (f.price - entry_price) * f.volume
+            # 手续费: 买卖各一次
+            commission = (entry_price + f.price) * f.volume * c.commission_rate
+            # 滑点成本: 买卖各滑一次
+            slippage_cost = 2 * f.volume * c.slippage
+            net = gross - commission - slippage_cost
+            total_profit += net
+            if net > 0:
+                wins += 1
+
         return Performance(
             total_trades=len(sells),
-            winning_trades=len(wins),
-            losing_trades=len(sells) - len(wins),
-            win_rate=len(wins) / len(sells) if sells else 0.0,
+            winning_trades=wins,
+            losing_trades=len(sells) - wins,
+            win_rate=wins / len(sells) if sells else 0.0,
             total_profit=total_profit,
         )
 

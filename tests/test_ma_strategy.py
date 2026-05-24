@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
 from strategies.ma_strategy import MaStrategyCore, TradingConfig
-from strategies.core import Bar, Signal, Fill, Position, Performance
+from strategies.core import Bar, Signal, Fill, StrategyPosition, Performance
 
 
 def _make_bar(close: float, idx: int = 0,

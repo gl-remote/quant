@@ -10,15 +10,25 @@ class ConfigManager:
 
     def __init__(self, config_file: Optional[str] = None):
         self.config = {}
+        self._project_root = Path(__file__).parent.parent  # config/../
         self._load(config_file)
+
+    def _resolve(self, path: str) -> str:
+        """将相对路径解析为项目根目录下的绝对路径"""
+        p = Path(path)
+        if p.is_absolute():
+            return str(p)
+        return str(self._project_root / p)
 
     def _load(self, config_file: Optional[str] = None):
         base = Path(config_file or (Path(__file__).parent / 'conf.yaml'))
         if base.exists():
-            self.config = yaml.safe_load(open(base, encoding='utf-8')) or {}
+            with open(base, encoding='utf-8') as f:
+                self.config = yaml.safe_load(f) or {}
         local = Path(__file__).parent / 'conf.local.yaml'
         if local.exists():
-            self._merge(self.config, yaml.safe_load(open(local, encoding='utf-8')) or {})
+            with open(local, encoding='utf-8') as f:
+                self._merge(self.config, yaml.safe_load(f) or {})
 
     def _merge(self, base: Dict, override: Dict):
         for k, v in override.items():
@@ -94,15 +104,15 @@ class ConfigManager:
     def get_data_config(self) -> Dict[str, str]:
         dc = self.config.get('data', {})
         return {
-            'base_dir': dc.get('base_dir', '.quant_shared_data'),
-            'export_dir': dc.get('export_dir', '.quant_shared_data/csv'),
-            'db_path': dc.get('db_path', '.quant_shared_data/quant_shared.db'),
+            'base_dir': self._resolve(dc.get('base_dir', '.quant_shared_data')),
+            'export_dir': self._resolve(dc.get('export_dir', '.quant_shared_data/csv')),
+            'db_path': self._resolve(dc.get('db_path', '.quant_shared_data/quant_shared.db')),
         }
 
     def get_export_config(self) -> Dict[str, str]:
         ec = self.config.get('export', {})
         return {
-            'default_dir': ec.get('default_dir', '.quant_shared_data/csv'),
+            'default_dir': self._resolve(ec.get('default_dir', '.quant_shared_data/csv')),
             'filename_template': ec.get('filename_template', '{symbol}_qlib.csv'),
         }
 
@@ -111,7 +121,7 @@ class ConfigManager:
         split_cfg = bc.get('split', {})
         report_cfg = bc.get('report', {})
         return {
-            'data_dir': bc.get('data_dir', '.quant_shared_data/csv'),
+            'data_dir': self._resolve(bc.get('data_dir', '.quant_shared_data/csv')),
             'initial_capital': bc.get('initial_capital', 100000.0),
             'commission_rate': bc.get('commission_rate', 0.0003),
             'slippage': bc.get('slippage', 1.0),
@@ -126,7 +136,7 @@ class ConfigManager:
                 'shuffle': split_cfg.get('shuffle', False),
             },
             'report': {
-                'output_dir': report_cfg.get('output_dir', '.quant_shared_data/reports'),
+                'output_dir': self._resolve(report_cfg.get('output_dir', '.quant_shared_data/reports')),
                 'save_trade_records': report_cfg.get('save_trade_records', True),
                 'save_equity_curve': report_cfg.get('save_equity_curve', True),
                 'format': report_cfg.get('format', 'json'),

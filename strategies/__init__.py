@@ -14,8 +14,10 @@
   from strategies.core import Strategy, Bar, Signal  # 基类 + 数据类型
 """
 
+__version__ = "0.2.0-dev"
+
 from .ma_strategy import MaStrategyCore, TradingConfig
-from .core import Strategy, Bar, Signal, Fill, Position, Performance, TradingContext
+from .core import Strategy, Bar, Signal, Fill, StrategyPosition, Performance, TradingContext
 
 try:
     from .bridges import VnpyStrategyBridge
@@ -27,11 +29,8 @@ try:
 except ImportError:
     TqsdkStrategyBridge = None
 
-MovingAverageStrategy = TqsdkStrategyBridge
-
 __all__ = [
     'Strategy', 'MaStrategyCore', 'TradingConfig',
-    'Bar', 'Signal', 'Fill', 'Position', 'Performance',
-    'VnpyStrategyBridge', 'TqsdkStrategyBridge',
-    'MovingAverageStrategy', 'TradingContext',
+    'Bar', 'Signal', 'Fill', 'StrategyPosition', 'Performance',
+    'VnpyStrategyBridge', 'TqsdkStrategyBridge', 'TradingContext',
 ]

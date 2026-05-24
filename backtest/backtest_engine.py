@@ -1,13 +1,20 @@
-"""vn.py 回测引擎 - 基于 vn.py 框架的回测系统
+"""回测引擎模块
 
-实现完整的回测流水线:
-  1. 从本地CSV读取历史数据
-  2. 按科学比例随机划分训练/验证/测试集
-  3. 分别在三个数据集上独立运行回测
-  4. 生成详细的交易报告
-  5. 提供三阶段对比分析与过拟合风险评估
+提供两套职责清晰的回测引擎:
 
-vn.py 为强制依赖，不再支持降级模式。
+  TQBacktestEngine  — 天勤单标的图形化回测 (配合 TqSdk GUI)
+    - 交易记录与资金曲线跟踪
+    - 绩效指标计算 (胜率/夏普/最大回撤)
+    - 文本报告生成
+    - 用于 tq-backtest 实盘/模拟模式
+
+  VnpyBacktestEngine — vn.py 批量回测流水线
+    - CSV 数据加载 + 训练/验证/测试集划分
+    - 三阶段独立回测 (委托 vnpy_ctastrategy.backtesting.BacktestingEngine)
+    - 报告生成与三阶段对比分析
+    - Walk-Forward 时间序列交叉验证
+
+vn.py 为强制依赖。
 """
 
 import logging
@@ -19,16 +26,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
-from .data_loader import parse_symbol_exchange, scan_csv_files
+from .data_loader import parse_symbol_exchange
 from .report import generate_dataset_report, format_console_report
-from .comparison import compare_datasets, format_comparison_report, generate_merged_report
+from .comparison import compare_datasets, format_comparison_report
 from strategies.core.context import TradingContext
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================
-# 交易记录与绩效统计 (用于 tq-backtest 实盘/模拟跟踪)
+# 天勤回测引擎 — 单标的图形窗口展示 (tq-backtest)
 # ============================================================
 
 @dataclass
@@ -59,8 +66,17 @@ class BacktestResult:
     final_equity: float = 0.0
 
 
-class BacktestEngine:
-    """简单交易跟踪器 - 用于 tq-backtest 实盘/模拟模式"""
+class TQBacktestEngine:
+    """天勤回测引擎 — 单标的图形窗口展示
+
+    用于 tq-backtest 实盘/模拟模式的交易跟踪：
+    - 记录每笔交易、计算资金曲线、生成绩效指标
+    - 配合天勤 TqSdk 的图形界面使用，提供直观的回测结果可视化
+
+    职责明确：
+      - TQBacktestEngine:  单标的图形化分析 (天勤 TqSdk)
+      - VnpyBacktestEngine: 批量回测流水线 (vn.py)
+    """
 
     def __init__(self, initial_capital: float = 100000.0):
         self.initial_capital = initial_capital
@@ -160,20 +176,22 @@ class BacktestEngine:
 
 
 # ============================================================
-# vn.py 框架回测引擎
+# vn.py 批量回测引擎
 # ============================================================
 
 class VnpyBacktestEngine:
-    """vn.py 框架回测引擎
+    """vn.py 批量回测引擎
 
-    封装完整的回测流程：数据加载 → 划分 → 回测 → 报告 → 对比
+    基于 vnpy_ctastrategy.backtesting.BacktestingEngine 的回测流水线，
+    封装数据加载 → 划分 → 单标的回测 → 报告生成。
 
     使用方式:
-        engine = VnpyBacktestEngine(config)
-        engine.run_full_pipeline()
-    或:
-        engine = VnpyBacktestEngine(config, context=trading_context)
-        engine.run_full_pipeline()
+        engine = VnpyBacktestEngine(config, context=context)
+        result = engine.run_full_pipeline(symbol)  # 单品种
+
+    职责明确：
+      - TQBacktestEngine:   单标的图形化分析 (天勤 TqSdk)
+      - VnpyBacktestEngine: 批量回测流水线 (vn.py)
     """
 
     def __init__(self, config: Dict[str, Any], context: Optional[TradingContext] = None):
@@ -345,88 +363,118 @@ class VnpyBacktestEngine:
             'comparison': comparison,
         }
 
-    def run_multi_backtest(
+    def run_walk_forward(
         self,
-        pattern: Optional[str] = None,
+        symbol: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        max_workers: int = 1,
+        train_size: Optional[int] = None,
+        val_size: Optional[int] = None,
+        test_size: Optional[int] = None,
+        step: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """执行多品种批量回测
+        """执行 Walk-Forward 时间序列交叉验证回测
 
-        扫描数据目录，对匹配的所有品种逐一执行完整回测流水线，
-        最后生成合并报告
+        对数据滚动产生多个窗口，每个窗口独立回测并收集测试集指标，
+        最后汇总所有窗口的平均表现。相比单次划分，Walk-Forward 能:
+          - 模拟策略在时间推进中的实际表现
+          - 评估策略稳健性（各窗口指标的标准差）
+          - 降低单次划分的偶然性
 
         Args:
-            pattern: 品种代码正则表达式，未提供则回测全部品种
-            start_date: 数据起始日期 (可选过滤)
-            end_date: 数据结束日期 (可选过滤)
-            max_workers: 并行线程数 (1=顺序执行, >1=并行回测)
+            symbol: 合约代码
+            start_date/end_date: 数据过滤
+            train_size/val_size/test_size/step: 窗口参数，
+                为 None 时按比例自动计算 (60%/20%/20%, step=10%)
 
         Returns:
-            多品种回测结果字典:
-              - success: 总体是否成功
-              - total: 品种总数
-              - results: 各品种回测结果列表
-              - merged_report: 合并回测报告
+            walk_forward 结果字典:
+              - windows: 窗口数
+              - window_results: 各窗口测试集指标列表
+              - aggregate: 聚合统计 (均值/标准差/夏普稳定性等)
         """
-        symbols = scan_csv_files(self.data_dir, pattern)
-        if not symbols:
-            logger.error("未找到匹配的品种数据")
-            return {'success': False, 'error': '未找到匹配的品种数据',
-                    'total': 0, 'results': [], 'merged_report': {}}
+        from .data_loader import walk_forward_split_by_ratio, walk_forward_split
 
-        logger.info(f"批量回测 {len(symbols)} 个品种: {[s for s, _ in symbols]}")
+        df = load_csv_data(self.data_dir, symbol)
+        if df is None or df.empty:
+            return {'success': False, 'error': '数据加载失败', 'windows': 0}
 
-        all_results = []
-        failed = []
+        if start_date:
+            df = df[df['datetime'] >= start_date]
+        if end_date:
+            df = df[df['datetime'] <= end_date]
+        df = df.reset_index(drop=True)
 
-        if max_workers > 1:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
-            def _run_one(sym):
-                return self.run_full_pipeline(sym, start_date, end_date)
-
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {executor.submit(_run_one, sym): sym for sym, _ in symbols}
-                for future in as_completed(futures):
-                    sym = futures[future]
-                    try:
-                        result = future.result()
-                        all_results.append(result)
-                        if not result.get('success'):
-                            failed.append(sym)
-                    except Exception as e:
-                        logger.error(f"{sym} 回测异常: {e}", exc_info=True)
-                        all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
-                        failed.append(sym)
+        if train_size is not None and val_size is not None and test_size is not None:
+            step_val = step or max(1, test_size // 2)
+            windows = walk_forward_split(df, train_size, val_size, test_size, step_val)
         else:
-            for sym, _ in symbols:
-                try:
-                    result = self.run_full_pipeline(sym, start_date, end_date)
-                    all_results.append(result)
-                    if not result.get('success'):
-                        failed.append(sym)
-                except Exception as e:
-                    logger.error(f"{sym} 回测异常: {e}", exc_info=True)
-                    all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
-                    failed.append(sym)
+            windows = walk_forward_split_by_ratio(df)
 
-        succeeded = [r for r in all_results if r.get('success')]
-        logger.info(f"批量回测完成: {len(succeeded)}/{len(all_results)} 成功"
-                     + (f", 失败: {failed}" if failed else ""))
+        if not windows:
+            return {'success': False, 'error': '无法生成窗口', 'windows': 0}
 
-        merged_report = {}
-        if succeeded:
-            merged_report = generate_merged_report(succeeded, self.report_dir)
+        logger.info(f"Walk-Forward: {len(windows)} 个窗口, {symbol}")
+
+        window_results = []
+        for wi, (train_df, val_df, test_df) in enumerate(windows):
+            logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
+            test_result = self._run_backtest(test_df, symbol, f'wf_{wi}_test')
+            if self.context and self.context.strategy:
+                self.context.strategy.reset()
+            window_results.append({
+                'window': wi,
+                'train_rows': len(train_df),
+                'val_rows': len(val_df),
+                'test_rows': len(test_df),
+                'test_start': str(test_df['datetime'].iloc[0])[:10],
+                'test_end': str(test_df['datetime'].iloc[-1])[:10],
+                'statistics': test_result.get('statistics', {}),
+            })
+
+        # 聚合所有窗口的测试集指标
+        returns = []
+        sharpes = []
+        drawdowns = []
+        win_rates = []
+        for wr in window_results:
+            stats = wr.get('statistics', {})
+            tr = stats.get('total_return', 0)
+            sr = stats.get('sharpe_ratio', 0)
+            dd = stats.get('max_drawdown', 0)
+            wr_rate = stats.get('win_rate', 0)
+            returns.append(float(str(tr).rstrip('%')) / 100 if isinstance(tr, str) else float(tr))
+            sharpes.append(float(sr))
+            drawdowns.append(float(str(dd).rstrip('%')) / 100 if isinstance(dd, str) else float(dd))
+            win_rates.append(float(str(wr_rate).rstrip('%')) / 100 if isinstance(wr_rate, str) else float(wr_rate))
+
+        import numpy as np
+        aggregate = {
+            'return_mean': float(np.mean(returns)),
+            'return_std': float(np.std(returns)),
+            'sharpe_mean': float(np.mean(sharpes)),
+            'sharpe_std': float(np.std(sharpes)),
+            'max_drawdown_mean': float(np.mean(drawdowns)),
+            'max_drawdown_worst': float(np.max(drawdowns)),
+            'win_rate_mean': float(np.mean(win_rates)),
+            'win_rate_std': float(np.std(win_rates)),
+            'positive_window_ratio': float(np.sum(np.array(returns) > 0) / len(returns)),
+            'stability_score': float(1.0 - np.std(returns) / max(abs(np.mean(returns)), 1e-9)),
+        }
+
+        logger.info(
+            f"Walk-Forward 汇总 ({len(windows)} 窗口): "
+            f"均收益={aggregate['return_mean']:.2%}, "
+            f"夏普={aggregate['sharpe_mean']:.2f}, "
+            f"盈利窗口比={aggregate['positive_window_ratio']:.0%}"
+        )
 
         return {
-            'success': len(succeeded) > 0,
-            'total': len(all_results),
-            'succeeded': len(succeeded),
-            'failed': failed,
-            'results': all_results,
-            'merged_report': merged_report,
+            'success': True,
+            'symbol': symbol,
+            'windows': len(windows),
+            'window_results': window_results,
+            'aggregate': aggregate,
         }
 
     def _build_setting(self) -> Dict[str, Any]:
@@ -460,8 +508,8 @@ class VnpyBacktestEngine:
         engine.set_parameters(
             vt_symbol=vt_symbol,
             interval=interval,
-            start=df['datetime'].iloc[0],
-            end=df['datetime'].iloc[-1],
+            start=df['datetime'].iloc[0].to_pydatetime(),
+            end=df['datetime'].iloc[-1].to_pydatetime(),
             rate=self.commission_rate,
             slippage=self.slippage,
             size=self.contract_size,
@@ -491,7 +539,7 @@ class VnpyBacktestEngine:
         engine.add_strategy(strategy_cls, setting)
 
         bars = df_to_vnpy_datalines(df, vt_symbol)
-        engine.history_data = {vt_symbol: bars}
+        engine.history_data = bars
 
         engine.run_backtesting()
         daily_results = engine.calculate_result()

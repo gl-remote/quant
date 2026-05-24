@@ -37,7 +37,7 @@ class Signal:
 
 
 @dataclass
-class Position:
+class StrategyPosition:
     """持仓快照"""
     direction: str = ""        # 'long' | ''
     entry_price: float = 0.0

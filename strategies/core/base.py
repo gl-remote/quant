@@ -11,7 +11,7 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from .types import Bar, Signal, Fill, Position, Performance
+from .types import Bar, Signal, Fill, StrategyPosition, Performance
 
 
 class Strategy(ABC):
@@ -56,7 +56,7 @@ class Strategy(ABC):
 
     @property
     @abstractmethod
-    def position(self) -> Position:
+    def position(self) -> StrategyPosition:
         """当前持仓"""
 
     @property

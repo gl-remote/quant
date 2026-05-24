@@ -275,3 +275,119 @@ def get_dataset_info(df: pd.DataFrame, name: str = "") -> Dict:
         'price_std': float(df['close'].std()),
         'volume_mean': float(df['volume'].mean()),
     }
+
+
+# ============================================================
+# Walk-Forward 时间序列交叉验证
+# ============================================================
+
+def walk_forward_split(
+    df: pd.DataFrame,
+    train_size: int = 200,
+    val_size: int = 40,
+    test_size: int = 40,
+    step: int = 40,
+) -> List[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+    """Walk-Forward 时间序列交叉验证 — 生成多个滚动窗口
+
+    按时间顺序滚动生成 (训练集, 验证集, 测试集) 三元组。
+    每个窗口在前一个窗口基础上向前滑动 step 行。
+
+    与单次划分 (split_datasets) 相比:
+      - 单次划分: 一次 6:2:2，结果偶然性大
+      - Walk-Forward: 多窗口滚动验证，模拟策略在实际时间推进中的表现
+
+    示例 (数据 1000 行, train=200, val=40, test=40, step=40):
+      Window 0: train[0:200],  val[200:240],  test[240:280]
+      Window 1: train[40:240], val[240:280],  test[280:320]
+      ...
+
+    Args:
+        df: 按时间排序的完整历史数据集
+        train_size: 每个窗口的训练集行数
+        val_size: 每个窗口的验证集行数
+        test_size: 每个窗口的测试集行数
+        step: 窗口滑动步长 (行数)，越小窗口越多
+
+    Returns:
+        [(train_df, val_df, test_df), ...] 按时间顺序排列的窗口列表
+    """
+    n = len(df)
+    min_required = train_size + val_size + test_size
+    if n < min_required:
+        raise ValueError(
+            f"数据量不足：需要至少 {min_required} 行，当前 {n} 行"
+        )
+
+    windows = []
+    start = 0
+    while start + min_required <= n:
+        train_end = start + train_size
+        val_end = train_end + val_size
+        test_end = val_end + test_size
+
+        train_df = df.iloc[start:train_end].reset_index(drop=True)
+        val_df = df.iloc[train_end:val_end].reset_index(drop=True)
+        test_df = df.iloc[val_end:test_end].reset_index(drop=True)
+
+        windows.append((train_df, val_df, test_df))
+        start += step
+
+    logger.info(
+        f"Walk-Forward 划分: {len(windows)} 个窗口 "
+        f"(train={train_size}, val={val_size}, test={test_size}, step={step}, "
+        f"数据量={n})"
+    )
+    return windows
+
+
+def walk_forward_split_by_ratio(
+    df: pd.DataFrame,
+    train_ratio: float = 0.6,
+    val_ratio: float = 0.2,
+    test_ratio: float = 0.2,
+    step_ratio: float = 0.1,
+    min_windows: int = 3,
+) -> List[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+    """Walk-Forward 时间序列交叉验证 — 基于比例参数
+
+    将 walk_forward_split 的行数参数转换为比例参数，
+    自动计算合适的窗口大小。
+
+    Args:
+        df: 按时间排序的完整历史数据集
+        train_ratio: 训练集占窗口总长度的比例 (默认 0.6)
+        val_ratio: 验证集占窗口总长度的比例 (默认 0.2)
+        test_ratio: 测试集占窗口总长度的比例 (默认 0.2)
+        step_ratio: 滑动步长占窗口总长度的比例 (默认 0.1)
+        min_windows: 最少需要的窗口数
+
+    Returns:
+        [(train_df, val_df, test_df), ...] 按时间顺序排列的窗口列表
+    """
+    total_ratio = train_ratio + val_ratio + test_ratio
+    if abs(total_ratio - 1.0) > 1e-9:
+        raise ValueError(f"比例之和必须为 1.0，当前: {total_ratio}")
+
+    n = len(df)
+    # 窗口总行数 = 全量数据 / (1 + (min_windows - 1) * step_ratio)
+    # 使得至少有 min_windows 个窗口
+    window_total = int(n / (1 + (min_windows - 1) * step_ratio))
+
+    train_size = int(window_total * train_ratio)
+    val_size = int(window_total * val_ratio)
+    test_size = int(window_total * test_ratio)
+    step = max(1, int(window_total * step_ratio))
+
+    # 修正浮点导致的窗口总大小偏差
+    actual_window = train_size + val_size + test_size
+    if actual_window + step > n:
+        step = max(1, (n - actual_window) // max(min_windows - 1, 1))
+
+    logger.info(
+        f"Walk-Forward (按比例): 窗口总行={actual_window} "
+        f"(train={train_size}, val={val_size}, test={test_size}), "
+        f"step={step}, 数据量={n}"
+    )
+
+    return walk_forward_split(df, train_size, val_size, test_size, step)

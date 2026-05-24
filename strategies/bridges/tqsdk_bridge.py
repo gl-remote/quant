@@ -71,17 +71,18 @@ class TqsdkStrategyBridge:
         if api:
             self.account = api.get_account()
 
-    def on_bar(self, kline_data) -> Signal:
-        """处理天勤K线数据，返回标准化 Signal
+    def on_bar(self, kline_data, idx: int = -1) -> Signal:
+        """处理天勤K线数据指定索引行，返回标准化 Signal
 
         无状态 — 每次调用独立转换并返回结果。
+        idx 默认为 -1 (最新一根K线)，传具体索引可处理历史行。
         """
 
         if kline_data.empty:
             return Signal()
 
         try:
-            last_close = float(kline_data.close.iloc[-1])
+            last_close = float(kline_data.close.iloc[idx])
         except Exception as e:
             logger.error(f"获取价格数据失败: {e}", exc_info=True)
             return Signal()
@@ -89,11 +90,11 @@ class TqsdkStrategyBridge:
         bar = Bar(
             symbol=self.symbol,
             datetime=str(datetime.now()),
-            open=float(kline_data.open.iloc[-1]),
-            high=float(kline_data.high.iloc[-1]),
-            low=float(kline_data.low.iloc[-1]),
+            open=float(kline_data.open.iloc[idx]),
+            high=float(kline_data.high.iloc[idx]),
+            low=float(kline_data.low.iloc[idx]),
             close=last_close,
-            volume=float(kline_data.volume.iloc[-1]),
+            volume=float(kline_data.volume.iloc[idx]),
         )
 
         return self._strategy.on_bar(bar)
@@ -111,38 +112,54 @@ class TqsdkStrategyBridge:
 
     # ---- 实盘/模拟运行 ----
 
-    def run(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
+    def _ensure_auth(self, auth: Optional[Any], symbol: str) -> Any:
+        """统一认证和符号设置"""
+        self.symbol = symbol or self.symbol or ""
+        if not auth and self.account is None:
+            auth = _tqsdk.TqAuth("guest", "")
+        return auth or _tqsdk.TqAuth("guest", "")
+
+    def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False):
+        """实盘/模拟主循环 — 处理行情驱动与信号翻译
+
+        跟踪 kline_serial 长度变化，每次 wait_update 处理所有新增 K 线，
+        避免仅取 iloc[-1] 时跳过中间数据。
+        """
         if not _tqsdk.ensure():
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
             return
 
-        symbol = symbol or self.symbol or ""
-        if not auth and self.account is None:
-            auth = _tqsdk.TqAuth("guest", "")
-
-        self.symbol = symbol
         try:
-            api = _tqsdk.TqApi(auth=auth or _tqsdk.TqAuth("guest", ""))
+            api = _tqsdk.TqApi(auth=auth, web_gui=web_gui)
             self.initialize(api)
             target_pos = _tqsdk.TargetPosTask(api, symbol)
             klines = api.get_kline_serial(symbol, 86400)
-            logger.info(f"开始运行策略: {symbol}，按Ctrl+C停止")
+            log_msg = f"开始运行策略: {symbol}，按Ctrl+C停止"
+            if web_gui:
+                log_msg += "，浏览器访问 http://127.0.0.1:9876"
+            logger.info(log_msg)
+
+            prev_kline_len = len(klines)
             while True:
                 api.wait_update()
                 if api.is_changing(klines):
-                    signal = self.on_bar(klines)
-                    if signal.action == 'buy':
-                        target_pos.set_target_volume(signal.volume)
-                        self.notify_fill(
-                            signal,
-                            float(klines.close.iloc[-1]),
-                        )
-                    elif signal.action == 'sell':
-                        target_pos.set_target_volume(0)
-                        self.notify_fill(
-                            signal,
-                            float(klines.close.iloc[-1]),
-                        )
+                    current_len = len(klines)
+                    # 遍历所有新增K线，避免跳过中间数据
+                    for i in range(prev_kline_len, current_len):
+                        signal = self.on_bar(klines, idx=i)
+                        if signal.action == 'buy':
+                            target_pos.set_target_volume(signal.volume)
+                            self.notify_fill(
+                                signal,
+                                float(klines.close.iloc[i]),
+                            )
+                        elif signal.action == 'sell':
+                            target_pos.set_target_volume(0)
+                            self.notify_fill(
+                                signal,
+                                float(klines.close.iloc[i]),
+                            )
+                    prev_kline_len = current_len
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except Exception as e:
@@ -156,44 +173,10 @@ class TqsdkStrategyBridge:
                 f"胜率{p.win_rate:.0%} 盈亏{p.total_profit:.2f}"
             )
 
+    def run(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
+        auth = self._ensure_auth(auth, symbol or "")
+        self._run_loop(symbol or self.symbol, auth, web_gui=False)
+
     def run_with_gui(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
-        if not _tqsdk.ensure():
-            logger.error("天勤量化API未安装")
-            return
-
-        symbol = symbol or self.symbol or ""
-        if not auth:
-            auth = _tqsdk.TqAuth("guest", "")
-
-        self.symbol = symbol
-        try:
-            api = _tqsdk.TqApi(auth=auth, web_gui=True)
-            self.initialize(api)
-            target_pos = _tqsdk.TargetPosTask(api, symbol)
-            klines = api.get_kline_serial(symbol, 86400)
-            logger.info(
-                f"启动图形界面: {symbol}，浏览器访问 http://127.0.0.1:9876"
-            )
-            while True:
-                api.wait_update()
-                if api.is_changing(klines):
-                    signal = self.on_bar(klines)
-                    if signal.action == 'buy':
-                        target_pos.set_target_volume(signal.volume)
-                        self.notify_fill(
-                            signal,
-                            float(klines.close.iloc[-1]),
-                        )
-                    elif signal.action == 'sell':
-                        target_pos.set_target_volume(0)
-                        self.notify_fill(
-                            signal,
-                            float(klines.close.iloc[-1]),
-                        )
-        except KeyboardInterrupt:
-            logger.info("策略已停止")
-        except Exception as e:
-            logger.error(f"策略运行错误: {e}", exc_info=True)
-        finally:
-            if self.api:
-                self.api.close()
+        auth = self._ensure_auth(auth, symbol or "")
+        self._run_loop(symbol or self.symbol, auth, web_gui=True)

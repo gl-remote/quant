@@ -2,22 +2,29 @@
 """
 回测模块
 
-基于 vn.py 框架的回测引擎，提供:
-  - VnpyBacktestEngine: 主回测引擎 (CSV数据加载、划分、三阶段回测、报告对比)
-  - BacktestEngine: 交易跟踪器 (tq-backtest 实盘/模拟模式)
+提供两套职责清晰的回测引擎:
+  - TQBacktestEngine:   单标的图形化回测 (配合天勤 TqSdk GUI)
+  - VnpyBacktestEngine: 批量回测流水线 (基于 vnpy_ctastrategy.backtesting)
   - TradeRecord / BacktestResult: 交易记录与结果数据结构
+  - walk_forward_split / scan_csv_files / generate_merged_report: 工具函数
 """
 
 from .backtest_engine import (
     VnpyBacktestEngine,
-    BacktestEngine,
+    TQBacktestEngine,
     BacktestResult,
     TradeRecord,
 )
+from .data_loader import walk_forward_split, walk_forward_split_by_ratio, scan_csv_files
+from .comparison import generate_merged_report
 
 __all__ = [
     'VnpyBacktestEngine',
-    'BacktestEngine',
+    'TQBacktestEngine',
     'BacktestResult',
     'TradeRecord',
+    'walk_forward_split',
+    'walk_forward_split_by_ratio',
+    'scan_csv_files',
+    'generate_merged_report',
 ]

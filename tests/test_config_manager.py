@@ -173,8 +173,11 @@ class TestDataConfig:
     def test_get_data_config_defaults(self):
         cm = ConfigManager(config_file='/nonexistent/path.yaml')
         dc = cm.get_data_config()
-        assert dc['base_dir'] == '.quant_shared_data'
+        # base_dir 已通过 _resolve 转为绝对路径，应包含 .quant_shared_data
+        assert '.quant_shared_data' in dc['base_dir']
+        assert Path(dc['base_dir']).is_absolute()
         assert 'csv' in dc['export_dir']
+        assert Path(dc['export_dir']).is_absolute()
 
     def test_get_export_config_defaults(self):
         cm = ConfigManager(config_file='/nonexistent/path.yaml')

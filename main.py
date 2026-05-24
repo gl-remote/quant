@@ -3,6 +3,7 @@
 
 import sys
 import argparse
+import dataclasses
 import logging
 import importlib
 from pathlib import Path
@@ -19,7 +20,8 @@ logging.basicConfig(
 )
 from strategies import TqsdkStrategyBridge
 from strategies.core import Strategy, TradingContext, Bar, Fill, Signal
-from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
+from backtest import VnpyBacktestEngine, scan_csv_files, generate_merged_report
+from backtest.comparison import format_merged_report
 from data import Database, DBLogHandler, export_csv
 
 logger = logging.getLogger(__name__)
@@ -63,9 +65,7 @@ def load_strategy(strategy_name: Optional[str]) -> Strategy:
             f"策略文件 {name}.py 不存在，可用策略: {', '.join(available)}"
         )
 
-    spec = importlib.util.spec_from_file_location(name, strategy_file)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = importlib.import_module(f"strategies.{name}")
 
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
@@ -103,11 +103,22 @@ def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
     account = cm.get_account_info()
 
     # 同步资金/合约乘数到 strategy.config，使策略能正确计算手数
+    # 使用 dataclasses.fields() 校验字段合法性，避免 hasattr 静默失败
     cfg = strategy.config
-    if hasattr(cfg, 'capital'):
-        setattr(cfg, 'capital', capital)
-    if hasattr(cfg, 'contract_size'):
-        setattr(cfg, 'contract_size', bc.get('contract_size', 10))
+    try:
+        valid_keys = {f.name for f in dataclasses.fields(cfg)}
+    except TypeError:
+        valid_keys = set()
+
+    if 'capital' in valid_keys:
+        cfg.capital = capital
+    elif hasattr(cfg, 'capital'):
+        cfg.capital = capital
+
+    if 'contract_size' in valid_keys:
+        cfg.contract_size = bc.get('contract_size', 10)
+    elif hasattr(cfg, 'contract_size'):
+        cfg.contract_size = bc.get('contract_size', 10)
 
     return TradingContext(
         strategy=strategy,
@@ -123,12 +134,30 @@ def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
 
 
 def _apply_strategy_config(strategy: Strategy, cm: ConfigManager):
-    """将配置文件中的策略参数应用到策略实例的 config 上"""
+    """将配置文件中的策略参数应用到策略实例的 config 上
+
+    通过 dataclasses.fields() 校验 YAML 配置键是否对应合法数据类字段，
+    避免 hasattr 静默跳过未知键导致的配置未生效问题。
+    """
     sc = cm.get_strategy_config(strategy.name)
     cfg = strategy.config
+    try:
+        valid_keys = {f.name for f in dataclasses.fields(cfg)}
+    except TypeError:
+        # 非 dataclass，回退到 hasattr 检查
+        for key, value in sc.items():
+            if hasattr(cfg, key):
+                setattr(cfg, key, value)
+        return
+
     for key, value in sc.items():
-        if hasattr(cfg, key):
+        if key in valid_keys:
             setattr(cfg, key, value)
+        else:
+            logger.warning(
+                f"忽略未识别的策略配置键: '{key}'，"
+                f"合法键: {sorted(valid_keys)}"
+            )
 
 
 # ============================================================
@@ -228,14 +257,14 @@ def cmd_test(args):
 
 
 # ============================================================
-# 子命令: backtest — vn.py 本地回测
+# 子命令: backtest — vn.py 批量回测
 # ============================================================
 def cmd_backtest(args):
-    """vn.py 框架回测 - 从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比
+    """vn.py 批量回测 — 对匹配的品种逐一执行完整流水线
 
     支持两种模式:
-      - 单品种: --symbol DCE.m2509
-      - 批量: --pattern 'DCE\\.m' 匹配多个品种，未指定则回测全部
+      - 单品种: --symbol DCE.m2509 (精确指定一个品种)
+      - 批量: --pattern 'DCE\\\\.m' 或省略 --symbol (扫描 data_dir 匹配全部)
     """
     cm = ConfigManager()
     db = Database(cm.get_data_config()['db_path'])
@@ -246,42 +275,63 @@ def cmd_backtest(args):
         strategy = load_strategy(args.strategy)
         _apply_strategy_config(strategy, cm)
 
-        context = _build_context(strategy, args.symbol or "", cm,
-                                 capital=bc.get('initial_capital', 100000.0))
-        engine = VnpyBacktestEngine(bc, context=context)
-
-        if args.pattern is not None or args.symbol is None or args.symbol == 'DCE.m2509':
-            pattern = args.pattern
-            logger.info(f"多品种回测模式: pattern={pattern or '全部'}, parallel={args.parallel} "
-                        f"strategy={_get_strategy_class_name(strategy)}")
-            result = engine.run_multi_backtest(
-                pattern=pattern,
-                start_date=args.start or None,
-                end_date=args.end or None,
-                max_workers=args.parallel or 1,
-            )
-            if result.get('success'):
-                db.log('backtest',
-                       f"批量回测完成: {result.get('succeeded', 0)}/{result.get('total', 0)}",
-                       symbol='multi', status='SUCCESS')
-            else:
-                db.log('backtest', f"批量回测失败: {result.get('error', '')}",
-                       symbol='multi', status='ERROR')
+        # 确定品种列表
+        if args.symbol and not args.pattern:
+            # 明确指定单品种，直接回测
+            symbols = [(args.symbol, None)]
+            mode = 'single'
         else:
-            logger.info(f"vn.py 回测: {args.symbol} 资金={bc['initial_capital']} "
-                         f"费率={bc['commission_rate']:.4%} "
-                         f"strategy={_get_strategy_class_name(strategy)}")
-            result = engine.run_full_pipeline(
-                symbol=args.symbol,
-                start_date=args.start or None,
-                end_date=args.end or None,
-            )
-            if result.get('success'):
-                db.log('backtest', f"完成: {args.symbol} 三阶段回测",
-                       symbol=args.symbol, status='SUCCESS')
-            else:
-                db.log('backtest', f"失败: {result.get('error', '')}",
-                       symbol=args.symbol, status='ERROR')
+            # 按 pattern 扫描 CSV 目录 (pattern=None 扫描全部)
+            symbols = scan_csv_files(bc['data_dir'], args.pattern)
+            if not symbols:
+                logger.error("未找到匹配的品种数据")
+                db.log('backtest', "未找到匹配的品种数据", symbol='multi', status='ERROR')
+                return
+            mode = 'batch'
+
+        logger.info(f"{'单品种' if mode == 'single' else '批量'}回测: {len(symbols)} 个品种"
+                     f" strategy={_get_strategy_class_name(strategy)}")
+
+        all_results = []
+        failed = []
+        for sym, _ in symbols:
+            # 每个品种独立构建 context 和 engine (避免状态污染)
+            ctx = _build_context(strategy, sym, cm,
+                                 capital=bc.get('initial_capital', 100000.0))
+            engine = VnpyBacktestEngine(bc, context=ctx)
+            try:
+                result = engine.run_full_pipeline(
+                    symbol=sym,
+                    start_date=args.start or None,
+                    end_date=args.end or None,
+                )
+                all_results.append(result)
+                if not result.get('success'):
+                    failed.append(sym)
+            except Exception as e:
+                logger.error(f"{sym} 回测异常: {e}", exc_info=True)
+                all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
+                failed.append(sym)
+
+        succeeded = [r for r in all_results if r.get('success')]
+        logger.info(f"回测完成: {len(succeeded)}/{len(all_results)} 成功"
+                     + (f", 失败: {failed}" if failed else ""))
+
+        # 生成合并报告 (仅批量模式且至少一个成功)
+        if mode == 'batch' and succeeded:
+            merged = generate_merged_report(succeeded, bc.get('report', {}).get(
+                'output_dir', '.quant_shared_data/reports'))
+            print(format_merged_report(merged))
+
+        if succeeded:
+            db.log('backtest',
+                   f"{'批量' if mode == 'batch' else ''}回测完成: "
+                   f"{len(succeeded)}/{len(all_results)}",
+                   symbol='multi' if mode == 'batch' else args.symbol,
+                   status='SUCCESS')
+        else:
+            db.log('backtest', f"回测全部失败", symbol='multi' if mode == 'batch' else args.symbol,
+                   status='ERROR')
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
@@ -293,7 +343,10 @@ def cmd_backtest(args):
 # 子命令: tq-backtest — TqSdk 回测 (兼容旧版)
 # ============================================================
 def cmd_tq_backtest(args):
-    """天勤SDK回测 (旧版兼容) - 使用天勤实时K线数据进行回测"""
+    """天勤SDK回测 — 使用 TQBacktestEngine 配合天勤实时K线数据进行单标的图形化回测
+
+    绩效跟踪统一委托给 Strategy.on_bar + on_fill，避免与 strategy.performance 重复计算。
+    """
     from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
     from tqsdk.exceptions import BacktestFinished
 
@@ -327,50 +380,53 @@ def cmd_tq_backtest(args):
         klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
 
         bridge.initialize(api)
-
-        engine = BacktestEngine(initial_capital=args.capital)
         target_pos = TargetPosTask(api, args.symbol)
 
+        prev_kline_len = len(klines)
         while True:
             api.wait_update()
             if api.is_changing(klines):
-                bar = {
-                    'datetime': datetime.fromtimestamp(klines['datetime'].iloc[-1] / 10 ** 9),
-                    'close': float(klines['close'].iloc[-1]),
-                    'open': float(klines['open'].iloc[-1]),
-                    'high': float(klines['high'].iloc[-1]),
-                    'low': float(klines['low'].iloc[-1]),
-                    'volume': int(klines['volume'].iloc[-1]),
-                }
+                current_len = len(klines)
+                for i in range(prev_kline_len, current_len):
+                    signal = bridge.on_bar(klines, idx=i)
 
-                signal = bridge.on_bar(klines)
-
-                if signal.action == 'buy' and engine.current_position == 0:
-                    if signal.volume > 0:
-                        engine.add_trade(TradeRecord(
-                            timestamp=bar['datetime'], symbol=args.symbol, direction='buy',
-                            price=bar['close'], quantity=signal.volume,
-                            reason=signal.reason))
+                    pos = strategy_core.position
+                    if signal.action == 'buy' and pos.direction != 'long':
                         target_pos.set_target_volume(signal.volume)
-                elif signal.action == 'sell' and engine.current_position > 0:
-                    profit = (bar['close'] - engine.entry_price) * engine.current_position
-                    engine.add_trade(TradeRecord(
-                        timestamp=bar['datetime'], symbol=args.symbol, direction='sell',
-                        price=bar['close'], quantity=engine.current_position,
-                        profit=profit, reason=signal.reason))
-                    target_pos.set_target_volume(0)
+                        bridge.notify_fill(signal, float(klines.close.iloc[i]))
+                    elif signal.action == 'sell' and pos.direction == 'long':
+                        target_pos.set_target_volume(0)
+                        bridge.notify_fill(signal, float(klines.close.iloc[i]))
+                prev_kline_len = current_len
 
     except BacktestFinished:
-        report = engine.generate_report()
+        p = strategy_core.performance
+        report = (
+            f"{'=' * 60}\n"
+            f"回测报告\n"
+            f"{'=' * 60}\n"
+            f"策略: {strategy_cls}\n"
+            f"品种: {args.symbol}\n"
+            f"区间: {args.start} ~ {args.end}\n"
+            f"初始资金: {args.capital:,.2f}\n\n"
+            f"交易统计:\n"
+            f"  总交易次数: {p.total_trades}\n"
+            f"  盈利交易: {p.winning_trades}\n"
+            f"  亏损交易: {p.losing_trades}\n"
+            f"  胜率: {p.win_rate:.2%}\n"
+            f"  总盈亏: {p.total_profit:,.2f}\n"
+            f"{'=' * 60}"
+        )
         print(report)
         db.log('backtest', f"完成:\n{report}", symbol=args.symbol, status='SUCCESS')
-        if engine.trade_history:
+
+        fills = getattr(strategy_core, 'fills', None)
+        if fills:
             logger.info("\n交易记录:")
-            for t in engine.trade_history:
-                ts = t.timestamp.strftime('%Y-%m-%d')
-                tag = "买入" if t.direction == 'buy' else "卖出"
-                extra = f" 盈亏: {t.profit:.2f}" if t.direction == 'sell' else ""
-                logger.info(f"  {ts} {tag} {t.symbol} @ {t.price:.2f} x {t.quantity}{extra}")
+            for f in fills:
+                ts = f.timestamp[:10] if f.timestamp else "N/A"
+                tag = "买入" if f.action == 'buy' else "卖出"
+                logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
         if args.gui:
             logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
             try:
@@ -450,12 +506,11 @@ def main():
                    help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     # ---- backtest ----
-    p = sub.add_parser('backtest', help='vn.py本地历史数据回测 (训练/验证/测试三阶段)',
-                       description='从本地CSV加载数据，划分训练/验证/测试集，独立回测并对比\n'
+    p = sub.add_parser('backtest', help='vn.py批量回测 (训练/验证/测试三阶段)',
+                       description='逐品种执行完整回测流水线: 数据加载→划分→三阶段回测→对比报告\n'
                                    '批量模式: python main.py backtest --pattern "DCE\\\\.m" 或省略 --symbol')
     p.add_argument('--symbol', default=None, help='品种代码 (单品种模式)')
     p.add_argument('--pattern', default=None, help='品种代码正则表达式 (批量模式, e.g. "DCE\\\\.m")')
-    p.add_argument('--parallel', type=int, default=1, help='并行线程数 (批量模式, 默认=1顺序)')
     p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD (可选)')
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD (可选)')
     p.add_argument('--strategy', default=None,

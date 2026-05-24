@@ -28,22 +28,25 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
     klines = api.get_kline_serial(symbol, duration_seconds=kline_period * 60)
 
     rows = []
+    prev_len = 0
     try:
         while True:
             api.wait_update()
             if api.is_changing(klines):
-                idx = -1
-                ts = datetime.fromtimestamp(klines['datetime'].iloc[idx] / 10 ** 9)
-                row = {
-                    'datetime': ts.strftime('%Y-%m-%d %H:%M:%S'),
-                    'open': float(klines['open'].iloc[idx]),
-                    'high': float(klines['high'].iloc[idx]),
-                    'low': float(klines['low'].iloc[idx]),
-                    'close': float(klines['close'].iloc[idx]),
-                    'volume': int(klines['volume'].iloc[idx]),
-                    'money': float(klines['close'].iloc[idx]) * int(klines['volume'].iloc[idx]),
-                }
-                rows.append(row)
+                current_len = len(klines)
+                for i in range(prev_len, current_len):
+                    ts = datetime.fromtimestamp(klines['datetime'].iloc[i] / 10 ** 9)
+                    row = {
+                        'datetime': ts.strftime('%Y-%m-%d %H:%M:%S'),
+                        'open': float(klines['open'].iloc[i]),
+                        'high': float(klines['high'].iloc[i]),
+                        'low': float(klines['low'].iloc[i]),
+                        'close': float(klines['close'].iloc[i]),
+                        'volume': int(klines['volume'].iloc[i]),
+                        'money': float(klines['close'].iloc[i]) * int(klines['volume'].iloc[i]),
+                    }
+                    rows.append(row)
+                prev_len = current_len
     except BacktestFinished:
         pass
     finally:
