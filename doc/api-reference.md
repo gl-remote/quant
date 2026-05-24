@@ -1,6 +1,6 @@
 # API 接口文档
 
-> 版本: 0.0.3 | 更新日期: 2026-05-24
+> 版本: 0.2.0 | 更新日期: 2026-05-24
 
 ---
 
@@ -148,6 +148,83 @@ run_full_pipeline(
 ## 策略桥接器 API
 
 ### VnpyStrategyBridge
+
+位于 [strategies/bridges/vnpy_bridge.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/vnpy_bridge.py)，继承 `vnpy_ctastrategy.CtaTemplate`，将 vn.py 的 K 线数据转换为标准 Bar 并委托给策略核心。
+
+**生命周期**：
+
+```python
+bridge = VnpyStrategyBridge(cta_engine, strategy_name, vt_symbol, setting)
+# vn.py 自动调用:
+#   bridge.on_init()    → 初始化参数
+#   bridge.on_start()   → 启动策略
+#   bridge.on_bar(bar)  → 每个 Bar 调用决策
+#   bridge.on_stop()    → 停止策略
+```
+
+**核心流程**：
+
+```
+vnpy BarData → 标准 Bar → Strategy.on_bar() → Signal → self.buy()/sell() → on_fill()
+```
+
+| 方法 | 说明 |
+|------|------|
+| `on_bar(bar: BarData)` | vn.py 回调入口，转换数据后委托给策略核心 |
+| `_send_order(signal)` | 将 Signal 翻译为 vn.py 的 buy/sell/short/cover 指令 |
+| `_on_trade(trade)` | vn.py 成交回调，构造 Fill 通知策略核心 |
+
+### TqsdkStrategyBridge
+
+位于 [strategies/bridges/tqsdk_bridge.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/tqsdk_bridge.py)，纯 Python 类，不继承任何框架类。
+
+**运行模式**：
+
+```python
+bridge = TqsdkStrategyBridge(api, symbol, strategy_core)
+bridge.run()            # 无 GUI 模式
+# 或
+bridge.run_with_gui()   # Web 图形界面模式
+```
+
+**核心流程**：
+
+```
+tqsdk kline_serial (DataFrame) → 标准 Bar → Strategy.on_bar() → Signal → TargetPosTask
+```
+
+| 方法 | 说明 |
+|------|------|
+| `run()` | 主循环，监听 K 线更新并驱动策略决策 |
+| `run_with_gui()` | 同上，附加 web 图形界面 |
+| `_process_new_bars()` | 处理新增 K 线，逐根调用 `on_bar` |
+| `_execute_signal(signal)` | 通过 `TargetPosTask` 调仓 |
+
+---
+
+## 信号优先级 (Signal Priority)
+
+持仓状态下多个出场条件可能同时触发，**`if/elif` 顺序决定实际优先级**：
+
+```
+止损 (stop_loss)  >  止盈 (take_profit)  >  死叉 (death_cross)
+```
+
+| 优先级 | 信号 | 触发条件 | 说明 |
+|--------|------|---------|------|
+| 1 (最高) | `stop_loss` | `(entry - current) / entry >= stop_loss_ratio` | 风控止损，优先于一切 |
+| 2 | `take_profit` | `(current - entry) / entry >= take_profit_ratio` | 获利了结 |
+| 3 (最低) | `death_cross` | 短均线下穿长均线 | 趋势反转信号 |
+
+空仓状态下仅检测 `golden_cross`（金叉）买入信号。
+
+**设计原因**：
+
+- 止损优先级最高确保风险可控，避免死叉信号覆盖止损
+- 止盈优先于死叉确保利润锁定，不被趋势信号的滞后性侵蚀
+- 如需自定义优先级，修改策略核心中 `on_bar()` 的 `if/elif` 顺序
+
+---
 
 ## 数据加载模块
 

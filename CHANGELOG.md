@@ -7,6 +7,33 @@
 
 ---
 
+## [0.2.0-dev] - 2026-05-24
+
+### 修复
+
+- **backtest 模块审计与修复 (9 项 Bug)**:
+  - BT01: 修复 `tq_backtest_engine` 卖出资金双重计算
+  - BT02: Walk-Forward 增加 train 集 IS 回测和 IS-OOS 过拟合差距检测
+  - BT03: `data_loader` 中 `_qlib` 后缀替换改为 `endswith` 精确匹配末尾
+  - BT04: `data_loader` 中 exchange 类型统一为字符串
+  - BT05: `profit_factor` 公式修正为行业标准 `gross_profit / abs(gross_loss)`
+  - BT06: `stability_score` 增加 `[0,1]` 范围裁剪
+  - BT07: `interval_map` 改用 `getattr` 动态获取 vnpy Interval 细分常量
+  - BT08: Equity curve 计算优先使用 vnpy 的 `balance` 字段
+  - BT09: `BarData` 的 Interval 从硬编码改为参数化传入
+
+### 变更
+
+- plan.md 移除已修复 Bug 列表，仅保留未解决的 15 项缺陷
+
+### 新增
+
+- 策略开发指南 (`doc/strategy-guide.md`)
+- 贡献指南 (`CONTRIBUTING.md`)
+- API 文档更新：补充 Bridge 接口和信号优先级说明
+
+---
+
 ## [0.1.0] - 2026-05-24
 
 ### 新增

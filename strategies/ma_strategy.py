@@ -91,6 +91,10 @@ class MaStrategyCore(Strategy):
 
         signal = Signal()
 
+        # 信号优先级 (由 if/elif 顺序决定):
+        #   持仓时: 止损 > 止盈 > 死叉
+        #   空仓时: 金叉买入
+        # 参见 doc/api-reference.md "信号优先级"
         if self._position.direction == 'long':
             if self._check_stop_loss(bar.close):
                 signal = Signal(action='sell', reason='stop_loss',

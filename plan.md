@@ -82,20 +82,11 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 > - **Bug**: 会导致功能异常、运行崩溃或数据错误的代码问题，必须立即修复
 > - **缺陷**: 代码质量、性能、规范或设计层面的不足，不影响当前功能，留待后续处理
 
-### 3.1 🔴 Bug (必须修复, 3 项)
-
-| 编号 | 问题 | 文件 | 说明 |
-|------|------|------|------|
-| BUG-01 | ~~硬编码真实 API 密钥~~ ✅ | `config/conf.local.yaml` | 迁移至环境变量优先架构 |
-| BUG-03 | ~~版本号三处不一致~~ ✅ | `pyproject.toml`/`conf.yaml`/`README.md` | 统一为 0.2.0-dev |
-| BUG-18 | ~~API 调用无重试机制~~ ✅ | `exporter.py` | 增加指数退避重试 (max 3 次, 1s/2s/4s) |
-| BUG-27 | ~~无日志轮转~~ ✅ | `database.py` | 操作日志自动清理: 50,000 条上限, 达到后保留最近一半 |
-
-### 3.2 🟡 缺陷 (低优先级, 待后续处理, 12 项)
+### 3.1 🟡 缺陷 (低优先级, 待后续处理, 12 项)
 
 | 编号 | 分类 | 问题 | 文件 | 说明 |
 |------|------|------|------|------|
-| DEF-01 | 文档 | CHANGELOG 未更新 | `CHANGELOG.md` | 0.2.0-dev 的 Bridge 架构重构等重大变更未记录 |
+| DEF-01 | 文档 | ~~CHANGELOG 未更新~~ ✅ | `CHANGELOG.md` | 0.2.0-dev 的 backtest 审计修复等重大变更已记录 |
 | DEF-02 | 测试 | 覆盖率排除核心文件导致虚高 | `pyproject.toml:80-90` | `main.py`/bridges/exporter/backtest_engine 被排除，真实覆盖率约 60% |
 | DEF-03 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | 约 340 行关键桥接代码无测试 |
 | DEF-04 | 测试 | 无集成/端到端测试 | `tests/` | 缺少导出→回测→报告完整流程测试 |
@@ -108,23 +99,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-11 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
 | DEF-12 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py:114-157` | 实盘运行无对天勤连接断开的自动检测与重连 |
 
-### 3.3 🔴 backtest 模块 Bug (全部已修复 ✅, 9/9)
-
-> 审计日期: 2026-05-24 | 修复日期: 2026-05-24 | 模块: `backtest/` (9 个文件, ~1200 行)
-
-| 编号 | 问题 | 文件 | 说明 |
-|------|------|------|------|
-| BUG-BT01 | ~~卖出资金双重计算~~ ✅ | `tq_backtest_engine.py:56` | 卖出时去除重复叠加 `profit`，盈亏由价差自动体现 |
-| BUG-BT02 | ~~Walk-Forward train/val 数据丢弃~~ ✅ | `vnpy_backtest_engine.py` | train 集 IS 回测 + IS-OOS 差距检测 |
-| BUG-BT03 | ~~`_qlib` 后缀替换过于粗暴~~ ✅ | `data_loader.py:68` | 改为 `endswith('_qlib')` 仅匹配末尾 |
-| BUG-BT04 | ~~exchange 类型不一致~~ ✅ | `data_loader.py:28,31` | 统一返回字符串，下游本地构造 Exchange 枚举 |
-| BUG-BT05 | ~~profit_factor 公式非行业标准~~ ✅ | `tq_backtest_engine.py:90` | 改为 `gross_profit/abs(gross_loss)` |
-| BUG-BT06 | ~~stability_score 不裁剪~~ ✅ | `aggregator.py:122-124` | `max(0, min(1, score))` 裁剪到 [0,1] |
-| BUG-BT07 | ~~interval_map 粒度丢失~~ ✅ | `vnpy_backtest_engine.py` | `getattr` 动态获取 MINUTE_5/15/30 等细分常量 |
-| BUG-BT08 | ~~equity curve 未用 vnpy balance~~ ✅ | `report.py:173-176` | 优先 `balance` 字段，回退 `net_pnl` 累加 |
-| BUG-BT09 | ~~BarData Interval 硬编码为 DAILY~~ ✅ | `data_loader.py:183` | 接受参数传入，根据配置设置正确 Interval |
-
-### 3.4 🟡 backtest 模块缺陷 (低优先级, 3 项)
+### 3.2 🟡 backtest 模块缺陷 (低优先级, 3 项)
 
 | 编号 | 分类 | 问题 | 文件 | 说明 |
 |------|------|------|------|------|
@@ -132,7 +107,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-14 | 架构 | context 为空时硬编码策略类型 | `vnpy_backtest_engine.py:278-289` | 回退到 MaStrategyCore，使用其他策略需显式传 context |
 | DEF-15 | 指标 | 缺少 Sortino/Calmar/基准对比 | `types.py`/`metrics.py` | 缺下行风险指标、年化收益/回撤比、buy-and-hold 基准 |
 
-### 3.5 功能缺失 (与原 S1-S4 规划重叠)
+### 3.3 功能缺失 (与原 S1-S4 规划重叠)
 
 | 功能 | 归属 | 优先级 |
 |------|------|--------|
@@ -145,14 +120,14 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 多数据源 | S4 (A18) | 低 |
 | Docker 支持 | S4 (A16) | 低 |
 
-### 3.6 文档缺失
+### 3.4 文档缺失 ✅ (全部已补充)
 
-| 元素 | 说明 |
-|------|------|
-| 策略开发指南 | 如何新增策略、参数调优流程 |
-| 贡献指南 (CONTRIBUTING.md) | 代码贡献规范 |
-| API 参考文档 | Bridge/Strategy 接口的使用说明 |
-| 止损/止盈信号优先级说明 | 当前由代码顺序隐式定义 |
+| 元素 | 说明 | 状态 |
+|------|------|------|
+| 策略开发指南 | 如何新增策略、参数调优流程 | ✅ `doc/strategy-guide.md` |
+| 贡献指南 (CONTRIBUTING.md) | 代码贡献规范 | ✅ `CONTRIBUTING.md` |
+| API 参考文档 | Bridge/Strategy 接口的使用说明 | ✅ `doc/api-reference.md` 已补充 |
+| 止损/止盈信号优先级说明 | 当前由代码顺序隐式定义 | ✅ `doc/api-reference.md` + `ma_strategy.py` 注释 |
 
 ---
 
@@ -162,7 +137,6 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 风险 | 可能性 | 影响 | 对应编号 | 缓解措施 |
 |------|--------|------|----------|---------|
-| — | — | — | — | **全项目 Bug 已修复** ✅ (3 original + 9 backtest = 12) |
 | 实盘无风控裸奔 | 中 | 🔴 高 | DEF-10 | 后续实现 S3-A15 风控熔断 |
 | Bridge 层无测试覆盖 | 高 | 🟡 中 | DEF-03 | 后续补充 mock 测试 |
 
@@ -189,7 +163,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 夏普比率 (测试集) | — | — | ≥ 0.5 | ≥ 0.5 |
 | 过拟合评分 | — | — | < 15 | < 15 |
 | CI 状态 | 已配置 | 通过 | 通过 | 通过 |
-| 代码审计问题数 | **Bug 全部修复 (12/12)** ✅ + 缺陷 15 项 (低优先级) | — | — | — |
+| 代码审计问题数 | 缺陷 15 项 (低优先级, 待后续处理) | — | — | — |
 
 ---
 
