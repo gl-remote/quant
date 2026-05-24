@@ -126,7 +126,7 @@ def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
     return df
 
 
-def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
+def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval=None) -> list:
     """将DataFrame转换为vn.py回测引擎可用的 BarData 列表
 
     将Qlib格式CSV (datetime, open, high, low, close, volume) 转换为
@@ -135,6 +135,7 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
     Args:
         df: Qlib格式的K线数据
         symbol: 合约代码 (vnpy格式: 品种.交易所, e.g. m2509.DCE)
+        interval: vnpy Interval 枚举，None 时回退到 Interval.DAILY
 
     Returns:
         vnpy BarData 对象列表
@@ -167,6 +168,7 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
 
     pure_symbol, exchange_code = parse_symbol_exchange(symbol)
     exchange = Exchange(exchange_code) if Exchange else exchange_code
+    bar_interval = interval if interval is not None else Interval.DAILY
 
     bars = []
     for _, row in df.iterrows():
@@ -177,7 +179,7 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
             symbol=pure_symbol,
             exchange=exchange,
             datetime=dt,
-            interval=Interval.DAILY,
+            interval=bar_interval,
             open_price=float(row['open']),
             high_price=float(row['high']),
             low_price=float(row['low']),

@@ -319,7 +319,7 @@ class VnpyBacktestEngine:
         strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge)
         engine.add_strategy(strategy_cls, setting)
 
-        bars = df_to_vnpy_datalines(df, vt_symbol)
+        bars = df_to_vnpy_datalines(df, vt_symbol, interval)
         engine.history_data = bars
 
         engine.run_backtesting()
