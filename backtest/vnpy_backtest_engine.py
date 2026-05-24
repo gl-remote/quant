@@ -13,11 +13,13 @@ vn.py 批量回测引擎
 import logging
 from typing import Any, Optional
 
+import numpy as np
+
 from strategies.core.context import TradingContext
 
 from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
 from .report import generate_dataset_report, format_console_report
-from .aggregator import aggregate_walk_forward
+from .aggregator import aggregate_walk_forward, parse_percentage
 
 logger = logging.getLogger(__name__)
 
@@ -159,13 +161,14 @@ class VnpyBacktestEngine:
         test_size: Optional[int] = None,
         step: Optional[int] = None,
     ) -> dict[str, Any]:
-        """执行 Walk-Forward 时间序列交叉验证回测
+        """执行 Walk-Forward 时间序列验证回测 (固定参数, 无优化)
 
-        对数据滚动产生多个窗口，每个窗口独立回测并收集测试集指标，
-        最后汇总所有窗口的平均表现。相比单次全量回测，Walk-Forward 能:
+        对数据滚动产生多个窗口，每个窗口在训练集(in-sample)和测试集
+        (out-of-sample)上分别回测，最后汇总 OOS 平均表现。相比单次全量
+        回测，Walk-Forward 能:
           - 模拟策略在时间推进中的实际表现
           - 评估策略稳健性（各窗口指标的标准差）
-          - 降低单次划分的偶然性
+          - 对比 IS-OOS 差距识别过拟合风险
 
         Args:
             symbol: 合约代码
@@ -176,8 +179,8 @@ class VnpyBacktestEngine:
         Returns:
             walk_forward 结果字典:
               - windows: 窗口数
-              - window_results: 各窗口测试集指标列表
-              - aggregate: 聚合统计 (均值/标准差/盈利窗口比/稳定性评分)
+              - window_results: 各窗口 IS/OOS 指标列表
+              - aggregate: OOS 聚合统计 + IS-OOS 差距
         """
         from .data_loader import walk_forward_split_by_ratio, walk_forward_split
 
@@ -201,6 +204,11 @@ class VnpyBacktestEngine:
         window_results = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
             logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
+            # In-Sample: 训练集上回测 (观察策略在该时间段的表现)
+            train_result = self._run_backtest(train_df, symbol, f'wf_{wi}_train')
+            if self.context and self.context.strategy:
+                self.context.strategy.reset()
+            # Out-of-Sample: 测试集上回测 (真正评估预测能力)
             test_result = self._run_backtest(test_df, symbol, f'wf_{wi}_test')
             if self.context and self.context.strategy:
                 self.context.strategy.reset()
@@ -209,18 +217,35 @@ class VnpyBacktestEngine:
                 'train_rows': len(train_df),
                 'val_rows': len(val_df),
                 'test_rows': len(test_df),
+                'train_start': str(train_df['datetime'].iloc[0])[:10],
+                'train_end': str(train_df['datetime'].iloc[-1])[:10],
                 'test_start': str(test_df['datetime'].iloc[0])[:10],
                 'test_end': str(test_df['datetime'].iloc[-1])[:10],
                 'statistics': test_result.get('statistics', {}),
+                'statistics_is': train_result.get('statistics', {}),
             })
 
-        # 聚合所有窗口的测试集指标
+        # 聚合所有窗口的 OOS 测试集指标
         aggregate = aggregate_walk_forward(window_results)
+
+        # 计算 IS-OOS 平均差距 (过拟合检测)
+        is_returns = [
+            parse_percentage(w.get('statistics_is', {}).get('total_return', 0))
+            for w in window_results
+        ]
+        oos_returns = [
+            parse_percentage(w.get('statistics', {}).get('total_return', 0))
+            for w in window_results
+        ]
+        is_mean = float(np.mean(is_returns)) if is_returns else 0.0
+        oos_mean = float(np.mean(oos_returns)) if oos_returns else 0.0
+        aggregate['is_oos_return_gap'] = is_mean - oos_mean
 
         logger.info(
             f"Walk-Forward 汇总 ({len(windows)} 窗口): "
-            f"均收益={aggregate['return_mean']:.2%}, "
+            f"OOS均收益={aggregate['return_mean']:.2%}, "
             f"夏普={aggregate['sharpe_mean']:.2f}, "
+            f"IS-OOS差距={aggregate['is_oos_return_gap']:.2%}, "
             f"盈利窗口比={aggregate['positive_window_ratio']:.0%}"
         )
 
