@@ -1,6 +1,7 @@
 """数据导出模块 - 从天勤获取K线数据导出为 Qlib 格式 CSV，支持智能去重合并"""
 
 import logging
+import time
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
@@ -12,11 +13,52 @@ logger = logging.getLogger(__name__)
 
 Qlib_COLUMNS = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'money']
 
+# 重试配置
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_BASE = 1.0  # 指数退避基数 (秒)
+
 
 def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
                       kline_period: int = 1,
                       account: Optional[Dict] = None) -> pd.DataFrame:
-    """从天勤 SDK 拉取 K 线数据"""
+    """从天勤 SDK 拉取 K 线数据，带自动重试
+
+    Args:
+        symbol: 品种代码
+        start_date: 开始日期 YYYY-MM-DD
+        end_date: 结束日期 YYYY-MM-DD
+        kline_period: K 线周期 (分钟)
+        account: 天勤认证信息
+
+    Returns:
+        DataFrame，拉取失败时返回空 DataFrame
+
+    Raises:
+        RuntimeError: 重试耗尽后仍失败时抛出
+    """
+    last_error = None
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            return _do_fetch(symbol, start_date, end_date, kline_period, account)
+        except Exception as e:
+            last_error = e
+            if attempt < _MAX_RETRIES:
+                backoff = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+                logger.warning(
+                    f"天勤数据拉取失败 (第 {attempt}/{_MAX_RETRIES} 次): {e}，"
+                    f"{backoff:.0f}s 后重试..."
+                )
+                time.sleep(backoff)
+            else:
+                logger.error(f"天勤数据拉取失败，已重试 {_MAX_RETRIES} 次: {e}")
+
+    logger.error(f"拉取 {symbol} 数据失败，已耗尽 {_MAX_RETRIES} 次重试")
+    return pd.DataFrame(columns=Qlib_COLUMNS)
+
+
+def _do_fetch(symbol: str, start_date: str, end_date: str,
+              kline_period: int, account: Optional[Dict]) -> pd.DataFrame:
+    """执行单次天勤 API 拉取（由 _fetch_from_tqsdk 的重试逻辑包裹）"""
     from tqsdk import TqApi, TqAuth, TqBacktest
     from tqsdk.exceptions import BacktestFinished
 
@@ -49,6 +91,9 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
                 prev_len = current_len
     except BacktestFinished:
         pass
+    except Exception:
+        api.close()
+        raise
     finally:
         api.close()
 
