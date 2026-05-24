@@ -87,8 +87,11 @@ class TQBacktestEngine:
         if losing:
             result.avg_loss = sum(t.profit for t in losing) / len(losing)
         result.max_drawdown = calc_max_drawdown(self.equity_curve)
-        if result.avg_loss != 0:
-            result.profit_factor = abs(result.avg_profit / result.avg_loss)
+        # 行业标准: gross_profit / abs(gross_loss)，非平均盈亏比
+        total_win = sum(t.profit for t in winning)
+        total_loss = sum(t.profit for t in losing)
+        if total_loss != 0:
+            result.profit_factor = total_win / abs(total_loss)
         result.sharpe_ratio = calc_sharpe_ratio(self.equity_curve)
         return result
 
