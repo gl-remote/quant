@@ -82,7 +82,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 编号 | 问题 | 文件 | 严重度 | 说明 |
 |------|------|------|--------|------|
-| BUG-01 | **硬编码真实 API 密钥** | `config/conf.local.yaml:11-12` | 🔴 严重 | `api_key: 'REDACTED_API_KEY'`, `api_secret: 'REDACTED_API_SECRET'` 为真实凭证。虽在 `.gitignore` 中，但一旦泄露将导致账户被盗用。需立即更换密钥 |
+| BUG-01 | ~~硬编码真实 API 密钥~~ ✅ 已修复 | `config/conf.local.yaml:11-12` | ✅ | 已迁移至环境变量优先架构 (TQSDK_API_KEY/TQSDK_API_SECRET)，配置文件仅留占位符 |
 
 ### 3.2 🔴 版本/配置不一致 (Critical)
 

@@ -45,6 +45,9 @@ Thumbs.db
 # *.key
 # credentials.json
 
+# 环境变量文件（包含API密钥等敏感信息）
+.env
+
 # 本地配置文件（包含敏感信息）
 conf.local.yaml           # 本地覆盖配置，包含API密钥等敏感信息
 config/conf.local.yaml

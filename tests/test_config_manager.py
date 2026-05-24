@@ -156,6 +156,61 @@ class TestAccountInfo:
         assert info['api_secret'] == 'real_secret_456'
         os.unlink(path)
 
+    def test_env_var_priority_over_config(self, monkeypatch, base_config_dict):
+        """环境变量优先级高于 conf.local.yaml"""
+        monkeypatch.setenv('TQSDK_API_KEY', 'env_key_abc')
+        monkeypatch.setenv('TQSDK_API_SECRET', 'env_secret_xyz')
+
+        base_config_dict['third_party'] = {
+            'services': [{
+                'name': 'tqsdk',
+                'api_key': 'config_key_123',
+                'api_secret': 'config_secret_456',
+            }]
+        }
+        fd, path = tempfile.mkstemp(suffix='.yaml')
+        with open(fd, 'w', encoding='utf-8') as f:
+            yaml.dump(base_config_dict, f)
+        cm = ConfigManager.__new__(ConfigManager)
+        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
+        info = cm.get_account_info()
+        assert info['api_key'] == 'env_key_abc'
+        assert info['api_secret'] == 'env_secret_xyz'
+        os.unlink(path)
+
+    def test_env_var_only_without_config(self, monkeypatch):
+        """仅设置环境变量，无配置文件时也正常工作"""
+        monkeypatch.setenv('TQSDK_API_KEY', 'pure_env_key')
+        monkeypatch.setenv('TQSDK_API_SECRET', 'pure_env_secret')
+        cm = ConfigManager.__new__(ConfigManager)
+        cm.config = {}
+        info = cm.get_account_info()
+        assert info['api_key'] == 'pure_env_key'
+        assert info['api_secret'] == 'pure_env_secret'
+
+    def test_env_var_partial_ignored(self, monkeypatch, base_config_dict):
+        """仅设置一个环境变量时不会误用，回退到配置文件"""
+        monkeypatch.setenv('TQSDK_API_KEY', 'half_env_key')
+        # 不设置 TQSDK_API_SECRET
+
+        base_config_dict['third_party'] = {
+            'services': [{
+                'name': 'tqsdk',
+                'api_key': 'fallback_key',
+                'api_secret': 'fallback_secret',
+            }]
+        }
+        fd, path = tempfile.mkstemp(suffix='.yaml')
+        with open(fd, 'w', encoding='utf-8') as f:
+            yaml.dump(base_config_dict, f)
+        cm = ConfigManager.__new__(ConfigManager)
+        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
+        info = cm.get_account_info()
+        # TQSDK_API_SECRET 未设置，ak+sk 不全 → 不回环境变量 → 走配置文件
+        assert info['api_key'] == 'fallback_key'
+        assert info['api_secret'] == 'fallback_secret'
+        os.unlink(path)
+
 
 class TestDataConfig:
     def test_get_data_config_defaults(self):

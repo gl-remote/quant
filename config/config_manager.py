@@ -1,5 +1,6 @@
 """配置管理 - 加载 conf.yaml 和 conf.local.yaml 并提供交易参数与账号信息"""
 
+import os
 import yaml
 from typing import Dict, Any, Optional
 from pathlib import Path
@@ -83,7 +84,25 @@ class ConfigManager:
         return self.get_strategy_config('ma')
 
     def get_account_info(self) -> Dict[str, str]:
+        """获取天勤 API 凭证，环境变量优先于配置文件
+
+        优先级:
+          1. 环境变量 TQSDK_API_KEY / TQSDK_API_SECRET (推荐，最高安全)
+          2. config/conf.local.yaml 中的 api_key / api_secret (本地便利)
+          3. 都不是真实值 → 返回空字典（占位符保护）
+
+        推荐用法:
+          export TQSDK_API_KEY="your_key"
+          export TQSDK_API_SECRET="your_secret"
+        """
         try:
+            # 1. 环境变量优先
+            ak = os.environ.get('TQSDK_API_KEY', '')
+            sk = os.environ.get('TQSDK_API_SECRET', '')
+            if ak and sk:
+                return {'api_key': ak, 'api_secret': sk}
+
+            # 2. 降级读配置文件
             svc = self._find_service('tqsdk')
             if not svc:
                 return {}
