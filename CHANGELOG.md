@@ -11,7 +11,7 @@
 
 ### 修复
 
-- **backtest 模块审计与修复 (9 项 Bug)**:
+- **backtest 模块第一轮审计与修复 (9 项 Bug)**:
   - BT01: 修复 `tq_backtest_engine` 卖出资金双重计算
   - BT02: Walk-Forward 增加 train 集 IS 回测和 IS-OOS 过拟合差距检测
   - BT03: `data_loader` 中 `_qlib` 后缀替换改为 `endswith` 精确匹配末尾
@@ -21,10 +21,19 @@
   - BT07: `interval_map` 改用 `getattr` 动态获取 vnpy Interval 细分常量
   - BT08: Equity curve 计算优先使用 vnpy 的 `balance` 字段
   - BT09: `BarData` 的 Interval 从硬编码改为参数化传入
+- **backtest 模块第二轮审计与修复 (6 项缺陷)**:
+  - DEF-BT16: `np.std` 改用 `ddof=1` 样本标准差；零波动正收益返回 999.0
+  - DEF-BT17: 回撤守卫 `peak != 0` → `peak > 0`，修复负权益场景
+  - DEF-BT18: `walk_forward_split_by_ratio` 中 `test_size` 兜底消除 int 截断丢行
+  - DEF-BT19: `_run_backtest` 中 `self.context` 赋值改为局部变量，消除副作用
+  - DEF-BT20: 多次买入时 `entry_price` 改为加权平均成本价
+  - DEF-BT21: `comparison.py` max_drawdown 格式化归一化 `>1` 时 `/100`
 
 ### 变更
 
-- plan.md 移除已修复 Bug 列表，仅保留未解决的 15 项缺陷
+- plan.md 移除已修复 Bug 列表，仅保留未解决的缺陷
+- **移除 `.plan/*.log.md` 归档**，重要改动统一记录在 CHANGELOG.md
+- AI_BEHAVIOR_RULES.md: 更新行为规范，CHANGELOG.md 替代 .plan/ 归档
 
 ### 新增
 

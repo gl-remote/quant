@@ -177,11 +177,11 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ## 六、版本记录
 
-| 版本 | 日期 | 变更 | 归档 |
-|------|------|------|------|
-| **0.2.0-dev** | **2026-05-24** | 全量代码审计 28 项问题 (4严重/12中/12低)；已修复 10 项 (BUG-02/04/09/10/12/20/21/22/23/24)；S1-S4 四阶段规划 | [plan.0.2.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.2.0.log.md) |
-| 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备，146用例85%覆盖 | [plan.0.1.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.1.0.log.md) |
-| 0.0.11 | 2026-05-24 | export --force 覆盖模式 + Schema 注释完善 | [plan.0.0.11.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.11.log.md) |
-| 0.0.10 | 2026-05-24 | A13 多品种并发回测完成 | [plan.0.0.10.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.10.log.md) |
-| 0.0.9 | 2026-05-24 | 根目录瘦身 | [plan.0.0.9.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.9.log.md) |
-| 0.0.8 | 2026-05-24 | M2 工程化完成 | [plan.0.0.8.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.8.log.md) |
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **0.2.0-dev** | **2026-05-24** | backtest 两轮审计修复 (9 Bug + 6 缺陷)；文档补充；S1-S4 四阶段规划 |
+| 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备，146用例85%覆盖 |
+| 0.0.11 | 2026-05-24 | export --force 覆盖模式 + Schema 注释完善 |
+| 0.0.10 | 2026-05-24 | A13 多品种并发回测完成 |
+| 0.0.9 | 2026-05-24 | 根目录瘦身 |
+| 0.0.8 | 2026-05-24 | M2 工程化完成 |
