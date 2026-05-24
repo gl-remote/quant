@@ -1,6 +1,6 @@
 """交易上下文 - 统一管理策略运行所需的所有参数
 
-从 cmd 层构建，贯穿 gateway → engine → strategy 的完整调用链，
+从 cmd 层构建，贯穿 bridge → engine → strategy 的完整调用链，
 替代散落在各层的独立参数传递。
 """
 

@@ -17,7 +17,7 @@ logging.basicConfig(
     level=getattr(logging, log_cfg.get('level', 'INFO'), logging.INFO),
     format=log_cfg.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 )
-from strategies import TqsdkStrategyGateway
+from strategies import TqsdkStrategyBridge
 from strategies.core import Strategy, TradingContext
 from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
 from data import Database, DBLogHandler, export_csv
@@ -311,7 +311,7 @@ def cmd_tq_backtest(args):
         strategy_cls = _get_strategy_class_name(strategy_core)
 
         context = _build_context(strategy_core, args.symbol, cm, capital=args.capital)
-        gateway = TqsdkStrategyGateway(context=context)
+        bridge = TqsdkStrategyBridge(context=context)
 
         logger.info(f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
                     f"strategy={strategy_cls} GUI={args.gui}")
@@ -327,7 +327,7 @@ def cmd_tq_backtest(args):
             auth=auth, web_gui=args.gui)
         klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
 
-        gateway.initialize(api)
+        bridge.initialize(api)
 
         engine = BacktestEngine(initial_capital=args.capital)
         target_pos = TargetPosTask(api, args.symbol)
@@ -343,24 +343,24 @@ def cmd_tq_backtest(args):
                     'low': float(klines['low'].iloc[-1]),
                     'volume': int(klines['volume'].iloc[-1]),
                 }
-                gateway.on_bar(klines)
+                bridge.on_bar(klines)
 
-                if gateway.signal == 'buy' and engine.current_position == 0:
-                    qty = int((engine.current_capital * gateway.config.position_ratio) / bar['close'])
+                if bridge.signal == 'buy' and engine.current_position == 0:
+                    qty = int((engine.current_capital * bridge.config.position_ratio) / bar['close'])
                     if qty > 0:
                         engine.add_trade(TradeRecord(
                             timestamp=bar['datetime'], symbol=args.symbol, direction='buy',
                             price=bar['close'], quantity=qty, reason="金叉买入"))
                         target_pos.set_target_volume(qty)
-                        gateway.signal = None
-                elif gateway.signal == 'sell' and engine.current_position > 0:
+                        bridge.signal = None
+                elif bridge.signal == 'sell' and engine.current_position > 0:
                     profit = (bar['close'] - engine.entry_price) * engine.current_position
                     engine.add_trade(TradeRecord(
                         timestamp=bar['datetime'], symbol=args.symbol, direction='sell',
                         price=bar['close'], quantity=engine.current_position,
-                        profit=profit, reason=gateway.signal_reason))
+                        profit=profit, reason=bridge.signal_reason))
                     target_pos.set_target_volume(0)
-                    gateway.signal = None
+                    bridge.signal = None
 
     except BacktestFinished:
         report = engine.generate_report()
@@ -412,13 +412,13 @@ def cmd_live(args):
         strategy_cls = _get_strategy_class_name(strategy)
 
         context = _build_context(strategy, args.symbol, cm)
-        gateway = TqsdkStrategyGateway(context=context)
+        bridge = TqsdkStrategyBridge(context=context)
 
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
         db.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
                symbol=args.symbol, status='INFO')
 
-        (gateway.run_with_gui if args.gui else gateway.run)(symbol=args.symbol, auth=auth)
+        (bridge.run_with_gui if args.gui else bridge.run)(symbol=args.symbol, auth=auth)
 
         db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status='SUCCESS')
     except Exception as e:

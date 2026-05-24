@@ -224,11 +224,11 @@ class VnpyBacktestEngine:
         self.save_equity: bool = report_cfg.get('save_equity_curve', True)
 
     def _wrap_injected_strategy(self, base_cls):
-        """创建包装了上下文的网关策略类
+        """创建包装了上下文的桥接器策略类
 
         _InjectedStrategy 覆写 _load_default_core 为 no-op，
         在 __init__ 返回后直接注入 _core 和 price_tick，
-        避免 gateway 的 __init__ 感知 context 参数。
+        避免 bridge 的 __init__ 感知 context 参数。
         """
         ctx = self.context
 
@@ -441,7 +441,7 @@ class VnpyBacktestEngine:
         """在单个数据集上执行 vnpy 回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
-        from strategies.gateways import VnpyStrategyGateway
+        from strategies.bridges import VnpyStrategyBridge
 
         pure_symbol, exchange = parse_symbol_exchange(symbol)
         vt_symbol = f"{pure_symbol}.{exchange.value}" if hasattr(exchange, 'value') else symbol
@@ -481,7 +481,7 @@ class VnpyBacktestEngine:
                 price_tick=self.price_tick,
             )
 
-        strategy_cls = self._wrap_injected_strategy(VnpyStrategyGateway)
+        strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge)
         engine.add_strategy(strategy_cls, setting)
 
         bars = df_to_vnpy_datalines(df, vt_symbol)

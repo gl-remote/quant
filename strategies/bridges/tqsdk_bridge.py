@@ -1,6 +1,6 @@
-"""tqsdk 框架网关适配器 - 将任意 Strategy 接口实现适配为天勤SDK可执行策略
+"""tqsdk 桥接器 - 将任意 Strategy 接口实现桥接到天勤SDK可执行策略
 
-网关职责:
+桥接器职责:
   - 接收 TradingContext，从中提取 Strategy 实例和运行参数
   - 天勤 API 的连接与认证
   - K线数据的获取与转换，传递给核心层 Strategy
@@ -48,10 +48,10 @@ class TqsdkImports:
 _tqsdk = TqsdkImports()
 
 
-class TqsdkStrategyGateway:
-    """天勤策略网关 - 将 Strategy 接口实现适配为天勤可执行策略
+class TqsdkStrategyBridge:
+    """天勤策略桥接器 - 将 Strategy 接口实现桥接到天勤可执行策略
 
-    策略由调用方通过 TradingContext 注入，网关自身不加载任何默认策略。
+    策略由调用方通过 TradingContext 注入，桥接器自身不加载任何默认策略。
 
     运行模式:
       - 实盘/模拟: run() 方法
@@ -60,7 +60,7 @@ class TqsdkStrategyGateway:
     """
 
     def __init__(self, context: TradingContext):
-        """初始化天勤策略网关
+        """初始化天勤策略桥接器
 
         Args:
             context: 交易上下文 (必需)，提供 Strategy 实例和交易参数，
