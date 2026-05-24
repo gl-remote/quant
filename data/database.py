@@ -1,15 +1,16 @@
-"""SQLite 数据库 — peewee ORM 适配层
+"""SQLite 数据库 — peewee ORM 适配层 (强类型)
 
 对外暴露 Database (CRUD 入口) 和 DBLogHandler (logging 桥接) 两个类，
 底层通过 data.models 中的 peewee ORM 模型操作四张表。
 
-公开 API 与旧 raw-SQL 版本完全兼容 — 所有查询方法仍返回 List[Dict]/Optional[Dict]。
+所有返回类型使用 TypedDict 精确描述，消除 Any 残留。
 """
+
+from __future__ import annotations
 
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Optional, Any
 
 import peewee as pw
 
@@ -19,20 +20,28 @@ from data.models import (
     OperationLog,
     Backtest,
     BacktestTrade,
+    ExportMetadataDict,
+    OperationLogDict,
+    BacktestDict,
+    BacktestTradeDict,
+    BacktestStatsDict,
+    EngineConfigDict,
+    VnpyDailyResultDict,
+    VnpyTradeRecordDict,
 )
 
 # ── 日志自动清理配置 ──────────────────────────────────────────
 # 公开常量，供 tests/test_database.py 通过 monkeypatch 调整阈值
-_MAX_OPERATION_LOG_ROWS = 50_000
-_PRUNE_CHECK_INTERVAL = 100
+_MAX_OPERATION_LOG_ROWS: int = 50_000
+_PRUNE_CHECK_INTERVAL: int = 100
 
 
 class Database:
     """SQLite 数据库管理 (peewee ORM 适配)"""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
+        self.db_path: str = db_path
 
         # 如果已有绑定则先关闭，防止连接泄漏 (正常运行中不会发生，但防御多实例场景)
         if database_proxy.obj is not None:
@@ -43,7 +52,7 @@ class Database:
             'foreign_keys': 1,
         })
         database_proxy.initialize(self._db)
-        self._insert_count = 0
+        self._insert_count: int = 0
         self._init_db()
 
     # ── 内部 ──────────────────────────────────────────────────
@@ -58,8 +67,9 @@ class Database:
 
     # ── 操作日志 ──────────────────────────────────────────────
 
-    def log(self, command: str, message: str, symbol: Optional[str] = None,
+    def log(self, command: str, message: str, symbol: str | None = None,
             status: str = "INFO") -> None:
+        """写入一条操作日志记录"""
         OperationLog.create(
             command=command,
             symbol=symbol,
@@ -79,7 +89,7 @@ class Database:
             删除的记录数
         """
         try:
-            total = OperationLog.select().count()
+            total: int = OperationLog.select().count()  # type: ignore[assignment]
             if total <= _MAX_OPERATION_LOG_ROWS:
                 return 0
 
@@ -95,7 +105,7 @@ class Database:
             if cutoff_id is None:
                 return 0
 
-            deleted = (
+            deleted: int = (
                 OperationLog
                 .delete()
                 .where(OperationLog.id < cutoff_id)
@@ -110,18 +120,20 @@ class Database:
             logging.getLogger(__name__).warning(f"操作日志清理失败: {e}")
             return 0
 
-    def get_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_logs(self, limit: int = 100) -> list[OperationLogDict]:
+        """查询最近的操作日志"""
         return list(
             OperationLog
             .select()
             .order_by(OperationLog.id.desc())
             .limit(limit)
             .dicts()
-        )
+        )  # type: ignore[return-value]
 
     # ── 导出元数据 ────────────────────────────────────────────
 
-    def get_metadata(self, symbol: str) -> Optional[Dict[str, Any]]:
+    def get_metadata(self, symbol: str) -> ExportMetadataDict | None:
+        """查询指定品种的最新导出元数据"""
         row = (
             ExportMetadata
             .select()
@@ -130,11 +142,12 @@ class Database:
             .limit(1)
             .dicts()
         )
-        return next(iter(row), None)
+        return next(iter(row), None)  # type: ignore[return-value]
 
     def upsert_metadata(self, symbol: str, filepath: str, start_date: str,
                         end_date: str, min_dt: str, max_dt: str,
                         total_rows: int) -> None:
+        """插入或更新导出元数据"""
         now = datetime.now().isoformat()
         existing = (
             ExportMetadata
@@ -176,12 +189,12 @@ class Database:
         symbol: str,
         strategy: str,
         status: str,
-        error_message: Optional[str],
-        statistics: Dict[str, Any],
-        engine_config: Dict[str, Any],
-        params_json: Optional[str],
-        data_start_date: Optional[str],
-        data_end_date: Optional[str],
+        error_message: str | None,
+        statistics: BacktestStatsDict,
+        engine_config: EngineConfigDict,
+        params_json: str | None,
+        data_start_date: str | None,
+        data_end_date: str | None,
     ) -> int:
         """写入一条回测主记录，返回自增 id
 
@@ -189,17 +202,15 @@ class Database:
         total_return / win_rate 由公式计算而非直接取值。
         """
         now = datetime.now().isoformat()
-        stats = statistics or {}
-        cfg = engine_config or {}
 
-        total_trades = stats.get('total_trades', 0) or 0
-        initial_capital = float(cfg.get('initial_capital', 100000.0))
-        end_balance = float(stats.get('end_balance', initial_capital))
-        total_return = (
+        total_trades: int = statistics.get('total_trades', 0) or 0
+        initial_capital: float = float(engine_config.get('initial_capital', 100000.0))
+        end_balance: float = float(statistics.get('end_balance', initial_capital))
+        total_return: float = (
             (end_balance - initial_capital) / initial_capital
         ) if initial_capital > 0 and total_trades > 0 else 0.0
-        win_rate = (
-            stats.get('win_trades', 0) / max(total_trades, 1)
+        win_rate: float = (
+            statistics.get('win_trades', 0) / max(total_trades, 1)
         ) if total_trades > 0 else 0.0
 
         bt = Backtest.create(
@@ -209,42 +220,42 @@ class Database:
             error_message=error_message,
             data_start_date=data_start_date,
             data_end_date=data_end_date,
-            start_date=str(stats.get('start_date', '')),
-            end_date=str(stats.get('end_date', '')),
-            total_days=stats.get('total_days'),
+            start_date=str(statistics.get('start_date', '')),
+            end_date=str(statistics.get('end_date', '')),
+            total_days=statistics.get('total_days'),
             initial_capital=initial_capital,
-            commission_rate=cfg.get('commission_rate'),
-            slippage=cfg.get('slippage'),
-            price_tick=cfg.get('price_tick'),
-            contract_size=cfg.get('contract_size'),
-            kline_interval=cfg.get('kline_interval'),
+            commission_rate=engine_config.get('commission_rate'),
+            slippage=engine_config.get('slippage'),
+            price_tick=engine_config.get('price_tick'),
+            contract_size=engine_config.get('contract_size'),
+            kline_interval=engine_config.get('kline_interval'),
             params_json=params_json,
             end_balance=end_balance,
             total_return=total_return,
-            annual_return=stats.get('annual_return'),
+            annual_return=statistics.get('annual_return'),
             total_trades=total_trades,
-            win_trades=stats.get('win_trades'),
-            loss_trades=stats.get('loss_trades'),
+            win_trades=statistics.get('win_trades'),
+            loss_trades=statistics.get('loss_trades'),
             win_rate=win_rate,
-            max_consecutive_win=stats.get('max_consecutive_win'),
-            max_consecutive_loss=stats.get('max_consecutive_loss'),
-            average_win=stats.get('average_win'),
-            average_loss=stats.get('average_loss'),
-            win_loss_ratio=stats.get('win_loss_ratio'),
-            sharpe_ratio=stats.get('sharpe_ratio'),
-            max_drawdown=stats.get('max_drawdown'),
-            max_drawdown_duration=stats.get('max_ddpercent_duration'),
-            daily_std=stats.get('daily_std'),
-            return_drawdown_ratio=stats.get('return_drawdown_ratio'),
+            max_consecutive_win=statistics.get('max_consecutive_win'),
+            max_consecutive_loss=statistics.get('max_consecutive_loss'),
+            average_win=statistics.get('average_win'),
+            average_loss=statistics.get('average_loss'),
+            win_loss_ratio=statistics.get('win_loss_ratio'),
+            sharpe_ratio=statistics.get('sharpe_ratio'),
+            max_drawdown=statistics.get('max_drawdown'),
+            max_drawdown_duration=statistics.get('max_ddpercent_duration'),
+            daily_std=statistics.get('daily_std'),
+            return_drawdown_ratio=statistics.get('return_drawdown_ratio'),
             created_at=now,
             updated_at=now,
         )
-        return bt.id
+        return bt.id  # type: ignore[return-value]
 
     def insert_backtest_trades(
         self,
         backtest_id: int,
-        daily_results: List[Dict[str, Any]],
+        daily_results: list[VnpyDailyResultDict],
     ) -> int:
         """批量写入交易明细
 
@@ -256,13 +267,14 @@ class Database:
             写入的交易记录数
         """
         now = datetime.now().isoformat()
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, object]] = []
 
         for day in daily_results:
             if not isinstance(day, dict):
                 continue
-            trade_day = str(day.get('datetime', ''))[:10]
-            for trade in day.get('trades', []):
+            trade_day: str = str(day.get('datetime', ''))[:10]
+            trades: list[VnpyTradeRecordDict] = day.get('trades', [])
+            for trade in trades:
                 if isinstance(trade, dict):
                     vt_sym = str(trade.get('vt_symbol', ''))
                     dt = str(trade.get('datetime', ''))
@@ -299,22 +311,24 @@ class Database:
 
         # 单事务批量插入 (peewee insert_many 对大列表性能远优于逐条 create)
         with database_proxy.atomic():
-            BacktestTrade.insert_many(rows).execute()
+            BacktestTrade.insert_many(rows).execute()  # type: ignore[arg-type]
         return len(rows)
 
     # ── 回测结果查询 ──────────────────────────────────────────
 
-    def get_backtest(self, backtest_id: int) -> Optional[Dict[str, Any]]:
+    def get_backtest(self, backtest_id: int) -> BacktestDict | None:
+        """按 ID 查询单条回测记录"""
         query = Backtest.select().where(Backtest.id == backtest_id).dicts()
-        return next(iter(query), None)
+        return next(iter(query), None)  # type: ignore[return-value]
 
     def get_backtests(
         self,
-        symbol: Optional[str] = None,
-        strategy: Optional[str] = None,
+        symbol: str | None = None,
+        strategy: str | None = None,
         status: str = 'success',
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[BacktestDict]:
+        """按条件查询回测记录列表"""
         query = Backtest.select().where(Backtest.status == status)
 
         if symbol:
@@ -327,25 +341,28 @@ class Database:
             .order_by(Backtest.created_at.desc())
             .limit(limit)
             .dicts()
-        )
+        )  # type: ignore[return-value]
 
-    def get_latest_backtests(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_latest_backtests(self, limit: int = 10) -> list[BacktestDict]:
+        """查询最近的回测记录"""
         return self.get_backtests(limit=limit)
 
-    def get_backtest_trades(self, backtest_id: int) -> List[Dict[str, Any]]:
+    def get_backtest_trades(self, backtest_id: int) -> list[BacktestTradeDict]:
+        """查询指定回测的所有交易明细"""
         return list(
             BacktestTrade
             .select()
             .where(BacktestTrade.backtest_id == backtest_id)
             .order_by(BacktestTrade.datetime.asc())
             .dicts()
-        )
+        )  # type: ignore[return-value]
 
     def get_trades_by_symbol(
         self,
         symbol: str,
         limit: int = 200,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[BacktestTradeDict]:
+        """按品种查询交易明细"""
         return list(
             BacktestTrade
             .select()
@@ -353,7 +370,7 @@ class Database:
             .order_by(BacktestTrade.datetime.desc())
             .limit(limit)
             .dicts()
-        )
+        )  # type: ignore[return-value]
 
 
 # ── DBLogHandler ──────────────────────────────────────────────
@@ -361,14 +378,14 @@ class Database:
 class DBLogHandler(logging.Handler):
     """将 Python logging 记录写入 operation_logs 表"""
 
-    def __init__(self, db: Database, command: str, symbol: str = None):
+    def __init__(self, db: Database, command: str, symbol: str | None = None) -> None:
         super().__init__()
-        self.db = db
-        self.command = command
-        self.symbol = symbol
+        self.db: Database = db
+        self.command: str = command
+        self.symbol: str | None = symbol
 
-    def emit(self, record: logging.LogRecord):
-        status_map = {
+    def emit(self, record: logging.LogRecord) -> None:
+        status_map: dict[int, str] = {
             logging.ERROR: 'ERROR',
             logging.WARNING: 'WARNING',
             logging.INFO: 'INFO',

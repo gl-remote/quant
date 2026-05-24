@@ -1,14 +1,23 @@
-"""peewee ORM 模型定义 — SQLite 数据库表映射
+"""peewee ORM 模型定义 — SQLite 数据库表映射 + TypedDict 类型体系
 
-本模块定义全部 4 张表的 ORM 模型:
-  - ExportMetadata  : CSV 数据导出元数据
-  - OperationLog    : 系统操作日志
-  - Backtest        : 回测运行主表
-  - BacktestTrade   : 回测交易明细 (ForeignKey → Backtest)
+本模块定义:
+  ORM 模型 (4 张表):
+    - ExportMetadata  : CSV 数据导出元数据
+    - OperationLog    : 系统操作日志
+    - Backtest        : 回测运行主表
+    - BacktestTrade   : 回测交易明细 (ForeignKey → Backtest)
+
+  TypedDict 类型 (精确描述 .dicts() 返回的字典形状):
+    - ExportMetadataDict / OperationLogDict / BacktestDict / BacktestTradeDict
+    - BacktestStatsDict / EngineConfigDict / VnpyDailyResultDict (外部输入形状)
 
 所有模型通过 database_proxy (DatabaseProxy) 延迟绑定实际数据库连接，
 在 Database.__init__ 时由 data/database.py 完成绑定。
 """
+
+from __future__ import annotations
+
+from typing import TypedDict
 
 import peewee as pw
 
@@ -142,3 +151,144 @@ class BacktestTrade(BaseModel):
             (('datetime',), False),
             (('trade_day',), False),
         )
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  TypedDict 类型体系 — 精确描述 .dicts() 返回值及外部输入形状
+# ═══════════════════════════════════════════════════════════════════
+
+# ── 数据库行类型 (.dicts() 返回值) ──────────────────────────────
+
+class ExportMetadataDict(TypedDict):
+    """export_metadata 表的行类型"""
+    id: int
+    symbol: str
+    filepath: str
+    start_date: str | None
+    end_date: str | None
+    min_dt: str | None
+    max_dt: str | None
+    total_rows: int
+    created_at: str
+    updated_at: str
+
+
+class OperationLogDict(TypedDict):
+    """operation_logs 表的行类型"""
+    id: int
+    command: str
+    symbol: str | None
+    message: str | None
+    status: str
+    created_at: str
+
+
+class BacktestDict(TypedDict):
+    """backtests 表的行类型 — 共 34 个字段"""
+    id: int
+    symbol: str
+    strategy: str
+    status: str
+    error_message: str | None
+    # 数据范围
+    data_start_date: str | None
+    data_end_date: str | None
+    start_date: str | None
+    end_date: str | None
+    total_days: int | None
+    # 引擎参数
+    initial_capital: float
+    commission_rate: float | None
+    slippage: float | None
+    price_tick: float | None
+    contract_size: int | None
+    kline_interval: str | None
+    params_json: str | None
+    # 资金
+    end_balance: float | None
+    total_return: float | None
+    annual_return: float | None
+    # 交易统计
+    total_trades: int | None
+    win_trades: int | None
+    loss_trades: int | None
+    win_rate: float | None
+    max_consecutive_win: int | None
+    max_consecutive_loss: int | None
+    average_win: float | None
+    average_loss: float | None
+    win_loss_ratio: float | None
+    # 风险
+    sharpe_ratio: float | None
+    max_drawdown: float | None
+    max_drawdown_duration: int | None
+    daily_std: float | None
+    return_drawdown_ratio: float | None
+    # 时间戳
+    created_at: str
+    updated_at: str
+
+
+class BacktestTradeDict(TypedDict):
+    """backtest_trades 表的行类型"""
+    id: int
+    backtest_id: int
+    symbol: str
+    datetime: str
+    direction: str
+    offset: str
+    price: float
+    volume: int
+    trade_day: str | None
+    created_at: str
+    updated_at: str
+
+
+# ── 外部输入类型 (vnpy / 天勤 → Database) ───────────────────────
+
+class BacktestStatsDict(TypedDict, total=False):
+    """vnpy calculate_statistics() 返回的统计字典 (字段均为可选)"""
+    start_date: str
+    end_date: str
+    total_days: int
+    end_balance: float
+    annual_return: float
+    total_trades: int
+    win_trades: int
+    loss_trades: int
+    max_consecutive_win: int
+    max_consecutive_loss: int
+    average_win: float
+    average_loss: float
+    win_loss_ratio: float
+    sharpe_ratio: float
+    max_drawdown: float
+    max_ddpercent_duration: int
+    daily_std: float
+    return_drawdown_ratio: float
+
+
+class EngineConfigDict(TypedDict, total=False):
+    """回测引擎配置字典 (字段均为可选)"""
+    initial_capital: float
+    commission_rate: float
+    slippage: float
+    price_tick: float
+    contract_size: int
+    kline_interval: str
+
+
+class VnpyTradeRecordDict(TypedDict, total=False):
+    """vnpy 单笔成交记录 (calculate_result 中 trades 的子元素)"""
+    vt_symbol: str
+    datetime: str
+    direction: str
+    offset: str
+    price: float
+    volume: int
+
+
+class VnpyDailyResultDict(TypedDict, total=False):
+    """vnpy 每日回测结果 (calculate_result().to_dict('records') 单行)"""
+    datetime: str
+    trades: list[VnpyTradeRecordDict]

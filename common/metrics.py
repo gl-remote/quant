@@ -6,11 +6,12 @@
 供 TQBacktestEngine、VnpyBacktestEngine、report 等模块共用。
 """
 
-from typing import List
+from __future__ import annotations
+
 import numpy as np
 
 
-def calc_max_drawdown(equity_curve: List[float]) -> float:
+def calc_max_drawdown(equity_curve: list[float]) -> float:
     """从权益曲线计算最大回撤
 
     Args:
@@ -21,18 +22,18 @@ def calc_max_drawdown(equity_curve: List[float]) -> float:
     """
     if len(equity_curve) < 2:
         return 0.0
-    peak = equity_curve[0]
-    max_dd = 0.0
+    peak: float = equity_curve[0]
+    max_dd: float = 0.0
     for equity in equity_curve[1:]:
         if equity > peak:
             peak = equity
-        dd = (peak - equity) / peak if peak > 0 else 0.0
+        dd: float = (peak - equity) / peak if peak > 0 else 0.0
         if dd > max_dd:
             max_dd = dd
     return max_dd
 
 
-def calc_sharpe_ratio(equity_curve: List[float], annual_factor: int = 252) -> float:
+def calc_sharpe_ratio(equity_curve: list[float], annual_factor: int = 252) -> float:
     """从权益曲线计算年化夏普比率
 
     Args:
@@ -47,7 +48,7 @@ def calc_sharpe_ratio(equity_curve: List[float], annual_factor: int = 252) -> fl
     returns = np.diff(equity_curve) / np.array(equity_curve[:-1])
     if len(returns) == 0:
         return 0.0
-    std = np.std(returns, ddof=1)
+    std: float = float(np.std(returns, ddof=1))
     if std == 0:
-        return 999.0 if np.mean(returns) > 0 else 0.0
-    return (np.mean(returns) / std) * np.sqrt(annual_factor)
+        return 999.0 if float(np.mean(returns)) > 0 else 0.0
+    return float(np.mean(returns) / std * np.sqrt(annual_factor))

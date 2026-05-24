@@ -7,10 +7,10 @@
 不依赖任何业务模块。
 """
 
-from typing import Any, Optional
+from __future__ import annotations
 
 
-def format_pct(value: Optional[float]) -> str:
+def format_pct(value: float | None) -> str:
     """安全格式化百分比
 
     若 value 绝对值 > 1 (如 15.0 表示 15%)，先归一化。
@@ -23,13 +23,13 @@ def format_pct(value: Optional[float]) -> str:
     """
     if value is None:
         return 'N/A'
-    v = float(value)
+    v: float = float(value)
     if abs(v) > 1:
         v = v / 100.0
     return f"{v:.2%}"
 
 
-def format_float(value: Optional[float], fmt: str = '.2f') -> str:
+def format_float(value: float | None, fmt: str = '.2f') -> str:
     """安全格式化浮点数
 
     Args:
@@ -44,11 +44,11 @@ def format_float(value: Optional[float], fmt: str = '.2f') -> str:
     return f"{float(value):{fmt}}"
 
 
-def ensure_float(v: Any, default: float = 0.0) -> float:
+def ensure_float(v: float | int | str | None, default: float = 0.0) -> float:
     """安全转为 float
 
     Args:
-        v: 任意值或 None
+        v: 数值、字符串或 None
         default: 转换失败时的默认值
 
     Returns:

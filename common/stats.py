@@ -8,12 +8,26 @@ rank_by_key:          对 flat dict 列表按指定键排序
 供 backtest (comparison/aggregator) 和 report (sql_reporter) 共用。
 """
 
-from typing import List, Dict, Any, Optional
+from __future__ import annotations
+
+from typing import TypedDict
 
 import numpy as np
 
 
-def compute_summary_stats(values: List[float]) -> Dict[str, Any]:
+class SummaryStats(TypedDict):
+    """compute_summary_stats 的返回值"""
+    mean: float
+    median: float
+    std: float
+    min: float
+    max: float
+    count: int
+    positive_count: int
+    negative_count: int
+
+
+def compute_summary_stats(values: list[float]) -> SummaryStats | dict[str, object]:
     """计算数值列表的描述性统计
 
     Args:
@@ -21,30 +35,30 @@ def compute_summary_stats(values: List[float]) -> Dict[str, Any]:
 
     Returns:
         {mean, median, std, min, max, count, positive_count, negative_count}
-        空列表返回 {}
+        空列表返回空的 SummaryStats 或 {}
     """
     if not values:
         return {}
     arr = np.array(values, dtype=float)
-    pos = int(np.sum(arr > 0))
-    neg = int(np.sum(arr < 0))
-    return {
-        'mean': float(np.mean(arr)),
-        'median': float(np.median(arr)),
-        'std': float(np.std(arr)),
-        'min': float(np.min(arr)),
-        'max': float(np.max(arr)),
-        'count': len(values),
-        'positive_count': pos,
-        'negative_count': neg,
-    }
+    pos: int = int(np.sum(arr > 0))
+    neg: int = int(np.sum(arr < 0))
+    return SummaryStats(
+        mean=float(np.mean(arr)),
+        median=float(np.median(arr)),
+        std=float(np.std(arr)),
+        min=float(np.min(arr)),
+        max=float(np.max(arr)),
+        count=len(values),
+        positive_count=pos,
+        negative_count=neg,
+    )
 
 
 def rank_by_key(
-    items: List[Dict],
+    items: list[dict[str, object]],
     key: str,
     reverse: bool = True,
-) -> List[Dict]:
+) -> list[dict[str, object]]:
     """对 flat dict 列表按指定键排序
 
     与 backtest/aggregator 中的同名函数不同:
@@ -58,5 +72,5 @@ def rank_by_key(
     Returns:
         排序后的字典列表 (原对象引用，非拷贝)
     """
-    valid = [it for it in items if it.get(key) is not None]
-    return sorted(valid, key=lambda it: it.get(key, 0), reverse=reverse)
+    valid: list[dict[str, object]] = [it for it in items if it.get(key) is not None]
+    return sorted(valid, key=lambda it: it.get(key, 0), reverse=reverse)  # type: ignore[arg-type,return-value]

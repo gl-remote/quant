@@ -3,5 +3,25 @@
 
 from .database import Database, DBLogHandler
 from .exporter import export_csv
+from .models import (
+    ExportMetadataDict,
+    OperationLogDict,
+    BacktestDict,
+    BacktestTradeDict,
+    BacktestStatsDict,
+    EngineConfigDict,
+    VnpyDailyResultDict,
+)
 
-__all__ = ['Database', 'DBLogHandler', 'export_csv']
+__all__ = [
+    'Database',
+    'DBLogHandler',
+    'export_csv',
+    'ExportMetadataDict',
+    'OperationLogDict',
+    'BacktestDict',
+    'BacktestTradeDict',
+    'BacktestStatsDict',
+    'EngineConfigDict',
+    'VnpyDailyResultDict',
+]
