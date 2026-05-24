@@ -1,6 +1,6 @@
 # 天勤量化交易系统
 
-![version](https://img.shields.io/badge/version-0.1.0-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-146%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-131%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)
 
 基于双均线交叉（SMA Crossover）策略的自动化量化交易系统，支持数据获取、三阶段回测、过拟合评估及实盘交易。
 
