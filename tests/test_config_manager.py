@@ -56,9 +56,6 @@ class TestBacktestConfig:
         assert bc['price_tick'] == 1.0
         assert bc['contract_size'] == 10
         assert bc['interval'] == '1m'
-        assert bc['split']['train_ratio'] == 0.6
-        assert bc['split']['val_ratio'] == 0.2
-        assert bc['split']['test_ratio'] == 0.2
         assert bc['report']['save_trade_records'] is True
 
 
@@ -97,15 +94,6 @@ class TestValidateConfig:
 
     def test_invalid_negative_slippage(self, base_config_dict):
         base_config_dict['backtest']['slippage'] = -1.0
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager(config_file=path)
-        assert cm.validate_config() is False
-        os.unlink(path)
-
-    def test_invalid_split_ratio(self, base_config_dict):
-        base_config_dict['backtest']['split']['train_ratio'] = 0.5
         fd, path = tempfile.mkstemp(suffix='.yaml')
         with open(fd, 'w', encoding='utf-8') as f:
             yaml.dump(base_config_dict, f)

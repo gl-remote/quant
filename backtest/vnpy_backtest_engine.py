@@ -3,7 +3,7 @@
 vn.py 批量回测引擎
 
 基于 vnpy_ctastrategy.backtesting.BacktestingEngine 的回测流水线，
-封装数据加载 → 划分 → 单标的回测 → 报告生成。
+封装数据加载 → 全量回测 → 报告生成。
 
 职责明确：
   - TQBacktestEngine:   单标的图形化分析 (天勤 TqSdk)
@@ -11,18 +11,14 @@ vn.py 批量回测引擎
 """
 
 import logging
-import json
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 import numpy as np
 
 from strategies.core.context import TradingContext
 
-from .data_loader import load_csv_data, split_datasets, df_to_vnpy_datalines, get_dataset_info
-from .data_loader import parse_symbol_exchange
+from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange
 from .report import generate_dataset_report, format_console_report
-from .comparison import compare_datasets, format_comparison_report
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +27,16 @@ class VnpyBacktestEngine:
     """vn.py 批量回测引擎
 
     基于 vnpy_ctastrategy.backtesting.BacktestingEngine 的回测流水线，
-    封装数据加载 → 划分 → 单标的回测 → 报告生成。
+    封装数据加载 → 全量单次回测 → 报告生成。
+    Walk-Forward 作为稳健性分析独立提供。
 
     使用方式:
         engine = VnpyBacktestEngine(config, context=context)
-        result = engine.run_full_pipeline(symbol)  # 单品种
+        result = engine.run_full_pipeline(symbol)          # 单次全量回测
+        wf_result = engine.run_walk_forward(symbol)        # Walk-Forward 验证
     """
 
-    def __init__(self, config: Dict[str, Any], context: Optional[TradingContext] = None):
+    def __init__(self, config: dict[str, Any], context: Optional[TradingContext] = None):
         """
         Args:
             config: 回测配置字典，结构参考 conf.yaml 中 backtest 段
@@ -73,13 +71,6 @@ class VnpyBacktestEngine:
         if self.contract_size <= 0:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
-        split_cfg = config.get('split', {})
-        self.train_ratio: float = split_cfg.get('train_ratio', 0.6)
-        self.val_ratio: float = split_cfg.get('val_ratio', 0.2)
-        self.test_ratio: float = split_cfg.get('test_ratio', 0.2)
-        self.random_seed: int = split_cfg.get('random_seed', 42)
-        self.shuffle: bool = split_cfg.get('shuffle', False)
-
         report_cfg = config.get('report', {})
         self.report_dir: str = report_cfg.get('output_dir', '.quant_shared_data/reports')
         self.save_trades: bool = report_cfg.get('save_trade_records', True)
@@ -110,15 +101,13 @@ class VnpyBacktestEngine:
         symbol: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """执行完整的回测流水线
 
         流水线步骤:
           1. 加载CSV数据
-          2. 划分为训练/验证/测试集
-          3. 三阶段独立回测
-          4. 分别生成报告
-          5. 对比分析
+          2. 全量单次回测
+          3. 生成报告
 
         Args:
             symbol: 合约代码 (e.g. DCE.m2509)
@@ -126,13 +115,12 @@ class VnpyBacktestEngine:
             end_date: 数据结束日期 (可选过滤)
 
         Returns:
-            完整回测结果字典，包含:
-              - datasets: 数据集信息
-              - train/val/test_results: 各阶段回测统计
-              - comparison: 三阶段对比分析
+            回测结果字典，包含:
+              - report: 结构化报告 (performance / risk / trades)
+              - result: 原始 vnpy 回测结果 (statistics / daily_results)
         """
         logger.info(f"{'=' * 60}")
-        logger.info(f"启动 vn.py 回测流水线: {symbol}")
+        logger.info(f"启动 vn.py 回测: {symbol}")
         logger.info(f"资金={self.initial_capital:,.0f} "
                      f"费率={self.commission_rate:.4%} 滑点={self.slippage}")
         logger.info(f"{'=' * 60}")
@@ -148,63 +136,22 @@ class VnpyBacktestEngine:
         if end_date:
             df = df[df['datetime'] <= end_date]
         df = df.reset_index(drop=True)
-        logger.info(f"数据过滤后: {len(df)} 条")
+        logger.info(f"数据加载完成: {len(df)} 条, "
+                     f"{df['datetime'].iloc[0]} ~ {df['datetime'].iloc[-1]}")
 
-        # ---- 步骤2: 划分数据集 ----
-        train_df, val_df, test_df = split_datasets(
-            df,
-            train_ratio=self.train_ratio,
-            val_ratio=self.val_ratio,
-            test_ratio=self.test_ratio,
-            random_seed=self.random_seed,
-            shuffle=self.shuffle,
-        )
+        # ---- 步骤2: 全量回测 ----
+        logger.info("\n>>> 执行全量回测")
+        result = self._run_backtest(df, symbol, 'full')
 
-        datasets_info = {
-            'train': get_dataset_info(train_df, 'train'),
-            'val': get_dataset_info(val_df, 'val'),
-            'test': get_dataset_info(test_df, 'test'),
-        }
-
-        # ---- 步骤3: 三阶段回测 ----
-        logger.info("\n>>> 阶段一: 训练集回测")
-        train_result = self._run_backtest(train_df, symbol, 'train')
-
-        logger.info("\n>>> 阶段二: 验证集回测")
-        val_result = self._run_backtest(val_df, symbol, 'val')
-
-        logger.info("\n>>> 阶段三: 测试集回测")
-        test_result = self._run_backtest(test_df, symbol, 'test')
-
-        # ---- 步骤4: 生成报告 ----
+        # ---- 步骤3: 生成报告 ----
         logger.info("\n>>> 生成回测报告")
-        train_report = self._format_and_save_report(train_result, symbol, 'train')
-        val_report = self._format_and_save_report(val_result, symbol, 'val')
-        test_report = self._format_and_save_report(test_result, symbol, 'test')
-
-        # ---- 步骤5: 对比分析 ----
-        logger.info("\n>>> 三阶段对比分析")
-        comparison = compare_datasets(train_report, val_report, test_report, symbol)
-
-        comparison_text = format_comparison_report(comparison)
-        print(comparison_text)
-
-        comp_path = Path(self.report_dir) / f"{symbol}_comparison.json"
-        with open(comp_path, 'w', encoding='utf-8') as f:
-            json.dump(comparison, f, ensure_ascii=False, indent=2, default=str)
-        logger.info(f"对比报告已保存: {comp_path}")
+        report = self._format_and_save_report(result, symbol, 'full')
 
         return {
             'success': True,
             'symbol': symbol,
-            'datasets': datasets_info,
-            'train': train_result,
-            'val': val_result,
-            'test': test_result,
-            'train_report': train_report,
-            'val_report': val_report,
-            'test_report': test_report,
-            'comparison': comparison,
+            'result': result,
+            'report': report,
         }
 
     def run_walk_forward(
@@ -216,11 +163,11 @@ class VnpyBacktestEngine:
         val_size: Optional[int] = None,
         test_size: Optional[int] = None,
         step: Optional[int] = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """执行 Walk-Forward 时间序列交叉验证回测
 
         对数据滚动产生多个窗口，每个窗口独立回测并收集测试集指标，
-        最后汇总所有窗口的平均表现。相比单次划分，Walk-Forward 能:
+        最后汇总所有窗口的平均表现。相比单次全量回测，Walk-Forward 能:
           - 模拟策略在时间推进中的实际表现
           - 评估策略稳健性（各窗口指标的标准差）
           - 降低单次划分的偶然性
@@ -235,7 +182,7 @@ class VnpyBacktestEngine:
             walk_forward 结果字典:
               - windows: 窗口数
               - window_results: 各窗口测试集指标列表
-              - aggregate: 聚合统计 (均值/标准差/夏普稳定性等)
+              - aggregate: 聚合统计 (均值/标准差/盈利窗口比/稳定性评分)
         """
         from .data_loader import walk_forward_split_by_ratio, walk_forward_split
 
@@ -321,7 +268,7 @@ class VnpyBacktestEngine:
             'aggregate': aggregate,
         }
 
-    def _build_setting(self) -> Dict[str, Any]:
+    def _build_setting(self) -> dict[str, Any]:
         return {'price_tick': self.price_tick}
 
     def _run_backtest(
@@ -329,7 +276,7 @@ class VnpyBacktestEngine:
         df: 'pd.DataFrame',
         symbol: str,
         dataset_name: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """在单个数据集上执行 vnpy 回测"""
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
@@ -397,10 +344,10 @@ class VnpyBacktestEngine:
 
     def _format_and_save_report(
         self,
-        result: Dict,
+        result: dict[str, Any],
         symbol: str,
         dataset_name: str,
-    ) -> Dict:
+    ) -> dict[str, Any]:
         """格式化并保存单个数据集报告"""
         report = generate_dataset_report(
             statistics=result.get('statistics', {}),
@@ -413,6 +360,6 @@ class VnpyBacktestEngine:
             save_equity=self.save_equity,
         )
 
-        console_report = format_console_report(report, f"[{dataset_name.upper()}]")
+        console_report = format_console_report(report, f"[{symbol}]")
         print(console_report)
         return report

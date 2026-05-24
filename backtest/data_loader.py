@@ -1,11 +1,10 @@
-"""数据加载与划分模块 - 从CSV加载历史数据并按科学比例划分训练/验证/测试集"""
+"""数据加载与划分模块 - 从CSV加载历史数据，提供 Walk-Forward 窗口划分"""
 
 import logging
 import re
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -131,61 +130,6 @@ def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
     return df
 
 
-def split_datasets(
-    df: pd.DataFrame,
-    train_ratio: float = 0.6,
-    val_ratio: float = 0.2,
-    test_ratio: float = 0.2,
-    random_seed: int = 42,
-    shuffle: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """将完整数据集按科学比例随机划分为训练集、验证集和测试集
-
-    划分策略:
-      - 默认按时间顺序划分 (shuffle=False): 前60%训练, 中间20%验证, 后20%测试
-        适合时间序列数据，避免未来信息泄露
-      - 随机打乱划分 (shuffle=True): 适合跨品种/跨时间段的稳健性验证
-        注意：随机打乱可能引入前视偏差，仅在特定场景下使用
-
-    Args:
-        df: 完整历史数据集
-        train_ratio: 训练集比例 (默认0.6)
-        val_ratio: 验证集比例 (默认0.2)
-        test_ratio: 测试集比例 (默认0.2)
-        random_seed: 随机种子，保证可复现
-        shuffle: 是否随机打乱（True=随机采样, False=时间顺序划分）
-
-    Returns:
-        (train_df, val_df, test_df) 三个子数据集
-    """
-    total = train_ratio + val_ratio + test_ratio
-    if abs(total - 1.0) > 1e-9:
-        raise ValueError(f"划分比例之和必须为1.0，当前: {total}")
-
-    n = len(df)
-    if n < 10:
-        raise ValueError(f"数据量不足 ({n}条)，至少需要10条数据")
-
-    if shuffle:
-        df = df.sample(frac=1, random_state=random_seed).reset_index(drop=True)
-
-    train_end = int(n * train_ratio)
-    val_end = train_end + int(n * val_ratio)
-
-    train_df = df.iloc[:train_end].reset_index(drop=True)
-    val_df = df.iloc[train_end:val_end].reset_index(drop=True)
-    test_df = df.iloc[val_end:].reset_index(drop=True)
-
-    logger.info(
-        f"数据集划分 (shuffle={shuffle}, seed={random_seed}): "
-        f"训练集 {len(train_df)}条 ({train_ratio:.0%}), "
-        f"验证集 {len(val_df)}条 ({val_ratio:.0%}), "
-        f"测试集 {len(test_df)}条 ({test_ratio:.0%})"
-    )
-
-    return train_df, val_df, test_df
-
-
 def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
     """将DataFrame转换为vn.py回测引擎可用的 BarData 列表
 
@@ -250,33 +194,6 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str) -> list:
     return bars
 
 
-def get_dataset_info(df: pd.DataFrame, name: str = "") -> Dict:
-    """获取数据集的基本统计信息
-
-    Args:
-        df: K线数据DataFrame
-        name: 数据集名称 (train/val/test)
-
-    Returns:
-        包含统计信息的字典
-    """
-    if df is None or df.empty:
-        return {'name': name, 'count': 0}
-
-    return {
-        'name': name,
-        'count': len(df),
-        'start_date': df['datetime'].min().strftime('%Y-%m-%d %H:%M:%S'),
-        'end_date': df['datetime'].max().strftime('%Y-%m-%d %H:%M:%S'),
-        'days': (df['datetime'].max() - df['datetime'].min()).days,
-        'price_min': float(df['close'].min()),
-        'price_max': float(df['close'].max()),
-        'price_mean': float(df['close'].mean()),
-        'price_std': float(df['close'].std()),
-        'volume_mean': float(df['volume'].mean()),
-    }
-
-
 # ============================================================
 # Walk-Forward 时间序列交叉验证
 # ============================================================
@@ -287,14 +204,14 @@ def walk_forward_split(
     val_size: int = 40,
     test_size: int = 40,
     step: int = 40,
-) -> List[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+) -> list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
     """Walk-Forward 时间序列交叉验证 — 生成多个滚动窗口
 
     按时间顺序滚动生成 (训练集, 验证集, 测试集) 三元组。
     每个窗口在前一个窗口基础上向前滑动 step 行。
 
-    与单次划分 (split_datasets) 相比:
-      - 单次划分: 一次 6:2:2，结果偶然性大
+    与单次全量回测相比:
+      - 单次全量回测: 结果受所选时间段影响大
       - Walk-Forward: 多窗口滚动验证，模拟策略在实际时间推进中的表现
 
     示例 (数据 1000 行, train=200, val=40, test=40, step=40):

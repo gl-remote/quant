@@ -20,8 +20,8 @@ logging.basicConfig(
 )
 from strategies import TqsdkStrategyBridge
 from strategies.core import Strategy, TradingContext, Bar, Fill, Signal
-from backtest import VnpyBacktestEngine, scan_csv_files, generate_merged_report
-from backtest.comparison import format_merged_report
+from backtest import VnpyBacktestEngine, scan_csv_files
+from backtest.comparison import generate_merged_report, format_merged_report
 from data import Database, DBLogHandler, export_csv
 
 logger = logging.getLogger(__name__)
@@ -506,8 +506,8 @@ def main():
                    help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
     # ---- backtest ----
-    p = sub.add_parser('backtest', help='vn.py批量回测 (训练/验证/测试三阶段)',
-                       description='逐品种执行完整回测流水线: 数据加载→划分→三阶段回测→对比报告\n'
+    p = sub.add_parser('backtest', help='vn.py批量回测',
+                       description='逐品种执行完整回测流水线: 数据加载→全量回测→报告\n'
                                    '批量模式: python main.py backtest --pattern "DCE\\\\.m" 或省略 --symbol')
     p.add_argument('--symbol', default=None, help='品种代码 (单品种模式)')
     p.add_argument('--pattern', default=None, help='品种代码正则表达式 (批量模式, e.g. "DCE\\\\.m")')

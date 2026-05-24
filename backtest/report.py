@@ -20,12 +20,12 @@ def generate_dataset_report(
     save_trades: bool = True,
     save_equity: bool = True,
 ) -> Dict[str, Any]:
-    """为单个数据集的回测结果生成详细报告
+    """为单个回测结果生成详细报告
 
     Args:
         statistics: vn.py 回测统计结果字典 (engine.calculate_statistics())
         daily_results: 每日回测结果列表
-        dataset_name: 数据集名称 (train/val/test)
+        dataset_name: 数据集名称
         symbol: 合约代码
         initial_capital: 初始资金
         output_dir: 报告输出目录
@@ -169,13 +169,13 @@ def _save_equity_curve(daily_results: List[Dict], filepath: Path,
 
 def format_console_report(
     report: Dict,
-    dataset_name: str,
+    title: str,
 ) -> str:
     """格式化控制台报告文本
 
     Args:
         report: 报告字典
-        dataset_name: 数据集显示名称
+        title: 报告标题
 
     Returns:
         格式化的报告字符串
@@ -186,7 +186,7 @@ def format_console_report(
 
     lines = [
         f"{'=' * 60}",
-        f"  {dataset_name} 数据集回测报告",
+        f"  {title} 回测报告",
         f"{'=' * 60}",
         "",
         "【资金概况】",

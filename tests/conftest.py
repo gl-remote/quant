@@ -60,13 +60,6 @@ def base_config_dict():
             'price_tick': 1.0,
             'contract_size': 10,
             'interval': '1m',
-            'split': {
-                'train_ratio': 0.6,
-                'val_ratio': 0.2,
-                'test_ratio': 0.2,
-                'random_seed': 42,
-                'shuffle': False,
-            },
             'report': {
                 'output_dir': '.quant_shared_data/reports',
                 'save_trade_records': True,

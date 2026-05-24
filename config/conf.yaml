@@ -90,14 +90,6 @@ backtest:
   contract_size: 10              # 合约乘数
   interval: "1m"                 # K线周期: 1m/5m/15m/30m/1h/d
 
-  # 数据集随机划分比例
-  split:
-    train_ratio: 0.6             # 训练集 (策略参数优化)
-    val_ratio: 0.2               # 验证集 (策略选择与调优)
-    test_ratio: 0.2              # 测试集 (最终性能评估)
-    random_seed: 42              # 随机种子 (保证可复现)
-    shuffle: false               # 是否打乱时间顺序 (false=按时间顺序划分，避免前视偏差)
-
   # 报告输出
   report:
     output_dir: ".quant_shared_data/reports"
