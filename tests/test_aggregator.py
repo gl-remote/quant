@@ -142,7 +142,7 @@ class TestAggregateWalkForward:
         assert agg['return_mean'] == pytest.approx(0.1167, abs=0.01)
         assert agg['sharpe_mean'] == pytest.approx(0.833, abs=0.01)
         assert agg['positive_window_ratio'] == pytest.approx(2 / 3)
-        assert -1 <= agg['stability_score'] <= 1
+        assert 0 <= agg['stability_score'] <= 1
 
     def test_string_percentage_inputs(self):
         """百分比字符串格式的指标也应正确解析"""

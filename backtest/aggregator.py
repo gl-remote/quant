@@ -119,7 +119,7 @@ def aggregate_walk_forward(window_results: list[dict]) -> dict[str, float]:
         'win_rate_mean': float(np.mean(win_rates)),
         'win_rate_std': float(np.std(win_rates)),
         'positive_window_ratio': float(np.sum(arr_returns > 0) / len(arr_returns)),
-        'stability_score': float(
+        'stability_score': float(max(0.0, min(1.0,
             1.0 - np.std(arr_returns) / max(abs(np.mean(arr_returns)), 1e-9)
-        ),
+        ))),
     }
