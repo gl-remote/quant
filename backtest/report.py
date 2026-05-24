@@ -168,17 +168,32 @@ def _save_trade_records(daily_results: List[Dict], filepath: Path):
 
 def _save_equity_curve(daily_results: List[Dict], filepath: Path,
                        initial_capital: float):
-    """保存资金曲线数据"""
+    """保存资金曲线数据
+
+    vnpy daily_results 可能包含 balance (含手续费/滑点后的净值)，
+    也可能只有 net_pnl (每日净盈亏)。优先使用 balance 直接记录，
+    否则用 net_pnl 累加推算。
+    """
+    has_balance = any(
+        isinstance(day, dict) and 'balance' in day
+        for day in (daily_results or [])
+    )
     curve = []
     equity = initial_capital
-    for day in daily_results:
-        day_return = day.get('net_pnl', 0) if isinstance(day, dict) else 0
-        equity += day_return
+    for day in daily_results or []:
+        if not isinstance(day, dict):
+            continue
+        if has_balance:
+            equity = day.get('balance', equity)
+            day_return = equity - (curve[-1]['equity'] if curve else initial_capital)
+        else:
+            day_return = day.get('net_pnl', 0)
+            equity += day_return
         curve.append({
             'date': str(day.get('datetime', '')),
             'equity': equity,
             'daily_return': day_return,
-            'drawdown': day.get('drawdown', 0) if isinstance(day, dict) else 0,
+            'drawdown': day.get('drawdown', 0),
         })
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(curve, f, ensure_ascii=False, indent=2)
