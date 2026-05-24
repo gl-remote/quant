@@ -11,7 +11,7 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
-from .types import Bar, Signal, Fill, StrategyPosition, Performance
+from .types import Bar, Signal, Fill, StrategyPosition
 
 
 class Strategy(ABC):
@@ -23,8 +23,10 @@ class Strategy(ABC):
       bridge.execute(signal)             # Bridge 翻译为框架指令并执行
       strategy.on_fill(fill)             # 成交回执 → Strategy 更新状态
 
-    调用方（回测引擎/CLI）通过 strategy.performance / strategy.position
+    调用方（回测引擎/CLI）通过 strategy.position / strategy.fills
     直接获取策略状态，不经过 Bridge 代理。
+    绩效数据统一由回测引擎（vnpy BacktestingEngine.calculate_statistics）
+    计算和对外输出，Strategy 不再自行统计盈亏。
     """
 
     name: str = "base"
@@ -58,11 +60,6 @@ class Strategy(ABC):
     @abstractmethod
     def position(self) -> StrategyPosition:
         """当前持仓"""
-
-    @property
-    @abstractmethod
-    def performance(self) -> Performance:
-        """累计绩效"""
 
     @property
     @abstractmethod

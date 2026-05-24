@@ -90,7 +90,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-02 | 测试 | 覆盖率排除核心文件导致虚高 | `pyproject.toml:80-90` | `main.py`/bridges/exporter/backtest_engine 被排除，真实覆盖率约 60% |
 | DEF-03 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | 约 340 行关键桥接代码无测试 |
 | DEF-04 | 测试 | 无集成/端到端测试 | `tests/` | 缺少导出→回测→报告完整流程测试 |
-| DEF-05 | 策略 | Performance 缺少行业标准指标 | `types.py:58-65` | 缺 max_drawdown/sharpe_ratio/profit_factor |
+| DEF-05 | 策略 | ~~Performance 缺少行业标准指标~~ (已移除，绩效统一由 vnpy 官方计算) | - | - |
 | DEF-06 | 策略 | 止损/止盈使用固定比例 | `ma_strategy.py:137-144` | 不同品种波动率差异大，应用 ATR 动态调整 |
 | DEF-07 | 策略 | 信号优先级隐式 | `ma_strategy.py:87-100` | 止损>止盈>死叉由代码顺序隐式决定，无文档 |
 | DEF-08 | 数据 | money 字段为近似值 | `exporter.py:44` | `close*volume` 不反映期货保证金杠杆的实际资金占用 |

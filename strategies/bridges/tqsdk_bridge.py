@@ -7,7 +7,7 @@
 
 所有交易状态由 Strategy 管理。on_bar() 是无状态方法，直接返回 Signal。
 
-调用方通过 strategy.performance / strategy.position 获取状态。
+调用方通过 strategy.position 获取状态。
 """
 
 import logging
@@ -167,10 +167,11 @@ class TqsdkStrategyBridge:
         finally:
             if self.api:
                 self.api.close()
-            p = self._strategy.performance
+            p = self._strategy
+            fills_count = len(p.fills)
+            sells = len([f for f in p.fills if f.action == 'sell'])
             logger.info(
-                f"绩效: 交易{p.total_trades}次 "
-                f"胜率{p.win_rate:.0%} 盈亏{p.total_profit:.2f}"
+                f"策略停止: fills={fills_count} sells={sells}"
             )
 
     def run(self, symbol: Optional[str] = None, auth: Optional[Any] = None):

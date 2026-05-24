@@ -56,14 +56,14 @@ class VnpyStrategyBridge(CtaTemplate):
         self.write_log("策略启动")
 
     def on_stop(self) -> None:
-        p = self._core.performance
+        fills_count = len(self._core.fills) if self._core else 0
+        sells = len([f for f in self._core.fills if f.action == 'sell']) if self._core else 0
         logger.info(
             f"[{self._strategy_name}] 策略停止 | "
-            f"交易{p.total_trades}次 胜{p.winning_trades} "
-            f"总盈亏{p.total_profit:.2f}"
+            f"fills={fills_count} sells={sells}"
         )
         self.write_log(
-            f"策略停止: 交易{p.total_trades}次 总盈亏{p.total_profit:.2f}"
+            f"策略停止: fills={fills_count} sells={sells}"
         )
 
     # ---- 核心: 数据转换 → 信号获取 → 下单执行 ----

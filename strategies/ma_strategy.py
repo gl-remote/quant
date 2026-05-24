@@ -3,7 +3,7 @@
 不依赖任何外部框架。拥有:
   - SMA 计算 + 金叉/死叉检测 + 止盈止损判断
   - 仓位管理 (entry_price/position/volume)
-  - 交易记录 (fills) 和绩效统计 (performance)
+  - 交易记录 (fills)
   - 技术指标缓存 (_close_history)
 
 Bridge 只需: 构造 Bar → 调用 on_bar() → 拿到 Signal → 执行下单 → 回调 on_fill()
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from .core.base import Strategy
-from .core.types import Bar, Signal, Fill, StrategyPosition, Performance
+from .core.types import Bar, Signal, Fill, StrategyPosition
 
 
 @dataclass
@@ -63,10 +63,6 @@ class MaStrategyCore(Strategy):
     def fills(self) -> List[Fill]:
         """交易成交记录 (只读副本)"""
         return list(self._fills)
-
-    @property
-    def performance(self) -> Performance:
-        return self._calc_performance()
 
     def reset(self) -> None:
         self._position = StrategyPosition()
@@ -158,41 +154,3 @@ class MaStrategyCore(Strategy):
         c = self._config
         vol = c.capital * c.position_ratio / (price * c.contract_size)
         return max(1, int(vol))
-
-    def _calc_performance(self) -> Performance:
-        sells = [f for f in self._fills if f.action == 'sell']
-        if not sells:
-            return Performance()
-
-        c = self._config
-        wins = 0
-        total_profit = 0.0
-
-        for f in sells:
-            entry_price = self._get_entry_for_fill(f)
-            if entry_price <= 0:
-                continue
-            gross = (f.price - entry_price) * f.volume
-            # 手续费: 买卖各一次
-            commission = (entry_price + f.price) * f.volume * c.commission_rate
-            # 滑点成本: 买卖各滑一次
-            slippage_cost = 2 * f.volume * c.slippage
-            net = gross - commission - slippage_cost
-            total_profit += net
-            if net > 0:
-                wins += 1
-
-        return Performance(
-            total_trades=len(sells),
-            winning_trades=wins,
-            losing_trades=len(sells) - wins,
-            win_rate=wins / len(sells) if sells else 0.0,
-            total_profit=total_profit,
-        )
-
-    def _get_entry_for_fill(self, sell_fill: Fill) -> float:
-        """找到卖出成交对应的入场价"""
-        for f in reversed(self._fills):
-            if f.action == 'buy' and f.timestamp < sell_fill.timestamp:
-                return f.price
-        return 0.0

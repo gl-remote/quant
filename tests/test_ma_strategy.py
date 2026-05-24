@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
 from strategies.ma_strategy import MaStrategyCore, TradingConfig
-from strategies.core import Bar, Signal, Fill, StrategyPosition, Performance
+from strategies.core import Bar, Signal, Fill, StrategyPosition
 
 
 def _make_bar(close: float, idx: int = 0,
@@ -196,7 +196,7 @@ class TestOnBar:
         assert sig.reason == 'stop_loss'
 
 
-class TestPositionAndPerformance:
+class TestPositionAndReset:
     def test_position_after_fill(self):
         core = MaStrategyCore()
         core.on_fill(Fill(timestamp="t", symbol="T", action='buy',
@@ -214,30 +214,13 @@ class TestPositionAndPerformance:
         assert core.position.direction == ''
         assert core.position.volume == 0
 
-    def test_performance_empty(self):
-        core = MaStrategyCore()
-        p = core.performance
-        assert p.total_trades == 0
-        assert p.total_profit == 0.0
-
-    def test_performance_with_trades(self):
-        core = MaStrategyCore()
-        core.on_fill(Fill(timestamp="t", symbol="T", action='buy',
-                          price=100.0, volume=10, reason='g'))
-        core.on_fill(Fill(timestamp="t2", symbol="T", action='sell',
-                          price=110.0, volume=10, reason='tp'))
-        p = core.performance
-        assert p.total_trades == 1
-        assert p.winning_trades == 1
-        assert p.win_rate == 1.0
-
     def test_reset(self):
         core = MaStrategyCore()
         core.on_fill(Fill(timestamp="t", symbol="T", action='buy',
                           price=100.0, volume=10, reason='g'))
         core.reset()
         assert core.position.direction == ''
-        assert core.performance.total_trades == 0
+        assert core.position.volume == 0
 
 
 class TestPositionSize:

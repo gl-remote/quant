@@ -36,7 +36,7 @@ quant/
 │   ├── core/                  # 策略抽象层 (ABC + 类型定义)
 │   │   ├── base.py            #   Strategy 基类
 │   │   ├── context.py         #   TradingContext
-│   │   └── types.py           #   Bar/Signal/Fill/Position/Performance
+│   │   └── types.py           #   Bar/Signal/Fill/Position
 │   ├── bridges/               # 框架桥接器
 │   │   ├── vnpy_bridge.py     #   vn.py CtaTemplate
 │   │   └── tqsdk_bridge.py    #   天勤 SDK

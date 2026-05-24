@@ -29,7 +29,7 @@ VnpyStrategyBridge  TqsdkStrategyBridge   ← 框架适配 + 数据转换
 from dataclasses import dataclass
 from typing import List, Optional
 from .core.base import Strategy
-from .core.types import Bar, Signal, Fill, StrategyPosition, Performance
+from .core.types import Bar, Signal, Fill, StrategyPosition
 
 
 @dataclass
@@ -64,11 +64,6 @@ class MyStrategy(Strategy):
         return self._position
 
     @property
-    def performance(self) -> Performance:
-        # 实现绩效计算
-        return self._calc_performance()
-
-    @property
     def fills(self) -> List[Fill]:
         return list(self._fills)
 
@@ -100,7 +95,7 @@ class MyStrategy(Strategy):
 |------|------|
 | `on_bar(bar: Bar) -> Signal` | 策略决策中枢，接收 K 线，返回交易信号 |
 | `on_fill(fill: Fill) -> None` | 成交回调，更新持仓和交易记录 |
-| `performance` | 累计绩效，一般在卖出时计算 |
+| `fills` | 交易成交记录列表 |
 | `position` | 当前持仓状态 |
 | `config` | 策略配置读写 |
 | `reset()` | 状态重置，用于新一轮回测 |

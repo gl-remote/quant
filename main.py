@@ -244,9 +244,9 @@ def cmd_test(args):
                     action='sell', price=bar2.close, volume=signal1.volume,
                     reason=signal2.reason))
 
-        p = strategy.performance
-        logger.info(f"绩效: 交易{p.total_trades}次 胜{p.winning_trades} "
-                    f"胜率{p.win_rate:.0%} 盈亏{p.total_profit:.2f}")
+        fills = strategy.fills
+        sells = [f for f in fills if f.action == 'sell']
+        logger.info(f"绩效: 交易{sells.__len__()}次")
         db.log('test', f"完成: strategy={cls_name}", status='SUCCESS')
         logger.info("\n" + "=" * 60)
         logger.info("测试模式完成")
@@ -400,7 +400,7 @@ def cmd_backtest(args):
 def cmd_tq_backtest(args):
     """天勤SDK回测 — 使用 TQBacktestEngine 配合天勤实时K线数据进行单标的图形化回测
 
-    绩效跟踪统一委托给 Strategy.on_bar + on_fill，避免与 strategy.performance 重复计算。
+    绩效跟踪统一委托给回测引擎（vnpy BacktestingEngine.calculate_statistics）计算。
     """
     from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
     from tqsdk.exceptions import BacktestFinished
@@ -455,7 +455,13 @@ def cmd_tq_backtest(args):
                 prev_kline_len = current_len
 
     except BacktestFinished:
-        p = strategy_core.performance
+        fills = getattr(strategy_core, 'fills', [])
+        sells = [f for f in fills if f.action == 'sell']
+        total_profit = sum(
+            (sf.price - bf.price) * sf.volume
+            for sf in sells
+            for bf in fills if bf.action == 'buy' and bf.timestamp < sf.timestamp
+        )
         report = (
             f"{'=' * 60}\n"
             f"回测报告\n"
@@ -465,11 +471,8 @@ def cmd_tq_backtest(args):
             f"区间: {args.start} ~ {args.end}\n"
             f"初始资金: {args.capital:,.2f}\n\n"
             f"交易统计:\n"
-            f"  总交易次数: {p.total_trades}\n"
-            f"  盈利交易: {p.winning_trades}\n"
-            f"  亏损交易: {p.losing_trades}\n"
-            f"  胜率: {p.win_rate:.2%}\n"
-            f"  总盈亏: {p.total_profit:,.2f}\n"
+            f"  总交易次数: {len(sells)}\n"
+            f"  总盈亏: {total_profit:,.2f}\n"
             f"{'=' * 60}"
         )
         print(report)

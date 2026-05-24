@@ -55,11 +55,4 @@ class Fill:
     reason: str = ""        # 触发原因
 
 
-@dataclass
-class Performance:
-    """策略绩效统计"""
-    total_trades: int = 0
-    winning_trades: int = 0
-    losing_trades: int = 0
-    win_rate: float = 0.0
-    total_profit: float = 0.0
+
