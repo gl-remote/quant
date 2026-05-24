@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quant"
-version = "0.0.3"
+version = "0.1.0"
 description = "天勤量化交易系统 - 均线交叉策略回测与实盘"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

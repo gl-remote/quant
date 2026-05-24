@@ -1,5 +1,7 @@
 # 天勤量化交易系统
 
+![version](https://img.shields.io/badge/version-0.1.0-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-146%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-85%25-brightgreen)
+
 基于双均线交叉（SMA Crossover）策略的自动化量化交易系统，支持数据获取、三阶段回测、过拟合评估及实盘交易。
 
 ## 核心功能
@@ -7,8 +9,9 @@
 - **金叉买入 / 死叉卖出** — SMA 双均线交叉信号
 - **风控管理** — 止损、止盈、仓位比例控制
 - **三阶段回测** — 训练集 / 验证集 / 测试集独立回测，过拟合综合评估
-- **数据导出** — 从天勤拉取历史 K 线，智能去重合并为 CSV
-- **双引擎降级** — vn.py 优先，不可用时自动切换内置引擎
+- **多品种并发回测** — 正则匹配 + 多线程并行 + 合并报告
+- **数据导出** — 从天勤拉取历史 K 线，增量合并 / 强制覆盖为 CSV
+- **实盘交易** — 天勤实盘/模拟 + Web GUI
 - **操作日志** — 所有操作持久化至 SQLite，支持审计追溯
 
 ## 项目结构

@@ -1,6 +1,6 @@
 # 项目改进计划
 
-> 版本: 0.0.11 | 生成日期: 2026-05-24 | 当前阶段: M3 功能增强
+> 版本: 0.1.0 | 生成日期: 2026-05-24 | 当前阶段: M3 功能增强 | 里程碑: Beta
 
 ---
 
@@ -16,10 +16,9 @@
 | A15 | 实盘风控熔断（日亏损限额、最大回撤限制） | 中 | 风控模块 |
 
 **M3 验收标准**：
-- 支持 ≥2 种策略类型（当前 1 种）
-- ~~支持多品种并发回测~~ ✅ A13 已完成
-- 具备本地可视化能力
-- 具备实盘风控熔断
+- 支持 ≥2 种策略类型（当前 1 种）→ A14
+- 具备本地可视化能力 → A12
+- 具备实盘风控熔断 → A15
 
 ### M4: 生产就绪
 
@@ -43,7 +42,6 @@
 
 | 元素 | 说明 |
 |------|------|
-| 变更日志 (CHANGELOG.md) | 无版本变更记录 |
 | 贡献指南 (CONTRIBUTING.md) | 无代码贡献规范 |
 | 策略开发指南 | 仅 FAQ 中简要提及 |
 
@@ -67,7 +65,7 @@
 | vn.py API 变更 | 中 | 高 | 锁定版本 (3.8.0)；CI 中增加依赖一致性检查 |
 | 天勤 SDK 升级不兼容 | 中 | 高 | 锁定版本 (3.0.0)；数据接口抽象 |
 | 回测结果与实盘偏差 | 中 | 高 | 模拟交易验证；完善手续费模型 |
-| 敏感信息泄露 | 低 | 严重 | .gitignore 排除 conf.local.yaml |
+| 敏感信息泄露 | 低 | 严重 | .gitignore 排除 config/conf.local.yaml |
 | 策略过拟合 | 中 | 高 | 过拟合评估评分 < 20；样本外测试 |
 
 ---
@@ -89,6 +87,7 @@
 
 | 版本 | 日期 | 变更 | 归档 |
 |------|------|------|------|
+| **0.1.0** | **2026-05-24** | **Beta 里程碑：策略/回测/数据/实盘完备，146用例85%覆盖** | [plan.0.1.0.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.1.0.log.md) |
 | 0.0.11 | 2026-05-24 | export --force 覆盖模式 + Schema 注释完善 | [plan.0.0.11.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.11.log.md) |
 | 0.0.10 | 2026-05-24 | A13 多品种并发回测完成：scan_csv/regex/并行/合并报告 | [plan.0.0.10.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.10.log.md) |
 | 0.0.9 | 2026-05-24 | 根目录瘦身：删除 5 冗余文件 + conf*.yaml 归入 config/ | [plan.0.0.9.log.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.plan/plan.0.0.9.log.md) |
