@@ -474,12 +474,18 @@ class VnpyBacktestEngine:
         if self.context is None:
             from strategies.ma_strategy import MaStrategyCore, TradingConfig
             from strategies.core.context import TradingContext
+            strategy = MaStrategyCore(TradingConfig(
+                capital=self.initial_capital,
+                contract_size=self.contract_size,
+            ))
             self.context = TradingContext(
-                strategy=MaStrategyCore(TradingConfig()),
+                strategy=strategy,
                 symbol=vt_symbol,
                 capital=self.initial_capital,
                 price_tick=self.price_tick,
             )
+
+        self.context.strategy.reset()
 
         strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge)
         engine.add_strategy(strategy_cls, setting)

@@ -1,4 +1,5 @@
-from .base import Strategy, PositionStatus, TradeRecord
+from .base import Strategy
+from .types import Bar, Signal, Fill, Position, Performance
 from .context import TradingContext
 
-__all__ = ['Strategy', 'PositionStatus', 'TradeRecord', 'TradingContext']
+__all__ = ['Strategy', 'Bar', 'Signal', 'Fill', 'Position', 'Performance', 'TradingContext']

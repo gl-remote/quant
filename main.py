@@ -18,7 +18,7 @@ logging.basicConfig(
     format=log_cfg.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 )
 from strategies import TqsdkStrategyBridge
-from strategies.core import Strategy, TradingContext
+from strategies.core import Strategy, TradingContext, Bar, Fill, Signal
 from backtest import BacktestEngine, TradeRecord, VnpyBacktestEngine
 from data import Database, DBLogHandler, export_csv
 
@@ -102,6 +102,13 @@ def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
     bc = cm.get_backtest_config()
     account = cm.get_account_info()
 
+    # 同步资金/合约乘数到 strategy.config，使策略能正确计算手数
+    cfg = strategy.config
+    if hasattr(cfg, 'capital'):
+        setattr(cfg, 'capital', capital)
+    if hasattr(cfg, 'contract_size'):
+        setattr(cfg, 'contract_size', bc.get('contract_size', 10))
+
     return TradingContext(
         strategy=strategy,
         symbol=symbol,
@@ -169,63 +176,55 @@ def cmd_test(args):
     db = Database(cm.get_data_config()['db_path'])
     _setup_db_logging(db, 'test')
 
-    if args.strategy:
-        strategy = load_strategy(args.strategy)
-        _apply_strategy_config(strategy, cm)
+    strategy = load_strategy(args.strategy or None)
+    _apply_strategy_config(strategy, cm)
+    cls_name = _get_strategy_class_name(strategy)
+
+    logger.info("=" * 60)
+    logger.info(f"测试模式 - 策略: {cls_name}")
+    logger.info("=" * 60)
+    db.log('test', f"开始: strategy={cls_name}", status='INFO')
+
+    try:
+        tc = cm.get_trading_config()
+        logger.info(f"策略参数: SMA({tc.get('sma_short', 5)},{tc.get('sma_long', 20)}) "
+                    f"止损={tc.get('stop_loss_ratio', 0.03):.0%} "
+                    f"止盈={tc.get('take_profit_ratio', 0.05):.0%}")
+
+        # 模拟连续K线: 先空仓→金叉买入→再一根K线触发止损
+        bar1 = Bar(symbol="TEST", datetime="2026-01-01",
+                   open=10, high=15, low=10, close=15, volume=1000)
+        signal1 = strategy.on_bar(bar1)
+        logger.info(f"信号1: action={signal1.action} reason={signal1.reason} volume={signal1.volume}")
+
+        if signal1.action == 'buy':
+            strategy.on_fill(Fill(
+                timestamp=bar1.datetime, symbol=bar1.symbol,
+                action='buy', price=bar1.close, volume=signal1.volume,
+                reason=signal1.reason))
+
+            bar2 = Bar(symbol="TEST", datetime="2026-01-02",
+                       open=15, high=16, low=13, close=13.5, volume=500)
+            signal2 = strategy.on_bar(bar2)
+            logger.info(f"信号2: action={signal2.action} reason={signal2.reason}")
+
+            if signal2.action == 'sell':
+                strategy.on_fill(Fill(
+                    timestamp=bar2.datetime, symbol=bar2.symbol,
+                    action='sell', price=bar2.close, volume=signal1.volume,
+                    reason=signal2.reason))
+
+        p = strategy.performance
+        logger.info(f"绩效: 交易{p.total_trades}次 胜{p.winning_trades} "
+                    f"胜率{p.win_rate:.0%} 盈亏{p.total_profit:.2f}")
+        db.log('test', f"完成: strategy={cls_name}", status='SUCCESS')
+        logger.info("\n" + "=" * 60)
+        logger.info("测试模式完成")
         logger.info("=" * 60)
-        logger.info(f"测试模式 - 策略: {_get_strategy_class_name(strategy)}")
-        logger.info("=" * 60)
-        db.log('test', f"开始: strategy={_get_strategy_class_name(strategy)}", status='INFO')
-
-        try:
-            signal, reason = strategy.on_bar_signal(
-                [10, 11, 12, 13, 15], 15.0)
-            logger.info(f"信号测试: signal={signal} reason={reason}")
-
-            strategy.on_enter(14.0, 10)
-            profit = strategy.on_exit(16.0)
-            logger.info(f"损益测试: 入场14.0 出场16.0 盈亏={profit:.2f}")
-
-            perf = strategy.get_performance([])
-            logger.info(f"绩效接口测试: {perf}")
-            db.log('test', f"完成: strategy={_get_strategy_class_name(strategy)}", status='SUCCESS')
-            logger.info("\n" + "=" * 60)
-            logger.info("测试模式完成")
-            logger.info("=" * 60)
-        except Exception as e:
-            logger.error(f"测试失败: {e}")
-            db.log('test', f"失败: {e}", status='ERROR')
-            raise
-    else:
-        strategy = load_strategy(None)
-        _apply_strategy_config(strategy, cm)
-        logger.info("=" * 60)
-        logger.info(f"测试模式 - 策略逻辑验证 ({_get_strategy_class_name(strategy)})")
-        logger.info("=" * 60)
-        db.log('test', f"开始: strategy={_get_strategy_class_name(strategy)}", status='INFO')
-
-        try:
-            tc = cm.get_trading_config()
-            logger.info(f"策略参数: SMA({tc['sma_short']},{tc['sma_long']}) "
-                        f"止损={tc['stop_loss_ratio']:.0%} 止盈={tc['take_profit_ratio']:.0%}")
-
-            signal, reason = strategy.on_bar_signal([10, 11, 12, 13, 15], 15.0)
-            logger.info(f"信号测试: signal={signal} reason={reason}")
-
-            strategy.on_enter(14.0, 10)
-            profit = strategy.on_exit(16.0)
-            logger.info(f"损益测试: 入场14.0 出场16.0 盈亏={profit:.2f}")
-
-            perf = strategy.get_performance([])
-            logger.info(f"绩效接口测试: {perf}")
-            db.log('test', f"完成: strategy={_get_strategy_class_name(strategy)}", status='SUCCESS')
-            logger.info("\n" + "=" * 60)
-            logger.info("测试模式完成")
-            logger.info("=" * 60)
-        except Exception as e:
-            logger.error(f"测试失败: {e}")
-            db.log('test', f"失败: {e}", status='ERROR')
-            raise
+    except Exception as e:
+        logger.error(f"测试失败: {e}")
+        db.log('test', f"失败: {e}", status='ERROR')
+        raise
 
 
 # ============================================================
@@ -343,24 +342,23 @@ def cmd_tq_backtest(args):
                     'low': float(klines['low'].iloc[-1]),
                     'volume': int(klines['volume'].iloc[-1]),
                 }
-                bridge.on_bar(klines)
 
-                if bridge.signal == 'buy' and engine.current_position == 0:
-                    qty = int((engine.current_capital * bridge.config.position_ratio) / bar['close'])
-                    if qty > 0:
+                signal = bridge.on_bar(klines)
+
+                if signal.action == 'buy' and engine.current_position == 0:
+                    if signal.volume > 0:
                         engine.add_trade(TradeRecord(
                             timestamp=bar['datetime'], symbol=args.symbol, direction='buy',
-                            price=bar['close'], quantity=qty, reason="金叉买入"))
-                        target_pos.set_target_volume(qty)
-                        bridge.signal = None
-                elif bridge.signal == 'sell' and engine.current_position > 0:
+                            price=bar['close'], quantity=signal.volume,
+                            reason=signal.reason))
+                        target_pos.set_target_volume(signal.volume)
+                elif signal.action == 'sell' and engine.current_position > 0:
                     profit = (bar['close'] - engine.entry_price) * engine.current_position
                     engine.add_trade(TradeRecord(
                         timestamp=bar['datetime'], symbol=args.symbol, direction='sell',
                         price=bar['close'], quantity=engine.current_position,
-                        profit=profit, reason=bridge.signal_reason))
+                        profit=profit, reason=signal.reason))
                     target_pos.set_target_volume(0)
-                    bridge.signal = None
 
     except BacktestFinished:
         report = engine.generate_report()
