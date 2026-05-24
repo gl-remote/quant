@@ -34,12 +34,16 @@
 - plan.md 移除已修复 Bug 列表，仅保留未解决的缺陷
 - **移除 `.plan/*.log.md` 归档**，重要改动统一记录在 CHANGELOG.md
 - AI_BEHAVIOR_RULES.md: 更新行为规范，CHANGELOG.md 替代 .plan/ 归档
+- **回测执行与报告解耦**: 回测结果写入 SQLite 数据库，报告通过独立 `report` 命令生成
 
 ### 新增
 
 - 策略开发指南 (`doc/strategy-guide.md`)
 - 贡献指南 (`CONTRIBUTING.md`)
 - API 文档更新：补充 Bridge 接口和信号优先级说明
+- **回测结果持久化**: `backtests` + `backtest_trades` 表，存储全部统计指标与交易明细
+- **`report` CLI 子命令**: `python main.py report [--id|--compare|--symbol]` 从数据库生成报告
+- **独立报告模块** (`report/sql_reporter.py`): 仅依赖 `data.database.Database`，与回测引擎/数据采集完全解耦
 
 ---
 

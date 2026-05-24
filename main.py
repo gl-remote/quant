@@ -4,6 +4,7 @@
 import sys
 import argparse
 import dataclasses
+import json
 import logging
 import importlib
 from pathlib import Path
@@ -21,8 +22,8 @@ logging.basicConfig(
 from strategies import TqsdkStrategyBridge
 from strategies.core import Strategy, TradingContext, Bar, Fill, Signal
 from backtest import VnpyBacktestEngine, scan_csv_files
-from backtest.comparison import generate_merged_report, format_merged_report
 from data import Database, DBLogHandler, export_csv
+from report import format_single_report, format_comparison_report, format_summary_report
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +260,17 @@ def cmd_test(args):
 # ============================================================
 # 子命令: backtest — vn.py 批量回测
 # ============================================================
+def _serialize_strategy_params(strategy: Strategy) -> str:
+    """将策略配置序列化为 JSON 字符串，用于写入 backtests.params_json"""
+    try:
+        cfg = strategy.config
+        valid_keys = {f.name for f in dataclasses.fields(cfg)}
+        params = {k: getattr(cfg, k) for k in valid_keys}
+        return json.dumps(params, ensure_ascii=False, default=str)
+    except Exception:
+        return '{}'
+
+
 def cmd_backtest(args):
     """vn.py 批量回测 — 对匹配的品种逐一执行完整流水线
 
@@ -292,6 +304,9 @@ def cmd_backtest(args):
         logger.info(f"{'单品种' if mode == 'single' else '批量'}回测: {len(symbols)} 个品种"
                      f" strategy={_get_strategy_class_name(strategy)}")
 
+        strategy_name = _get_strategy_class_name(strategy)
+        params_json = _serialize_strategy_params(strategy)
+
         all_results = []
         failed = []
         for sym, _ in symbols:
@@ -317,16 +332,56 @@ def cmd_backtest(args):
         logger.info(f"回测完成: {len(succeeded)}/{len(all_results)} 成功"
                      + (f", 失败: {failed}" if failed else ""))
 
-        # 生成合并报告 (仅批量模式且至少一个成功)
-        if mode == 'batch' and succeeded:
-            merged = generate_merged_report(succeeded, bc.get('report', {}).get(
-                'output_dir', '.quant_shared_data/reports'))
-            print(format_merged_report(merged))
+        # ---- 持久化回测结果到数据库 ----
+        bt_ids: list[int] = []
+        for r in all_results:
+            if r.get('success'):
+                st = r['result'].get('statistics', {})
+                dr = r['result'].get('daily_results', [])
+                ec = r.get('engine_config', {})
+                bt_id = db.insert_backtest(
+                    symbol=r['symbol'],
+                    strategy=strategy_name,
+                    status='success',
+                    error_message=None,
+                    statistics=st,
+                    engine_config=ec,
+                    params_json=params_json,
+                    data_start_date=r.get('data_start_date'),
+                    data_end_date=r.get('data_end_date'),
+                )
+                bt_ids.append(bt_id)
+                if dr:
+                    trade_count = db.insert_backtest_trades(bt_id, dr)
+                    logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
+            else:
+                db.insert_backtest(
+                    symbol=r.get('symbol', 'unknown'),
+                    strategy=strategy_name,
+                    status='failed',
+                    error_message=r.get('error'),
+                    statistics={},
+                    engine_config={},
+                    params_json=params_json,
+                    data_start_date=None,
+                    data_end_date=None,
+                )
+
+        # ---- 提示用户使用 report 命令查看报告 ----
+        persisted = len(bt_ids)
+        if persisted > 0:
+            logger.info(f"回测结果已写入数据库: {persisted} 条成功")
+            if mode == 'batch':
+                ids_str = ','.join(str(i) for i in bt_ids)
+                print(f"\n💡 查看对比报告: python main.py report --compare {ids_str}")
+            else:
+                print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
 
         if succeeded:
             db.log('backtest',
                    f"{'批量' if mode == 'batch' else ''}回测完成: "
-                   f"{len(succeeded)}/{len(all_results)}",
+                   f"{len(succeeded)}/{len(all_results)}, "
+                   f"已写入 {persisted} 条 DB 记录",
                    symbol='multi' if mode == 'batch' else args.symbol,
                    status='SUCCESS')
         else:
@@ -482,6 +537,58 @@ def cmd_live(args):
 
 
 # ============================================================
+# 子命令: report — 从数据库生成回测报告
+# ============================================================
+def cmd_report(args):
+    """从数据库读取回测结果并生成报告
+
+    完全解耦于回测执行: 只读 backtests / backtest_trades 表，
+    不依赖 backtest 引擎 / data.exporter / strategies 模块。
+    """
+    cm = ConfigManager()
+    db = Database(cm.get_data_config()['db_path'])
+
+    try:
+        if args.id is not None:
+            # 单次报告
+            report = format_single_report(db, args.id)
+            print(report)
+
+        elif args.compare:
+            # 多条对比报告
+            try:
+                ids = [int(i.strip()) for i in args.compare.split(',') if i.strip()]
+            except ValueError:
+                print("错误: --compare 参数格式无效，请使用逗号分隔的整数 ID，如 '1,2,3'")
+                sys.exit(1)
+            if not ids:
+                print("错误: --compare 需要至少一个 ID")
+                sys.exit(1)
+
+            report = format_comparison_report(
+                db, ids,
+                save_json=args.save_json,
+                output_dir=cm.get_backtest_config().get('report', {}).get(
+                    'output_dir', '.quant_shared_data/reports'),
+            )
+            print(report)
+
+        else:
+            # 汇总列表
+            report = format_summary_report(
+                db,
+                symbol=args.symbol,
+                strategy=args.strategy,
+                limit=args.limit or 20,
+            )
+            print(report)
+
+    except Exception as e:
+        logger.error(f"生成报告失败: {e}", exc_info=True)
+        sys.exit(1)
+
+
+# ============================================================
 # 主入口
 # ============================================================
 def main():
@@ -516,6 +623,23 @@ def main():
     p.add_argument('--strategy', default=None,
                    help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
 
+    # ---- report ----
+    p = sub.add_parser('report', help='从数据库生成回测报告（不执行回测）',
+                       description='读取数据库中已完成的回测结果，生成文本/JSON 报告\n'
+                                   '完全解耦: 只读 DB，不执行回测，不拉取数据\n\n'
+                                   '用法:\n'
+                                   '  python main.py report                   汇总最近 20 条\n'
+                                   '  python main.py report --id 42           单次详细报告\n'
+                                   '  python main.py report --compare 1,2,3   多条对比排名\n'
+                                   '  python main.py report --symbol DCE.m2509 按品种过滤')
+    p.add_argument('--id', type=int, default=None, help='查看指定 ID 的详细报告')
+    p.add_argument('--compare', default=None, help='对比多个回测 ID，逗号分隔 (e.g. "1,2,3")')
+    p.add_argument('--symbol', default=None, help='按品种代码过滤')
+    p.add_argument('--strategy', default=None, help='按策略名称过滤')
+    p.add_argument('--limit', type=int, default=20, help='汇总模式最大条数 (默认 20)')
+    p.add_argument('--save-json', dest='save_json', action='store_true',
+                   help='对比模式同时保存 JSON 文件')
+
     # ---- tq-backtest ----
     p = sub.add_parser('tq-backtest', help='TqSdk历史数据回测 (旧版兼容)')
     p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
@@ -538,7 +662,8 @@ def main():
 
     try:
         {'export': cmd_export, 'test': cmd_test,
-         'backtest': cmd_backtest, 'tq-backtest': cmd_tq_backtest,
+         'backtest': cmd_backtest, 'report': cmd_report,
+         'tq-backtest': cmd_tq_backtest,
          'live': cmd_live}[args.command](args)
     except KeyboardInterrupt:
         logger.info("\n用户中断程序")

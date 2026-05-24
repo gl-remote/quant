@@ -133,6 +133,8 @@ class VnpyBacktestEngine:
             return {'success': False, 'error': '数据加载失败'}
 
         df = filter_dataframe_by_date(df, start_date, end_date)
+        data_start = str(df['datetime'].iloc[0])[:10]
+        data_end = str(df['datetime'].iloc[-1])[:10]
         logger.info(f"数据加载完成: {len(df)} 条, "
                      f"{df['datetime'].iloc[0]} ~ {df['datetime'].iloc[-1]}")
 
@@ -149,6 +151,16 @@ class VnpyBacktestEngine:
             'symbol': symbol,
             'result': result,
             'report': report,
+            'data_start_date': data_start,
+            'data_end_date': data_end,
+            'engine_config': {
+                'initial_capital': self.initial_capital,
+                'commission_rate': self.commission_rate,
+                'slippage': self.slippage,
+                'price_tick': self.price_tick,
+                'contract_size': self.contract_size,
+                'kline_interval': self.interval,
+            },
         }
 
     def run_walk_forward(
