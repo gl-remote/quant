@@ -28,6 +28,40 @@ from report import format_single_report, format_comparison_report, format_summar
 logger = logging.getLogger(__name__)
 
 
+def _calculate_fifo_profit(fills: list) -> float:
+    """按 FIFO 顺序计算已平仓交易的盈亏总额
+
+    与笛卡尔积不同，此函数按先入先出规则将每笔买入与卖出匹配，
+    正确处理多笔买入→单笔卖出、部分平仓等场景。
+
+    Args:
+        fills: 策略的所有成交记录 (Fill 对象)，按时间顺序排列
+
+    Returns:
+        FIFO 盈亏总额 (未扣除手续费/滑点)
+    """
+    buy_entries = [(f.price, f.volume) for f in fills if f.action == 'buy']
+    sell_entries = [(f.price, f.volume) for f in fills if f.action == 'sell']
+
+    total_profit = 0.0
+    bi = 0          # 当前待匹配买入的索引
+    bv = 0          # 当前买入剩余的未匹配量
+
+    for sell_price, sell_vol in sell_entries:
+        remaining = sell_vol
+        while remaining > 0 and bi < len(buy_entries):
+            if bv == 0:
+                _, bv = buy_entries[bi]
+            matched = min(remaining, bv)
+            total_profit += (sell_price - buy_entries[bi][0]) * matched
+            remaining -= matched
+            bv -= matched
+            if bv == 0:
+                bi += 1
+
+    return total_profit
+
+
 # ============================================================
 # 策略动态加载
 # ============================================================
@@ -456,12 +490,11 @@ def cmd_tq_backtest(args):
 
     except BacktestFinished:
         fills = getattr(strategy_core, 'fills', [])
-        sells = [f for f in fills if f.action == 'sell']
-        total_profit = sum(
-            (sf.price - bf.price) * sf.volume
-            for sf in sells
-            for bf in fills if bf.action == 'buy' and bf.timestamp < sf.timestamp
-        )
+        bc = cm.get_backtest_config()
+
+        total_profit = _calculate_fifo_profit(fills)
+        total_trades = len([f for f in fills if f.action == 'sell'])
+
         report = (
             f"{'=' * 60}\n"
             f"回测报告\n"
@@ -471,7 +504,7 @@ def cmd_tq_backtest(args):
             f"区间: {args.start} ~ {args.end}\n"
             f"初始资金: {args.capital:,.2f}\n\n"
             f"交易统计:\n"
-            f"  总交易次数: {len(sells)}\n"
+            f"  总交易次数: {total_trades}\n"
             f"  总盈亏: {total_profit:,.2f}\n"
             f"{'=' * 60}"
         )
