@@ -26,12 +26,18 @@ class TQBacktestEngine:
     交易记录、权益曲线和绩效指标计算，与天勤 TqSdk 的图形界面配合。
 
     使用方式:
-        engine = TQBacktestEngine(initial_capital=100000)
+        engine = TQBacktestEngine(initial_capital=100000,
+                                  commission_rate=0.0003, slippage=1.0)
         engine.add_trade(TradeRecord(...))
         print(engine.generate_report())
     """
 
-    def __init__(self, initial_capital: float = 100000.0):
+    def __init__(
+        self,
+        initial_capital: float = 100000.0,
+        commission_rate: float = 0.0003,
+        slippage: float = 1.0,
+    ):
         self.initial_capital = initial_capital
         self.current_capital = initial_capital
         self.current_position = 0
@@ -39,19 +45,29 @@ class TQBacktestEngine:
         self.trade_history: List[TradeRecord] = []
         self.equity_curve: List[float] = [initial_capital]
         self.max_equity = initial_capital
+        self.commission_rate = commission_rate
+        self.slippage = slippage
+
+    def _trade_cost(self, price: float, quantity: int) -> float:
+        """单边交易成本: 手续费 + 滑点"""
+        return (self.commission_rate * price * quantity
+                + self.slippage * quantity)
 
     def add_trade(self, trade: TradeRecord):
         """记录一笔交易并更新持仓/权益
+
+        买入扣减 价格*数量 + 手续费 + 滑点
+        卖出增加 价格*数量 - 手续费 - 滑点
 
         Args:
             trade: TradeRecord 实例，direction 为 'buy' 或 'sell'
         """
         self.trade_history.append(trade)
+        cost = self._trade_cost(trade.price, trade.quantity)
         if trade.direction == 'buy':
             old_pos = self.current_position
             self.current_position += trade.quantity
-            self.current_capital -= trade.price * trade.quantity
-            # 加权平均成本价，避免多次买入时被最后一次价格覆盖
+            self.current_capital -= (trade.price * trade.quantity + cost)
             if old_pos == 0:
                 self.entry_price = trade.price
             else:
@@ -60,8 +76,7 @@ class TQBacktestEngine:
                 ) / self.current_position
         elif trade.direction == 'sell':
             self.current_position -= trade.quantity
-            # 只加回卖出金额，profit 为信息字段，价差已体现在 (sell - entry) 中
-            self.current_capital += trade.price * trade.quantity
+            self.current_capital += (trade.price * trade.quantity - cost)
 
         equity = self.current_capital + (self.current_position * self.entry_price
                                           if self.current_position > 0 else 0)
