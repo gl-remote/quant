@@ -11,7 +11,7 @@
     bc = cfg.backtest                                    # → BacktestConfig
     sc = cfg.get_strategy_config("ma")                   # → StrategyItemConfig
 
-ConfigManager 提供向后兼容的访问方式（与 ProjectConfig.instance() 行为一致）:
+ConfigManager 提供统一的配置访问方式（与 ProjectConfig.instance() 行为一致）:
     from config import ConfigManager
 
     cm = ConfigManager()

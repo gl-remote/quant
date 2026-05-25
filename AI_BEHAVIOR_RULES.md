@@ -51,7 +51,7 @@ vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 | 新增 Schema | `common/schemas.py` |
 | 修改数据库表 | `data/models.py` + `data/store.py` |
 | 修改报告格式 | `report/xxx.py` |
-| 修改配置项 | `common/constants.py` (默认值) + `config/conf.yaml` |
+| 修改配置项 | `common/constants.py` (默认值) + `config/conf.toml` |
 | 修改回测引擎 | `backtest/vnpy_backtest_engine.py` |
 | 新增桥接器 | `strategies/bridges/xxx.py` |
 
@@ -69,16 +69,10 @@ python main.py <子命令> [参数]
 |--------|------|------|
 | `export` | 从天勤导出历史 K 线 CSV | `python main.py export --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01` |
 | `test` | 离线策略逻辑验证（不联网） | `python main.py test --strategy ma` |
-| `backtest` | vn.py 三阶段回测 | `python main.py backtest --symbol DCE.m2509 --strategy ma` |
-| `tq-backtest` | 天勤 SDK 回测（旧版兼容） | `python main.py tq-backtest --symbol DCE.m2109 --gui --strategy ma` |
+| `backtest` | 统一回测 (TqSdk / vn.py) | `python main.py backtest --symbol DCE.m2509 --strategy ma` |
 | `live` | 实盘/模拟交易 | `python main.py live --symbol DCE.m2509 --gui --strategy ma` |
 
-`--strategy` 参数支持三种传入方式:
-- 简化名: `ma` → 找 `strategies/ma_strategy.py`
-- 完整名: `ma_strategy` → 找 `strategies/ma_strategy.py`
-- 带扩展名: `ma_strategy.py` → 找 `strategies/ma_strategy.py`
-
-不指定 `--strategy` 时默认使用 ma 策略。
+`--strategy` 参数为必填，支持三种传入方式:
 
 > **禁止**使用旧版 `--mode backtest` 格式，该格式已废弃。
 
@@ -130,8 +124,8 @@ strategies/bridges/tqsdk_bridge.py   ← 天勤桥接器 (接收 Strategy 实例
 
 ### 规则 4.5: 配置管理
 
-- API 密钥、密码等敏感信息**必须**写入 `conf.local.yaml`，严禁写入 `conf.yaml`
-- `conf.local.yaml` 已通过 `.gitignore` 排除，严禁手动 `git add`
+- API 密钥、密码等敏感信息**必须**写入 `conf.local.toml`，严禁写入 `conf.toml`
+- `conf.local.toml` 已通过 `.gitignore` 排除，严禁手动 `git add`
 - 新增配置参数应提供默认值，遵循 `.get(key, default)` 模式
 
 ### 规则 4.6: 构造函数输入校验
@@ -200,7 +194,7 @@ capital = bc.get('initial_capital', 100000.0)
 - 开平仓标识（TRADE_OFFSET_OPEN/CLOSE）
 - 信号原因（SIGNAL_STOP_LOSS/TAKE_PROFIT/DEATH_CROSS/GOLDEN_CROSS）
 - 状态码（STATUS_SUCCESS/FAILED, LOG_STATUS_*）
-- CLI 命令名（CMD_EXPORT/BACKTEST/TQ_BACKTEST/TEST/LIVE/REPORT）
+- CLI 命令名（CMD_EXPORT/BACKTEST/TEST/LIVE/REPORT）
 - 回测运行模式（MODE_SINGLE/BATCH/MULTI）
 - 策略标识名（STRATEGY_MA）
 - 所有配置默认值（DEFAULT_* 系列）
@@ -299,7 +293,6 @@ def insert_backtest(statistics: dict, engine_config: dict) -> None:
 
 **不需要改的：**
 - `strategies/core/types.py` 的 `Bar`/`Signal`/`Fill`/`StrategyPosition`：`@dataclass` 是正确的，它们是策略内部的轻量数据节点，不应引入 Pydantic 依赖
-- `TradingContext.strategy_params: dict[str, Any]`：策略自定义参数容器，保留 dict 是合理设计
 - `common/stats.py` 的 `TypedDict`：轻量聚合结果，TypedDict 合适
 
 #### 4.11.4 重构步骤（每次遇到底层代码时执行）
@@ -358,7 +351,7 @@ strategy_config.get("sma_short")  # 应直接用 strategy_config.sma_short
 |------|------|
 | 提交粒度 | 逻辑相关的修改合并为一次提交 |
 | 提交信息 | `类型: 简述` 格式（如 `docs:`, `fix:`, `feat:`, `refactor:`） |
-| 禁止提交 | `conf.local.yaml`、`*.csv`、`*.log`、`__pycache__/` |
+| 禁止提交 | `conf.local.toml`、`*.csv`、`*.log`、`__pycache__/` |
 | 提交前检查 | 确保代码可运行，基本功能无回归 |
 | 版本变动 | **仅在合并到 main 分支时**更新版本号（pyproject.toml、AI_BEHAVIOR_RULES.md、plan.md），日常开发提交不改变版本号 |
 

@@ -15,7 +15,6 @@ import argparse
 import logging
 
 from config import ConfigManager
-from common.constants import DEFAULT_INITIAL_CAPITAL
 
 # 配置日志（必须在导入其他模块之前）
 cm = ConfigManager()

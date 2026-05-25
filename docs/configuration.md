@@ -6,32 +6,30 @@
 
 ## 配置文件体系
 
-系统使用 YAML 分层配置，通过深度合并实现基础配置与本地覆盖的分离：
+系统使用 TOML 分层配置，通过深度合并实现基础配置与本地覆盖的分离：
 
 | 文件 | 用途 | 版本控制 |
 |------|------|---------|
-| `config/conf.yaml` | 基础配置，含策略参数、风控、回测设置 | 提交 |
-| `config/conf.example.yaml` | 配置模板，供新用户参考 | 提交 |
-| `config/conf.local.yaml` | 本地密钥与个性化覆盖 | **不提交** |
+| `config/conf.toml` | 基础配置，含策略参数、风控、回测设置 | 提交 |
+| `config/conf.example.toml` | 配置模板，供新用户参考 | 提交 |
+| `config/conf.local.toml` | 本地密钥与个性化覆盖 | **不提交** |
 
-合并策略为递归深度合并：`conf.local.yaml` 中的键值会覆盖 `conf.yaml` 中同路径的值，嵌套字典逐层合并。`ConfigManager` 在初始化时自动完成此过程。
+合并策略为递归深度合并：`conf.local.toml` 中的键值会覆盖 `conf.toml` 中同路径的值，嵌套 dict 逐层合并。`ProjectConfig.load()` 在初始化时自动完成此过程。配置模型定义在 `config/app_config.py`，所有字段通过 Pydantic `Field(default=...)` 提供默认值。
 
 ## 配置域概览
 
 ```
-conf.yaml
-├── app                 # 应用元信息
-├── environment         # 运行环境标识
-├── strategy_params     # 均线策略参数
-├── risk                # 风险管理参数
-├── data                # 数据源与存储路径
-├── export              # 数据导出模板
-├── backtest            # 回测引擎完整配置 ★
+conf.toml
+├── [app]                 # 应用元信息
+├── [environment]         # 运行环境标识
+├── [[strategies]]        # 策略配置数组
+├── [data]                # 数据源与存储路径
+├── [export]              # 数据导出模板
+├── [backtest]            # 回测引擎完整配置 ★
 │   ├── （基础交易参数）
-│   ├── split           # 数据集划分
-│   └── report          # 报告输出
-├── third_party         # 第三方服务密钥
-└── system              # 系统日志配置
+│   └── [backtest.split]  # 数据集划分
+├── [third_party]         # 第三方服务密钥
+└── [system]              # 系统日志配置
 ```
 
 ## 回测配置 `backtest`
@@ -110,49 +108,48 @@ conf.yaml
 
 用于配置外部数据源和交易接口的认证信息。当前支持天勤量化 (tqsdk)：
 
-```yaml
-third_party:
-  services:
-    - name: "tqsdk"
-      provider: "tianqin"
-      api_key: "your_api_key"        # 天勤账号
-      api_secret: "your_api_secret"  # 天勤密码
-      enabled: true
+```toml
+[third_party.services]
+name = "tqsdk"
+provider = "tianqin"
+api_key = "your_api_key"         # 天勤账号
+api_secret = "your_api_secret"   # 天勤密码
+enabled = true
 ```
 
-> 密钥信息应写入 `config/conf.local.yaml`，`config/conf.yaml` 中仅保留占位符。
+> 密钥信息应写入 `config/conf.local.toml`，`config/conf.toml` 中仅保留占位符。
 
 ## 配置示例
 
 ### 期货日线回测（保守型）
 
-```yaml
-backtest:
-  initial_capital: 500000.0
-  commission_rate: 0.0001
-  slippage: 1
-  price_tick: 0.5
-  contract_size: 100
-  interval: "d"
-  split:
-    train_ratio: 0.7
-    val_ratio: 0.15
-    test_ratio: 0.15
-    shuffle: false
-  report:
-    output_dir: "./output/reports"
+```toml
+[backtest]
+initial_capital = 500000.0
+commission_rate = 0.0001
+slippage = 1
+price_tick = 0.5
+contract_size = 100
+interval = "d"
+
+[backtest.split]
+train_ratio = 0.7
+val_ratio = 0.15
+test_ratio = 0.15
+shuffle = false
 ```
 
 ### 分钟线高频回测
 
-```yaml
-backtest:
-  initial_capital: 200000.0
-  commission_rate: 0.0002
-  slippage: 0
-  interval: "5m"
-  split:
-    shuffle: true
+```toml
+[backtest]
+initial_capital = 200000.0
+commission_rate = 0.0002
+slippage = 0
+interval = "5m"
+
+[backtest.split]
+shuffle = true
 ```
 
 ## 配置验证

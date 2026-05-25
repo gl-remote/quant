@@ -53,7 +53,6 @@ quant/
 │   └── formatting.py          #   安全格式化 (format_pct/format_float)
 ├── backtest/                  # 回测子系统
 │   ├── vnpy_backtest_engine.py
-│   ├── tq_backtest_engine.py
 │   ├── data_loader.py
 │   └── types.py
 ├── report/                    # 报告子系统
@@ -252,7 +251,7 @@ tests/
 
 ## 回测注意事项
 
-- **参数命名**: 回测参数通过 `config/conf.yaml` 管理，不在代码中硬编码
+- **参数命名**: 回测参数通过 `config/conf.toml` 管理，不在代码中硬编码
 - **手续费和滑点**: 双向扣除，`commission_rate * 2` + `slippage * 2 * volume`
 - **profit_factor**: 使用行业标准公式 `gross_profit / abs(gross_loss)`
 - **equity curve**: 优先使用 vnpy 的 `balance` 字段（含手续费/滑点），回退 `net_pnl`

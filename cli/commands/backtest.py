@@ -28,7 +28,6 @@ from common.constants import (
     MODE_SINGLE,
     MODE_BATCH,
     MODE_MULTI,
-    DEFAULT_INITIAL_CAPITAL,
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
 )
@@ -77,8 +76,8 @@ def cmd_backtest(args):
             pattern: 品种代码正则表达式（批量模式）
             start: 开始日期（可选）
             end: 结束日期（可选）
-            strategy: 策略名称（可选）
-            capital: 初始资金（默认 100000）
+            strategy: 策略名称（必填）
+            capital: 初始资金（默认从配置文件读取）
             gui: 是否启用图形界面（仅单标的模式生效）
     """
     cm = ConfigManager()
@@ -240,7 +239,7 @@ def _run_vnpy_backtest(args, cm, dm):
 
         logger.info(
             f"{'单品种' if mode == MODE_SINGLE else '批量'}回测: {len(symbols)} 个品种"
-            f" strategy={args.strategy or 'ma'}"
+            f" strategy={args.strategy}"
         )
 
         all_results = []

@@ -37,12 +37,12 @@ def cmd_test(args):
 
     Args:
         args: argparse.Namespace 对象，包含:
-            strategy: 策略名称（可选，默认 ma）
+            strategy: 策略名称（必填）
     """
     cm = ConfigManager()
     dm = DataManager(cm)
 
-    strategy = load_strategy(args.strategy or None)
+    strategy = load_strategy(args.strategy)
     apply_strategy_config(strategy, cm)
     cls_name = get_strategy_class_name(strategy)
 

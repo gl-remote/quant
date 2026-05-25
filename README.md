@@ -21,11 +21,11 @@
 quant/
 ├── main.py                 # 命令行入口（转发器）
 ├── run.sh                  # 快捷运行脚本
-├── config/                 # YAML 分层配置管理
-│   ├── conf.yaml           #   基础配置（提交版本控制）
-│   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
-│   ├── conf.example.yaml   #   配置模板
-│   └── config_manager.py   #   配置加载与合并
+├── config/                 # TOML + Pydantic 强类型配置
+│   ├── app_config.py       #   Pydantic 模型定义 + 单例加载
+│   ├── conf.toml           #   基础配置（提交版本控制）
+│   ├── conf.local.toml     #   本地密钥覆盖（不提交）
+│   └── conf.example.toml   #   配置模板
 ├── strategies/             # 策略模块（核心算法 + 桥接器）
 │   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
 │   ├── config/run_config.py #   运行配置 (RunConfig)
@@ -73,10 +73,10 @@ pip install vnpy vnpy_ctastrategy
 ### 2. 配置天勤账号
 
 ```bash
-cp config/conf.example.yaml config/conf.local.yaml
+cp config/conf.example.toml config/conf.local.toml
 ```
 
-编辑 `config/conf.local.yaml`，填入天勤 API Key 和 Secret。仅数据导出和实盘交易需要此配置，离线测试和本地 CSV 回测不需要。
+编辑 `config/conf.local.toml`，填入天勤 API Key 和 Secret。仅数据导出和实盘交易需要此配置，离线测试和本地 CSV 回测不需要。
 
 ### 3. 导出历史数据
 
@@ -124,7 +124,7 @@ python main.py backtest  # 扫描全部品种
 
 ## 关键配置
 
-回测参数通过 `config/conf.yaml` 中的 `backtest` 段管理：
+回测参数通过 `config/conf.toml` 中的 `[backtest]` 段管理：
 
 ```yaml
 backtest:

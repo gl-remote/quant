@@ -20,10 +20,10 @@ vn.py 和 tqsdk 为强制依赖，安装后即可使用全部功能。
 复制配置模板并填入凭证：
 
 ```bash
-cp config/conf.example.yaml config/conf.local.yaml
+cp config/conf.example.toml config/conf.local.toml
 ```
 
-编辑 `config/conf.local.yaml` 中的 `api_key` 和 `api_secret`。实盘交易和无 GUI 数据导出依赖此配置。
+编辑 `config/conf.local.toml` 中的 `api_key` 和 `api_secret`。实盘交易和无 GUI 数据导出依赖此配置。
 
 ### 准备行情数据
 
@@ -80,29 +80,13 @@ python main.py backtest --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01
 
 执行完整流水线：加载 CSV → 划分三数据集 → 独立回测 → 生成报告 → 对比分析。结果同时输出到控制台和 `.quant_shared_data/reports/` 目录。
 
-### `tq-backtest` — 天勤回测（旧版兼容）
-
-```bash
-python main.py tq-backtest --symbol DCE.m2109 --start 2024-01-01 --end 2024-12-31 --gui
-```
-
-| 参数 | 必需 | 默认值 | 说明 |
-|------|------|--------|------|
-| `--symbol` | 否 | `DCE.m2109` | 品种代码 |
-| `--start` | 否 | `2024-01-01` | 起始日期 |
-| `--end` | 否 | `2024-12-31` | 结束日期 |
-| `--capital` | 否 | `100000.0` | 初始资金 |
-| `--gui` | 否 | 关闭 | 启用天勤 Web 图形界面 |
-
-使用天勤 SDK 的 Backtest 模式执行回测，通过 `--gui` 可查看 K 线图与交易信号标注。
-
 ### `live` — 实盘/模拟交易
 
 ```bash
 python main.py live --symbol DCE.m2509 --gui
 ```
 
-需要 `config/conf.local.yaml` 中配置有效的天勤账号。`--gui` 启用实时 K 线图和资金曲线监控。
+需要 `config/conf.local.toml` 中配置有效的天勤账号。`--gui` 启用实时 K 线图和资金曲线监控。
 
 ## 输出解读
 

@@ -352,8 +352,8 @@ class MACrossParams:
 ```python
 from config import ConfigManager
 
-cm = ConfigManager()                        # 加载 conf.yaml + conf.local.yaml
-cm = ConfigManager(config_file='custom.yaml')  # 加载指定配置文件
+cm = ConfigManager()                        # 加载 conf.toml + conf.local.toml
+cm = ConfigManager(config_file='custom.toml')  # 加载指定配置文件
 
 tc = cm.get_trading_config()                # 策略 + 风控参数
 bc = cm.get_backtest_config()               # 回测引擎参数

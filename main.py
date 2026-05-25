@@ -7,8 +7,7 @@
 命令参考:
     python main.py export     # 数据导出
     python main.py test       # 策略测试
-    python main.py backtest   # vn.py 批量回测
-    python main.py tq-backtest # TqSdk 回测
+    python main.py backtest   # 统一回测 (TqSdk / vn.py)
     python main.py live       # 实盘交易
     python main.py report     # 生成报告
 

@@ -1,4 +1,4 @@
-"""应用配置 — Pydantic 全量模型 + 交易上下文 + 统一单例入口
+"""应用配置 — Pydantic 全量模型 + 统一单例入口
 
 层级结构:
     ProjectConfig (根模型，单例 & 统一访问入口)
@@ -376,7 +376,7 @@ class ProjectConfig(BaseModel):
 
     @staticmethod
     def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:
-        """解析账户信息：环境变量优先，其次 YAML config"""
+        """解析账户信息：环境变量优先，其次 TOML config"""
         ak = os.environ.get("TQSDK_API_KEY", "")
         sk = os.environ.get("TQSDK_API_SECRET", "")
         if ak and sk:

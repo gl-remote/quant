@@ -102,7 +102,6 @@
 | 模块 | 职责 |
 |------|------|
 | [vnpy_backtest_engine.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/vnpy_backtest_engine.py) | 批量回测 + Walk-Forward 编排器，包装 vnpy 官方引擎 |
-| [tq_backtest_engine.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/tq_backtest_engine.py) | 天勤 GUI 单标的回测引擎 |
 | [data_loader.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/data_loader.py) | CSV 加载、数据集划分、vnpy BarData 格式转换 |
 | [types.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/types.py) | 回测结果类型定义 |
 
@@ -157,7 +156,7 @@ cli/
 
 ### `config/` — 配置子系统
 
-[ConfigManager](file:///Users/REDACTED_API_KEY/Documents/src/quant/config/config_manager.py) 实现 YAML 分层配置的深度合并：`conf.yaml`（基础配置，提交版本控制）→ `conf.local.yaml`（本地覆盖，含密钥，不提交）。所有默认值来自 `common/constants.py`。
+[ProjectConfig](file:///Users/REDACTED_API_KEY/Documents/src/quant/config/app_config.py) 实现 TOML 分层配置的深度合并：`conf.toml`（基础配置，提交版本控制）→ `conf.local.toml`（本地覆盖，含密钥，不提交）。所有默认值来自 Pydantic 模型的 `Field(default=...)`。
 
 ## 数据流
 
@@ -245,10 +244,9 @@ quant/
 │       └── live.py
 │
 ├── config/                       # 配置管理
-│   ├── config_manager.py         #   YAML 分层合并 + 校验
-│   ├── conf.yaml                 #   基础配置（版本控制）
-│   ├── conf.local.yaml           #   本地密钥覆盖（不提交）
-│   └── conf.example.yaml         #   配置模板
+│   ├── app_config.py              #   TOML 加载 + Pydantic 模型
+│   ├── conf.toml                   #   基础配置（版本控制）
+│   ├── conf.local.toml             #   本地密钥覆盖（不提交）
 │
 ├── strategies/                   # 策略子系统
 │   ├── core/                     #   抽象接口
@@ -262,7 +260,6 @@ quant/
 │
 ├── backtest/                     # 回测子系统
 │   ├── vnpy_backtest_engine.py   #   批量回测 + Walk-Forward
-│   ├── tq_backtest_engine.py     #   天勤 GUI 回测
 │   ├── data_loader.py            #   数据加载与划分
 │   └── types.py                  #   回测结果类型
 │
