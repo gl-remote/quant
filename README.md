@@ -28,7 +28,7 @@ quant/
 │   └── config_manager.py   #   配置加载与合并
 ├── strategies/             # 策略模块（核心算法 + 桥接器）
 │   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
-│   ├── core/context.py     #   交易上下文 (TradingContext)
+│   ├── config/run_config.py #   运行配置 (RunConfig)
 │   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
 │   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测引擎、数据加载、报告对比

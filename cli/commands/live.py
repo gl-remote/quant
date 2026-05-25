@@ -18,9 +18,7 @@ from data import DataManager
 from strategies import TqsdkStrategyBridge
 from strategies.core import (
     load_strategy,
-    apply_strategy_config,
     get_strategy_class_name,
-    TradingContext,
 )
 from common.constants import (
     LOG_STATUS_INFO,
@@ -49,19 +47,25 @@ def cmd_live(args):
     try:
         cm.validate_config()
         account = cm.get_account_info()
-        if not account:
-            logger.error("请先在 config/conf.local.yaml 中配置天勤账号信息")
+        if account is None:
+            logger.error("请先在 config/conf.local.toml 中配置天勤账号信息")
             dm.store.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
             sys.exit(1)
 
         from tqsdk import TqAuth
-        auth = TqAuth(account['api_key'], account['api_secret'])
-        strategy = load_strategy(args.strategy)
-        apply_strategy_config(strategy, cm)
+        auth = TqAuth(account.api_key, account.api_secret)
+        sc = cm.get_trading_config(args.strategy)
+        strategy_params = sc.model_dump(exclude={"name", "enabled"})
+        bc = cm.get_backtest_config()
+        strategy = load_strategy(
+            args.strategy,
+            strategy_params=strategy_params,
+            capital=bc.initial_capital,
+            contract_size=bc.contract_size,
+        )
         strategy_cls = get_strategy_class_name(strategy)
 
-        context = TradingContext.build(strategy, args.symbol, cm)
-        bridge = TqsdkStrategyBridge(context=context)
+        bridge = TqsdkStrategyBridge(strategy=strategy, symbol=args.symbol)\
 
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
         dm.store.log('live', f"开始: {args.symbol} strategy={strategy_cls}",

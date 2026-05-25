@@ -101,7 +101,7 @@ strategies/bridges/tqsdk_bridge.py   ← 天勤桥接器 (接收 Strategy 实例
 
 ### 规则 4.2: 核心策略复用（强制执行）
 
-任何需要执行 SMA 计算、金叉/死叉检测、止盈止损判断的代码，**必须**通过 `MaStrategyCore` 或 `TradingConfig` 调用，严禁手动实现等效逻辑。
+任何需要执行 SMA 计算、金叉/死叉检测、止盈止损判断的代码，**必须**通过 `MaStrategyCore` 或 `MACrossParams` 调用，严禁手动实现等效逻辑。
 
 ```
 ✅ core.calculate_sma(closes, period)        # 使用核心方法
@@ -239,6 +239,89 @@ vol = capital * 0.1 / (price * 10)
 - **统计**: avg_trades_per_day(), profitable_ratio(), convert_annual_factor()
 
 新增公式时：先确认公式库中无等价的函数 → 在 `formulas.py` 中实现（纯函数、零依赖）→ 补充单元测试于 `tests/test_common.py` → 全局替换。
+
+### 规则 4.11: Pydantic 类型约束（渐进式迁移）
+
+**原则：项目内所有数据载体优先使用 Pydantic 模型，禁止在模块间传递裸 dict。**
+
+#### 4.11.1 三种类型工具的选择
+
+| 场景 | 工具 | 何时用 |
+|------|------|--------|
+| 有运行时验证需求、含字段级约束（`gt/ge/le`）、需序列化/反序列化 | **Pydantic `BaseModel`** | 配置对象、API 返回值、数据库记录、跨模块传递的数据载体 |
+| 纯内存中间数据、性能敏感路径、框架无关的轻量类型 | **`@dataclass`** | 策略内部 Bar/Signal/Fill（`strategies/core/types.py`） |
+| 仅标注函数参数/返回值类型、无需运行时验证 | **`TypedDict`** | 轻量统计聚合结果（`common/stats.py`） |
+
+**选择优先级：** Pydantic `BaseModel` > `@dataclass` > `TypedDict` > 裸 `dict`
+
+#### 4.11.2 Pydantic 模型规范
+
+```python
+# ✅ 正确：Pydantic 模型 + 字段级约束
+from pydantic import BaseModel, Field, field_validator
+
+class BacktestResult(BaseModel):
+    """单阶段回测结果"""
+    model_config = ConfigDict(frozen=True)  # 不可变，防意外修改
+
+    symbol: str = Field(..., min_length=1)
+    total_trades: int = Field(ge=0)
+    total_profit: float
+    win_rate: float = Field(ge=0.0, le=1.0)
+    max_drawdown: float = Field(ge=0.0)
+    sharpe_ratio: float | None = None
+
+    @field_validator("total_profit")
+    @classmethod
+    def check_profit_consistency(cls, v, info):
+        # 可以在此做跨字段逻辑校验
+        return v
+
+# ❌ 禁止：模块间传递裸 dict
+def run_backtest() -> dict[str, Any]:
+    return {"total_trades": 10, "total_profit": 5000.0, ...}
+
+# ❌ 禁止：函数接收裸 dict 参数（无法校验字段完整性）
+def insert_backtest(statistics: dict, engine_config: dict) -> None:
+    ...
+```
+
+#### 4.11.3 渐进式迁移优先级
+
+按影响面和收益排序，遇到相关代码修改时按此顺序推进：
+
+| 优先级 | 模块 | 当前状态 | 迁移目标 |
+|--------|------|---------|---------|
+| **P0** | `backtest/vnpy_backtest_engine.py` 返回值 | 方法返回 `dict[str, Any]`，下游 `.get()` 取值 | 创建 `BacktestResult` / `WalkForwardResult` Pydantic 模型 |
+| **P1** | `data/store.py` 参数/返回值 | `insert_*()` 接收裸 `dict`，`query_*()` 返回 `List[Dict]` | statistics / engine_config / daily_results → Pydantic 模型 |
+| **P2** | `report/charts.py` / `report/reports.py` | `daily: List[Dict]`，`trades: List` | 创建 `DailyRecord` / `TradeRecord` Pydantic 模型（复用 `data/models.py`） |
+| **P3** | `tests/conftest.py` 测试夹具 | `make_trade()` / `make_daily()` 返回裸 dict | 复用正式 Pydantic 模型构造测试数据 |
+
+**不需要改的：**
+- `strategies/core/types.py` 的 `Bar`/`Signal`/`Fill`/`StrategyPosition`：`@dataclass` 是正确的，它们是策略内部的轻量数据节点，不应引入 Pydantic 依赖
+- `TradingContext.strategy_params: dict[str, Any]`：策略自定义参数容器，保留 dict 是合理设计
+- `common/stats.py` 的 `TypedDict`：轻量聚合结果，TypedDict 合适
+
+#### 4.11.4 重构步骤（每次遇到底层代码时执行）
+
+1. 发现裸 dict 在模块间传递 → 不要仅加类型注解掩盖
+2. 定义对应的 Pydantic `BaseModel`（文件名与模型所在领域匹配）
+3. 用 `Field(gt/ge/le/...)` 添加字段级约束
+4. 生产方返回模型实例，消费方用属性访问（`result.total_trades` 替代 `result.get("total_trades")`）
+5. 运行 `pytest tests/ -q` 确认无回归
+
+#### 4.11.5 反模式清单
+
+```python
+# ❌ 用类型别名掩盖裸 dict
+BacktestResult = dict[str, Any]  # 这不是真正的类型约束！
+
+# ❌ 在 Pydantic 模型外套一层 dict
+return {"data": backtest_result.model_dump()}  # 直接返回模型实例
+
+# ❌ 用 .get() 访问 Pydantic 模型字段
+strategy_config.get("sma_short")  # 应直接用 strategy_config.sma_short
+```
 
 ---
 

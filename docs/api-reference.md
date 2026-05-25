@@ -264,9 +264,9 @@ tqsdk kline_serial (DataFrame) → 标准 Bar → Strategy.on_bar() → Signal �
 位于 [strategies/ma_strategy.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/ma_strategy.py)，纯业务逻辑，无框架依赖。
 
 ```python
-from strategies.core import MaStrategyCore, TradingConfig
+from strategies.core import MaStrategyCore, MACrossParams
 
-config = TradingConfig(sma_short=5, sma_long=20)
+config = MACrossParams(sma_short=5, sma_long=20)
 core = MaStrategyCore(config)
 
 signal, reason = core.on_bar_signal(closes=[...], current_price=100.5)
@@ -331,11 +331,11 @@ class BacktestResult:
     final_equity: float = 0.0
 ```
 
-### TradingConfig（策略核心）
+### MACrossParams（策略核心）
 
 ```python
 @dataclass
-class TradingConfig:
+class MACrossParams:
     sma_short: int = 5
     sma_long: int = 20
     stop_loss_ratio: float = 0.03

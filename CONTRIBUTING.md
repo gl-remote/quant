@@ -38,7 +38,7 @@ quant/
 ├── strategies/
 │   ├── core/                  # 策略抽象层 (ABC + 类型定义)
 │   │   ├── base.py            #   Strategy 基类
-│   │   ├── context.py         #   TradingContext
+│   │   ├── run_config.py      #   RunConfig
 │   │   └── types.py           #   Bar/Signal/Fill/Position
 │   ├── bridges/               # 框架桥接器
 │   │   ├── vnpy_bridge.py     #   vn.py CtaTemplate
@@ -96,7 +96,7 @@ mypy strategies/ backtest/ data/
 | 函数/方法 | `snake_case` | `on_bar()` |
 | 私有方法 | `_leading_underscore` | `_calc_sma()` |
 | 常量 | `UPPER_SNAKE` | `MAX_RETRIES` |
-| 类型变量 | `PascalCase` | `TradingConfig` |
+| 类型变量 | `PascalCase` | `MACrossParams` |
 
 ### 架构原则
 

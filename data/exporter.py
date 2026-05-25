@@ -5,9 +5,12 @@ import time
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Optional, TYPE_CHECKING
 
 from .manager import DataManager
+
+if TYPE_CHECKING:
+    from config.app_config import AccountInfo
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +22,7 @@ _RETRY_BACKOFF_BASE = 1.0
 
 def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
                       kline_period: int = 1,
-                      account: Optional[Dict] = None) -> pd.DataFrame:
+                      account: Optional["AccountInfo"] = None) -> pd.DataFrame:
     """从天勤 SDK 拉取 K 线数据，带自动重试
 
     Args:
@@ -56,14 +59,14 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
 
 
 def _do_fetch(symbol: str, start_date: str, end_date: str,
-              kline_period: int, account: Optional[Dict]) -> pd.DataFrame:
+              kline_period: int, account: Optional["AccountInfo"]) -> pd.DataFrame:
     """执行单次天勤 API 拉取"""
     from tqsdk import TqApi, TqAuth, TqBacktest
     from tqsdk.exceptions import BacktestFinished
 
     start_dt = datetime.strptime(start_date, '%Y-%m-%d')
     end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-    auth = TqAuth(account['api_key'], account['api_secret']) if account else None
+    auth = TqAuth(account.api_key, account.api_secret) if account else None
 
     api = TqApi(backtest=TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth)
     klines = api.get_kline_serial(symbol, duration_seconds=kline_period * 60)
@@ -120,11 +123,11 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
     try:
         dc = config_manager.get_data_config()
         ec = config_manager.get_export_config()
-        Path(dc['export_dir']).mkdir(parents=True, exist_ok=True)
+        Path(dc.export_dir).mkdir(parents=True, exist_ok=True)
 
         if not output_path:
-            filename = ec['filename_template'].format(symbol=symbol, interval=interval)
-            output_path = str(Path(dc['export_dir']) / filename)
+            filename = ec.filename_template.format(symbol=symbol, interval=interval)
+            output_path = str(Path(dc.export_dir) / filename)
 
         account = config_manager.get_account_info()
         logger.info(f"开始导出 {symbol}: {start_date} ~ {end_date}")

@@ -4,10 +4,11 @@ import pytest
 import tempfile
 import pandas as pd
 import numpy as np
-import yaml
 import os
 from pathlib import Path
 from datetime import datetime, timedelta
+
+import tomli_w
 
 from common.constants import STATUS_SUCCESS
 from data.store import DataStore
@@ -125,7 +126,7 @@ def trading_config_dict():
 
 @pytest.fixture
 def base_config_dict():
-    """基础配置字典（模拟 conf.yaml 新格式）"""
+    """基础配置字典（模拟 conf.toml 新格式）"""
     return {
         'strategies': [
             {
@@ -179,12 +180,21 @@ def sample_kline_df():
     return df
 
 
+@pytest.fixture(autouse=True)
+def _reset_config_singleton():
+    """每个测试前重置 ConfigManager 单例"""
+    from config.app_config import ConfigManager
+    ConfigManager.reset()
+    yield
+    ConfigManager.reset()
+
+
 @pytest.fixture
 def temp_config_file(base_config_dict):
-    """创建临时 conf.yaml"""
-    fd, path = tempfile.mkstemp(suffix='.yaml')
-    with open(fd, 'w', encoding='utf-8') as f:
-        yaml.dump(base_config_dict, f)
+    """创建临时 conf.toml"""
+    fd, path = tempfile.mkstemp(suffix='.toml')
+    with open(fd, 'wb') as f:
+        f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
     yield path
     os.unlink(path)
 

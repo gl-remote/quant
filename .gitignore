@@ -49,8 +49,8 @@ Thumbs.db
 .env
 
 # 本地配置文件（包含敏感信息）
-conf.local.yaml           # 本地覆盖配置，包含API密钥等敏感信息
-config/conf.local.yaml
+conf.local.toml           # 本地覆盖配置，包含API密钥等敏感信息
+config/conf.local.toml
 
 # Logs
 *.log

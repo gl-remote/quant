@@ -120,16 +120,20 @@ class Signal:
 
 ### 3.1 编程方式
 
-构造 `TradingContext`，将策略实例直接注入回测引擎：
+通过 `RunConfig` 将策略参数和环境配置传入回测引擎：
 
 ```python
-from strategies.core.context import TradingContext
-from strategies.core.my_strategy import MyStrategy, MyConfig
+from config.run_config import RunConfig
+from config import ConfigManager
+from strategies.ma_strategy import MaStrategyCore
 from backtest import VnpyBacktestEngine
 
-context = TradingContext(strategy=MyStrategy(MyConfig(param_a=15)))
-engine = VnpyBacktestEngine(config, context=context)
-result = engine.run_full_pipeline(symbol='DCE.m2509')
+cm = ConfigManager()
+ctx = cm.build_run_config(symbol='DCE.m2509', strategy_name='ma',
+                           capital=200_000)
+strategy = MaStrategyCore(ctx)
+engine = VnpyBacktestEngine(cm.get_backtest_config(), run_config=ctx)
+result = engine.run_full_pipeline(symbol='DCE.m2509', strategy=strategy)
 ```
 
 适合脚本或 Notebook 中手动调用。

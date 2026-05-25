@@ -62,20 +62,20 @@ class DataManager:
     
     def _get_data_dir(self):
         """获取数据目录配置"""
-        return self._get_config().get_backtest_config().get('data_dir', '.quant_shared_data/csv')
+        return self._get_config().get_backtest_config().data_dir or '.quant_shared_data/csv'
     
     def _get_filename_template(self):
         """获取文件名模板配置"""
-        return self._get_config().get_export_config().get('filename_template', '{symbol}.{interval}.csv')
+        return self._get_config().get_export_config().filename_template
     
     def _get_default_interval(self):
         """获取默认K线周期配置"""
-        return self._get_config().get_backtest_config().get('interval', '1m')
+        return self._get_config().get_backtest_config().interval
     
     def _init_store(self):
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().get('db_path', '.quant_shared_data/quant_shared.db')
+            db_path = self._get_config().get_data_config().db_path or '.quant_shared_data/quant_shared.db'
             self._store = DataStore(db_path)
     
     @property

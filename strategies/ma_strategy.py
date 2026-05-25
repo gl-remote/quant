@@ -10,7 +10,7 @@ Bridge 只需: 构造 Bar → 调用 on_bar() → 拿到 Signal → 执行下单
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from .core.base import Strategy
 from .core.types import Bar, Signal, Fill, StrategyPosition
@@ -28,10 +28,8 @@ from common.constants import (
     DEFAULT_STOP_LOSS_RATIO,
     DEFAULT_TAKE_PROFIT_RATIO,
     DEFAULT_POSITION_RATIO,
-    DEFAULT_CONTRACT_SIZE,
     DEFAULT_INITIAL_CAPITAL,
-    DEFAULT_COMMISSION_RATE,
-    DEFAULT_SLIPPAGE,
+    DEFAULT_CONTRACT_SIZE,
 )
 from common.formulas import (
     simple_moving_average,
@@ -44,29 +42,45 @@ from common.formulas import (
 
 
 @dataclass
-class TradingConfig:
+class MACrossParams:
+    """均线交叉策略参数
+
+    纯策略参数，不存环境数据 (capital/contract_size 由 MaStrategyCore 管理)。
+    """
     sma_short: int = DEFAULT_SMA_SHORT
     sma_long: int = DEFAULT_SMA_LONG
     stop_loss_ratio: float = DEFAULT_STOP_LOSS_RATIO
     take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
     position_ratio: float = DEFAULT_POSITION_RATIO
-    contract_size: int = DEFAULT_CONTRACT_SIZE
-    capital: float = DEFAULT_INITIAL_CAPITAL
-    commission_rate: float = DEFAULT_COMMISSION_RATE
-    slippage: float = DEFAULT_SLIPPAGE
 
 
 class MaStrategyCore(Strategy):
     """均线交叉策略核心
 
     负责全部业务逻辑，Bridge 仅做数据转换和下单执行。
+
+    构造时接受策略参数和环境数据。
     """
 
     name: str = STRATEGY_MA
     VERSION: str = "v1.0.0"
 
-    def __init__(self, config: Optional[TradingConfig] = None):
-        self._config = config or TradingConfig()
+    def __init__(self, strategy_params: Optional[Dict[str, Any]] = None,
+                 capital: Optional[float] = None,
+                 contract_size: Optional[int] = None):
+        if strategy_params is not None:
+            self._config = MACrossParams(
+                sma_short=strategy_params.get('sma_short', DEFAULT_SMA_SHORT),
+                sma_long=strategy_params.get('sma_long', DEFAULT_SMA_LONG),
+                stop_loss_ratio=strategy_params.get('stop_loss_ratio', DEFAULT_STOP_LOSS_RATIO),
+                take_profit_ratio=strategy_params.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO),
+                position_ratio=strategy_params.get('position_ratio', DEFAULT_POSITION_RATIO),
+            )
+        else:
+            self._config = MACrossParams()
+        self._capital = float(capital) if capital is not None else float(DEFAULT_INITIAL_CAPITAL)
+        self._contract_size = int(contract_size) if contract_size is not None else int(DEFAULT_CONTRACT_SIZE)
+
         self._position = StrategyPosition()
         self._fills: List[Fill] = []
         self._close_history: List[float] = []
@@ -76,11 +90,11 @@ class MaStrategyCore(Strategy):
     # ---- Strategy 接口 ----
 
     @property
-    def config(self) -> TradingConfig:
+    def config(self) -> MACrossParams:
         return self._config
 
     @config.setter
-    def config(self, value: TradingConfig):
+    def config(self, value: MACrossParams):
         self._config = value
 
     @property
@@ -168,5 +182,5 @@ class MaStrategyCore(Strategy):
                                       self._config.take_profit_ratio)
 
     def _calc_position_size(self, price: float) -> int:
-        c = self._config
-        return position_size(c.capital, c.position_ratio, price, c.contract_size)
+        return position_size(self._capital, self._config.position_ratio,
+                             price, self._contract_size)

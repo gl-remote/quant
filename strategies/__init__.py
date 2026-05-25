@@ -16,8 +16,8 @@
 
 __version__ = "0.2.0-dev"
 
-from .ma_strategy import MaStrategyCore, TradingConfig
-from .core import Strategy, Bar, Signal, Fill, StrategyPosition, TradingContext
+from .ma_strategy import MaStrategyCore, MACrossParams
+from .core import Strategy, Bar, Signal, Fill, StrategyPosition
 
 try:
     from .bridges import VnpyStrategyBridge
@@ -30,7 +30,7 @@ except ImportError:
     TqsdkStrategyBridge = None
 
 __all__ = [
-    'Strategy', 'MaStrategyCore', 'TradingConfig',
+    'Strategy', 'MaStrategyCore', 'MACrossParams',
     'Bar', 'Signal', 'Fill', 'StrategyPosition',
-    'VnpyStrategyBridge', 'TqsdkStrategyBridge', 'TradingContext',
+    'VnpyStrategyBridge', 'TqsdkStrategyBridge',
 ]

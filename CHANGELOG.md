@@ -14,7 +14,9 @@
 - **统一回测命令**: `backtest` 命令自动选择引擎，单标的用 TqSdk（支持 GUI），批量用 vn.py
 - **common/constants.py**: 全局常量字典，消除所有硬编码字符和魔术数字
 - **common/formulas.py**: 统一量化计算公式库，20+ 行业标准公式
-- **TradingContext.build()**: 交易上下文工厂方法，简化上下文创建
+- **RunConfig & build_run_config()**: 运行配置 typed config，ConfigManager 组装
+- **Typed config dataclass**: BacktestConfig / DataConfig / ExportConfig / LoggingConfig 替代 dict
+- **Pydantic ProjectConfig**: 全量 Pydantic 根配置模型，启动时加载一次，单例访问，路径自动解析 + 字段级校验
 - **快捷运行脚本**: `run.sh` 支持命令验证和详细帮助信息
 
 ### 重构
@@ -26,7 +28,7 @@
 - **工具函数迁移**:
   - `calculate_fifo_profit` → `common/formulas.py`
   - `load_strategy`, `apply_strategy_config` → `strategies/core/__init__.py`
-  - `build_context` → `TradingContext.build()`
+  - `build_context` → `ConfigManager.build_run_config()`
   - `setup_db_logging` → `data/database.py`
 - **整合回测命令**: 删除 `tq_backtest.py`，功能整合到 `backtest.py`
 

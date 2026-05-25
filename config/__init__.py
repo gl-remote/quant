@@ -2,11 +2,53 @@
 """
 配置管理模块
 
-提供配置文件加载、验证和敏感信息访问功能。
+基于 Pydantic 的强类型配置系统。
+
+统一入口:
+    from config import ProjectConfig
+
+    cfg = ProjectConfig.instance()                        # 单例
+    bc = cfg.backtest                                    # → BacktestConfig
+    sc = cfg.get_strategy_config("ma")                   # → StrategyItemConfig
+
+ConfigManager 提供向后兼容的访问方式（与 ProjectConfig.instance() 行为一致）:
+    from config import ConfigManager
+
+    cm = ConfigManager()
+    bc = cm.get_backtest_config()
 """
 
-from .config_manager import ConfigManager
+from .app_config import (
+    ConfigManager,
+    ProjectConfig,
+    # 子模型
+    AccountInfo,
+    AppConfig,
+    BacktestConfig,
+    DataConfig,
+    EnvironmentConfig,
+    ExportConfig,
+    LoggingConfig,
+    SplitConfig,
+    StrategyItemConfig,
+    SystemConfig,
+    ThirdPartyConfig,
+    ThirdPartyServiceConfig,
+)
 
 __all__ = [
-    'ConfigManager'
+    'ProjectConfig',
+    'ConfigManager',
+    'AccountInfo',
+    'AppConfig',
+    'BacktestConfig',
+    'DataConfig',
+    'EnvironmentConfig',
+    'ExportConfig',
+    'LoggingConfig',
+    'SplitConfig',
+    'StrategyItemConfig',
+    'SystemConfig',
+    'ThirdPartyConfig',
+    'ThirdPartyServiceConfig',
 ]

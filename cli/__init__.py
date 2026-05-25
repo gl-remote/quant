@@ -14,33 +14,27 @@ CLI 模块包
         - live.py           # 实盘交易命令
         - report.py         # 报告生成命令
 
-工具函数已迁移到核心模块:
-    - load_strategy, apply_strategy_config, TradingContext → strategies.core
+工具函数:
+    - load_strategy, apply_strategy_config → strategies.core
     - calculate_fifo_profit → common.formulas
+    - BacktestConfig / StrategyItemConfig → config.app_config (typed config models)
 """
 
-# 兼容性导入转发（保留原有 API）
+# 兼容性导入转发
 from strategies.core import (
     load_strategy,
     get_strategy_class_name,
     apply_strategy_config,
     serialize_strategy_params,
-    TradingContext,
 )
 from common.formulas import calculate_fifo_profit
 from common.constants import DEFAULT_INITIAL_CAPITAL
-
-
-def build_context(strategy, symbol, config_manager, capital=DEFAULT_INITIAL_CAPITAL):
-    """兼容性包装：委托给 TradingContext.build"""
-    return TradingContext.build(strategy, symbol, config_manager, capital)
 
 
 __all__ = [
     'calculate_fifo_profit',
     'load_strategy',
     'get_strategy_class_name',
-    'build_context',
     'apply_strategy_config',
     'serialize_strategy_params',
 ]

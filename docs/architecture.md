@@ -115,7 +115,7 @@ strategies/
 ├── core/
 │   ├── base.py           ← Strategy ABC
 │   ├── types.py          ← Bar/Signal/Fill/StrategyPosition
-│   └── context.py        ← TradingContext
+│   └── run_config.py     ← RunConfig
 ├── ma_strategy.py        ← MaStrategyCore (纯算法, 173 行, 99% 覆盖)
 └── bridges/
     ├── vnpy_bridge.py    ← VnpyStrategyBridge (vn.py 桥接)
@@ -254,7 +254,7 @@ quant/
 │   ├── core/                     #   抽象接口
 │   │   ├── base.py               #     Strategy ABC
 │   │   ├── types.py              #     Bar/Signal/Fill/StrategyPosition
-│   │   └── context.py            #     TradingContext
+│   │   └── run_config.py         #     RunConfig
 │   ├── ma_strategy.py            #   均线策略核心 (173 行)
 │   └── bridges/                  #   框架桥接器
 │       ├── vnpy_bridge.py        #     vn.py 桥接

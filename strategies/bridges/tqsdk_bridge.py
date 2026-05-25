@@ -15,7 +15,6 @@ from datetime import datetime
 from typing import Optional, Any
 
 from ..core.base import Strategy
-from ..core.context import TradingContext
 from ..core.types import Bar, Signal, Fill
 
 logger = logging.getLogger(__name__)
@@ -55,9 +54,9 @@ class TqsdkStrategyBridge:
       caller 根据 signal 执行下单 → strategy.on_fill(fill)
     """
 
-    def __init__(self, context: TradingContext):
-        self._strategy: Strategy = context.strategy
-        self.symbol: str = context.symbol
+    def __init__(self, strategy: Strategy, symbol: str):
+        self._strategy: Strategy = strategy
+        self.symbol: str = symbol
 
         self.api: Any = None
         self.account: Any = None

@@ -1,11 +1,10 @@
 """策略核心模块
 
-提供策略基类、数据类型定义、交易上下文以及策略加载功能。
+提供策略基类、数据类型定义以及策略加载功能。
 
 子模块:
   - base: Strategy ABC 基类
   - types: Bar, Signal, Fill, StrategyPosition 标准化数据类型
-  - context: TradingContext 交易上下文类
 
 功能函数:
   - load_strategy: 动态加载策略实例
@@ -22,13 +21,12 @@ from typing import Optional
 
 from .base import Strategy
 from .types import Bar, Signal, Fill, StrategyPosition
-from .context import TradingContext
 from common.constants import (
     STRATEGY_MA,
 )
 
 __all__ = [
-    'Strategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition', 'TradingContext',
+    'Strategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
     'load_strategy', 'get_strategy_class_name',
     'apply_strategy_config', 'serialize_strategy_params',
 ]
@@ -37,7 +35,8 @@ __all__ = [
 # ============================================================
 # 策略动态加载
 # ============================================================
-def load_strategy(strategy_name: Optional[str]) -> Strategy:
+def load_strategy(strategy_name: Optional[str] = None,
+                  **strategy_kwargs) -> Strategy:
     """根据名称动态加载策略实例
 
     支持三种传入方式:
@@ -47,6 +46,7 @@ def load_strategy(strategy_name: Optional[str]) -> Strategy:
 
     Args:
         strategy_name: 策略名称，None 则默认使用 ma
+        **strategy_kwargs: 透传给策略构造函数的参数 (strategy_params/capital/contract_size)
 
     Returns:
         Strategy 实例
@@ -81,6 +81,8 @@ def load_strategy(strategy_name: Optional[str]) -> Strategy:
                 issubclass(attr, Strategy) and
                 attr is not Strategy and
                 attr_name != 'Strategy'):
+            if strategy_kwargs:
+                return attr(**strategy_kwargs)
             return attr()
 
     raise ValueError(f"策略文件 {name}.py 中未找到 Strategy 实现类")
@@ -94,7 +96,7 @@ def get_strategy_class_name(strategy: Strategy) -> str:
 def apply_strategy_config(strategy: Strategy, config_manager):
     """将配置文件中的策略参数应用到策略实例的 config 上
 
-    通过 dataclasses.fields() 校验 YAML 配置键是否对应合法数据类字段，
+    通过 dataclasses.fields() 校验 TOML 配置键是否对应合法数据类字段，
     避免 hasattr 静默跳过未知键导致的配置未生效问题。
 
     Args:
@@ -104,18 +106,18 @@ def apply_strategy_config(strategy: Strategy, config_manager):
     import logging
     logger = logging.getLogger(__name__)
 
-    sc = config_manager.get_strategy_config(strategy.name)
+    sc = config_manager.get_strategy_config(strategy.name)  # → StrategyItemConfig
     cfg = strategy.config
     try:
         valid_keys = {f.name for f in dataclasses.fields(cfg)}
     except TypeError:
         # 非 dataclass，回退到 hasattr 检查
-        for key, value in sc.items():
+        for key, value in sc.model_dump(exclude={"name", "enabled"}).items():
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
         return
 
-    for key, value in sc.items():
+    for key, value in sc.model_dump(exclude={"name", "enabled"}).items():
         if key in valid_keys:
             setattr(cfg, key, value)
         else:

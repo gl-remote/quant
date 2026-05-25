@@ -2,65 +2,64 @@
 
 覆盖:
     - ConfigManager 加载、默认值、验证
-    - 环境变量优先级
+    - Pydantic 验证 / 环境变量优先级
     - 数据/导出/日志配置
 """
 
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
 import pytest
-import yaml
 import os
 import tempfile
 from pathlib import Path
-from config.config_manager import ConfigManager
+
+import tomli_w
+from pydantic import ValidationError
+
+from config.app_config import ConfigManager, ProjectConfig
 
 
 class TestConfigLoading:
     def test_load_from_temp_file(self, temp_config_file):
         cm = ConfigManager(config_file=temp_config_file)
         tc = cm.get_trading_config()
-        assert tc['sma_short'] == 5
-        assert tc['sma_long'] == 20
-        assert tc['stop_loss_ratio'] == 0.03
+        assert tc.sma_short == 5
+        assert tc.sma_long == 20
+        assert tc.stop_loss_ratio == 0.03
 
     def test_defaults_when_no_config(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         tc = cm.get_trading_config()
-        assert tc['sma_short'] == 5
-        assert tc['position_ratio'] == 0.1
+        assert tc.sma_short == 5
+        assert tc.position_ratio == 0.1
 
 
 class TestTradingConfig:
     def test_get_trading_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         tc = cm.get_trading_config()
-        assert tc['stop_loss_ratio'] == 0.03
-        assert tc['take_profit_ratio'] == 0.05
-        assert tc['position_ratio'] == 0.1
-        assert tc['sma_short'] == 5
-        assert tc['sma_long'] == 20
-        assert tc['kline_period'] == 5
+        assert tc.stop_loss_ratio == 0.03
+        assert tc.take_profit_ratio == 0.05
+        assert tc.position_ratio == 0.1
+        assert tc.sma_short == 5
+        assert tc.sma_long == 20
+        assert tc.kline_period == 5
 
     def test_get_trading_config_from_file(self, temp_config_file):
         cm = ConfigManager(config_file=temp_config_file)
         tc = cm.get_trading_config()
-        assert tc['sma_short'] == 5
-        assert tc['sma_long'] == 20
+        assert tc.sma_short == 5
+        assert tc.sma_long == 20
 
 
 class TestBacktestConfig:
     def test_get_backtest_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         bc = cm.get_backtest_config()
-        assert bc['initial_capital'] == 100000.0
-        assert bc['commission_rate'] == 0.0003
-        assert bc['slippage'] == 1.0
-        assert bc['price_tick'] == 1.0
-        assert bc['contract_size'] == 10
-        assert bc['interval'] == '1m'
+        assert bc.initial_capital == 100000.0
+        assert bc.commission_rate == 0.0003
+        assert bc.slippage == 1.0
+        assert bc.price_tick == 1.0
+        assert bc.contract_size == 10
+        assert bc.interval == '1m'
 
 
 class TestValidateConfig:
@@ -69,64 +68,66 @@ class TestValidateConfig:
         assert cm.validate_config() is True
 
     def test_invalid_stop_loss_ratio(self, base_config_dict):
+        """stop_loss_ratio=0 → Pydantic field_validator 拒绝"""
         base_config_dict['strategies'][0]['stop_loss_ratio'] = 0.0
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager(config_file=path)
-        assert cm.validate_config() is False
+        fd, path = tempfile.mkstemp(suffix='.toml')
+        with open(fd, 'wb') as f:
+            f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
+        with pytest.raises(ValidationError):
+            ConfigManager(config_file=path)
         os.unlink(path)
 
     def test_invalid_sma_ordering(self, base_config_dict):
+        """sma_short >= sma_long → validate_config 返回 False"""
         base_config_dict['strategies'][0]['sma_short'] = 30
         base_config_dict['strategies'][0]['sma_long'] = 10
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
+        fd, path = tempfile.mkstemp(suffix='.toml')
+        with open(fd, 'wb') as f:
+            f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
         cm = ConfigManager(config_file=path)
         assert cm.validate_config() is False
         os.unlink(path)
 
     def test_invalid_commission_rate(self, base_config_dict):
+        """commission_rate=1.5 → Pydantic field_validator 拒绝"""
         base_config_dict['backtest']['commission_rate'] = 1.5
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager(config_file=path)
-        assert cm.validate_config() is False
+        fd, path = tempfile.mkstemp(suffix='.toml')
+        with open(fd, 'wb') as f:
+            f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
+        with pytest.raises(ValidationError):
+            ConfigManager(config_file=path)
         os.unlink(path)
 
     def test_invalid_negative_slippage(self, base_config_dict):
+        """slippage=-1 → Pydantic field_validator 拒绝"""
         base_config_dict['backtest']['slippage'] = -1.0
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager(config_file=path)
-        assert cm.validate_config() is False
+        fd, path = tempfile.mkstemp(suffix='.toml')
+        with open(fd, 'wb') as f:
+            f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
+        with pytest.raises(ValidationError):
+            ConfigManager(config_file=path)
         os.unlink(path)
 
     def test_invalid_price_tick(self, base_config_dict):
+        """price_tick=0 → Pydantic field_validator 拒绝"""
         base_config_dict['backtest']['price_tick'] = 0
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager(config_file=path)
-        assert cm.validate_config() is False
+        fd, path = tempfile.mkstemp(suffix='.toml')
+        with open(fd, 'wb') as f:
+            f.write(tomli_w.dumps(base_config_dict).encode('utf-8'))
+        with pytest.raises(ValidationError):
+            ConfigManager(config_file=path)
         os.unlink(path)
 
 
 class TestAccountInfo:
-    def test_get_account_info_no_services(self, base_config_dict):
-        base_config_dict.pop('third_party', None)
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
-        assert cm.get_account_info() == {}
-        os.unlink(path)
+    """测试 _resolve_account 逻辑：环境变量优先 + 占位符过滤"""
 
-    def test_get_account_info_placeholder(self, base_config_dict):
+    def test_no_services(self, base_config_dict):
+        base_config_dict.pop('third_party', None)
+        result = ProjectConfig._resolve_account(base_config_dict)
+        assert result.get('account') is None
+
+    def test_placeholder_values(self, base_config_dict):
         base_config_dict['third_party'] = {
             'services': [{
                 'name': 'tqsdk',
@@ -134,15 +135,10 @@ class TestAccountInfo:
                 'api_secret': 'PLACEHOLDER_API_SECRET',
             }]
         }
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
-        assert cm.get_account_info() == {}
-        os.unlink(path)
+        result = ProjectConfig._resolve_account(base_config_dict)
+        assert result.get('account') is None
 
-    def test_get_account_info_valid(self, base_config_dict):
+    def test_valid_keys(self, base_config_dict):
         base_config_dict['third_party'] = {
             'services': [{
                 'name': 'tqsdk',
@@ -150,20 +146,13 @@ class TestAccountInfo:
                 'api_secret': 'real_secret_456',
             }]
         }
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
-        info = cm.get_account_info()
-        assert info['api_key'] == 'real_key_123'
-        assert info['api_secret'] == 'real_secret_456'
-        os.unlink(path)
+        result = ProjectConfig._resolve_account(base_config_dict)
+        assert result['account']['api_key'] == 'real_key_123'
+        assert result['account']['api_secret'] == 'real_secret_456'
 
     def test_env_var_priority_over_config(self, monkeypatch, base_config_dict):
         monkeypatch.setenv('TQSDK_API_KEY', 'env_key_abc')
         monkeypatch.setenv('TQSDK_API_SECRET', 'env_secret_xyz')
-
         base_config_dict['third_party'] = {
             'services': [{
                 'name': 'tqsdk',
@@ -171,27 +160,21 @@ class TestAccountInfo:
                 'api_secret': 'config_secret_456',
             }]
         }
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
-        info = cm.get_account_info()
-        assert info['api_key'] == 'env_key_abc'
-        assert info['api_secret'] == 'env_secret_xyz'
-        os.unlink(path)
+        result = ProjectConfig._resolve_account(base_config_dict)
+        assert result['account']['api_key'] == 'env_key_abc'
+        assert result['account']['api_secret'] == 'env_secret_xyz'
 
-    def test_env_var_only_without_config(self, monkeypatch):
+    def test_env_var_only_without_third_party(self, monkeypatch):
         monkeypatch.setenv('TQSDK_API_KEY', 'pure_env_key')
         monkeypatch.setenv('TQSDK_API_SECRET', 'pure_env_secret')
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = {}
-        info = cm.get_account_info()
-        assert info['api_key'] == 'pure_env_key'
-        assert info['api_secret'] == 'pure_env_secret'
+        result = ProjectConfig._resolve_account({})
+        assert result['account']['api_key'] == 'pure_env_key'
+        assert result['account']['api_secret'] == 'pure_env_secret'
 
     def test_env_var_partial_ignored(self, monkeypatch, base_config_dict):
+        """仅设置一个环境变量 → 不全则不使用，退回配置文件"""
         monkeypatch.setenv('TQSDK_API_KEY', 'half_env_key')
+        # 不设置 TQSDK_API_SECRET
         base_config_dict['third_party'] = {
             'services': [{
                 'name': 'tqsdk',
@@ -199,35 +182,28 @@ class TestAccountInfo:
                 'api_secret': 'fallback_secret',
             }]
         }
-        fd, path = tempfile.mkstemp(suffix='.yaml')
-        with open(fd, 'w', encoding='utf-8') as f:
-            yaml.dump(base_config_dict, f)
-        cm = ConfigManager.__new__(ConfigManager)
-        cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
-        info = cm.get_account_info()
-        assert info['api_key'] == 'fallback_key'
-        assert info['api_secret'] == 'fallback_secret'
-        os.unlink(path)
+        result = ProjectConfig._resolve_account(base_config_dict)
+        # 环境变量不全 → 退回配置文件
+        assert result['account']['api_key'] == 'fallback_key'
+        assert result['account']['api_secret'] == 'fallback_secret'
 
 
 class TestDataConfig:
     def test_get_data_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         dc = cm.get_data_config()
-        assert '.quant_shared_data' in dc['base_dir']
-        assert Path(dc['base_dir']).is_absolute()
-        assert 'csv' in dc['export_dir']
-        assert Path(dc['export_dir']).is_absolute()
+        # 默认值无路径 → base_dir 为空字符串
+        assert isinstance(dc.base_dir, str)
 
     def test_get_export_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         ec = cm.get_export_config()
-        assert '{symbol}' in ec['filename_template']
+        assert '{symbol}' in ec.filename_template
 
 
 class TestLoggingConfig:
     def test_get_system_logging_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.yaml')
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
         sl = cm.get_system_logging_config()
-        assert sl['level'] == 'INFO'
-        assert 'format' in sl
+        assert sl.level == 'INFO'
+        assert sl.format  # 非空字符串

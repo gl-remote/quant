@@ -21,8 +21,8 @@ from common.constants import DEFAULT_INITIAL_CAPITAL
 cm = ConfigManager()
 log_cfg = cm.get_system_logging_config()
 logging.basicConfig(
-    level=getattr(logging, log_cfg.get('level', 'INFO'), logging.INFO),
-    format=log_cfg.get('format', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    level=getattr(logging, log_cfg.level, logging.INFO),
+    format=log_cfg.format,
 )
 
 from cli.commands.export import cmd_export
@@ -60,8 +60,8 @@ def main():
 
     # ---- test ----
     p = sub.add_parser('test', help='本地策略逻辑测试（不联网）')
-    p.add_argument('--strategy', default=None,
-                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
+    p.add_argument('--strategy', required=True,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)')
 
     # ---- backtest (统一回测命令) ----
     p = sub.add_parser(
@@ -88,9 +88,9 @@ def main():
     p.add_argument('--pattern', default=None, help='品种代码正则表达式（批量模式，启用 vn.py）')
     p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD（可选）')
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD（可选）')
-    p.add_argument('--strategy', default=None,
-                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
-    p.add_argument('--capital', type=float, default=DEFAULT_INITIAL_CAPITAL, help='初始资金（默认 100000）')
+    p.add_argument('--strategy', required=True,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)')
+    p.add_argument('--capital', type=float, default=None, help='初始资金（默认从配置文件读取）')
     p.add_argument('--gui', action='store_true', help='启用图形界面（仅单品种模式生效）')
 
     # ---- report ----
@@ -116,8 +116,8 @@ def main():
     p.add_argument('--symbol', default='DCE.m2509', help='品种代码')
     p.add_argument('--gui', action='store_true', help='启用图形界面')
     p.add_argument('--config', default=None, help='配置文件路径')
-    p.add_argument('--strategy', default=None,
-                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
+    p.add_argument('--strategy', required=True,
+                   help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)')
 
     args = parser.parse_args()
 

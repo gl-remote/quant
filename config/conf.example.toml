@@ -1,6 +1,6 @@
 # 天勤量化交易系统 - 配置模板
 # 使用方法：
-# 1. 复制此文件为 config/conf.local.yaml
+# 1. 复制此文件为 config/conf.local.toml
 # 2. 填写真实的配置信息
 # 3. 不要将此文件提交到git
 #
@@ -13,39 +13,37 @@
 # ============================================================
 # 第三方服务配置
 # ============================================================
-third_party:
-  services:
-    - name: "tqsdk"                  # 天勤量化
-      provider: "tianqin"
-      api_key: 'YOUR_TQ_API_KEY'      # 替换为你的API Key
-      api_secret: 'YOUR_TQ_API_SECRET' # 替换为你的API Secret
-      enabled: true
+[[third_party.services]]
+name = "tqsdk"                  # 天勤量化
+provider = "tianqin"
+api_key = "YOUR_TQ_API_KEY"      # 替换为你的API Key
+api_secret = "YOUR_TQ_API_SECRET" # 替换为你的API Secret
+enabled = true
 
 # ============================================================
 # 本地环境配置
 # ============================================================
-environment:
-  name: "local"                    # local/development/production
-  debug: true                      # 是否启用调试模式
+[environment]
+name = "local"                    # local/development/production
+debug = true                      # 是否启用调试模式
 
 # ============================================================
-# 可选：自定义策略参数 (conf.local.yaml 中覆盖)
+# 可选：自定义策略参数 (conf.local.toml 中覆盖)
 # ============================================================
-# strategies:
-#   - name: ma
-#     sma_short: 5
-#     sma_long: 20
-#     stop_loss_ratio: 0.03
-#     take_profit_ratio: 0.05
-#     position_ratio: 0.1
+# [[strategies]]
+# name = "ma"
+# sma_short = 5
+# sma_long = 20
+# stop_loss_ratio = 0.03
+# take_profit_ratio = 0.05
+# position_ratio = 0.1
 
 # ============================================================
 # 可选：第三方服务配置
 # ============================================================
-# third_party:
-#   services:
-#     - name: "binance"
-#       provider: "binance"
-#       enabled: false
-#       api_key: ""
-#       api_secret: ""
+# [[third_party.services]]
+# name = "binance"
+# provider = "binance"
+# enabled = false
+# api_key = ""
+# api_secret = ""

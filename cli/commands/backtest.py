@@ -34,9 +34,7 @@ from common.constants import (
 )
 from strategies.core import (
     load_strategy,
-    apply_strategy_config,
     get_strategy_class_name,
-    TradingContext,
     serialize_strategy_params,
 )
 from common.formulas import calculate_fifo_profit
@@ -101,14 +99,20 @@ def _run_tq_backtest(args, cm, dm):
 
     api = None
     try:
-        tc = cm.get_trading_config()
+        sc = cm.get_trading_config(args.strategy)
         account = cm.get_account_info()
-        strategy_core = load_strategy(args.strategy)
-        apply_strategy_config(strategy_core, cm)
+        bc = cm.get_backtest_config()
+        strategy_params = sc.model_dump(exclude={"name", "enabled"})
+        capital = args.capital if args.capital else bc.initial_capital
+        strategy_core = load_strategy(
+            args.strategy,
+            strategy_params=strategy_params,
+            capital=capital,
+            contract_size=bc.contract_size,
+        )
         strategy_cls = get_strategy_class_name(strategy_core)
 
-        context = TradingContext.build(strategy_core, args.symbol, cm, capital=args.capital)
-        bridge = TqsdkStrategyBridge(context=context)
+        bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=args.symbol)
 
         logger.info(
             f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
@@ -119,7 +123,7 @@ def _run_tq_backtest(args, cm, dm):
                f"strategy={strategy_cls}",
                symbol=args.symbol, status=LOG_STATUS_INFO)
 
-        auth = TqAuth(account['api_key'], account['api_secret']) if account.get('api_key') else None
+        auth = TqAuth(account.api_key, account.api_secret) if account else None
         api = TqApi(
             backtest=TqBacktest(
                 start_dt=datetime.strptime(args.start, '%Y-%m-%d'),
@@ -127,7 +131,7 @@ def _run_tq_backtest(args, cm, dm):
             ),
             auth=auth, web_gui=args.gui
         )
-        klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
+        klines = api.get_kline_serial(args.symbol, duration_seconds=sc.kline_period * 60)
 
         bridge.initialize(api)
         bridge._watch_klines(api, klines, args.symbol)
@@ -222,8 +226,6 @@ def _run_vnpy_backtest(args, cm, dm):
 
     try:
         bc = cm.get_backtest_config()
-        strategy = load_strategy(args.strategy)
-        apply_strategy_config(strategy, cm)
 
         if args.symbol and not args.pattern:
             symbols = [(args.symbol, None)]
@@ -238,31 +240,32 @@ def _run_vnpy_backtest(args, cm, dm):
 
         logger.info(
             f"{'单品种' if mode == MODE_SINGLE else '批量'}回测: {len(symbols)} 个品种"
-            f" strategy={get_strategy_class_name(strategy)}"
+            f" strategy={args.strategy or 'ma'}"
         )
-
-        strategy_name = get_strategy_class_name(strategy)
-        params_json = serialize_strategy_params(strategy)
-        git_hash = get_git_hash()
-        strategy_version = getattr(strategy, 'VERSION', None)
-        
-        if git_hash:
-            logger.info(f"Git 提交哈希: {git_hash}")
-        logger.info(f"策略版本: {strategy_version or 'N/A'}")
 
         all_results = []
         failed = []
         for sym, _ in symbols:
-            ctx = TradingContext.build(
-                strategy, sym, cm,
-                capital=bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL)
+            sc = cm.get_trading_config(args.strategy)
+            strategy_params = sc.model_dump(exclude={"name", "enabled"})
+            capital = args.capital if args.capital else bc.initial_capital
+            strategy = load_strategy(
+                args.strategy,
+                strategy_params=strategy_params,
+                capital=capital,
+                contract_size=bc.contract_size,
             )
-            engine = VnpyBacktestEngine(bc, context=ctx)
+            params_json = serialize_strategy_params(strategy)
+            strategy_name = get_strategy_class_name(strategy)
+            strategy_version = getattr(strategy, 'VERSION', None)
+
+            engine = VnpyBacktestEngine(bc)
             try:
                 result = engine.run_full_pipeline(
                     symbol=sym,
                     start_date=args.start or None,
                     end_date=args.end or None,
+                    strategy=strategy,
                 )
                 all_results.append(result)
                 if not result.get('success'):

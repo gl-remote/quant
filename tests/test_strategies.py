@@ -2,14 +2,15 @@
 
 覆盖:
     - MaStrategyCore: 初始化、信号生成、止损止盈、生命周期
-    - TradingConfig / Bar / Signal / Fill 核心类型
+    - MACrossParams / Bar / Signal / Fill 核心类型
 """
 
 import pytest
 import dataclasses
 
-from strategies.ma_strategy import MaStrategyCore, TradingConfig
+from strategies.ma_strategy import MaStrategyCore, MACrossParams
 from strategies.core.types import Bar, Signal, Fill, StrategyPosition
+from config.app_config import StrategyItemConfig
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -45,34 +46,33 @@ def _make_signal(action: str, reason: str, volume: int) -> Signal:
 
 
 # ==============================================================================
-# TradingConfig
+# MACrossParams
 # ==============================================================================
 
-class TestTradingConfig:
+class TestMACrossParams:
     def test_default_values(self):
-        cfg = TradingConfig()
+        cfg = MACrossParams()
         assert cfg.sma_short == 5
         assert cfg.sma_long == 20
         assert cfg.stop_loss_ratio == 0.03
         assert cfg.take_profit_ratio == 0.05
         assert cfg.position_ratio == 0.1
-        assert cfg.contract_size == 10
 
     def test_custom_values(self):
-        cfg = TradingConfig(
+        cfg = MACrossParams(
             sma_short=10,
             sma_long=30,
             stop_loss_ratio=0.02,
-            commission_rate=0.0005,
+            take_profit_ratio=0.06,
         )
         assert cfg.sma_short == 10
         assert cfg.sma_long == 30
         assert cfg.stop_loss_ratio == 0.02
-        assert cfg.commission_rate == 0.0005
+        assert cfg.take_profit_ratio == 0.06
 
     def test_is_dataclass(self):
-        """TradingConfig 是 dataclass，支持 replace"""
-        cfg = TradingConfig(sma_short=5)
+        """MACrossParams 是 dataclass，支持 replace"""
+        cfg = MACrossParams(sma_short=5)
         new_cfg = dataclasses.replace(cfg, sma_short=10)
         assert new_cfg.sma_short == 10
         assert new_cfg.sma_long == 20  # 未变
@@ -90,8 +90,7 @@ class TestMaStrategyInit:
         assert strat.config.sma_long == 20
 
     def test_custom_config(self):
-        cfg = TradingConfig(sma_short=10, sma_long=30)
-        strat = MaStrategyCore(config=cfg)
+        strat = MaStrategyCore(strategy_params={'sma_short': 10, 'sma_long': 30})
         assert strat.config.sma_short == 10
 
     def test_initial_position_is_zero(self):
@@ -107,7 +106,7 @@ class TestMaStrategyInit:
 
     def test_config_setter_updates(self):
         strat = MaStrategyCore()
-        new_cfg = TradingConfig(sma_short=15)
+        new_cfg = MACrossParams(sma_short=15)
         strat.config = new_cfg
         assert strat.config.sma_short == 15
 
@@ -162,7 +161,7 @@ class TestMaStrategySignals:
     def test_death_cross_sell_after_buy(self):
         """持仓后死叉平仓"""
         strat = MaStrategyCore()
-        strat.config = TradingConfig(sma_short=3, sma_long=10,
+        strat.config = MACrossParams(sma_short=3, sma_long=10,
                                       stop_loss_ratio=0.20)  # 止放宽
         # 先建仓
         for _ in range(25):
@@ -185,7 +184,7 @@ class TestMaStrategySignals:
     def test_stop_loss_triggers_sell(self):
         """止损触发卖出"""
         strat = MaStrategyCore()
-        strat.config = TradingConfig(stop_loss_ratio=0.03)
+        strat.config = MACrossParams(stop_loss_ratio=0.03)
         # 建仓
         strat.on_fill(Fill(
             timestamp='2024-01-25',
@@ -202,7 +201,7 @@ class TestMaStrategySignals:
     def test_take_profit_triggers_sell(self):
         """止盈触发卖出"""
         strat = MaStrategyCore()
-        strat.config = TradingConfig(take_profit_ratio=0.05)
+        strat.config = MACrossParams(take_profit_ratio=0.05)
         # 建仓
         strat.on_fill(Fill(
             timestamp='2024-01-25',
@@ -219,7 +218,7 @@ class TestMaStrategySignals:
     def test_stop_loss_before_death_cross(self):
         """止损优先级高于死叉"""
         strat = MaStrategyCore()
-        strat.config = TradingConfig(stop_loss_ratio=0.02)
+        strat.config = MACrossParams(stop_loss_ratio=0.02)
         # 建仓
         strat.on_fill(Fill(
             timestamp='2024-01-25',
@@ -321,7 +320,7 @@ class TestMaStrategyIntegration:
     def test_buy_and_sell_cycle(self):
         """完整的买入→卖出周期"""
         strat = MaStrategyCore()
-        cfg = TradingConfig(
+        cfg = MACrossParams(
             sma_short=3,
             sma_long=10,
             stop_loss_ratio=0.05,
