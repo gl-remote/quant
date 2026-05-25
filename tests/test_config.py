@@ -1,4 +1,10 @@
-"""ConfigManager 配置管理测试"""
+"""config/ 配置管理测试
+
+覆盖:
+    - ConfigManager 加载、默认值、验证
+    - 环境变量优先级
+    - 数据/导出/日志配置
+"""
 
 import sys
 import os
@@ -21,7 +27,6 @@ class TestConfigLoading:
         assert tc['stop_loss_ratio'] == 0.03
 
     def test_defaults_when_no_config(self):
-        """no conf.yaml exists in test directory, should use defaults"""
         cm = ConfigManager(config_file='/nonexistent/path.yaml')
         tc = cm.get_trading_config()
         assert tc['sma_short'] == 5
@@ -156,7 +161,6 @@ class TestAccountInfo:
         os.unlink(path)
 
     def test_env_var_priority_over_config(self, monkeypatch, base_config_dict):
-        """环境变量优先级高于 conf.local.yaml"""
         monkeypatch.setenv('TQSDK_API_KEY', 'env_key_abc')
         monkeypatch.setenv('TQSDK_API_SECRET', 'env_secret_xyz')
 
@@ -178,7 +182,6 @@ class TestAccountInfo:
         os.unlink(path)
 
     def test_env_var_only_without_config(self, monkeypatch):
-        """仅设置环境变量，无配置文件时也正常工作"""
         monkeypatch.setenv('TQSDK_API_KEY', 'pure_env_key')
         monkeypatch.setenv('TQSDK_API_SECRET', 'pure_env_secret')
         cm = ConfigManager.__new__(ConfigManager)
@@ -188,10 +191,7 @@ class TestAccountInfo:
         assert info['api_secret'] == 'pure_env_secret'
 
     def test_env_var_partial_ignored(self, monkeypatch, base_config_dict):
-        """仅设置一个环境变量时不会误用，回退到配置文件"""
         monkeypatch.setenv('TQSDK_API_KEY', 'half_env_key')
-        # 不设置 TQSDK_API_SECRET
-
         base_config_dict['third_party'] = {
             'services': [{
                 'name': 'tqsdk',
@@ -205,7 +205,6 @@ class TestAccountInfo:
         cm = ConfigManager.__new__(ConfigManager)
         cm.config = yaml.safe_load(open(path, encoding='utf-8')) or {}
         info = cm.get_account_info()
-        # TQSDK_API_SECRET 未设置，ak+sk 不全 → 不回环境变量 → 走配置文件
         assert info['api_key'] == 'fallback_key'
         assert info['api_secret'] == 'fallback_secret'
         os.unlink(path)
@@ -215,7 +214,6 @@ class TestDataConfig:
     def test_get_data_config_defaults(self):
         cm = ConfigManager(config_file='/nonexistent/path.yaml')
         dc = cm.get_data_config()
-        # base_dir 已通过 _resolve 转为绝对路径，应包含 .quant_shared_data
         assert '.quant_shared_data' in dc['base_dir']
         assert Path(dc['base_dir']).is_absolute()
         assert 'csv' in dc['export_dir']

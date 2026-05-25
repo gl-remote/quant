@@ -1,4 +1,9 @@
-"""测试 strategies/ma_strategy.py — 均线交叉策略核心"""
+"""strategies/ 策略模块测试
+
+覆盖:
+    - MaStrategyCore: 初始化、信号生成、止损止盈、生命周期
+    - TradingConfig / Bar / Signal / Fill 核心类型
+"""
 
 import pytest
 import dataclasses
