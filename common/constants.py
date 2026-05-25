@@ -58,7 +58,6 @@ STATUS_FAILED  = 'failed'    # 失败
 LOG_STATUS_INFO    = 'INFO'     # 信息
 LOG_STATUS_SUCCESS = 'SUCCESS'  # 操作成功
 LOG_STATUS_ERROR   = 'ERROR'    # 错误
-LOG_STATUS_WARNING = 'WARNING'  # 警告
 
 
 # ============================================================================
@@ -67,7 +66,6 @@ LOG_STATUS_WARNING = 'WARNING'  # 警告
 
 CMD_EXPORT      = 'export'       # 数据导出
 CMD_BACKTEST    = 'backtest'     # vnpy 批量回测
-CMD_TQ_BACKTEST = 'tq-backtest'  # 天勤图形化回测
 CMD_TEST        = 'test'         # 策略逻辑测试
 CMD_LIVE        = 'live'         # 实盘/模拟交易
 CMD_REPORT      = 'report'       # 回测报告查询
@@ -120,7 +118,6 @@ DEFAULT_TRAIN_RATIO  = 0.6     # 训练集占比 (60%)
 DEFAULT_VAL_RATIO    = 0.2     # 验证集占比 (20%)
 DEFAULT_TEST_RATIO   = 0.2     # 测试集占比 (20%)
 DEFAULT_RANDOM_SEED  = 42      # 随机种子
-DEFAULT_SHUFFLE      = False   # 是否打乱数据
 
 
 # ============================================================================
@@ -146,8 +143,6 @@ COMMON_KLINE_INTERVALS = [
 ]
 
 
-
-
 # ============================================================================
 # 操作日志自动清理 (Operation Log Pruning)
 # ============================================================================
@@ -156,20 +151,3 @@ MAX_OPERATION_LOG_ROWS  = 50_000   # 最大日志行数，超出自动清理
 PRUNE_CHECK_INTERVAL    = 100      # 每 N 次 insert 检查一次是否需要清理
 
 
-# ============================================================================
-# 量化金融行业通用常数 (Quantitative Finance Constants)
-# ============================================================================
-
-TRADING_DAYS_PER_YEAR = 252        # 年交易日数 (中国市场)
-DEFAULT_ANNUAL_FACTOR = 252        # 年化因子 (日频数据)
-SECONDS_PER_TRADING_DAY = 14400    # 每交易日秒数 (4 小时)
-
-
-# ============================================================================
-# 格式化字符串 (Format Strings)
-# ============================================================================
-
-FMT_PERCENT      = '.2%'      # 百分比格式化 (如 15.00%)
-FMT_FLOAT_2      = '.2f'      # 两位小数浮点数
-FMT_FLOAT_4      = '.4f'      # 四位小数浮点数
-FMT_FLOAT_COMMA  = ',.0f'     # 千位分隔整数

@@ -11,12 +11,8 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict
 from peewee import *
 
-# 从 common.schemas 导入全局统一的 Pandera Schema
-from common.schemas import (
-    KlineSchema,
-    TradeRecordSchema,
-    BacktestResultSchema,
-)
+# 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
+from common.schemas import KlineSchema
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）

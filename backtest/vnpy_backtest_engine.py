@@ -6,12 +6,11 @@ vn.py 批量回测引擎
 封装数据加载 → 全量回测 → 报告生成。
 
 职责明确：
-  - TQBacktestEngine:   单标的图形化分析 (天勤 TqSdk)
   - VnpyBacktestEngine: 批量回测流水线 (vn.py)
 """
 
 import logging
-from typing import Any, Optional, List
+from typing import Any, Optional
 
 import numpy as np
 

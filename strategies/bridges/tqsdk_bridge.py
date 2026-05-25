@@ -12,7 +12,7 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, Optional, Any, List
+from typing import Optional, Any
 
 from ..core.base import Strategy
 from ..core.context import TradingContext

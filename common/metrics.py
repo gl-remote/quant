@@ -3,7 +3,7 @@
 绩效指标计算工具 (纯函数)
 
 接受权益曲线或收益率序列，返回标量指标。
-供 TQBacktestEngine、VnpyBacktestEngine、report 等模块共用。
+供 VnpyBacktestEngine、report 等模块共用。
 """
 
 from __future__ import annotations

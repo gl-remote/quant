@@ -25,12 +25,6 @@ from .types import Bar, Signal, Fill, StrategyPosition
 from .context import TradingContext
 from common.constants import (
     STRATEGY_MA,
-    DEFAULT_INITIAL_CAPITAL,
-    DEFAULT_COMMISSION_RATE,
-    DEFAULT_SLIPPAGE,
-    DEFAULT_PRICE_TICK,
-    DEFAULT_CONTRACT_SIZE,
-    DEFAULT_KLINE_PERIOD,
 )
 
 __all__ = [

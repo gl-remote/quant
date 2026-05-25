@@ -8,9 +8,7 @@
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-
-from peewee import SqliteDatabase
+from typing import Optional, List, Dict
 
 from .models import (
     database,
@@ -21,7 +19,6 @@ from .models import (
     BacktestDaily,
     BacktestRecord,
     TradeRecord,
-    SymbolInfo,
 )
 import common.constants as constants
 from common.formulas import total_return as calc_total_return, win_rate as calc_win_rate

@@ -4,8 +4,7 @@ Strategy 产生决策 (Signal)，Bridge 转换为框架指令。
 Bridge 接收行情 (Bar)，喂给 Strategy 产生信号。
 """
 
-from dataclasses import dataclass, field
-from typing import Dict, Any, List
+from dataclasses import dataclass
 
 
 @dataclass

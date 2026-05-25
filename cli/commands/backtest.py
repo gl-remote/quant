@@ -15,7 +15,7 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple, Any, Optional
+from typing import List, Optional
 
 from config import ConfigManager
 from data import DataManager

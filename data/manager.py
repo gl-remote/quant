@@ -13,7 +13,7 @@
 
 import logging
 import re
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict
 
 from common.constants import COMMON_KLINE_INTERVALS
 import pandas as pd
@@ -25,8 +25,6 @@ from pandera.typing import DataFrame
 from .store import DataStore
 from .models import (
     KlineSchema,
-    TradeRecordSchema,
-    BacktestResultSchema,
     BacktestRecord,
     TradeRecord,
     SymbolInfo,

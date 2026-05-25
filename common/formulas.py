@@ -18,8 +18,6 @@
 
 from __future__ import annotations
 
-import math
-
 # 每交易日交易秒数 (4 小时)
 _SECONDS_PER_TRADING_DAY = 14400
 
