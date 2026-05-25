@@ -1,8 +1,6 @@
-"""数据集报告生成模块 — 为单个回测结果生成详细 JSON 交易报告"""
+"""数据集报告生成模块 — 构建结构化报告字典，供控制台格式化输出"""
 
-import json
 import logging
-from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
@@ -19,26 +17,25 @@ def generate_dataset_report(
     symbol: str = "",
     backtest_id: Optional[int] = None,
     initial_capital: float = DEFAULT_INITIAL_CAPITAL,
-    output_dir: str = ".quant_shared_data/reports",
-    save_trades: bool = False,  # 默认不保存文件，数据已在数据库
-    save_equity: bool = False,  # 默认不保存文件，数据已在数据库
 ) -> dict[str, Any]:
-    """为单个回测结果生成详细报告
+    """为单个回测结果生成结构化报告字典
 
     Args:
         statistics: vn.py 回测统计结果字典 (engine.calculate_statistics())
-        daily_results: 每日回测结果列表
+        daily_results: 每日回测结果列表 (可选，保留兼容)
         dataset_name: 数据集名称
         symbol: 合约代码
+        backtest_id: 回测 ID (对应数据库记录)
         initial_capital: 初始资金
-        output_dir: 报告输出目录
-        save_trades: 是否保存交易记录
-        save_equity: 是否保存资金曲线数据
 
     Returns:
-        报告字典
+        报告字典，供 format_console_report() 格式化控制台输出
+
+    Note:
+        交易明细和资金曲线数据已通过 CLI 存入 SQLite 数据库，
+        可通过 sql_reporter.py 查询，不再额外导出一份 JSON 文件。
     """
-    report = {
+    return {
         'meta': {
             'backtest_id': backtest_id,
             'dataset': dataset_name,
@@ -50,29 +47,6 @@ def generate_dataset_report(
         'risk': _extract_risk_metrics(statistics),
         'trades': _extract_trade_summary(statistics),
     }
-
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    file_prefix = f"bt_{backtest_id}_{symbol}_{dataset_name}" if backtest_id else f"{symbol}_{dataset_name}"
-
-    # 保存JSON报告
-    report_file = output_path / f"{file_prefix}_report.json"
-    with open(report_file, 'w', encoding='utf-8') as f:
-        json.dump(report, f, ensure_ascii=False, indent=2, default=str)
-    logger.info(f"报告已保存: {report_file}")
-
-    # 保存交易记录
-    if save_trades and daily_results:
-        trades_file = output_path / f"{file_prefix}_trades.json"
-        _save_trade_records(daily_results, trades_file)
-
-    # 保存资金曲线
-    if save_equity and daily_results:
-        equity_file = output_path / f"{file_prefix}_equity.json"
-        _save_equity_curve(daily_results, equity_file, initial_capital)
-
-    return report
 
 
 def _extract_performance_metrics(statistics: dict, initial_capital: float) -> dict:
@@ -161,51 +135,6 @@ def _extract_trade_summary(statistics: dict) -> dict:
         'max_consecutive_win': statistics.get('max_consecutive_win', 0),
         'max_consecutive_loss': statistics.get('max_consecutive_loss', 0),
     }
-
-
-def _save_trade_records(daily_results: list[dict], filepath: Path):
-    """保存详细交易记录"""
-    trades = []
-    for day in daily_results:
-        if 'trades' in day:
-            trades.extend(day.get('trades', []))
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(trades, f, ensure_ascii=False, indent=2, default=str)
-    logger.info(f"交易记录已保存: {filepath}")
-
-
-def _save_equity_curve(daily_results: list[dict], filepath: Path,
-                       initial_capital: float):
-    """保存资金曲线数据
-
-    vnpy daily_results 可能包含 balance (含手续费/滑点后的净值)，
-    也可能只有 net_pnl (每日净盈亏)。优先使用 balance 直接记录，
-    否则用 net_pnl 累加推算。
-    """
-    has_balance = any(
-        isinstance(day, dict) and 'balance' in day
-        for day in (daily_results or [])
-    )
-    curve = []
-    equity = initial_capital
-    for day in daily_results or []:
-        if not isinstance(day, dict):
-            continue
-        if has_balance:
-            equity = day.get('balance', equity)
-            day_return = equity - (curve[-1]['equity'] if curve else initial_capital)
-        else:
-            day_return = day.get('net_pnl', 0)
-            equity += day_return
-        curve.append({
-            'date': str(day.get('datetime', '')),
-            'equity': equity,
-            'daily_return': day_return,
-            'drawdown': day.get('drawdown', 0),
-        })
-    with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(curve, f, ensure_ascii=False, indent=2)
-    logger.info(f"资金曲线已保存: {filepath}")
 
 
 def format_console_report(

@@ -2,7 +2,6 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-import json
 import pytest
 from report.dataset_reporter import (
     _extract_performance_metrics,
@@ -221,15 +220,11 @@ class TestGenerateDatasetReport:
             'max_consecutive_win': 5,
             'max_consecutive_loss': 3,
         }
-        output_dir = str(tmp_path / 'reports')
         report = generate_dataset_report(
             statistics=stats,
             dataset_name='full',
             symbol='rb888',
             initial_capital=100000.0,
-            output_dir=output_dir,
-            save_trades=False,
-            save_equity=False,
         )
         assert report['meta']['dataset'] == 'full'
         assert report['meta']['symbol'] == 'rb888'
@@ -238,13 +233,9 @@ class TestGenerateDatasetReport:
         assert 'risk' in report
         assert 'trades' in report
         assert report['performance']['total_trades'] == 20
-        report_path = tmp_path / 'reports' / 'rb888_full_report.json'
-        assert report_path.exists()
-        with open(report_path) as f:
-            saved = json.load(f)
-        assert saved['meta']['dataset'] == 'full'
 
-    def test_generate_report_with_trades_and_equity(self, tmp_path):
+    def test_generate_report_trades_and_equity_unused(self):
+        """daily_results 参数仍被接受但不再写文件 (数据在数据库)"""
         stats = {
             'end_balance': 105000.0,
             'total_trades': 10,
@@ -254,39 +245,22 @@ class TestGenerateDatasetReport:
             'average_loss': -200.0,
         }
         daily_results = [
-            {'datetime': '2024-01-02', 'net_pnl': 500.0, 'drawdown': 0.0,
-             'trades': [{'symbol': 'rb888', 'pnl': 500.0}]},
-            {'datetime': '2024-01-03', 'net_pnl': -200.0, 'drawdown': 200.0,
-             'trades': [{'symbol': 'rb888', 'pnl': -200.0}]},
+            {'datetime': '2024-01-02', 'net_pnl': 500.0, 'drawdown': 0.0},
+            {'datetime': '2024-01-03', 'net_pnl': -200.0, 'drawdown': 200.0},
         ]
-        output_dir = str(tmp_path / 'reports')
         report = generate_dataset_report(
             statistics=stats,
             daily_results=daily_results,
             dataset_name='val',
             symbol='rb888',
-            output_dir=output_dir,
-            save_trades=True,
-            save_equity=True,
         )
-        trades_path = tmp_path / 'reports' / 'rb888_val_trades.json'
-        equity_path = tmp_path / 'reports' / 'rb888_val_equity.json'
-        assert trades_path.exists()
-        assert equity_path.exists()
-        with open(equity_path) as f:
-            equity_data = json.load(f)
-        assert len(equity_data) == 2
-        assert equity_data[0]['equity'] == 100500.0
+        assert report['performance']['total_trades'] == 10
 
     def test_generate_report_empty_stats(self, tmp_path):
-        output_dir = str(tmp_path / 'reports')
         report = generate_dataset_report(
             statistics={},
             dataset_name='test',
             symbol='',
-            output_dir=output_dir,
-            save_trades=False,
-            save_equity=False,
         )
         assert report['meta']['dataset'] == 'test'
         assert report['performance']['total_trades'] == 0
@@ -312,68 +286,68 @@ class TestGenerateMergedReport:
             },
         }
 
-    def test_empty_results(self, tmp_path):
-        merged = generate_merged_report([], str(tmp_path))
+    def test_empty_results(self):
+        merged = generate_merged_report([])
         assert merged['meta']['symbol_count'] == 0
         assert merged['symbols'] == []
 
-    def test_single_symbol(self, tmp_path):
+    def test_single_symbol(self):
         results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
-        merged = generate_merged_report(results, str(tmp_path))
+        merged = generate_merged_report(results)
         assert merged['meta']['symbol_count'] == 1
         assert merged['symbols'][0]['symbol'] == 'DCE.m2509'
         assert merged['aggregate']['total_return']['mean'] == pytest.approx(0.15)
         assert merged['aggregate']['profitable_ratio'] == 1.0
 
-    def test_multiple_symbols(self, tmp_path):
+    def test_multiple_symbols(self):
         results = [
             self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
             self._make_result('CZCE.TA509', 0.10, 1.2, 0.05, 0.55, 30),
             self._make_result('SHFE.rb2410', -0.05, -0.5, 0.15, 0.35, 20),
         ]
-        merged = generate_merged_report(results, str(tmp_path))
+        merged = generate_merged_report(results)
         assert merged['meta']['symbol_count'] == 3
         agg = merged['aggregate']
         assert agg['profitable_ratio'] == pytest.approx(2 / 3)
         assert agg['total_trades']['total'] == 100
 
-    def test_skips_failed_results(self, tmp_path):
+    def test_skips_failed_results(self):
         results = [
             self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
             {'success': False, 'symbol': 'FAIL', 'error': 'no data'},
         ]
-        merged = generate_merged_report(results, str(tmp_path))
+        merged = generate_merged_report(results)
         assert merged['meta']['symbol_count'] == 1
         assert 'FAIL' not in merged['meta']['symbols']
 
-    def test_saves_json_file(self, tmp_path):
+    def test_returns_valid_merged_report(self):
+        """合并报告返回完整字典（不再写 JSON 文件）"""
         results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
-        generate_merged_report(results, str(tmp_path))
-        report_path = tmp_path / 'merged_report.json'
-        assert report_path.exists()
-        with open(report_path) as f:
-            saved = json.load(f)
-        assert saved['meta']['symbol_count'] == 1
+        merged = generate_merged_report(results)
+        assert merged['meta']['symbol_count'] == 1
+        assert len(merged['symbols']) == 1
+        assert 'ranking' in merged
+        assert 'aggregate' in merged
 
-    def test_ranking_by_return(self, tmp_path):
+    def test_ranking_by_return(self):
         results = [
             self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
             self._make_result('B', 0.1, 1.0, 0.1, 0.5, 50),
             self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
         ]
-        merged = generate_merged_report(results, str(tmp_path))
+        merged = generate_merged_report(results)
         ranking = merged['ranking']['total_return']
         assert ranking[0]['symbol'] == 'A'
         assert ranking[1]['symbol'] == 'C'
         assert ranking[2]['symbol'] == 'B'
 
-    def test_ranking_by_drawdown_ascending(self, tmp_path):
+    def test_ranking_by_drawdown_ascending(self):
         results = [
             self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
             self._make_result('B', 0.1, 1.0, 0.15, 0.5, 50),
             self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
         ]
-        merged = generate_merged_report(results, str(tmp_path))
+        merged = generate_merged_report(results)
         ranking = merged['ranking']['max_drawdown']
         assert ranking[0]['symbol'] == 'A'
 

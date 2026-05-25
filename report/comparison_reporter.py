@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from pathlib import Path
 
 import numpy as np
 
@@ -16,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 def generate_merged_report(
     all_results: list[dict],
-    output_dir: str = ".quant_shared_data/reports",
 ) -> dict:
     """生成多品种合并回测报告
 
@@ -26,7 +23,6 @@ def generate_merged_report(
     Args:
         all_results: 每个品种的 run_full_pipeline 返回结果列表，
                      每个元素包含 {success, symbol, report: {performance, risk, trades}}
-        output_dir: 报告输出目录
 
     Returns:
         合并报告字典，包含:
@@ -72,13 +68,6 @@ def generate_merged_report(
         'ranking': ranking,
         'aggregate': aggregate,
     }
-
-    out_dir = Path(output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    merged_path = out_dir / "merged_report.json"
-    with open(merged_path, 'w', encoding='utf-8') as f:
-        json.dump(merged, f, ensure_ascii=False, indent=2, default=str)
-    logger.info(f"合并报告已保存: {merged_path}")
 
     console_report = format_merged_report(merged)
     print(console_report)

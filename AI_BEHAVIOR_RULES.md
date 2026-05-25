@@ -250,7 +250,7 @@ vol = capital * 0.1 / (price * 10)
 1. load_csv_data()        → 加载 CSV
 2. split_datasets()       → 划分 train/val/test (60/20/20)
 3. _run_single_backtest() ×3  → 三阶段独立回测
-4. generate_dataset_report() ×3 → 生成 JSON 报告
+4. generate_dataset_report() ×3 → 生成结构化报告字典
 5. compare_datasets()     → 过拟合评估 + 稳定性分析
 ```
 

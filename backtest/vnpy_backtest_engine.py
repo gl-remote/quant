@@ -76,11 +76,6 @@ class VnpyBacktestEngine:
         if self.contract_size <= 0:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
-        report_cfg = config.get('report', {})
-        self.report_dir: str = report_cfg.get('output_dir', '.quant_shared_data/reports')
-        self.save_trades: bool = report_cfg.get('save_trade_records', True)
-        self.save_equity: bool = report_cfg.get('save_equity_curve', True)
-
     def _wrap_injected_strategy(self, base_cls):
         """创建包装了上下文的桥接器策略类
 
@@ -396,7 +391,7 @@ class VnpyBacktestEngine:
         dataset_name: str,
         backtest_id: Optional[int] = None,
     ) -> dict[str, Any]:
-        """格式化并保存单个数据集报告"""
+        """格式化并输出单个数据集控制台报告"""
         report = generate_dataset_report(
             statistics=result.get('statistics', {}),
             daily_results=result.get('daily_results', []),
@@ -404,9 +399,6 @@ class VnpyBacktestEngine:
             symbol=symbol,
             backtest_id=backtest_id,
             initial_capital=self.initial_capital,
-            output_dir=self.report_dir,
-            save_trades=self.save_trades,
-            save_equity=self.save_equity,
         )
 
         console_report = format_console_report(report, f"[{symbol}]")

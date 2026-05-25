@@ -245,7 +245,7 @@ tqsdk kline_serial (DataFrame) → 标准 Bar → Strategy.on_bar() → Signal �
 
 | 函数 | 说明 |
 |------|------|
-| `generate_dataset_report(statistics, daily_results, dataset_name, symbol, initial_capital, output_dir, save_trades, save_equity) -> Dict` | 生成单数据集报告并序列化为 JSON |
+| `generate_dataset_report(statistics, daily_results, dataset_name, symbol, backtest_id, initial_capital) -> Dict` | 生成结构化报告字典 |
 | `format_console_report(report, dataset_name) -> str` | 格式化控制台输出 |
 
 ### 对比分析 (comparison.py)
