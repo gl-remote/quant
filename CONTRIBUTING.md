@@ -231,13 +231,14 @@ pytest tests/ --cov=. --cov-report=term-missing
 
 ```
 tests/
-├── conftest.py              # 共享 fixtures
-├── test_ma_strategy.py      # 策略核心测试 (425 行)
-├── test_common.py           # common/ 工具函数测试
-├── test_config_manager.py   # 配置管理器测试
+├── conftest.py              # 共享 fixtures + helper 函数
+├── test_common.py           # common/ 工具函数测试 (constants/formulas/stats/metrics/formatting)
+├── test_config.py           # 配置管理器测试
+├── test_database.py         # DataStore CRUD + 级联删除
 ├── test_data_loader.py      # 数据加载测试
-├── test_database.py         # 数据库测试
-└── test_report_comparison.py # 报告对比测试 (425 行)
+├── test_models.py           # Pydantic + ORM 模型验证
+├── test_report.py           # 文字报告格式化 + build_report
+└── test_strategies.py       # 策略核心测试 (MA 信号/止损止盈)
 ```
 
 ### 编写测试的原则

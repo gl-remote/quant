@@ -10,13 +10,15 @@ vn.py 批量回测引擎
 """
 
 import logging
+import os
 from typing import Any, Optional
 
 import numpy as np
+import pandas as pd
 
 from strategies.core.context import TradingContext
 
-from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
+from .walk_forward import df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
 from common.formatting import parse_percentage
 from common.constants import (
     DEFAULT_INITIAL_CAPITAL, DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE,
@@ -75,6 +77,61 @@ class VnpyBacktestEngine:
         if self.contract_size <= 0:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
+    @staticmethod
+    def _load_data(
+        data_dir: str, symbol: str, default_interval: str = '1m',
+    ) -> Optional['pd.DataFrame']:
+        """从本地 CSV 加载历史 K 线数据
+
+        支持的文件命名: {symbol}.csv, {symbol}.{interval}.csv, {symbol}_*.csv
+
+        Args:
+            data_dir: CSV 文件存放目录
+            symbol: 品种代码 (e.g. DCE.m2509)
+            default_interval: 默认 K 线周期
+
+        Returns:
+            DataFrame (datetime, open, high, low, close, volume)，失败返回 None
+        """
+        from pathlib import Path
+        from common.constants import COMMON_KLINE_INTERVALS
+
+        csv_dir = Path(data_dir)
+        if not csv_dir.exists():
+            logger.error(f"数据目录不存在: {data_dir}")
+            return None
+
+        candidates = [
+            csv_dir / f"{symbol}.1m.csv",
+            csv_dir / f"{symbol}.csv",
+        ] + sorted(csv_dir.glob(f"{symbol}.*.csv")) + sorted(csv_dir.glob(f"{symbol}_*.csv"))
+
+        filepath = None
+        for fp in candidates:
+            if fp.exists():
+                filepath = fp
+                break
+
+        if filepath is None:
+            logger.error(f"未找到 {symbol} 的数据文件于 {data_dir}")
+            return None
+
+        logger.info(f"加载数据: {filepath}")
+        df = pd.read_csv(filepath)
+
+        if 'datetime' not in df.columns:
+            logger.error(f"CSV 缺少 datetime 列，实际列: {list(df.columns)}")
+            return None
+
+        df['datetime'] = pd.to_datetime(df['datetime'])
+        df = df.sort_values('datetime').reset_index(drop=True)
+
+        logger.info(
+            f"加载完成: {len(df)} 条 K 线, "
+            f"时间范围 {df['datetime'].min().strftime('%Y-%m-%d')} ~ {df['datetime'].max().strftime('%Y-%m-%d')}"
+        )
+        return df
+
     def _wrap_injected_strategy(self, base_cls):
         """创建包装了上下文的桥接器策略类
 
@@ -125,7 +182,7 @@ class VnpyBacktestEngine:
         logger.info(f"{'=' * 60}")
 
         # ---- 步骤1: 加载数据 ----
-        df = load_csv_data(self.data_dir, symbol)
+        df = self._load_data(self.data_dir, symbol)
         if df is None or df.empty:
             logger.error("数据加载失败，终止回测")
             return {'success': False, 'error': '数据加载失败'}
@@ -190,9 +247,9 @@ class VnpyBacktestEngine:
               - window_results: 各窗口 IS/OOS 指标列表
               - aggregate: OOS 聚合统计 + IS-OOS 差距
         """
-        from .data_loader import walk_forward_split_by_ratio, walk_forward_split
+        from .walk_forward import walk_forward_split_by_ratio, walk_forward_split
 
-        df = load_csv_data(self.data_dir, symbol)
+        df = self._load_data(self.data_dir, symbol)
         if df is None or df.empty:
             return {'success': False, 'error': '数据加载失败', 'windows': 0}
 

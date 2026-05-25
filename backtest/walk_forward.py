@@ -1,12 +1,17 @@
-"""数据加载与划分模块 - 从CSV加载历史数据，提供 Walk-Forward 窗口划分"""
+"""Walk-Forward 时间序列交叉验证与回测数据工具
+
+提供:
+  - parse_symbol_exchange:      品种代码 → 交易所映射
+  - filter_dataframe_by_date:   日期范围过滤
+  - df_to_vnpy_datalines:       DataFrame → vnpy BarData
+  - walk_forward_split:         WF 窗口划分 (按行数)
+  - walk_forward_split_by_ratio: WF 窗口划分 (按比例)
+"""
 
 import logging
-import re
 import pandas as pd
 from pathlib import Path
-from typing import List, Optional, Tuple
-
-from common.constants import COMMON_KLINE_INTERVALS
+from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -31,128 +36,43 @@ def parse_symbol_exchange(symbol: str) -> tuple[str, str]:
     return pure_symbol, exchange_code
 
 
-def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[str, Path]]:
-    """扫描数据目录，匹配符合正则表达式的CSV文件并提取品种代码
+# ── 日期过滤 ──────────────────────────────────────────────
 
-    文件命名规则:
-      - {symbol}.csv
-      - {symbol}.{interval}.csv
-      - {symbol}_*.csv (兼容旧格式)
+def filter_dataframe_by_date(
+    df: 'pd.DataFrame',
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> 'pd.DataFrame':
+    """按日期范围过滤 DataFrame，重置索引
 
-    Args:
-        data_dir: CSV文件存放目录
-        pattern: 可选的品种代码正则表达式，匹配从文件名提取的 symbol 部分
-                 未提供则匹配所有CSV文件
-
-    Returns:
-        [(symbol, filepath), ...] 按 symbol 排序的去重列表
-    """
-    csv_dir = Path(data_dir)
-    if not csv_dir.exists():
-        logger.warning(f"数据目录不存在: {data_dir}")
-        return []
-
-    files = sorted(csv_dir.glob("*.csv"))
-    if not files:
-        logger.warning(f"数据目录为空: {data_dir}")
-        return []
-
-    seen = set()
-    result = []
-    regex = re.compile(pattern) if pattern else None
-
-    for fp in files:
-        name = fp.stem
-        symbol = None
-        
-        # 先尝试新格式: {symbol}.{interval}
-        # 找到最后一个点号的位置，分隔出interval
-        last_dot = name.rfind('.')
-        if last_dot != -1:
-            suffix_part = name[last_dot + 1:]
-            # 检查后面的部分是否像常见的interval
-            common_intervals = COMMON_KLINE_INTERVALS
-            if suffix_part in common_intervals:
-                symbol = name[:last_dot]
-        
-        # 如果新格式没匹配到，直接用文件名作为symbol
-        if symbol is None:
-            symbol = name
-        
-        if regex and not regex.search(symbol):
-            continue
-        
-        if symbol not in seen:
-            seen.add(symbol)
-            result.append((symbol, fp))
-
-    if regex and not result:
-        logger.warning(f"没有文件匹配正则表达式: {pattern}")
-
-    logger.info(f"扫描到 {len(result)} 个品种: {[s for s, _ in result]}")
-    return result
-
-
-def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
-    """从本地CSV目录加载历史K线数据
-
-    支持的文件命名模式:
-      - {symbol}.csv
-      - {symbol}.{interval}.csv (优先使用 1m)
-      - {symbol}_*.csv (兼容旧格式)
+    纯函数，不修改原 DataFrame。
 
     Args:
-        data_dir: CSV文件存放目录
-        symbol: 品种代码 (e.g. DCE.m2509)
+        df: 含 'datetime' 列的 K 线 DataFrame
+        start_date: 可选起始日期 (闭区间)
+        end_date: 可选结束日期 (闭区间)
 
     Returns:
-        DataFrame with columns: datetime, open, high, low, close, volume
+        过滤后的 DataFrame (copy, reindexed)
     """
-    csv_dir = Path(data_dir)
-    if not csv_dir.exists():
-        logger.error(f"数据目录不存在: {data_dir}")
-        return None
+    if start_date:
+        df = df[df['datetime'] >= start_date]
+    if end_date:
+        df = df[df['datetime'] <= end_date]
+    return df.reset_index(drop=True)
 
-    # 优先查找新格式文件
-    candidates = [
-        csv_dir / f"{symbol}.1m.csv",
-        csv_dir / f"{symbol}.csv",
-        csv_dir / f"{symbol}_qlib.csv",
-    ] + sorted(csv_dir.glob(f"{symbol}.*.csv")) + sorted(csv_dir.glob(f"{symbol}_*.csv"))
 
-    filepath = None
-    for fp in candidates:
-        if fp.exists():
-            filepath = fp
-            break
-
-    if filepath is None:
-        logger.error(f"未找到 {symbol} 的数据文件于 {data_dir}")
-        return None
-
-    logger.info(f"加载数据: {filepath}")
-    df = pd.read_csv(filepath)
-
-    if 'datetime' not in df.columns:
-        logger.error(f"CSV缺少datetime列，实际列: {list(df.columns)}")
-        return None
-
-    df['datetime'] = pd.to_datetime(df['datetime'])
-    df = df.sort_values('datetime').reset_index(drop=True)
-
-    logger.info(f"加载完成: {len(df)} 条K线, 时间范围 {df['datetime'].min().strftime('%Y-%m-%d')} ~ {df['datetime'].max().strftime('%Y-%m-%d')}")
-    return df
-
+# ── BarData 转换 ─────────────────────────────────────────
 
 def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval=None) -> list:
-    """将DataFrame转换为vn.py回测引擎可用的 BarData 列表
+    """将 DataFrame 转换为 vn.py 回测引擎可用的 BarData 列表
 
-    将Qlib格式CSV (datetime, open, high, low, close, volume) 转换为
+    将 K 线 CSV (datetime, open, high, low, close, volume) 转换为
     vnpy BarData 对象列表，可直接注入 BacktestingEngine.history_data
 
     Args:
-        df: Qlib格式的K线数据
-        symbol: 合约代码 (vnpy格式: 品种.交易所, e.g. m2509.DCE)
+        df: K 线数据
+        symbol: 合约代码 (vnpy 格式: 品种.交易所, e.g. m2509.DCE)
         interval: vnpy Interval 枚举，None 时回退到 Interval.DAILY
 
     Returns:
@@ -167,7 +87,7 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval=None) -> list:
         from vnpy.trader.object import BarData
         from vnpy.trader.constant import Exchange, Interval
     except ImportError:
-        logger.warning("vnpy未安装，返回字典格式数据")
+        logger.warning("vnpy 未安装，返回字典格式数据")
         bars = []
         for _, row in df.iterrows():
             dt = row['datetime']
@@ -211,33 +131,6 @@ def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval=None) -> list:
     return bars
 
 
-# ── 日期过滤 ──────────────────────────────────────────────
-
-def filter_dataframe_by_date(
-    df: 'pd.DataFrame',
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> 'pd.DataFrame':
-    """按日期范围过滤 DataFrame，重置索引
-
-    纯函数，不修改原 DataFrame。适用于 run_full_pipeline
-    和 run_walk_forward 的数据裁剪。
-
-    Args:
-        df: 含 'datetime' 列的 K 线 DataFrame
-        start_date: 可选起始日期 (闭区间)
-        end_date: 可选结束日期 (闭区间)
-
-    Returns:
-        过滤后的 DataFrame (copy, reindexed)
-    """
-    if start_date:
-        df = df[df['datetime'] >= start_date]
-    if end_date:
-        df = df[df['datetime'] <= end_date]
-    return df.reset_index(drop=True)
-
-
 # ============================================================
 # Walk-Forward 时间序列交叉验证
 # ============================================================
@@ -253,15 +146,6 @@ def walk_forward_split(
 
     按时间顺序滚动生成 (训练集, 验证集, 测试集) 三元组。
     每个窗口在前一个窗口基础上向前滑动 step 行。
-
-    与单次全量回测相比:
-      - 单次全量回测: 结果受所选时间段影响大
-      - Walk-Forward: 多窗口滚动验证，模拟策略在实际时间推进中的表现
-
-    示例 (数据 1000 行, train=200, val=40, test=40, step=40):
-      Window 0: train[0:200],  val[200:240],  test[240:280]
-      Window 1: train[40:240], val[240:280],  test[280:320]
-      ...
 
     Args:
         df: 按时间排序的完整历史数据集

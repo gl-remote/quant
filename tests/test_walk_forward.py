@@ -1,19 +1,16 @@
-"""测试 backtest/data_loader.py — 数据加载与 Walk-Forward 划分"""
+"""测试 backtest/walk_forward.py — Walk-Forward 划分与数据工具"""
 
 import pandas as pd
 import pytest
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from backtest.data_loader import (
+from backtest.walk_forward import (
     parse_symbol_exchange,
-    scan_csv_files,
-    load_csv_data,
     filter_dataframe_by_date,
     walk_forward_split,
     walk_forward_split_by_ratio,
 )
-from common.constants import COMMON_KLINE_INTERVALS
 
 
 # ==============================================================================
@@ -59,113 +56,6 @@ class TestParseSymbolExchange:
         pure, exchange = parse_symbol_exchange('DCE.m2509')
         assert pure == 'm2509'
         assert exchange == 'DCE'
-
-
-# ==============================================================================
-# scan_csv_files
-# ==============================================================================
-
-class TestScanCsvFiles:
-    def test_no_dir(self, tmp_path):
-        result = scan_csv_files(str(tmp_path / 'nonexistent'))
-        assert result == []
-
-    def test_empty_dir(self, tmp_path):
-        result = scan_csv_files(str(tmp_path))
-        assert result == []
-
-    def test_simple_csv(self, tmp_path):
-        """{symbol}.csv 格式"""
-        (tmp_path / 'm2509.csv').write_text('')
-        (tmp_path / 'rb2410.csv').write_text('')
-        result = scan_csv_files(str(tmp_path))
-        assert len(result) == 2
-        symbols = [s for s, _ in result]
-        assert 'm2509' in symbols
-        assert 'rb2410' in symbols
-
-    def test_interval_format(self, tmp_path):
-        """{symbol}.{interval}.csv 格式"""
-        (tmp_path / 'm2509.1m.csv').write_text('')
-        (tmp_path / 'm2509.1d.csv').write_text('')
-        result = scan_csv_files(str(tmp_path))
-        # 同 symbol 去重
-        assert len(result) == 1
-        assert result[0][0] == 'm2509'
-
-    def test_pattern_filter(self, tmp_path):
-        """正则过滤"""
-        (tmp_path / 'm2509.csv').write_text('')
-        (tmp_path / 'rb2410.csv').write_text('')
-        (tmp_path / 'i2509.csv').write_text('')
-        result = scan_csv_files(str(tmp_path), pattern=r'^m\d+')
-        assert len(result) == 1
-        assert result[0][0] == 'm2509'
-
-    def test_pattern_no_match(self, tmp_path):
-        (tmp_path / 'm2509.csv').write_text('')
-        result = scan_csv_files(str(tmp_path), pattern=r'^zzzz')
-        assert result == []
-
-    def test_returns_sorted(self, tmp_path):
-        (tmp_path / 'c2509.csv').write_text('')
-        (tmp_path / 'a2509.csv').write_text('')
-        (tmp_path / 'b2509.csv').write_text('')
-        result = scan_csv_files(str(tmp_path))
-        symbols = [s for s, _ in result]
-        assert symbols == sorted(symbols)
-
-
-# ==============================================================================
-# load_csv_data
-# ==============================================================================
-
-class TestLoadCsvData:
-    def test_no_dir(self, tmp_path):
-        result = load_csv_data(str(tmp_path / 'nonexistent'), 'm2509')
-        assert result is None
-
-    def test_symbol_not_found(self, tmp_path):
-        (tmp_path / 'rb2410.csv').write_text('datetime,open,high,low,close,volume\n')
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert result is None
-
-    def test_load_simple(self, tmp_path):
-        df = _make_kline_df(10)
-        df.to_csv(tmp_path / 'm2509.csv', index=False)
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert result is not None
-        assert len(result) == 10
-        assert 'datetime' in result.columns
-        assert 'close' in result.columns
-
-    def test_load_interval_format(self, tmp_path):
-        """优先加载 {symbol}.{interval}.csv"""
-        df1m = _make_kline_df(5, '2024-01-01')
-        df1m.to_csv(tmp_path / 'm2509.1m.csv', index=False)
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert result is not None
-        assert len(result) == 5
-
-    def test_missing_datetime_column(self, tmp_path):
-        df = pd.DataFrame({'close': [1.0, 2.0], 'volume': [100, 200]})
-        df.to_csv(tmp_path / 'm2509.csv', index=False)
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert result is None
-
-    def test_datetime_converted_to_datetime_type(self, tmp_path):
-        df = _make_kline_df(5)
-        df.to_csv(tmp_path / 'm2509.csv', index=False)
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert pd.api.types.is_datetime64_any_dtype(result['datetime'])
-
-    def test_data_sorted_by_datetime(self, tmp_path):
-        df = _make_kline_df(10)
-        # 乱序写入
-        df_shuffled = df.sample(frac=1)
-        df_shuffled.to_csv(tmp_path / 'm2509.csv', index=False)
-        result = load_csv_data(str(tmp_path), 'm2509')
-        assert result['datetime'].is_monotonic_increasing
 
 
 # ==============================================================================
@@ -231,7 +121,6 @@ class TestWalkForwardSplit:
         """step=1 产生最大窗口数"""
         df = _make_kline_df(60)
         windows = walk_forward_split(df, train_size=30, val_size=10, test_size=10, step=1)
-        # 60 - 50 = 10 个窗口
         assert len(windows) == 11
 
     def test_single_window(self):
@@ -245,10 +134,8 @@ class TestWalkForwardSplit:
         df = _make_kline_df(300)
         windows = walk_forward_split(df, train_size=100, val_size=20, test_size=20, step=20)
         assert len(windows) >= 2
-        # 验证 train 起始位置按 step 递增
         train0_start = windows[0][0]['datetime'].min()
         train1_start = windows[1][0]['datetime'].min()
-        # 窗口 0 的 train 从第 0 天开始，窗口 1 从第 20 天开始
         assert train1_start > train0_start
 
 
@@ -288,7 +175,6 @@ class TestWalkForwardSplitByRatio:
             df, train_ratio=0.6, val_ratio=0.2, test_ratio=0.2,
             step_ratio=0.1, min_windows=3,
         )
-        # 500 行足够产生>=3 个窗口
         assert len(windows) >= 3
 
     def test_train_val_test_cover_all_data(self):
@@ -300,5 +186,4 @@ class TestWalkForwardSplitByRatio:
         )
         for train, val, test in windows:
             total = len(train) + len(val) + len(test)
-            # 比例大致正确 (允许 1 行的舍入误差)
             assert abs(len(train) / total - 0.6) < 0.15

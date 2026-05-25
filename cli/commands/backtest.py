@@ -235,7 +235,7 @@ def _run_tq_backtest(args, cm, dm):
 
 def _run_vnpy_backtest(args, cm, dm):
     """使用 vn.py 执行批量回测"""
-    from backtest import VnpyBacktestEngine, scan_csv_files
+    from backtest import VnpyBacktestEngine
 
     try:
         bc = cm.get_backtest_config()
@@ -246,7 +246,7 @@ def _run_vnpy_backtest(args, cm, dm):
             symbols = [(args.symbol, None)]
             mode = MODE_SINGLE
         else:
-            symbols = scan_csv_files(bc['data_dir'], args.pattern)
+            symbols = [(sym, None) for sym in dm.search_symbols(args.pattern)]
             if not symbols:
                 logger.error("未找到匹配的品种数据")
                 dm.store.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)

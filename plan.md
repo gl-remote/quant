@@ -10,15 +10,15 @@
 
 | 指标 | 数值 |
 |------|------|
-| 生产代码 | 7,819 行 (48 个 .py 文件) |
-| 测试代码 | ~2,000 行 (7 个 test 文件) |
-| 测试用例 | **162** 个全通过，0 失败 |
-| 覆盖率 | **51%** (2,098 stmts / 1,021 missed) |
+| 生产代码 | 5,685 行 (38 个 .py 文件) |
+| 测试代码 | 2,722 行 (7 个 test 文件) |
+| 测试用例 | **297** 个全通过，0 失败 |
+| 覆盖率 | **61%** (1,889 stmts / 733 missed) |
 | 策略类型 | 1 (双均线 MA) |
 | CI | GitHub Actions (pytest + flake8) |
 | Python | 3.10+ |
 
-> 覆盖率下降因代码量增长 71%（4,568→7,819）但测试未同比扩充。核心策略模块 `ma_strategy.py` 覆盖率 99%。
+> 代码精简 27%（7,819→5,685）通过合并冗余模块和删除死代码。测试从 162→297（+83%），覆盖率 51%→61%。核心策略 `ma_strategy.py` 覆盖率 100%。
 
 ### 1.2 模块架构（唯一权威源）
 
@@ -31,30 +31,29 @@ main.py (19 行转发器) → cli/ (命令行子包)
 ├── strategies/          策略核心 (框架无关)
 │   ├── core/            Strategy ABC + Bar/Signal/Fill/Position 类型
 │   ├── bridges/         vnpy 桥接 + 天勤桥接 (协议转换层)
-│   └── ma_strategy.py  双均线策略 (173 行, 99% 覆盖)
+│   └── ma_strategy.py  双均线策略 (82 行, 100% 覆盖)
 ├── backtest/            回测引擎
-│   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward (415 行)
-│   ├── tq_backtest_engine.py    天勤 GUI 回测 (单标的图形化)
-│   ├── data_loader.py           CSV 加载 / 窗口切分
-│   └── types.py                 回测结果类型
+│   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
+│   └── data_loader.py           CSV 加载 / 窗口切分
 ├── data/                数据层
-│   ├── store.py          SQLite + peewee ORM (405 行)
-│   ├── models.py         Pydantic + ORM 模型 (246 行)
-│   ├── manager.py        DataManager 统一入口
+│   ├── store.py          SQLite + peewee ORM (155 行, 92% 覆盖)
+│   ├── models.py         Pydantic + ORM 模型 (178 行, 100% 覆盖)
+│   ├── manager.py        DataManager 统一入口 (153 行)
 │   └── exporter.py       天勤 → CSV 导出
-├── report/              报告层
-│   ├── dataset_reporter.py     单数据集 JSON 报告
-│   ├── comparison_reporter.py  多品种横向对比 + 排名
-│   └── sql_reporter.py         SQLite 只读报告
+├── report/              报告 + 可视化 (原 visualizer 已合并)
+│   ├── reports.py        文字报告: 单次 + 汇总 (72 行, 97% 覆盖)
+│   ├── charts.py         Plotly 多子图图表 (78 行)
+│   ├── _html.py          HTML 模板渲染 (13 行)
+│   └── __init__.py       build_report() 统一入口
 ├── common/              纯函数工具层 (零 I/O)
-│   ├── constants.py     全局常量字典 (166 行, 60+ 常量)
-│   ├── formulas.py      统一量化计算公式库 (437 行, 15+ 公式)
-│   ├── schemas.py        Pandera Schema 定义 (124 行, 4 Schema)
+│   ├── constants.py     全局常量字典 (60+ 常量)
+│   ├── formulas.py      统一量化计算公式库 (15+ 公式)
+│   ├── schemas.py        Pandera Schema 定义 (4 Schema)
 │   ├── metrics.py        max_drawdown / sharpe_ratio
 │   ├── stats.py          rank_by_key / summary_stats
 │   └── formatting.py     百分比/浮点数格式化
 └── config/              配置管理
-    └── config_manager.py YAML 分层合并 + 校验 (220 行)
+    └── config_manager.py YAML 分层合并 + 校验 (91% 覆盖)
 ```
 
 ### 1.3 架构决策记录（唯一权威源）
@@ -78,6 +77,13 @@ main.py (19 行转发器) → cli/ (命令行子包)
 
 | 提交 | 变更 |
 |------|------|
+| `39f2ce4` | **refactor**: tests/ 重组，对齐源码模块结构。9→7 文件，297 测试全过 |
+| `8a37b6d` | **refactor**: report/ 合并 single+summary+_helpers → reports.py，目录 6→4 文件 |
+| `cd4943c` | **refactor**: visualizer/ 合并到 report/，统一报告+可视化入口 build_report() |
+| `2b0b18f` | **feat**: 添加回测可视化模块 (Plotly 多子图) + 数据库表结构对齐 |
+| `57c140a` | **chore**: 统一构建产物到 output/ 目录 |
+| `9b37007` | **refactor**: 清理技术债，统一字段命名，删除死代码和兼容层 (净减 2,134 行) |
+| `6dfaa23` | **refactor**: 清理死代码 |
 | `164d00d` | **refactor**: 数据模块配置管理：移除硬编码，统一通过 config 读取 |
 | `a342811` | **feat**: 全项目代码升级与清理 |
 | `6a13da1` | **feat**: 在 common/schemas.py 定义全局统一的 Pandera Schema |
@@ -104,22 +110,23 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 阶段 | 目标 | 状态 |
 |------|------|------|
-| **S1** 策略研发工具 | 参数优化 + 可视化 | 未开始 |
+| **S0** 工程基础 | 常量/公式/CLI/Schema/report 统一 | ✅ 完成 |
+| **S1** 策略研发工具 | 参数优化 + 可视化完善 | 进行中 |
 | **S2** 策略研发 | 多策略迭代至稳定盈利 | 未开始 |
 | **S3** 生产加固 | 风控熔断 + 通知 | 未开始 |
 | **S4** 基础设施 | Docker + 多数据源 | 未开始 |
 
-> 当前处于 **S0: 工程基础打磨完成**，全局常量/公式库/CLI 重构/Pandera 校验已就绪，代码量 7,819 行，8 Bug 全部修复，可进入 S1。
+> 当前 **S0 工程基础全部完成**，S1 可视化基础链路已通，下一步：参数优化模块。
 
 ### S1: 策略研发工具
 
 > 先有工具，再做策略。看不到回测曲线、不会调参就谈不上研发。
 
-| 编号 | 行动 | 优先级 | 交付物 |
-|------|------|--------|--------|
-| A12 | 回测结果本地可视化 | **高** | `visualizer/` — 资金曲线、信号标注、回撤区间、参数对比图 |
-| A11 | 内置参数优化模块（网格搜索） | **高** | `optimizer/` — 参数网格定义、并发评估、最优参数输出 |
-| S1-DOC | 策略开发指南 | 中 | `docs/strategy-guide.md` — 如何新增策略、调优流程 |
+| 编号 | 行动 | 优先级 | 状态 | 交付物 |
+|------|------|--------|------|--------|
+| A12 | 回测结果本地可视化 | **高** | 🟡 部分完成 | `report/charts.py` — Plotly 多子图 (资金曲线+回撤+交易标注) + `report/_html.py` HTML 模板，`build_report()` 已通。**待完善**: 参数对比图、多策略叠加、信号详细标注 |
+| A11 | 内置参数优化模块（网格搜索） | **高** | ⬜ 未开始 | `optimizer/` — 参数网格定义、并发评估、最优参数输出 |
+| S1-DOC | 策略开发指南 | 中 | ⬜ 未开始 | `docs/strategy-guide.md` — 如何新增策略、调优流程 |
 
 **S1 验收**: 跑一次完整流程 — 网格搜索均线参数 → 可视化最优 vs 默认对比图
 
@@ -267,12 +274,12 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 指标 | 当前 (2026-05-25) | S1 目标 | S2 目标 | S3 目标 |
 |------|-------------------|---------|---------|---------|
-| Bug 数 | **0** (8/8 已修复) | 0 | 0 | 0 |
-| 测试用例数 | 162 ✅ | 165+ | 175+ | 185+ |
-| 覆盖率 | 51% | ≥ 55% | ≥ 65% | ≥ 75% |
+| Bug 数 | **0** (全部已修复) | 0 | 0 | 0 |
+| 测试用例数 | **297** ✅ | 310+ | 330+ | 350+ |
+| 覆盖率 | **61%** | ≥ 65% | ≥ 70% | ≥ 75% |
 | 策略类型数 | 1 (MA) | 1 | 2+ | 2+ |
 | CI 状态 | ✅ 通过 | 通过 | 通过 | 通过 |
-| 生产代码行 | 7,819 | — | — | — |
+| 生产代码行 | 5,685 | — | — | — |
 
 ---
 
@@ -280,7 +287,8 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| **0.2.0-dev** | **2026-05-25** | 第四次全量审计：全局常量标准化 + 公式库统一 + Pandera 校验 + CLI 重构完成。代码量 7,819 行，8 Bug 全部修复 |
+| **0.2.0-dev** | **2026-05-25** | S0 工程基础全部完成。report 合并、visualizer 集成、tests 重组。297 测试 61% 覆盖 |
+| 0.2.0-dev | 2026-05-25 | 第四次全量审计：全局常量标准化 + 公式库统一 + Pandera 校验 + CLI 重构完成 |
 | 0.2.0-dev | 2026-05-25 | 第三次审计：移除双重绩效系统；symbols_data 扁平化；peewee ORM；lib→common；回测与报告解耦 |
 | 0.2.0-dev | 2026-05-24 | backtest 两轮审计修复 (15 项 Bug/缺陷)；DB 持久化 + cmd_report；S1-S4 四阶段规划 |
 | 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备 |
