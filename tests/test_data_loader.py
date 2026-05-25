@@ -13,7 +13,7 @@ from backtest.data_loader import (
     walk_forward_split,
     walk_forward_split_by_ratio,
 )
-from common.constants import COMMON_KLINE_INTERVALS, Qlib_SUFFIX
+from common.constants import COMMON_KLINE_INTERVALS
 
 
 # ==============================================================================
@@ -92,13 +92,6 @@ class TestScanCsvFiles:
         # 同 symbol 去重
         assert len(result) == 1
         assert result[0][0] == 'm2509'
-
-    def test_qlib_suffix(self, tmp_path):
-        """{symbol}_qlib.csv 旧格式"""
-        (tmp_path / 'rb2410_qlib.csv').write_text('')
-        result = scan_csv_files(str(tmp_path))
-        assert len(result) == 1
-        assert result[0][0] == 'rb2410'
 
     def test_pattern_filter(self, tmp_path):
         """正则过滤"""

@@ -6,7 +6,7 @@ import pandas as pd
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from common.constants import COMMON_KLINE_INTERVALS, Qlib_SUFFIX, Qlib_SUFFIX_LEN
+from common.constants import COMMON_KLINE_INTERVALS
 
 logger = logging.getLogger(__name__)
 
@@ -75,13 +75,9 @@ def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[s
             if suffix_part in common_intervals:
                 symbol = name[:last_dot]
         
-        # 如果新格式没匹配到，尝试旧格式或无后缀格式
+        # 如果新格式没匹配到，直接用文件名作为symbol
         if symbol is None:
-            if name.endswith(Qlib_SUFFIX):
-                symbol = name[:-Qlib_SUFFIX_LEN]
-            else:
-                # 直接用文件名作为symbol
-                symbol = name
+            symbol = name
         
         if regex and not regex.search(symbol):
             continue

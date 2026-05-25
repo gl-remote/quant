@@ -15,7 +15,7 @@ import logging
 import re
 from typing import Optional, List, Dict, Any
 
-from common.constants import COMMON_KLINE_INTERVALS, Qlib_SUFFIX, Qlib_SUFFIX_LEN
+from common.constants import COMMON_KLINE_INTERVALS
 import pandas as pd
 from pathlib import Path
 
@@ -120,13 +120,9 @@ class DataManager:
                 if suffix_part in common_intervals:
                     symbol = name[:last_dot]
             
-            # 如果新格式没匹配到，尝试旧格式或无后缀格式
+            # 如果新格式没匹配到，直接用文件名作为symbol
             if symbol is None:
-                if name.endswith(Qlib_SUFFIX):
-                    symbol = name[:-Qlib_SUFFIX_LEN]
-                else:
-                    # 直接用文件名作为symbol
-                    symbol = name
+                symbol = name
             
             symbols.add(symbol)
         
