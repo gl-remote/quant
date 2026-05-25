@@ -73,10 +73,6 @@ class ConfigManager:
             defaults['sma_short'] = 5
             defaults['sma_long'] = 20
 
-        for k, default in defaults.items():
-            if k not in tc and k not in sp and k not in risk:
-                tc[k] = default
-
         return {**defaults, **sp, **risk, **tc}
 
     def get_trading_config(self) -> Dict[str, Any]:
