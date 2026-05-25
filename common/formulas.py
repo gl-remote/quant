@@ -165,17 +165,19 @@ def simple_moving_average(prices: list[float], period: int) -> float:
     """计算简单移动平均线 (SMA)
 
     行业标准: 最近 period 个值的算术平均。
+    数据不足 period 时，使用全部可用数据的均值作为近似。
 
     Args:
         prices: 价格序列 (按时间升序)
         period: 均线周期
 
     Returns:
-        SMA 值，数据不足或 period<=0 时返回 0.0
+        SMA 值，prices 为空或 period<=0 时返回 0.0
     """
-    if not prices or period <= 0 or len(prices) < period:
+    if not prices or period <= 0:
         return 0.0
-    chunk = prices[-period:]
+    actual_period = min(period, len(prices))
+    chunk = prices[-actual_period:]
     return sum(chunk) / len(chunk)
 
 

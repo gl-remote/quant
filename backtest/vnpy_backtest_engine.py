@@ -20,6 +20,12 @@ from strategies.core.context import TradingContext
 from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
 from report.dataset_reporter import generate_dataset_report, format_console_report
 from common.formatting import parse_percentage
+from common.constants import (
+    DEFAULT_INITIAL_CAPITAL, DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE,
+    DEFAULT_PRICE_TICK, DEFAULT_CONTRACT_SIZE, DEFAULT_EXPORT_DIR,
+    DEFAULT_REPORT_OUTPUT_DIR, KLINE_INTERVAL_1MIN,
+)
+from common.formulas import profitable_ratio
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +58,14 @@ class VnpyBacktestEngine:
             self.price_tick = context.price_tick
             self.contract_size = context.contract_size
         else:
-            self.initial_capital: float = float(config.get('initial_capital', 100000.0))
-            self.commission_rate: float = float(config.get('commission_rate', 0.0003))
-            self.slippage: float = float(config.get('slippage', 1.0))
-            self.price_tick: float = float(config.get('price_tick', 1.0))
-            self.contract_size: int = int(config.get('contract_size', 10))
+            self.initial_capital: float = float(config.get('initial_capital', DEFAULT_INITIAL_CAPITAL))
+            self.commission_rate: float = float(config.get('commission_rate', DEFAULT_COMMISSION_RATE))
+            self.slippage: float = float(config.get('slippage', DEFAULT_SLIPPAGE))
+            self.price_tick: float = float(config.get('price_tick', DEFAULT_PRICE_TICK))
+            self.contract_size: int = int(config.get('contract_size', DEFAULT_CONTRACT_SIZE))
 
-        self.data_dir: str = config.get('data_dir', '.quant_shared_data/csv')
-        self.interval: str = config.get('interval', '1m')
+        self.data_dir: str = config.get('data_dir', DEFAULT_EXPORT_DIR)
+        self.interval: str = config.get('interval', KLINE_INTERVAL_1MIN)
 
         if self.initial_capital <= 0:
             raise ValueError(f"initial_capital 必须大于 0，当前: {self.initial_capital}")
@@ -73,7 +79,7 @@ class VnpyBacktestEngine:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
         report_cfg = config.get('report', {})
-        self.report_dir: str = report_cfg.get('output_dir', '.quant_shared_data/reports')
+        self.report_dir: str = report_cfg.get('output_dir', DEFAULT_REPORT_OUTPUT_DIR)
         self.save_trades: bool = report_cfg.get('save_trade_records', True)
         self.save_equity: bool = report_cfg.get('save_equity_curve', True)
 
@@ -279,7 +285,7 @@ class VnpyBacktestEngine:
             'max_drawdown_worst': float(np.max(drawdowns)),
             'win_rate_mean': float(np.mean(win_rates)),
             'win_rate_std': float(np.std(win_rates)),
-            'positive_window_ratio': float(np.sum(arr_returns > 0) / len(arr_returns)),
+            'positive_window_ratio': profitable_ratio(int(np.sum(arr_returns > 0)), len(arr_returns)),
             'stability_score': float(max(0.0, min(1.0,
                 1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9)
             ))),
