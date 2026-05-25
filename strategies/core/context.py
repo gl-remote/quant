@@ -1,11 +1,17 @@
-"""交易上下文 - 统一管理策略运行所需的所有参数
+"""交易上下文 - 不可变值对象，统一管理策略运行所需的所有参数
 
+Go 风格 context: 一个 frozen dataclass → 派生覆盖字段 → 线程安全传递。
 从 cmd 层构建，贯穿 bridge → engine → strategy 的完整调用链，
 替代散落在各层的独立参数传递。
+
+用法:
+    base_ctx = TradingContext.build(strategy, symbol, cm)
+    # 参数搜索: 不可变派生 (Go: context.WithValue)
+    ctx = replace(base_ctx, strategy=new_strategy)
 """
 
 import dataclasses
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Dict, Optional
 
 from .base import Strategy
@@ -19,12 +25,15 @@ from common.constants import (
 )
 
 
-@dataclass
+@dataclass(frozen=True)
 class TradingContext:
-    """统一交易上下文
+    """不可变交易上下文 (Go style)
 
     捆绑策略实例、品种信息、交易参数、回测引擎参数和账户信息，
     在各模块间统一传递，消除参数散落问题。
+
+    不可变设计: 创建后字段只读，通过 dataclasses.replace() 派生新实例。
+    每个 context 实例持有独立的 strategy 引用，天然线程安全。
 
     Attributes:
         strategy: 策略实例 (实现 Strategy 接口)
@@ -93,3 +102,4 @@ class TradingContext:
             contract_size=bc.get('contract_size', DEFAULT_CONTRACT_SIZE),
             account=account if account else None,
         )
+

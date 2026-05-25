@@ -119,12 +119,41 @@ class TqsdkStrategyBridge:
             auth = _tqsdk.TqAuth("guest", "")
         return auth or _tqsdk.TqAuth("guest", "")
 
-    def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False):
-        """实盘/模拟主循环 — 处理行情驱动与信号翻译
+    def _watch_klines(self, api, klines, symbol: str):
+        """监控 K 线序列变化并驱动策略 — 回测/实盘共用核心循环
 
         跟踪 kline_serial 长度变化，每次 wait_update 处理所有新增 K 线，
         避免仅取 iloc[-1] 时跳过中间数据。
+
+        此方法被 _run_loop (实盘/模拟) 和 CLI _run_tq_backtest (回测) 共用，
+        消除了两处 ~50 行重复的行情处理循环。
+
+        Args:
+            api: TqApi 实例 (可能含 TqBacktest 包装)
+            klines: get_kline_serial 返回的 DataFrame
+            symbol: 品种代码
+
+        Raises:
+            BacktestFinished: 回测模式下由 TqApi.wait_update() 自然抛出
         """
+        target_pos = _tqsdk.TargetPosTask(api, symbol)
+        prev_kline_len = len(klines)
+        while True:
+            api.wait_update()
+            if api.is_changing(klines):
+                current_len = len(klines)
+                for i in range(prev_kline_len, current_len):
+                    signal = self.on_bar(klines, idx=i)
+                    if signal.action == 'buy':
+                        target_pos.set_target_volume(signal.volume)
+                        self.notify_fill(signal, float(klines.close.iloc[i]))
+                    elif signal.action == 'sell':
+                        target_pos.set_target_volume(0)
+                        self.notify_fill(signal, float(klines.close.iloc[i]))
+                prev_kline_len = current_len
+
+    def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False):
+        """实盘/模拟主循环 — 初始化 API 后委托 _watch_klines 驱动策略"""
         if not _tqsdk.ensure():
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
             return
@@ -132,34 +161,12 @@ class TqsdkStrategyBridge:
         try:
             api = _tqsdk.TqApi(auth=auth, web_gui=web_gui)
             self.initialize(api)
-            target_pos = _tqsdk.TargetPosTask(api, symbol)
             klines = api.get_kline_serial(symbol, 86400)
             log_msg = f"开始运行策略: {symbol}，按Ctrl+C停止"
             if web_gui:
                 log_msg += "，浏览器访问 http://127.0.0.1:9876"
             logger.info(log_msg)
-
-            prev_kline_len = len(klines)
-            while True:
-                api.wait_update()
-                if api.is_changing(klines):
-                    current_len = len(klines)
-                    # 遍历所有新增K线，避免跳过中间数据
-                    for i in range(prev_kline_len, current_len):
-                        signal = self.on_bar(klines, idx=i)
-                        if signal.action == 'buy':
-                            target_pos.set_target_volume(signal.volume)
-                            self.notify_fill(
-                                signal,
-                                float(klines.close.iloc[i]),
-                            )
-                        elif signal.action == 'sell':
-                            target_pos.set_target_volume(0)
-                            self.notify_fill(
-                                signal,
-                                float(klines.close.iloc[i]),
-                            )
-                    prev_kline_len = current_len
+            self._watch_klines(api, klines, symbol)
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except Exception as e:

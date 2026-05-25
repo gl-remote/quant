@@ -132,23 +132,24 @@ class VnpyBacktestEngine:
         )
         return df
 
-    def _wrap_injected_strategy(self, base_cls):
-        """创建包装了上下文的桥接器策略类
+    @staticmethod
+    def _wrap_injected_strategy(base_cls, context):
+        """创建包装了上下文的桥接器策略类 (线程安全)
 
         _InjectedStrategy 覆写 _load_default_core 为 no-op，
         在 __init__ 返回后直接注入 _core 和 price_tick，
         避免 bridge 的 __init__ 感知 context 参数。
-        """
-        ctx = getattr(self, '_backtest_context', self.context)
 
+        context 通过参数显式传入，消除 self._backtest_context 共享属性的竞态条件。
+        """
         class _InjectedStrategy(base_cls):
             def _load_default_core(inner_self, setting):
                 pass
 
             def __init__(inner_self, cta_engine, strategy_name, vt_symbol, setting):
                 super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-                inner_self.price_tick = ctx.price_tick
-                inner_self._core = ctx.strategy
+                inner_self.price_tick = context.price_tick
+                inner_self._core = context.strategy
 
         return _InjectedStrategy
 
@@ -157,6 +158,7 @@ class VnpyBacktestEngine:
         symbol: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
+        context: Optional[TradingContext] = None,
     ) -> dict[str, Any]:
         """执行完整的回测流水线
 
@@ -169,6 +171,9 @@ class VnpyBacktestEngine:
             symbol: 合约代码 (e.g. DCE.m2509)
             start_date: 数据起始日期 (可选过滤)
             end_date: 数据结束日期 (可选过滤)
+            context: 交易上下文 (可选)。参数搜索场景下传入独立 context，
+                     每个参数组合持有独立的 strategy 实例，互不干扰。
+                     为 None 时使用 engine 构造时的 self.context。
 
         Returns:
             回测结果字典，包含:
@@ -195,7 +200,7 @@ class VnpyBacktestEngine:
 
         # ---- 步骤2: 全量回测 ----
         logger.info("\n>>> 执行全量回测")
-        result = self._run_backtest(df, symbol, 'full')
+        result = self._run_backtest(df, symbol, 'full', context=context)
         if 'error' in result:
             logger.error(f"全量回测失败 [{symbol}]: {result['error']}")
             return {'success': False, 'error': result['error'], 'symbol': symbol}
@@ -360,8 +365,18 @@ class VnpyBacktestEngine:
         df: 'pd.DataFrame',
         symbol: str,
         dataset_name: str,
+        context: Optional[TradingContext] = None,
     ) -> dict[str, Any]:
-        """在单个数据集上执行 vnpy 回测"""
+        """在单个数据集上执行 vnpy 回测
+
+        Args:
+            df: K 线数据
+            symbol: 品种代码
+            dataset_name: 数据集标识 (用于日志)
+            context: 交易上下文 (可选)，参数搜索时传入独立 context，
+                     每个参数组合持有独立 strategy 实例，无共享可变状态。
+                     为 None 时使用 self.context。
+        """
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
         from strategies.bridges import VnpyStrategyBridge
@@ -395,7 +410,11 @@ class VnpyBacktestEngine:
 
         setting = self._build_setting()
 
-        if self.context is None:
+        if context is not None:
+            local_context = context
+        elif self.context is not None:
+            local_context = self.context
+        else:
             from strategies.ma_strategy import MaStrategyCore, TradingConfig
             from strategies.core.context import TradingContext
             strategy = MaStrategyCore(TradingConfig(
@@ -408,14 +427,10 @@ class VnpyBacktestEngine:
                 capital=self.initial_capital,
                 price_tick=self.price_tick,
             )
-        else:
-            local_context = self.context
 
         local_context.strategy.reset()
 
-        # 临时挂到 self 上供 _wrap_injected_strategy 的闭包捕获
-        self._backtest_context = local_context
-        strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge)
+        strategy_cls = self._wrap_injected_strategy(VnpyStrategyBridge, local_context)
         engine.add_strategy(strategy_cls, setting)
 
         bars = df_to_vnpy_datalines(df, vt_symbol, interval)

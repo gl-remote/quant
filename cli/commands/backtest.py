@@ -95,7 +95,7 @@ def cmd_backtest(args):
 
 def _run_tq_backtest(args, cm, dm):
     """使用 TqSdk 执行单标的回测"""
-    from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
+    from tqsdk import TqApi, TqAuth, TqBacktest
     from tqsdk.exceptions import BacktestFinished
     from strategies import TqsdkStrategyBridge
 
@@ -130,24 +130,7 @@ def _run_tq_backtest(args, cm, dm):
         klines = api.get_kline_serial(args.symbol, duration_seconds=tc['kline_period'] * 60)
 
         bridge.initialize(api)
-        target_pos = TargetPosTask(api, args.symbol)
-
-        prev_kline_len = len(klines)
-        while True:
-            api.wait_update()
-            if api.is_changing(klines):
-                current_len = len(klines)
-                for i in range(prev_kline_len, current_len):
-                    signal = bridge.on_bar(klines, idx=i)
-
-                    pos = strategy_core.position
-                    if signal.action == TRADE_ACTION_BUY and pos.direction != 'long':
-                        target_pos.set_target_volume(signal.volume)
-                        bridge.notify_fill(signal, float(klines.close.iloc[i]))
-                    elif signal.action == TRADE_ACTION_SELL and pos.direction == 'long':
-                        target_pos.set_target_volume(0)
-                        bridge.notify_fill(signal, float(klines.close.iloc[i]))
-                prev_kline_len = current_len
+        bridge._watch_klines(api, klines, args.symbol)
 
     except BacktestFinished:
         fills = getattr(strategy_core, 'fills', [])

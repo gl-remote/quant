@@ -127,7 +127,11 @@ class ConfigManager:
                 return {}
             ak = svc.get('api_key', '')
             sk = svc.get('api_secret', '')
-            if not ak or ak == 'PLACEHOLDER_API_KEY' or not sk or sk == 'PLACEHOLDER_API_SECRET':
+            _PLACEHOLDERS = {
+                'PLACEHOLDER_API_KEY', 'PLACEHOLDER_API_SECRET',
+                'your_api_key_here', 'your_api_secret_here',
+            }
+            if not ak or ak in _PLACEHOLDERS or not sk or sk in _PLACEHOLDERS:
                 return {}
             return {'api_key': ak, 'api_secret': sk}
         except Exception:

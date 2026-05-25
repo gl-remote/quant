@@ -113,7 +113,7 @@ def main():
 
     # ---- live ----
     p = sub.add_parser('live', help='实盘/模拟交易')
-    p.add_argument('--symbol', default='DCE.m2109', help='品种代码')
+    p.add_argument('--symbol', default='DCE.m2509', help='品种代码')
     p.add_argument('--gui', action='store_true', help='启用图形界面')
     p.add_argument('--config', default=None, help='配置文件路径')
     p.add_argument('--strategy', default=None,

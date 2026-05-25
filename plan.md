@@ -219,7 +219,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 编号 | 发现 | 严重度 | 说明 |
 |------|------|--------|------|
-| ARC-01 | `_InjectedStrategy` 闭包注入脆弱 | 中 | 依赖 `self._backtest_context` 临时属性+闭包捕获，并发调用会竞态 |
+| ~~ARC-01~~ | ~~`_InjectedStrategy` 闭包注入脆弱~~ ✅ 已修复 | 中 | `self._backtest_context` 实例属性 → 方法参数显式传入 (线程安全) |
 | ARC-02 | `data_loader.py` 覆盖率仅 37% | 中 | Walk-Forward 切分/CSV 扫描路径几乎无测试 |
 | ARC-03 | `vnpy_backtest_engine.py` 覆盖率 11% | 中 | 核心引擎依赖 vnpy 运行时，无法在 CI 环境 mock |
 | ARC-04 | ~~`main.py` 678 行单一入口~~ ✅ 已修复 | — | 已重构为 `cli/` 子包，`main.py` 仅 19 行转发 |
@@ -257,7 +257,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | format_pct 格式化错误 | 中 | 🟡 高 | **BUG-03** | ✅ 已修复 | 已修复：统一 DB 入库语义（全部存比值），消除启发式 (`d1589b9`) |
 | 实盘无风控裸奔 | 中 | 🔴 高 | DEF-S08 | S3-A15 风控熔断 |
 | 报告数值不可靠 | 高 | 🟡 中 | BUG-05~07, DEF-02, DEF-07 | ✅ 已修复 | BUG-05/06/07 已修复，方向常量+WF验证+命名修正 |
-| `_InjectedStrategy` 竞态 | 低 | 🟡 中 | ARC-01 | 当前单线程安全，重构时再处理 |
+| ~~`_InjectedStrategy` 竞态~~ | 低 | 🟡 中 | ARC-01 | ✅ 已修复: context 显式传参，消除共享属性 (供 A11 并发参数搜索) |
 
 ### 4.2 前瞻风险
 
