@@ -79,7 +79,7 @@ class DataManager:
             self._store = DataStore(db_path)
     
     @property
-    def store(self):
+    def store(self) -> "DataStore":
         """获取存储层实例（延迟初始化）"""
         self._init_store()
         return self._store

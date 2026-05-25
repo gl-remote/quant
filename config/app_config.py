@@ -31,11 +31,11 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 if sys.version_info >= (3, 11):
     import tomllib
-else:
+else:  # pyright: ignore[reportUnreachable]
     import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 from pydantic import (
@@ -74,7 +74,7 @@ from common.constants import (
 class StrategyItemConfig(BaseModel):
     """单个策略配置项。extra="allow" 允许策略自定义参数字段。"""
 
-    model_config = ConfigDict(extra="allow")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
     name: str
     enabled: bool = True
@@ -210,7 +210,7 @@ class ThirdPartyServiceConfig(BaseModel):
     api_secret: str = ""
     enabled: bool = True
 
-    model_config = ConfigDict(extra="allow")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
 
 class ThirdPartyConfig(BaseModel):
@@ -256,7 +256,7 @@ class ProjectConfig(BaseModel):
     统一入口: ProjectConfig.instance()
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     app: AppConfig = Field(default_factory=AppConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
@@ -330,10 +330,10 @@ class ProjectConfig(BaseModel):
         return cls(**raw)
 
     @classmethod
-    def _parse_toml(cls, config_file: str, config_dir: Path) -> dict[str, Any]:
+    def _parse_toml(cls, config_file: str, config_dir: Path) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
         """读取基础配置 + local 覆盖，返回合并后的字典"""
         base_path = Path(config_file)
-        config: dict[str, Any] = {}
+        config: dict[str, Any] = {}  # pyright: ignore[reportExplicitAny]
         if base_path.exists():
             with open(base_path, "rb") as f:
                 config = tomllib.load(f)
@@ -345,7 +345,7 @@ class ProjectConfig(BaseModel):
         return config
 
     @staticmethod
-    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
+    def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:  # pyright: ignore[reportExplicitAny]
         for k, v in override.items():
             if isinstance(v, dict) and isinstance(base.get(k), dict):
                 ProjectConfig._deep_merge(base[k], v)
@@ -353,7 +353,7 @@ class ProjectConfig(BaseModel):
                 base[k] = v
 
     @staticmethod
-    def _resolve_data_paths(raw: dict[str, Any], root: Path) -> None:
+    def _resolve_data_paths(raw: dict[str, Any], root: Path) -> None:  # pyright: ignore[reportExplicitAny]
         dc = raw.setdefault("data", {})
         for key in ("base_dir", "export_dir", "db_path"):
             val = dc.get(key, "")
@@ -361,21 +361,21 @@ class ProjectConfig(BaseModel):
                 dc[key] = str(root / val)
 
     @staticmethod
-    def _resolve_backtest_paths(raw: dict[str, Any], root: Path) -> None:
+    def _resolve_backtest_paths(raw: dict[str, Any], root: Path) -> None:  # pyright: ignore[reportExplicitAny]
         bc = raw.get("backtest", {})
         data_dir = bc.get("data_dir", "")
         if data_dir and not Path(data_dir).is_absolute():
             bc["data_dir"] = str(root / data_dir)
 
     @staticmethod
-    def _resolve_export_paths(raw: dict[str, Any], root: Path) -> None:
+    def _resolve_export_paths(raw: dict[str, Any], root: Path) -> None:  # pyright: ignore[reportExplicitAny]
         ec = raw.setdefault("export", {})
         default_dir = ec.get("default_dir", "")
         if default_dir and not Path(default_dir).is_absolute():
             ec["default_dir"] = str(root / default_dir)
 
     @staticmethod
-    def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:
+    def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
         """解析账户信息：环境变量优先，其次 TOML config"""
         ak = os.environ.get("TQSDK_API_KEY", "")
         sk = os.environ.get("TQSDK_API_SECRET", "")
@@ -430,7 +430,7 @@ class ProjectConfig(BaseModel):
         """检查配置是否通过 Pydantic 校验"""
         try:
             # 重校验自身及子模型
-            self.model_validate(self.model_dump())
+            _ = self.model_validate(self.model_dump())
             return True
         except Exception:
             return False

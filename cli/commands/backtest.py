@@ -11,11 +11,12 @@
     - 数据落地: 回测结果统一持久化到数据库
 """
 
+import argparse
 import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any
 
 from config import ConfigManager
 from data import DataManager
@@ -41,7 +42,7 @@ from common.formulas import calculate_fifo_profit
 logger = logging.getLogger(__name__)
 
 
-def get_git_hash() -> Optional[str]:
+def get_git_hash() -> str | None:
     """获取当前 Git 提交的短哈希值（7位）
     
     Returns:
@@ -63,7 +64,7 @@ def get_git_hash() -> Optional[str]:
     return None
 
 
-def cmd_backtest(args):
+def cmd_backtest(args: argparse.Namespace) -> None:
     """执行统一回测命令
 
     根据标的数量自动选择回测引擎:
@@ -83,60 +84,67 @@ def cmd_backtest(args):
     cm = ConfigManager()
     dm = DataManager(cm)
 
-    is_single_mode = args.symbol and not args.pattern
+    is_single_mode = args.symbol and not args.pattern  # pyright: ignore[reportAny]
     if is_single_mode:
         _run_tq_backtest(args, cm, dm)
     else:
         _run_vnpy_backtest(args, cm, dm)
 
 
-def _run_tq_backtest(args, cm, dm):
+def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManager") -> None:
     """使用 TqSdk 执行单标的回测"""
-    from tqsdk import TqApi, TqAuth, TqBacktest
-    from tqsdk.exceptions import BacktestFinished
+    from tqsdk import TqApi, TqAuth, TqBacktest  # pyright: ignore[reportMissingTypeStubs]
+    from tqsdk.exceptions import BacktestFinished  # pyright: ignore[reportMissingTypeStubs]
     from strategies import TqsdkStrategyBridge
 
-    api = None
+    strategy: str = args.strategy  # pyright: ignore[reportAny]
+    symbol: str = args.symbol  # pyright: ignore[reportAny]
+    start_date_str: str = args.start  # pyright: ignore[reportAny]
+    end_date_str: str = args.end  # pyright: ignore[reportAny]
+    gui_flag: bool = args.gui  # pyright: ignore[reportAny]
+
+    api: TqApi | None = None
+    strategy_cls = ""
     try:
-        sc = cm.get_trading_config(args.strategy)
+        sc = cm.get_trading_config(strategy)
         account = cm.get_account_info()
         bc = cm.get_backtest_config()
         strategy_params = sc.model_dump(exclude={"name", "enabled"})
-        capital = args.capital if args.capital else bc.initial_capital
+        capital = args.capital if args.capital else bc.initial_capital  # pyright: ignore[reportAny]
         strategy_core = load_strategy(
-            args.strategy,
+            strategy,
             strategy_params=strategy_params,
             capital=capital,
             contract_size=bc.contract_size,
         )
         strategy_cls = get_strategy_class_name(strategy_core)
 
-        bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=args.symbol)
+        bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=symbol)
 
+        capital_val = args.capital  # pyright: ignore[reportAny]
         logger.info(
-            f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
-            f"strategy={strategy_cls} GUI={args.gui}"
+            "回测: %s %s~%s 资金=%s strategy=%s GUI=%s",
+            symbol, start_date_str, end_date_str, capital_val, strategy_cls, gui_flag,
         )
         dm.store.log('backtest',
-               f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
-               f"strategy={strategy_cls}",
-               symbol=args.symbol, status=LOG_STATUS_INFO)
+               "开始: %s %s~%s 资金=%s strategy=%s" % (symbol, start_date_str, end_date_str, capital_val, strategy_cls),
+               symbol=symbol, status=LOG_STATUS_INFO)
 
         auth = TqAuth(account.api_key, account.api_secret) if account else None
         api = TqApi(
             backtest=TqBacktest(
-                start_dt=datetime.strptime(args.start, '%Y-%m-%d'),
-                end_dt=datetime.strptime(args.end, '%Y-%m-%d')
+                start_dt=datetime.strptime(start_date_str, '%Y-%m-%d'),
+                end_dt=datetime.strptime(end_date_str, '%Y-%m-%d')
             ),
-            auth=auth, web_gui=args.gui
+            auth=auth, web_gui=gui_flag
         )
-        klines = api.get_kline_serial(args.symbol, duration_seconds=sc.kline_period * 60)
+        klines = api.get_kline_serial(symbol, duration_seconds=sc.kline_period * 60)
 
         bridge.initialize(api)
-        bridge._watch_klines(api, klines, args.symbol)
+        bridge._watch_klines(api, klines, symbol)
 
     except BacktestFinished:
-        fills = getattr(strategy_core, 'fills', [])
+        fills = getattr(strategy_core, 'fills', [])  # pyright: ignore[reportPossiblyUnboundVariable]
 
         total_profit = calculate_fifo_profit(fills)
         total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
@@ -146,9 +154,9 @@ def _run_tq_backtest(args, cm, dm):
             f"回测报告\n"
             f"{'=' * 60}\n"
             f"策略: {strategy_cls}\n"
-            f"品种: {args.symbol}\n"
-            f"区间: {args.start} ~ {args.end}\n"
-            f"初始资金: {args.capital:,.2f}\n\n"
+            f"品种: {symbol}\n"
+            f"区间: {start_date_str} ~ {end_date_str}\n"
+            f"初始资金: {args.capital:,.2f}\n\n"  # pyright: ignore[reportAny]
             f"交易统计:\n"
             f"  总交易次数: {total_trades}\n"
             f"  总盈亏: {total_profit:,.2f}\n"
@@ -157,7 +165,7 @@ def _run_tq_backtest(args, cm, dm):
         print(report)
 
         bt_id = dm.insert_backtest(
-            symbol=args.symbol,
+            symbol=symbol,
             strategy=strategy_cls,
             status=STATUS_SUCCESS,
             error_message=None,
@@ -165,10 +173,10 @@ def _run_tq_backtest(args, cm, dm):
                 'total_trades': total_trades,
                 'total_profit': total_profit,
             },
-            engine_config={'type': 'tqsdk', 'gui': args.gui},
-            params_json=serialize_strategy_params(strategy_core),
-            start_date=args.start,
-            end_date=args.end,
+            engine_config={'type': 'tqsdk', 'gui': gui_flag},
+            params_json=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
+            start_date=start_date_str,
+            end_date=end_date_str,
         )
 
         if fills:
@@ -189,10 +197,10 @@ def _run_tq_backtest(args, cm, dm):
                 tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
                 logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
 
-        dm.store.log('backtest', f"完成:\n{report}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
+        dm.store.log('backtest', f"完成:\n{report}", symbol=symbol, status=LOG_STATUS_SUCCESS)
         print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
 
-        if args.gui:
+        if gui_flag and api is not None:
             logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
             try:
                 while True:
@@ -201,10 +209,10 @@ def _run_tq_backtest(args, cm, dm):
                 pass
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        dm.store.log('backtest', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
+        dm.store.log('backtest', f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
         dm.insert_backtest(
-            symbol=args.symbol,
-            strategy=get_strategy_class_name(strategy_core) if 'strategy_core' in locals() else 'unknown',
+            symbol=symbol,
+            strategy=strategy_cls or 'unknown',
             status=STATUS_FAILED,
             error_message=str(e),
             statistics={},
@@ -219,51 +227,59 @@ def _run_tq_backtest(args, cm, dm):
             api.close()
 
 
-def _run_vnpy_backtest(args, cm, dm):
+def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManager") -> None:
     """使用 vn.py 执行批量回测"""
     from backtest import VnpyBacktestEngine
+
+    strategy_name: str = args.strategy  # pyright: ignore[reportAny]
+    symbol_arg: str | None = args.symbol  # pyright: ignore[reportAny]
+    pattern_arg: str | None = args.pattern  # pyright: ignore[reportAny]
+    start_arg: str | None = args.start  # pyright: ignore[reportAny]
+    end_arg: str | None = args.end  # pyright: ignore[reportAny]
+    capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
 
     try:
         bc = cm.get_backtest_config()
 
-        if args.symbol and not args.pattern:
-            symbols = [(args.symbol, None)]
+        if symbol_arg and not pattern_arg:
+            symbols = [(symbol_arg, None)]
             mode = MODE_SINGLE
         else:
-            symbols = [(sym, None) for sym in dm.search_symbols(args.pattern)]
+            symbols = [(sym, None) for sym in dm.search_symbols(pattern_arg or "")]
             if not symbols:
                 logger.error("未找到匹配的品种数据")
                 dm.store.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
                 return
             mode = MODE_BATCH
 
-        logger.info(
-            f"{'单品种' if mode == MODE_SINGLE else '批量'}回测: {len(symbols)} 个品种"
-            f" strategy={args.strategy}"
-        )
+        mode_label = "单品种" if mode == MODE_SINGLE else "批量"
+        logger.info("%s回测: %d 个品种 strategy=%s", mode_label, len(symbols), strategy_name)
 
-        all_results = []
-        failed = []
+        all_results: list[dict[str, Any]] = []  # pyright: ignore[reportExplicitAny]
+        failed: list[str] = []
+        params_json = "{}"
+        strat_cls_name = strategy_name
+        strategy_version: str | None = None
         for sym, _ in symbols:
-            sc = cm.get_trading_config(args.strategy)
+            sc = cm.get_trading_config(strategy_name)
             strategy_params = sc.model_dump(exclude={"name", "enabled"})
-            capital = args.capital if args.capital else bc.initial_capital
+            capital = capital_arg if capital_arg else bc.initial_capital
             strategy = load_strategy(
-                args.strategy,
+                strategy_name,
                 strategy_params=strategy_params,
                 capital=capital,
                 contract_size=bc.contract_size,
             )
             params_json = serialize_strategy_params(strategy)
-            strategy_name = get_strategy_class_name(strategy)
+            strat_cls_name = get_strategy_class_name(strategy)
             strategy_version = getattr(strategy, 'VERSION', None)
 
             engine = VnpyBacktestEngine(bc)
             try:
                 result = engine.run_full_pipeline(
                     symbol=sym,
-                    start_date=args.start or None,
-                    end_date=args.end or None,
+                    start_date=start_arg or None,
+                    end_date=end_arg or None,
                     strategy=strategy,
                 )
                 all_results.append(result)
@@ -280,15 +296,16 @@ def _run_vnpy_backtest(args, cm, dm):
             + (f", 失败: {failed}" if failed else "")
         )
 
-        bt_ids: List[int] = []
-        for i, r in enumerate(all_results):
+        bt_ids: list[int] = []
+        git_hash = get_git_hash()
+        for r in all_results:
             if r.get('success'):
                 st = r['result'].get('statistics', {})
                 dr = r['result'].get('daily_results', [])
                 ec = r.get('engine_config', {})
                 bt_id = dm.insert_backtest(
                     symbol=r['symbol'],
-                    strategy=strategy_name,
+                    strategy=strat_cls_name,
                     status=STATUS_SUCCESS,
                     error_message=None,
                     statistics=st,
@@ -326,7 +343,7 @@ def _run_vnpy_backtest(args, cm, dm):
             else:
                 dm.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),
-                    strategy=strategy_name,
+                    strategy=strat_cls_name,
                     status=STATUS_FAILED,
                     error_message=r.get('error'),
                     statistics={},
@@ -346,18 +363,20 @@ def _run_vnpy_backtest(args, cm, dm):
                 print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
 
         if succeeded:
-            dm.store.log('backtest',
-                   f"{'批量' if mode == MODE_BATCH else ''}回测完成: "
-                   f"{len(succeeded)}/{len(all_results)}, "
-                   f"已写入 {persisted} 条 DB 记录",
-                   symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
+            msg = (
+                f"{'批量' if mode == MODE_BATCH else ''}回测完成: "
+                + f"{len(succeeded)}/{len(all_results)}, "
+                + f"已写入 {persisted} 条 DB 记录"
+            )
+            dm.store.log('backtest', msg,
+                   symbol=MODE_MULTI if mode == MODE_BATCH else symbol_arg,
                    status=LOG_STATUS_SUCCESS)
         else:
             dm.store.log('backtest', f"回测全部失败",
-                   symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
+                   symbol=MODE_MULTI if mode == MODE_BATCH else symbol_arg,
                    status=LOG_STATUS_ERROR)
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        dm.store.log('backtest', f"失败: {e}", symbol=args.symbol or MODE_MULTI, status=LOG_STATUS_ERROR)
+        dm.store.log('backtest', f"失败: {e}", symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
