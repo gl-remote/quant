@@ -40,42 +40,20 @@ vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 
 ## 二、项目结构
 
-```
-quant/
-├── main.py                 # 命令行入口转发器 (19 行)
-├── plan.md                 # 项目改进计划（仅含未解决问题）
-├── AI_BEHAVIOR_RULES.md    # 本文档
-├── CHANGELOG.md            # 重要变更记录
-├── .memory_rules.md         # 知识图谱记忆规则
-├── run.sh / activate_env.sh
-├── tests/                  # 测试目录 (162 用例)
-│
-├── cli/                    # CLI 命令子包
-│   ├── main.py             #   参数解析与命令分发
-│   └── commands/           #   子命令实现 (export/test/backtest/report/live)
-├── config/                 # 配置管理（YAML 分层合并）
-│   ├── conf.yaml           #   基础配置（提交版本控制）
-│   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
-│   └── conf.example.yaml   #   配置模板
-├── strategies/             # 策略子系统
-│   ├── core/               #   策略基类接口 (Strategy ABC)
-│   │   ├── base.py         #     抽象基类定义
-│   │   ├── types.py        #     Bar/Signal/Fill/StrategyPosition
-│   │   └── context.py      #     TradingContext
-│   ├── ma_strategy.py      #   均线交叉策略 (173 行, 99% 覆盖)
-│   └── bridges/            #   vn.py / 天勤 桥接器
-├── common/                 # 通用工具层（零 I/O、零依赖）
-│   ├── constants.py        #   全局常量字典 (60+)
-│   ├── formulas.py         #   量化计算公式库 (15+)
-│   ├── schemas.py          #   Pandera Schema 定义
-│   ├── metrics.py          #   绩效指标
-│   ├── stats.py            #   统计聚合
-│   └── formatting.py       #   安全格式化
-├── backtest/               # 回测子系统（引擎+数据+报告+对比）
-├── report/                 # 报告生成（单数据集/多品种/DB）
-├── data/                   # 数据子系统（manager/models/store/exporter）
-└── doc/                    # 项目文档
-```
+> 完整模块架构见 `plan.md` §1.2（唯一权威源）。以下为**文件修改速查表**——AI 需修改某功能时定位对应文件。
+
+| 需求 | 应修改的文件 |
+|------|------------|
+| 新增策略 | `strategies/xxx.py` + `strategies/__init__.py` |
+| 新增 CLI 命令 | `cli/commands/xxx.py` |
+| 新增量化公式 | `common/formulas.py` + `tests/test_common.py` |
+| 新增常量 | `common/constants.py` |
+| 新增 Schema | `common/schemas.py` |
+| 修改数据库表 | `data/models.py` + `data/store.py` |
+| 修改报告格式 | `report/xxx.py` |
+| 修改配置项 | `common/constants.py` (默认值) + `config/conf.yaml` |
+| 修改回测引擎 | `backtest/vnpy_backtest_engine.py` |
+| 新增桥接器 | `strategies/bridges/xxx.py` |
 
 ---
 
@@ -347,41 +325,11 @@ vol = capital * 0.1 / (price * 10)
 
 ## 十一、Knowledge Graph Memory
 
-### 规则 11.1: 知识图谱持久化（强制执行）
+### 规则 11.1: 知识图谱持久化
 
-项目使用 Knowledge Graph Memory 跨会话保持关键信息。详细规则见 [.memory_rules.md](file:///Users/REDACTED_API_KEY/Documents/src/quant/.memory_rules.md)。
+项目使用 Knowledge Graph Memory 跨会话保持关键信息。**实体类型、关系类型、写入时机、命名约定**的完整定义见 [`.memory_rules.md`](file:///Users/REDACTED_API_KEY/Documents/src/quant/.memory_rules.md)（唯一权威源），本文件不重复。
 
-核心要求：
-
-| 场景 | 必须创建 |
-|------|---------|
-| 项目首次加载 | Module + Strategy 实体及依赖关系 |
-| 发现新问题 | Issue 实体 |
-| 修复问题 | Fix 实体 + `resolved_by` 关系 |
-| 新增模块/类 | 对应实体及关系 |
-| 文档变更 | 更新 Document 实体的 observations |
-
-### 规则 11.2: 实体类型
-
-| 类型 | 命名格式 | 示例 |
-|------|---------|------|
-| Module | `{子系统}/{模块名}` | `backtest/backtest_engine` |
-| Strategy | `{ClassName}` | `MaStrategyCore` |
-| Issue | `{issue_id}` | `C1` |
-| Fix | `fix-{issue_id}` | `fix-C1` |
-| Config | `{section}.{key}` | `backtest.initial_capital` |
-| Document | `{路径不含扩展名}` | `doc/architecture` |
-
-### 规则 11.3: 核心关系
-
-| 关系 | 含义 |
-|------|------|
-| `imports` | 模块导入依赖 |
-| `implements` | 网关实现核心策略 |
-| `depends_on` | 依赖外部框架 |
-| `found_in` | 问题所在文件 |
-| `resolved_by` | 问题被修复解决 |
-| `tracks` | 文档跟踪问题 |
+项目现状数据（架构/缺陷/ADR/风险等）的权威来源为 [`plan.md`](file:///Users/REDACTED_API_KEY/Documents/src/quant/plan.md)，KG 实体通过 `found_in`/`resolved_by` 关系关联至其 issue_id。
 
 ---
 
