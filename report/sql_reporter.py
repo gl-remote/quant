@@ -18,6 +18,11 @@ from common.formatting import format_pct, format_float, ensure_float
 
 logger = logging.getLogger(__name__)
 
+_DIR_LONG = 'long'
+_DIR_SHORT = 'short'
+_OFFSET_OPEN = 'open'
+_OFFSET_CLOSE = 'close'
+
 
 # ── 内部工具 ──────────────────────────────────────────────────
 
@@ -66,10 +71,10 @@ def format_single_report(db: Database, backtest_id: int) -> str:
         t['trade_day'] for t in trades if t.get('trade_day')
     ))
     buy_count: int = sum(
-        1 for t in trades if t['direction'] == 'long' and t['offset'] == 'open'
+        1 for t in trades if t['direction'] == _DIR_LONG and t['offset'] == _OFFSET_OPEN
     )
     sell_count: int = sum(
-        1 for t in trades if t['direction'] == 'short' and t['offset'] == 'close'
+        1 for t in trades if t['direction'] == _DIR_SHORT and t['offset'] == _OFFSET_CLOSE
     )
 
     symbol = bt['symbol']
@@ -153,8 +158,8 @@ def format_single_report(db: Database, backtest_id: int) -> str:
             f"  {'-' * 63}",
         ]
         for t in trades[-20:]:
-            d_tag: str = '多' if t['direction'] == 'long' else '空'
-            o_tag: str = '开' if t['offset'] == 'open' else '平'
+            d_tag: str = '多' if t['direction'] == _DIR_LONG else '空'
+            o_tag: str = '开' if t['offset'] == _OFFSET_OPEN else '平'
             lines.append(
                 f"  {t['datetime']:<20} "
                 f"{t['symbol']:<16} "
