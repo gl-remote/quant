@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """数据处理 - 数据导出、数据库管理"""
 
-from .database import Database, DBLogHandler
+from .database import Database, DBLogHandler, setup_db_logging
 from .exporter import export_csv
 from .models import (
     ExportMetadataDict,
@@ -16,6 +16,7 @@ from .models import (
 __all__ = [
     'Database',
     'DBLogHandler',
+    'setup_db_logging',
     'export_csv',
     'ExportMetadataDict',
     'OperationLogDict',

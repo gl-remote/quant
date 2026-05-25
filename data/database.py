@@ -413,3 +413,18 @@ class DBLogHandler(logging.Handler):
             message=self.format(record),
             status=status_map.get(record.levelno, 'INFO'),
         )
+
+
+def setup_db_logging(db: Database, command: str, symbol: str = None) -> None:
+    """设置数据库日志处理器
+
+    创建 DBLogHandler 实例，配置格式化器，并注册到根 logger。
+
+    Args:
+        db: Database 实例
+        command: 命令名称（用于日志分类）
+        symbol: 品种代码（可选）
+    """
+    handler = DBLogHandler(db, command=command, symbol=symbol)
+    handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logging.getLogger().addHandler(handler)

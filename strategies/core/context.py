@@ -4,10 +4,19 @@
 替代散落在各层的独立参数传递。
 """
 
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from .base import Strategy
+from common.constants import (
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_COMMISSION_RATE,
+    DEFAULT_SLIPPAGE,
+    DEFAULT_PRICE_TICK,
+    DEFAULT_CONTRACT_SIZE,
+    DEFAULT_KLINE_PERIOD,
+)
 
 
 @dataclass
@@ -31,10 +40,56 @@ class TradingContext:
 
     strategy: Strategy
     symbol: str = ""
-    capital: float = 100000.0
-    kline_period: int = 5
-    commission_rate: float = 0.0003
-    slippage: float = 1.0
-    price_tick: float = 1.0
-    contract_size: int = 10
+    capital: float = DEFAULT_INITIAL_CAPITAL
+    kline_period: int = DEFAULT_KLINE_PERIOD
+    commission_rate: float = DEFAULT_COMMISSION_RATE
+    slippage: float = DEFAULT_SLIPPAGE
+    price_tick: float = DEFAULT_PRICE_TICK
+    contract_size: int = DEFAULT_CONTRACT_SIZE
     account: Optional[Dict[str, str]] = None
+
+    @classmethod
+    def build(cls, strategy: Strategy, symbol: str,
+              config_manager, capital: float = DEFAULT_INITIAL_CAPITAL):
+        """工厂方法：从 ConfigManager 构建统一的 TradingContext
+
+        Args:
+            strategy: 策略实例
+            symbol: 品种代码
+            config_manager: ConfigManager 实例
+            capital: 初始资金 (可被 backtest config 覆盖)
+
+        Returns:
+            TradingContext 实例
+        """
+        bc = config_manager.get_backtest_config()
+        account = config_manager.get_account_info()
+
+        # 同步资金/合约乘数到 strategy.config，使策略能正确计算手数
+        cfg = strategy.config
+        try:
+            valid_keys = {f.name for f in dataclasses.fields(cfg)}
+        except TypeError:
+            valid_keys = set()
+
+        if 'capital' in valid_keys:
+            cfg.capital = capital
+        elif hasattr(cfg, 'capital'):
+            cfg.capital = capital
+
+        if 'contract_size' in valid_keys:
+            cfg.contract_size = bc.get('contract_size', DEFAULT_CONTRACT_SIZE)
+        elif hasattr(cfg, 'contract_size'):
+            cfg.contract_size = bc.get('contract_size', DEFAULT_CONTRACT_SIZE)
+
+        return cls(
+            strategy=strategy,
+            symbol=symbol,
+            capital=capital,
+            kline_period=config_manager.get_strategy_config().get('kline_period', DEFAULT_KLINE_PERIOD),
+            commission_rate=bc.get('commission_rate', DEFAULT_COMMISSION_RATE),
+            slippage=bc.get('slippage', DEFAULT_SLIPPAGE),
+            price_tick=bc.get('price_tick', DEFAULT_PRICE_TICK),
+            contract_size=bc.get('contract_size', DEFAULT_CONTRACT_SIZE),
+            account=account if account else None,
+        )

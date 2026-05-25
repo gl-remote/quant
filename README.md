@@ -1,6 +1,6 @@
 # 天勤量化交易系统
 
-![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-131%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-70%25-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-163%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-53%25-brightgreen)
 
 基于双均线交叉（SMA Crossover）策略的自动化量化交易系统，支持数据获取、三阶段回测、过拟合评估及实盘交易。
 
@@ -13,12 +13,14 @@
 - **数据导出** — 从天勤拉取历史 K 线，增量合并 / 强制覆盖为 CSV
 - **实盘交易** — 天勤实盘/模拟 + Web GUI
 - **操作日志** — 所有操作持久化至 SQLite，支持审计追溯
+- **统一回测引擎** — 根据标的数量自动选择 TqSdk（单标的）或 vn.py（批量）
 
 ## 项目结构
 
 ```
 quant/
-├── main.py                 # 命令行入口
+├── main.py                 # 命令行入口（转发器）
+├── run.sh                  # 快捷运行脚本
 ├── config/                 # YAML 分层配置管理
 │   ├── conf.yaml           #   基础配置（提交版本控制）
 │   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
@@ -26,10 +28,23 @@ quant/
 │   └── config_manager.py   #   配置加载与合并
 ├── strategies/             # 策略模块（核心算法 + 桥接器）
 │   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
+│   ├── core/context.py     #   交易上下文 (TradingContext)
 │   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
 │   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测引擎、数据加载、报告对比
 ├── data/                   # 数据导出、SQLite 管理
+├── cli/                    # 命令行接口（重构后）
+│   ├── main.py             #   参数解析与命令分发
+│   └── commands/           #   命令实现
+│       ├── export.py       #     数据导出命令
+│       ├── test.py         #     策略测试命令
+│       ├── backtest.py     #     统一回测命令
+│       ├── report.py       #     报告生成命令
+│       └── live.py         #     实盘交易命令
+├── common/                 # 公共工具（零依赖）
+│   ├── constants.py        #   全局常量字典
+│   ├── formulas.py         #   量化计算公式库
+│   └── metrics.py          #   绩效指标计算
 └── doc/                    # 文档
 ```
 
@@ -63,13 +78,22 @@ python main.py export --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01
 
 数据保存至 `.quant_shared_data/csv/`，重复执行自动去重合并。
 
-### 4. 运行三阶段回测
+### 4. 运行回测
+
+#### 单标的回测（TqSdk，支持 GUI）
 
 ```bash
-python main.py backtest --symbol DCE.m2509
+python main.py backtest --symbol DCE.m2509 --start 2024-01-01 --end 2024-12-31 --gui
 ```
 
-执行完整流水线：加载数据 → 划分训练/验证/测试集 → 独立回测 → 生成报告 → 过拟合对比分析。结果同时输出到控制台和 `.quant_shared_data/reports/` 目录。
+#### 批量回测（vn.py，生成文字报告）
+
+```bash
+python main.py backtest --pattern "DCE\.m"
+python main.py backtest  # 扫描全部品种
+```
+
+执行完整流水线：加载数据 → 划分训练/验证/测试集 → 独立回测 → 生成报告 → 过拟合对比分析。结果同时输出到控制台和数据库。
 
 ## 命令行参考
 
@@ -77,9 +101,18 @@ python main.py backtest --symbol DCE.m2509
 |------|------|------|
 | `export` | 从天勤导出 K 线 CSV | `python main.py export --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01` |
 | `test` | 离线策略逻辑验证 | `python main.py test` |
-| `backtest` | vn.py 三阶段回测 | `python main.py backtest --symbol DCE.m2509` |
-| `tq-backtest` | 天勤 SDK 回测（旧版兼容） | `python main.py tq-backtest --symbol DCE.m2109 --gui` |
+| `backtest` | 统一回测（自动选择引擎） | 单标的: `python main.py backtest --symbol DCE.m2509 --gui`<br>批量: `python main.py backtest --pattern "DCE\.m"` |
+| `report` | 从数据库生成回测报告 | `python main.py report --id 42`<br>`python main.py report --compare 1,2,3` |
 | `live` | 实盘/模拟交易 | `python main.py live --symbol DCE.m2509 --gui` |
+
+### 快捷脚本
+
+使用 `run.sh` 脚本简化命令：
+
+```bash
+./run.sh backtest --symbol DCE.m2509 --gui
+./run.sh report --compare 1,2,3
+```
 
 ## 关键配置
 
@@ -123,9 +156,21 @@ risk:
 | [使用指南](doc/usage-guide.md) | 环境准备、CLI 操作、编程调用 |
 | [API 文档](doc/api-reference.md) | 核心接口与数据结构 |
 | [常见问题](doc/faq.md) | 安装、数据、回测 FAQ |
+| [AI_BEHAVIOR_RULES.md](AI_BEHAVIOR_RULES.md) | AI 开发行为规范 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 项目贡献指南 |
 
 ## 环境要求
 
 - Python 3.8 ~ 3.11
 - 依赖：`numpy`, `pandas`, `pyyaml`, `tqsdk`
 - vn.py ≥ 3.8.0（可选，未安装时自动降级）
+
+## 开发规范
+
+项目遵循以下开发规范：
+
+1. **常量字典**：所有硬编码字符、数值统一定义在 `common/constants.py`
+2. **计算公式**：所有量化计算统一在 `common/formulas.py` 实现
+3. **单一职责**：每个模块职责清晰，避免功能混杂
+4. **类型提示**：提供完整的类型标注
+5. **测试覆盖**：核心功能需有单元测试覆盖

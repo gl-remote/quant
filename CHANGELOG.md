@@ -7,7 +7,28 @@
 
 ---
 
-## [0.2.0-dev] - 2026-05-24
+## [0.2.0-dev] - 2026-05-25
+
+### 新增
+
+- **统一回测命令**: `backtest` 命令自动选择引擎，单标的用 TqSdk（支持 GUI），批量用 vn.py
+- **common/constants.py**: 全局常量字典，消除所有硬编码字符和魔术数字
+- **common/formulas.py**: 统一量化计算公式库，20+ 行业标准公式
+- **TradingContext.build()**: 交易上下文工厂方法，简化上下文创建
+- **快捷运行脚本**: `run.sh` 支持命令验证和详细帮助信息
+
+### 重构
+
+- **CLI 架构重构**: 将 `main.py` 拆分为 `cli/` 子包
+  - `cli/main.py`: 参数解析与命令分发
+  - `cli/commands/`: 各命令独立模块
+  - 删除 `cli/utils.py`，功能迁移到对应核心模块
+- **工具函数迁移**:
+  - `calculate_fifo_profit` → `common/formulas.py`
+  - `load_strategy`, `apply_strategy_config` → `strategies/core/__init__.py`
+  - `build_context` → `TradingContext.build()`
+  - `setup_db_logging` → `data/database.py`
+- **整合回测命令**: 删除 `tq_backtest.py`，功能整合到 `backtest.py`
 
 ### 修复
 
@@ -36,15 +57,8 @@
 - AI_BEHAVIOR_RULES.md: 更新行为规范，CHANGELOG.md 替代 .plan/ 归档
 - **回测执行与报告解耦**: 回测结果写入 SQLite 数据库，报告通过独立 `report` 命令生成
 - **提取 common/ 通用纯函数模块**: `metrics.py` + `stats.py` + `formatting.py`，消除 backtest/report 间的代码重复
-
-### 新增
-
-- 策略开发指南 (`doc/strategy-guide.md`)
-- 贡献指南 (`CONTRIBUTING.md`)
-- API 文档更新：补充 Bridge 接口和信号优先级说明
-- **回测结果持久化**: `backtests` + `backtest_trades` 表，存储全部统计指标与交易明细
-- **`report` CLI 子命令**: `python main.py report [--id|--compare|--symbol]` 从数据库生成报告
-- **独立报告模块** (`report/sql_reporter.py`): 仅依赖 `data.database.Database`，与回测引擎/数据采集完全解耦
+- README.md: 更新项目结构和命令行参考
+- 测试数量从 131 增加到 163 个
 
 ---
 

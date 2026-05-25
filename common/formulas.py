@@ -22,6 +22,67 @@ import math
 
 
 # ============================================================================
+# FIFO 盈亏计算 (FIFO PnL Calculation)
+# ============================================================================
+
+def calculate_fifo_profit(fills: list) -> float:
+    """按 FIFO 顺序计算已平仓交易的盈亏总额
+
+    与笛卡尔积不同，此函数按先入先出规则将每笔买入与卖出匹配，
+    正确处理多笔买入→单笔卖出、部分平仓等场景。
+
+    输入数据结构要求:
+        fills 列表中的每个元素需具有:
+            - action 属性/键: 'buy' 或 'sell'
+            - price 属性/键: 成交价格
+            - volume 属性/键: 成交量
+
+    Args:
+        fills: 成交记录列表，按时间顺序排列
+
+    Returns:
+        FIFO 盈亏总额 (未扣除手续费/滑点)
+    """
+    def get_attr(obj, attr):
+        if hasattr(obj, attr):
+            return getattr(obj, attr)
+        if isinstance(obj, dict):
+            return obj.get(attr)
+        return None
+
+    buy_entries = []
+    sell_entries = []
+    
+    for fill in fills:
+        action = get_attr(fill, 'action')
+        price = get_attr(fill, 'price')
+        volume = get_attr(fill, 'volume')
+        
+        if action == 'buy':
+            buy_entries.append((price, volume))
+        elif action == 'sell':
+            sell_entries.append((price, volume))
+
+    total_profit = 0.0
+    bi = 0          # 当前待匹配买入的索引
+    bv = 0          # 当前买入剩余的未匹配量
+
+    for sell_price, sell_vol in sell_entries:
+        remaining = sell_vol
+        while remaining > 0 and bi < len(buy_entries):
+            if bv == 0:
+                _, bv = buy_entries[bi]
+            matched = min(remaining, bv)
+            total_profit += (sell_price - buy_entries[bi][0]) * matched
+            remaining -= matched
+            bv -= matched
+            if bv == 0:
+                bi += 1
+
+    return total_profit
+
+
+# ============================================================================
 # 收益类指标 (Return Metrics)
 # ============================================================================
 
