@@ -90,13 +90,6 @@ backtest:
   contract_size: 10              # 合约乘数
   interval: "1m"                 # K线周期: 1m/5m/15m/30m/1h/d
 
-  # 报告输出
-  report:
-    output_dir: ".quant_shared_data/reports"
-    save_trade_records: true     # 保存详细交易记录
-    save_equity_curve: true      # 保存资金曲线数据
-    format: "json"               # 报告格式: json/csv
-
 # ============================================================
 # 系统配置
 # ============================================================

@@ -96,22 +96,20 @@ def main():
     # ---- report ----
     p = sub.add_parser(
         'report',
-        help='从数据库生成回测报告（不执行回测）',
-        description='读取数据库中已完成的回测结果，生成文本/JSON 报告\n'
-                    '完全解耦: 只读 DB，不执行回测，不拉取数据\n\n'
+        help='管理与查看回测数据',
+        description='回测数据管理：列表、详情查看、数据清理\n\n'
                     '用法:\n'
-                    '  python main.py report                   汇总最近 20 条\n'
-                    '  python main.py report --id 42           单次详细报告\n'
-                    '  python main.py report --compare 1,2,3   多条对比排名\n'
-                    '  python main.py report --symbol DCE.m2509 按品种过滤'
+                    '  python main.py report                   列出最近 20 条回测\n'
+                    '  python main.py report --id 42           查看指定回测详情\n'
+                    '  python main.py report --clean 42        删除指定回测及关联数据\n'
+                    '  python main.py report --symbol DCE.m2509 按品种过滤列表'
     )
     p.add_argument('--id', type=int, default=None, help='查看指定 ID 的详细报告')
-    p.add_argument('--compare', default=None, help='对比多个回测 ID，逗号分隔 (e.g. "1,2,3")')
+    p.add_argument('--clean', dest='clean_id', type=int, default=None,
+                   help='硬删除指定回测 ID 及关联数据 (不可撤销)')
     p.add_argument('--symbol', default=None, help='按品种代码过滤')
     p.add_argument('--strategy', default=None, help='按策略名称过滤')
-    p.add_argument('--limit', type=int, default=20, help='汇总模式最大条数 (默认 20)')
-    p.add_argument('--save-json', dest='save_json', action='store_true',
-                   help='对比模式同时保存 JSON 文件')
+    p.add_argument('--limit', type=int, default=20, help='列表最大条数 (默认 20)')
 
     # ---- live ----
     p = sub.add_parser('live', help='实盘/模拟交易')

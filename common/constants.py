@@ -127,7 +127,6 @@ DEFAULT_RANDOM_SEED  = 42      # 随机种子
 DEFAULT_DATA_BASE_DIR     = '.quant_shared_data'              # 共享数据根目录
 DEFAULT_EXPORT_DIR        = '.quant_shared_data/csv'          # CSV 导出目录
 DEFAULT_DB_PATH           = '.quant_shared_data/quant_shared.db'  # SQLite 数据库路径
-DEFAULT_REPORT_OUTPUT_DIR = '.quant_shared_data/reports'      # 报告输出目录
 
 
 # ============================================================================

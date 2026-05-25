@@ -60,11 +60,6 @@ def base_config_dict():
             'price_tick': 1.0,
             'contract_size': 10,
             'interval': '1m',
-            'report': {
-                'output_dir': '.quant_shared_data/reports',
-                'save_trade_records': True,
-                'save_equity_curve': True,
-            },
         },
         'system': {
             'logging': {

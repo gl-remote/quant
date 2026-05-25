@@ -268,22 +268,11 @@ class DataManager:
             return None
     
     # ── 回测记录 ────────────────────────────────────────────
-    
-    def save_backtest(self, record: BacktestRecord) -> int:
-        """保存回测记录
-        
-        Args:
-            record: BacktestRecord实例
-        
-        Returns:
-            记录ID
-        """
-        return self.store.save_backtest(record)
-    
+
     def insert_backtest(self, symbol: str, strategy: str, status: str,
                         error_message: Optional[str], statistics: dict,
                         engine_config: dict, params_json: Optional[str],
-                        data_start_date: Optional[str], data_end_date: Optional[str],
+                        start_date: Optional[str], end_date: Optional[str],
                         strategy_version: Optional[str] = None,
                         git_hash: Optional[str] = None) -> int:
         """插入完整的回测记录"""
@@ -295,8 +284,8 @@ class DataManager:
             statistics=statistics,
             engine_config=engine_config,
             params_json=params_json,
-            data_start_date=data_start_date,
-            data_end_date=data_end_date,
+            start_date=start_date,
+            end_date=end_date,
             strategy_version=strategy_version,
             git_hash=git_hash,
         )
@@ -331,8 +320,20 @@ class DataManager:
         """查询每日资金曲线"""
         return self.store.query_daily(backtest_id)
     
+    def delete_backtest(self, backtest_id: int) -> bool:
+        """硬删除回测记录及关联的交易明细和每日资金曲线
+        
+        Args:
+            backtest_id: 回测记录 ID
+        
+        Returns:
+            是否成功删除
+        """
+        self._init_store()
+        return self._store.delete_backtest(backtest_id)
+   
     # ── 资源管理 ────────────────────────────────────────────
-    
+   
     def clear_cache(self):
         """清除数据缓存"""
         self._data_cache.clear()

@@ -19,26 +19,37 @@ from common.schemas import KlineSchema
 # ==============================================================================
 
 class BacktestRecord(BaseModel):
-    """回测记录"""
+    """回测记录 — 字段与 ORM Backtest 表保持一致"""
     id: Optional[int] = None
     symbol: str
     strategy: str
+    strategy_version: Optional[str] = None
+    git_hash: Optional[str] = None
     status: str = "success"
+    error_message: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    total_days: Optional[int] = None
+    initial_capital: float = 0.0
+    end_balance: Optional[float] = None
     total_return: float = 0.0
-    max_drawdown: float = 0.0
-    win_rate: float = 0.0
-    profit_factor: float = 0.0
-    sharpe_ratio: Optional[float] = None
-    sortino_ratio: Optional[float] = None
+    annual_return: Optional[float] = None
     total_trades: int = 0
-    profit_trades: int = 0
-    loss_trades: int = 0
-    avg_profit: float = 0.0
-    avg_loss: float = 0.0
+    win_trades: Optional[int] = None
+    loss_trades: Optional[int] = None
+    win_rate: float = 0.0
+    max_consecutive_win: Optional[int] = None
+    max_consecutive_loss: Optional[int] = None
+    avg_win: Optional[float] = None
+    avg_loss: Optional[float] = None
+    win_loss_ratio: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
+    max_drawdown: float = 0.0
+    max_drawdown_duration: Optional[int] = None
+    daily_std: Optional[float] = None
+    return_drawdown_ratio: Optional[float] = None
     created_at: Optional[str] = None
-    
+
     def to_dict(self) -> Dict:
         """转换为字典"""
         return self.model_dump(exclude_none=True)
@@ -164,8 +175,6 @@ class Backtest(BaseModel):
     git_hash = CharField(null=True)          # 回测时的 Git 提交哈希
     status = CharField()
     error_message = TextField(null=True)
-    data_start_date = CharField(null=True, max_length=10)
-    data_end_date = CharField(null=True, max_length=10)
     start_date = CharField(null=True, max_length=10)
     end_date = CharField(null=True, max_length=10)
     total_days = IntegerField(null=True)
@@ -185,8 +194,8 @@ class Backtest(BaseModel):
     win_rate = FloatField(null=True)
     max_consecutive_win = IntegerField(null=True)
     max_consecutive_loss = IntegerField(null=True)
-    average_win = FloatField(null=True)
-    average_loss = FloatField(null=True)
+    avg_win = FloatField(null=True)
+    avg_loss = FloatField(null=True)
     win_loss_ratio = FloatField(null=True)
     sharpe_ratio = FloatField(null=True)
     max_drawdown = FloatField(null=True)

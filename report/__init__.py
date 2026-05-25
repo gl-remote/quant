@@ -2,31 +2,16 @@
 """
 报告生成模块
 
-  - sql_reporter.py:        基于 SQLite 数据库的只读报告 (生产用)
-  - dataset_reporter.py:    单数据集 JSON 回测报告 (engine 调用)
-  - comparison_reporter.py: 多品种合并报告与排名
+从数据库读取回测数据，生成格式化控制台文本报告。
+
+  - single.py:  单次回测详细报告 (format_single_report)
+  - summary.py: 回测记录汇总列表 (format_summary_report)
 """
 
-from .sql_reporter import (
-    format_single_report,
-    format_comparison_report,
-    format_summary_report,
-)
-from .dataset_reporter import (
-    generate_dataset_report,
-    format_console_report,
-)
-from .comparison_reporter import (
-    generate_merged_report,
-    format_merged_report,
-)
+from .single import format_single_report
+from .summary import format_summary_report
 
 __all__ = [
     'format_single_report',
-    'format_comparison_report',
     'format_summary_report',
-    'generate_dataset_report',
-    'format_console_report',
-    'generate_merged_report',
-    'format_merged_report',
 ]

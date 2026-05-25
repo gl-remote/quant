@@ -25,7 +25,6 @@ from common.constants import (
     DEFAULT_DATA_BASE_DIR,
     DEFAULT_EXPORT_DIR,
     DEFAULT_DB_PATH,
-    DEFAULT_REPORT_OUTPUT_DIR,
     KLINE_INTERVAL_1MIN,
 )
 
@@ -158,7 +157,6 @@ class ConfigManager:
     def get_backtest_config(self) -> Dict[str, Any]:
         bc = self.config.get('backtest', {})
         split_cfg = bc.get('split', {})
-        report_cfg = bc.get('report', {})
         return {
             'data_dir': self._resolve(bc.get('data_dir', DEFAULT_EXPORT_DIR)),
             'initial_capital': bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL),
@@ -173,12 +171,6 @@ class ConfigManager:
                 'test_ratio': split_cfg.get('test_ratio', DEFAULT_TEST_RATIO),
                 'random_seed': split_cfg.get('random_seed', DEFAULT_RANDOM_SEED),
                 'shuffle': split_cfg.get('shuffle', False),
-            },
-            'report': {
-                'output_dir': self._resolve(report_cfg.get('output_dir', DEFAULT_REPORT_OUTPUT_DIR)),
-                'save_trade_records': report_cfg.get('save_trade_records', True),
-                'save_equity_curve': report_cfg.get('save_equity_curve', True),
-                'format': report_cfg.get('format', 'json'),
             },
         }
 

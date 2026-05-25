@@ -56,7 +56,6 @@ class TestBacktestConfig:
         assert bc['price_tick'] == 1.0
         assert bc['contract_size'] == 10
         assert bc['interval'] == '1m'
-        assert bc['report']['save_trade_records'] is True
 
 
 class TestValidateConfig:

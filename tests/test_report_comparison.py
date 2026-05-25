@@ -1,399 +1,441 @@
+"""report 模块 & 数据管道集成测试
+
+覆盖:
+    - DataStore.insert_backtest_detailed → 读取完整性
+    - DataStore.delete_backtest 端到端 (CASCADE 级联)
+    - format_single_report 带真实数据
+    - format_summary_report 列表/过滤
+"""
+
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
-from report.dataset_reporter import (
-    _extract_performance_metrics,
-    _extract_risk_metrics,
-    _extract_trade_summary,
-    format_console_report,
-    generate_dataset_report,
-)
-from report.comparison_reporter import (
-    generate_merged_report,
-    format_merged_report,
-)
+from datetime import datetime
+
+from common.constants import STATUS_SUCCESS, STATUS_FAILED
+from data.store import DataStore
 
 
-class TestExtractPerformanceMetrics:
-    def test_empty_stats_returns_defaults(self):
-        result = _extract_performance_metrics({}, 100000.0)
-        assert result['initial_capital'] == 100000.0
-        assert result['final_equity'] == 100000.0
-        assert result['total_return'] == '0.00%'
-        assert result['total_return_abs'] == 0.0
-        assert result['total_trades'] == 0
-        assert result['winning_trades'] == 0
-        assert result['losing_trades'] == 0
-        assert result['win_rate'] == '0.00%'
-        assert result['win_rate_abs'] == 0.0
-        assert result['avg_profit'] == 0
-        assert result['avg_loss'] == 0
-        assert result['profit_loss_ratio'] == 0
-        assert result['sharpe_ratio'] == 0
-        assert result['annual_return'] == '0.00%'
-        assert result['annual_return_ratio'] == 0
+# ==============================================================================
+# DataStore insert / query / delete 端到端
+# ==============================================================================
 
-    def test_none_stats_returns_defaults(self):
-        result = _extract_performance_metrics(None, 100000.0)
-        assert result['initial_capital'] == 100000.0
-        assert result['total_trades'] == 0
-
-    def test_non_dict_stats_returns_defaults(self):
-        result = _extract_performance_metrics([], 100000.0)
-        assert result['initial_capital'] == 100000.0
-        assert result['total_trades'] == 0
-
-    def test_valid_stats(self):
-        stats = {
-            'end_balance': 115000.0,
-            'total_trades': 50,
-            'win_trades': 30,
-            'loss_trades': 20,
-            'average_win': 800.0,
-            'average_loss': -400.0,
-            'win_loss_ratio': 2.0,
-            'sharpe_ratio': 1.5,
-            'annual_return': 0.25,
-        }
-        result = _extract_performance_metrics(stats, 100000.0)
-        assert result['initial_capital'] == 100000.0
-        assert result['final_equity'] == 115000.0
-        assert result['total_return'] == '15.00%'
-        assert result['total_return_abs'] == 15000.0
-        assert result['total_trades'] == 50
-        assert result['winning_trades'] == 30
-        assert result['losing_trades'] == 20
-        assert result['win_rate'] == '60.00%'
-        assert pytest.approx(result['win_rate_abs']) == 0.6
-        assert result['avg_profit'] == 800.0
-        assert result['avg_loss'] == -400.0
-        assert result['profit_loss_ratio'] == 2.0
-        assert result['sharpe_ratio'] == 1.5
-        assert result['annual_return'] == '25.00%'
-        assert result['annual_return_ratio'] == 0.25
-
-    def test_stats_with_zero_trades(self):
-        stats = {
-            'end_balance': 100000.0,
-            'total_trades': 0,
-            'win_trades': 0,
-            'loss_trades': 0,
-        }
-        result = _extract_performance_metrics(stats, 100000.0)
-        assert result['win_rate'] == '0.00%'
-        assert result['win_rate_abs'] == 0.0
-
-    def test_stats_zero_initial_capital(self):
-        stats = {'end_balance': 0}
-        result = _extract_performance_metrics(stats, 0.0)
-        assert result['total_return'] == '0.00%'
+_vnpy_stats = {
+    'total_trades': 80,
+    'win_trades': 45,
+    'loss_trades': 35,
+    'end_balance': 118000.0,
+    'annual_return': 0.18,
+    'max_consecutive_win': 6,
+    'max_consecutive_loss': 3,
+    'average_win': 120.0,
+    'average_loss': -55.0,
+    'win_loss_ratio': 2.18,
+    'sharpe_ratio': 1.35,
+    'max_drawdown': 0.12,
+    'max_ddpercent_duration': 15,
+    'daily_std': 0.018,
+    'return_drawdown_ratio': 1.5,
+}
 
 
-class TestExtractRiskMetrics:
-    def test_valid_risk_stats(self):
-        stats = {
-            'total_trades': 10,
-            'max_drawdown': 0.15,
-            'max_ddpercent_duration': 10,
-            'daily_std': 0.02,
-            'return_drawdown_ratio': 1.5,
-        }
-        result = _extract_risk_metrics(stats)
-        assert result['max_drawdown'] == '15.00%'
-        assert result['max_drawdown_abs'] == 0.15
-        assert result['max_drawdown_duration'] == 10
-        assert result['daily_std'] == 0.02
-        assert result['return_drawdown_ratio'] == 1.5
-
-    def test_empty_risk_stats(self):
-        result = _extract_risk_metrics({})
-        assert result['max_drawdown'] == '0.00%'
-        assert result['max_drawdown_abs'] == 0
-        assert result['max_drawdown_duration'] == 0
-        assert result['daily_std'] == 0
-        assert result['return_drawdown_ratio'] == 0
+def _make_trade(dt, sym='DCE.m2509', direction='long', offset='open',
+                price=3500.0, quantity=1, pnl=0.0):
+    return {
+        'datetime': dt,
+        'symbol': sym,
+        'direction': direction,
+        'offset': offset,
+        'open_price': price,
+        'close_price': price,
+        'quantity': quantity,
+        'pnl': pnl,
+        'commission': 0.0,
+    }
 
 
-class TestExtractTradeSummary:
-    def test_valid_trade_stats(self):
-        stats = {
-            'total_trades': 100,
-            'start_date': '2024-01-01',
-            'end_date': '2024-12-31',
-            'total_days': 250,
-            'max_consecutive_win': 8,
-            'max_consecutive_loss': 4,
-        }
-        result = _extract_trade_summary(stats)
-        assert result['total_trades'] == 100
-        assert result['start_date'] == '2024-01-01'
-        assert result['end_date'] == '2024-12-31'
-        assert result['total_days'] == 250
-        assert pytest.approx(result['avg_trades_per_day']) == 0.4
-        assert result['max_consecutive_win'] == 8
-        assert result['max_consecutive_loss'] == 4
-
-    def test_empty_trade_stats(self):
-        result = _extract_trade_summary({})
-        assert result['total_trades'] == 0
-        assert result['start_date'] == ''
-        assert result['end_date'] == ''
-        assert result['total_days'] == 0
-        assert result['avg_trades_per_day'] == 0.0
-
-    def test_zero_total_days(self):
-        stats = {'total_trades': 10, 'total_days': 0}
-        result = _extract_trade_summary(stats)
-        assert result['avg_trades_per_day'] == 10.0
+def _make_daily(dt, equity=100000.0, daily_return=0.0, drawdown=0.0):
+    return {
+        'datetime': dt,  # store.insert_backtest_daily 用 'datetime' 键
+        'equity': equity,
+        'daily_return': daily_return,
+        'drawdown': drawdown,
+    }
 
 
-class TestFormatConsoleReport:
-    def test_returns_non_empty_string(self):
-        report = {
-            'performance': {
-                'initial_capital': 100000.0,
-                'final_equity': 115000.0,
-                'total_return': '15.00%',
-                'annual_return': '25.00%',
-                'total_trades': 50,
-                'winning_trades': 30,
-                'losing_trades': 20,
-                'win_rate': '60.00%',
-                'avg_profit': 800.0,
-                'avg_loss': -400.0,
-                'profit_loss_ratio': 2.0,
-                'sharpe_ratio': 1.5,
-            },
-            'risk': {
-                'max_drawdown': '15.00%',
-                'daily_std': 0.02,
-                'return_drawdown_ratio': 1.5,
-            },
-            'trades': {
-                'start_date': '2024-01-01',
-                'end_date': '2024-12-31',
-                'total_days': 250,
-            },
-        }
-        result = format_console_report(report, '[DCE.m2509]')
-        assert isinstance(result, str)
-        assert len(result) > 0
-        assert '资金概况' in result
-        assert '交易统计' in result
-        assert '风险评估' in result
-        assert 'DCE.m2509' in result
-        assert '100,000.00' in result
-
-    def test_with_defaults(self):
-        report = {
-            'performance': {},
-            'risk': {},
-            'trades': {},
-        }
-        result = format_console_report(report, '[TEST]')
-        assert isinstance(result, str)
-        assert len(result) > 0
-        assert 'TEST' in result
+def _insert_full_backtest(store, **overrides):
+    """插入一条完整回测 (主记录 + 交易 + 每日曲线)，返回 backtest_id"""
+    ec = {
+        'initial_capital': 100000.0,
+        'commission_rate': 0.0003,
+        'slippage': 1.0,
+        'price_tick': 1.0,
+        'contract_size': 10,
+        'kline_interval': '1m',
+    }
+    bt_id = store.insert_backtest_detailed(
+        symbol=overrides.get('symbol', 'DCE.m2509'),
+        strategy=overrides.get('strategy', 'ma'),
+        status=STATUS_SUCCESS,
+        error_message=None,
+        statistics=_vnpy_stats,
+        engine_config=ec,
+        params_json='{"sma_short":5,"sma_long":20}',
+        start_date='2024-01-01',
+        end_date='2024-12-31',
+        strategy_version='1.0',
+        git_hash='abc1234',
+    )
+    # 写入交易明细
+    trades = [
+        _make_trade('2024-01-15 10:00:00', direction='long', offset='open', pnl=200.0),
+        _make_trade('2024-01-20 14:30:00', direction='short', offset='close', pnl=-100.0),
+        _make_trade('2024-02-01 09:15:00', direction='long', offset='open', pnl=350.0),
+    ]
+    store.insert_backtest_trades(bt_id, trades)
+    # 写入每日曲线
+    daily = [
+        _make_daily('2024-01-15', 100200.0, 200.0, 0.0),
+        _make_daily('2024-01-20', 100100.0, -100.0, 0.001),
+        _make_daily('2024-02-01', 100450.0, 350.0, 0.0),
+    ]
+    store.insert_backtest_daily(bt_id, daily)
+    return bt_id
 
 
-class TestGenerateDatasetReport:
-    def test_basic_report_generation(self, tmp_path):
-        stats = {
-            'end_balance': 110000.0,
-            'total_trades': 20,
-            'win_trades': 12,
-            'loss_trades': 8,
-            'average_win': 500.0,
-            'average_loss': -300.0,
-            'win_loss_ratio': 1.67,
-            'sharpe_ratio': 1.2,
-            'annual_return': 0.15,
-            'max_drawdown': 0.08,
-            'max_ddpercent_duration': 5,
-            'daily_std': 0.015,
-            'return_drawdown_ratio': 1.88,
-            'start_date': '2024-01-01',
-            'end_date': '2024-06-30',
-            'total_days': 120,
-            'max_consecutive_win': 5,
-            'max_consecutive_loss': 3,
-        }
-        report = generate_dataset_report(
-            statistics=stats,
-            dataset_name='full',
-            symbol='rb888',
-            initial_capital=100000.0,
+class TestInsertAndQuery:
+    def test_insert_and_get_backtest(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        bt = store.get_backtest(bt_id)
+        assert bt is not None
+        assert bt.symbol == 'DCE.m2509'
+        assert bt.strategy == 'ma'
+        assert bt.strategy_version == '1.0'
+        assert bt.git_hash == 'abc1234'
+        assert bt.start_date == '2024-01-01'
+        assert bt.status == 'success'
+        # 统计字段正确映射
+        assert bt.total_trades == 80
+        assert bt.win_trades == 45
+        assert bt.loss_trades == 35
+        assert bt.avg_win == 120.0
+        assert bt.avg_loss == -55.0
+        assert bt.sharpe_ratio == 1.35
+        assert bt.max_drawdown == 0.12
+        assert bt.daily_std == 0.018
+        assert bt.initial_capital == 100000.0
+        assert bt.end_balance == 118000.0
+        assert bt.annual_return == 0.18
+        assert bt.total_return is not None
+        assert bt.win_rate is not None
+        store.close()
+
+    def test_query_trades(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        trades = store.query_trades(bt_id)
+        assert len(trades) == 3
+        assert trades[0].symbol == 'DCE.m2509'
+        assert trades[1].pnl == -100.0
+        store.close()
+
+    def test_query_daily(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        daily = store.query_daily(bt_id)
+        assert len(daily) == 3
+        assert daily[0]['equity'] == 100200.0
+        assert daily[1]['daily_return'] == -100.0
+        store.close()
+
+    def test_query_backtests_filter(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        _insert_full_backtest(store, symbol='DCE.m2509')
+        _insert_full_backtest(store, symbol='DCE.rb2410', strategy='sma')
+        # 全量
+        all_bt = store.query_backtests(status='success', limit=50)
+        assert len(all_bt) == 2
+        # 按品种过滤
+        filtered = store.query_backtests(symbol='DCE.m2509', status='success')
+        assert len(filtered) == 1
+        assert filtered[0].symbol == 'DCE.m2509'
+        # 按策略过滤
+        filtered = store.query_backtests(strategy='sma', status='success')
+        assert len(filtered) == 1
+        assert filtered[0].strategy == 'sma'
+        # 无匹配
+        filtered = store.query_backtests(symbol='NONEXIST', status='success')
+        assert len(filtered) == 0
+        store.close()
+
+    def test_query_backtests_limit(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        for i in range(5):
+            _insert_full_backtest(store, symbol=f'DCE.sym{i:02d}')
+        results = store.query_backtests(status='success', limit=2)
+        assert len(results) == 2
+        store.close()
+
+    def test_failed_backtest_ignored_by_default(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        _insert_full_backtest(store, symbol='DCE.good')
+        # 直接插入一条失败记录
+        store.insert_backtest_detailed(
+            symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
+            error_message='test error', statistics={}, engine_config={},
+            params_json='{}', start_date=None, end_date=None,
         )
-        assert report['meta']['dataset'] == 'full'
-        assert report['meta']['symbol'] == 'rb888'
-        assert report['meta']['initial_capital'] == 100000.0
-        assert 'performance' in report
-        assert 'risk' in report
-        assert 'trades' in report
-        assert report['performance']['total_trades'] == 20
+        results = store.query_backtests(status='success')
+        assert len(results) == 1
+        assert results[0].symbol == 'DCE.good'
+        store.close()
 
-    def test_generate_report_trades_and_equity_unused(self):
-        """daily_results 参数仍被接受但不再写文件 (数据在数据库)"""
-        stats = {
-            'end_balance': 105000.0,
-            'total_trades': 10,
-            'win_trades': 6,
-            'loss_trades': 4,
-            'average_win': 400.0,
-            'average_loss': -200.0,
-        }
-        daily_results = [
-            {'datetime': '2024-01-02', 'net_pnl': 500.0, 'drawdown': 0.0},
-            {'datetime': '2024-01-03', 'net_pnl': -200.0, 'drawdown': 200.0},
-        ]
-        report = generate_dataset_report(
-            statistics=stats,
-            daily_results=daily_results,
-            dataset_name='val',
-            symbol='rb888',
+
+class TestDeleteBacktest:
+    def test_delete_removes_main_record(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        assert store.get_backtest(bt_id) is not None
+        ok = store.delete_backtest(bt_id)
+        assert ok is True
+        assert store.get_backtest(bt_id) is None
+        store.close()
+
+    def test_delete_cascades_trades(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        assert len(store.query_trades(bt_id)) == 3
+        store.delete_backtest(bt_id)
+        assert len(store.query_trades(bt_id)) == 0
+        store.close()
+
+    def test_delete_cascades_daily(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        assert len(store.query_daily(bt_id)) == 3
+        store.delete_backtest(bt_id)
+        assert len(store.query_daily(bt_id)) == 0
+        store.close()
+
+    def test_delete_nonexistent_returns_false(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        ok = store.delete_backtest(99999)
+        assert ok is False
+        store.close()
+
+    def test_delete_idempotent(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(store)
+        store.delete_backtest(bt_id)
+        # 二次删除不抛异常
+        ok = store.delete_backtest(bt_id)
+        assert ok is False
+        store.close()
+
+    def test_delete_isolated(self, temp_db_path):
+        """删除一条不影响其他记录"""
+        store = DataStore(temp_db_path)
+        id1 = _insert_full_backtest(store, symbol='DCE.m2509')
+        id2 = _insert_full_backtest(store, symbol='DCE.rb2410')
+        store.delete_backtest(id1)
+        assert store.get_backtest(id2) is not None
+        assert len(store.query_trades(id2)) == 3
+        assert len(store.query_daily(id2)) == 3
+        store.close()
+
+
+# ==============================================================================
+# report 格式化集成测试
+# ==============================================================================
+
+class TestFormatSingleReport:
+    def test_success_report_contains_key_metrics(self, temp_db_path):
+        from report import format_single_report
+        from data import DataManager
+        dm = DataManager()
+        dm._init_store = lambda: None  # 注入路径
+        dm._store = DataStore(temp_db_path)
+        bt_id = _insert_full_backtest(dm._store)
+
+        text = format_single_report(dm, bt_id)
+        assert '回测报告 #' in text
+        assert 'DCE.m2509' in text
+        assert 'ma' in text
+        assert '1.0' in text          # strategy_version
+        assert 'abc1234' in text      # git_hash
+        assert 'success' in text
+        assert '2024-01-01' in text   # start_date
+        assert '2024-12-31' in text   # end_date
+        assert '100,000.00' in text   # initial_capital
+        assert '118,000.00' in text   # end_balance
+        assert '1.35' in text         # sharpe_ratio
+        assert '80' in text           # total_trades
+        assert '45' in text           # win_trades
+        assert '35' in text           # loss_trades
+        assert '120' in text          # avg_win
+        # 每日资金曲线
+        assert '100,200.00' in text
+        assert '100,100.00' in text
+        assert '100,450.00' in text
+        # 交易明细
+        assert '多' in text
+        assert '空' in text
+        assert '开' in text
+        assert '平' in text
+        dm.close()
+
+    def test_failed_report_shows_error(self, temp_db_path):
+        from report import format_single_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        bt_id = dm._store.insert_backtest_detailed(
+            symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
+            error_message='数据不足无法回测', statistics={},
+            engine_config={}, params_json='{}',
+            start_date=None, end_date=None,
         )
-        assert report['performance']['total_trades'] == 10
+        text = format_single_report(dm, bt_id)
+        assert '失败' in text or 'failed' in text
+        assert '数据不足无法回测' in text
+        dm.close()
 
-    def test_generate_report_empty_stats(self, tmp_path):
-        report = generate_dataset_report(
-            statistics={},
-            dataset_name='test',
-            symbol='',
+    def test_nonexistent_id(self, temp_db_path):
+        from report import format_single_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        text = format_single_report(dm, 99999)
+        assert '错误' in text or '未找到' in text
+        dm.close()
+
+    def test_no_daily_no_crash(self, temp_db_path):
+        """无每日曲线时不崩 — 适用于 TqSdk 回测"""
+        from report import format_single_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        bt_id = dm._store.insert_backtest_detailed(
+            symbol='DCE.m2509', strategy='ma', status=STATUS_SUCCESS,
+            error_message=None,
+            statistics={'total_trades': 3, 'end_balance': 101000.0},
+            engine_config={'initial_capital': 100000.0},
+            params_json='{}',
+            start_date='2024-01-01', end_date='2024-03-31',
         )
-        assert report['meta']['dataset'] == 'test'
-        assert report['performance']['total_trades'] == 0
+        text = format_single_report(dm, bt_id)
+        assert '交易日数:   0 天' in text
+        assert '资金曲线' not in text  # 无 daily 不显示此段
+        dm.close()
 
 
-class TestGenerateMergedReport:
-    def _make_result(self, symbol, ret, sharpe, dd, wr, trades):
-        return {
-            'success': True,
-            'symbol': symbol,
-            'report': {
-                'performance': {
-                    'total_return_abs': ret,
-                    'sharpe_ratio': sharpe,
-                    'win_rate_abs': wr,
-                    'profit_loss_ratio': 1.5,
-                    'total_trades': trades,
-                    'annual_return_ratio': 0.25,
-                },
-                'risk': {
-                    'max_drawdown_abs': dd,
-                },
-            },
-        }
+class TestFormatSummaryReport:
+    def test_list_success_records(self, temp_db_path):
+        from report import format_summary_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        _insert_full_backtest(dm._store, symbol='DCE.m2509')
+        _insert_full_backtest(dm._store, symbol='DCE.rb2410')
 
-    def test_empty_results(self):
-        merged = generate_merged_report([])
-        assert merged['meta']['symbol_count'] == 0
-        assert merged['symbols'] == []
+        text = format_summary_report(dm, limit=10)
+        assert '回测汇总' in text
+        assert '2 条' in text
+        assert 'DCE.m2509' in text
+        assert 'DCE.rb2410' in text
+        assert 'abc1234' in text              # git_hash
+        assert '1.0' in text                 # strategy_version
+        assert 'python main.py report --id' in text
+        dm.close()
 
-    def test_single_symbol(self):
-        results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
-        merged = generate_merged_report(results)
-        assert merged['meta']['symbol_count'] == 1
-        assert merged['symbols'][0]['symbol'] == 'DCE.m2509'
-        assert merged['aggregate']['total_return']['mean'] == pytest.approx(0.15)
-        assert merged['aggregate']['profitable_ratio'] == 1.0
+    def test_empty_list(self, temp_db_path):
+        from report import format_summary_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        text = format_summary_report(dm)
+        assert '未找到' in text
+        dm.close()
 
-    def test_multiple_symbols(self):
-        results = [
-            self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
-            self._make_result('CZCE.TA509', 0.10, 1.2, 0.05, 0.55, 30),
-            self._make_result('SHFE.rb2410', -0.05, -0.5, 0.15, 0.35, 20),
-        ]
-        merged = generate_merged_report(results)
-        assert merged['meta']['symbol_count'] == 3
-        agg = merged['aggregate']
-        assert agg['profitable_ratio'] == pytest.approx(2 / 3)
-        assert agg['total_trades']['total'] == 100
+    def test_filter_by_symbol(self, temp_db_path):
+        from report import format_summary_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        _insert_full_backtest(dm._store, symbol='DCE.m2509')
+        _insert_full_backtest(dm._store, symbol='DCE.rb2410')
 
-    def test_skips_failed_results(self):
-        results = [
-            self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50),
-            {'success': False, 'symbol': 'FAIL', 'error': 'no data'},
-        ]
-        merged = generate_merged_report(results)
-        assert merged['meta']['symbol_count'] == 1
-        assert 'FAIL' not in merged['meta']['symbols']
+        text = format_summary_report(dm, symbol='DCE.m2509')
+        assert 'DCE.m2509' in text
+        assert 'DCE.rb2410' not in text
+        dm.close()
 
-    def test_returns_valid_merged_report(self):
-        """合并报告返回完整字典（不再写 JSON 文件）"""
-        results = [self._make_result('DCE.m2509', 0.15, 1.5, 0.08, 0.6, 50)]
-        merged = generate_merged_report(results)
-        assert merged['meta']['symbol_count'] == 1
-        assert len(merged['symbols']) == 1
-        assert 'ranking' in merged
-        assert 'aggregate' in merged
+    def test_filter_by_strategy(self, temp_db_path):
+        from report import format_summary_report
+        from data import DataManager
+        dm = DataManager()
+        dm._store = DataStore(temp_db_path)
+        _insert_full_backtest(dm._store, symbol='DCE.m2509', strategy='ma')
+        _insert_full_backtest(dm._store, symbol='DCE.rb2410', strategy='bband')
 
-    def test_ranking_by_return(self):
-        results = [
-            self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
-            self._make_result('B', 0.1, 1.0, 0.1, 0.5, 50),
-            self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
-        ]
-        merged = generate_merged_report(results)
-        ranking = merged['ranking']['total_return']
-        assert ranking[0]['symbol'] == 'A'
-        assert ranking[1]['symbol'] == 'C'
-        assert ranking[2]['symbol'] == 'B'
-
-    def test_ranking_by_drawdown_ascending(self):
-        results = [
-            self._make_result('A', 0.3, 2.0, 0.05, 0.7, 100),
-            self._make_result('B', 0.1, 1.0, 0.15, 0.5, 50),
-            self._make_result('C', 0.2, 1.5, 0.08, 0.6, 75),
-        ]
-        merged = generate_merged_report(results)
-        ranking = merged['ranking']['max_drawdown']
-        assert ranking[0]['symbol'] == 'A'
+        text = format_summary_report(dm, strategy='bband')
+        assert 'bband' in text
+        assert '1 条' in text             # 只有 1 条
+        assert 'DCE.rb2410' in text       # bband 的记录
+        assert 'DCE.m2509' not in text    # ma 的记录被过滤掉
+        dm.close()
 
 
-class TestFormatMergedReport:
-    def _make_merged(self):
-        return {
-            'meta': {
-                'symbol_count': 2,
-                'symbols': ['DCE.m2509', 'CZCE.TA509'],
-                'generated_at': '2024-01-01',
-            },
-            'symbols': [
-                {
-                    'symbol': 'DCE.m2509',
-                    'total_return': 0.15, 'sharpe_ratio': 1.5,
-                    'max_drawdown': 0.08, 'win_rate': 0.6, 'total_trades': 50,
-                },
-            ],
-            'aggregate': {
-                'total_return': {'mean': 0.15, 'median': 0.15, 'min': 0.15, 'max': 0.15},
-                'sharpe_ratio': {'mean': 1.5, 'median': 1.5, 'min': 1.5, 'max': 1.5},
-                'max_drawdown': {'mean': 0.08, 'median': 0.08, 'min': 0.08, 'max': 0.08},
-                'win_rate': {'mean': 0.6, 'median': 0.6, 'min': 0.6, 'max': 0.6},
-                'total_trades': {'total': 50, 'avg': 50, 'count': 1},
-                'profitable_ratio': 1.0,
-            },
-            'ranking': {
-                'total_return': [{'symbol': 'DCE.m2509', 'total_return': 0.15}],
-                'sharpe_ratio': [{'symbol': 'DCE.m2509', 'sharpe_ratio': 1.5}],
-                'max_drawdown': [{'symbol': 'DCE.m2509', 'max_drawdown': 0.08}],
-                'win_rate': [{'symbol': 'DCE.m2509', 'win_rate': 0.6}],
-            },
-        }
+# ==============================================================================
+# 公共 API 存在性
+# ==============================================================================
 
-    def test_returns_non_empty_string(self):
-        merged = self._make_merged()
-        result = format_merged_report(merged)
-        assert isinstance(result, str)
-        assert len(result) > 0
-        assert '多品种合并回测报告' in result
-        assert 'DCE.m2509' in result
+class TestReportPublicAPI:
+    def test_format_single_report_importable(self):
+        from report import format_single_report
+        assert callable(format_single_report)
 
-    def test_contains_key_sections(self):
-        merged = self._make_merged()
-        result = format_merged_report(merged)
-        assert '品种关键指标' in result
-        assert '整体聚合统计' in result
-        assert '各指标排名' in result
+    def test_format_summary_report_importable(self):
+        from report import format_summary_report
+        assert callable(format_summary_report)
+
+
+class TestDataDeleteBacktest:
+    def test_delete_backtest_exists(self):
+        from data import DataManager
+        assert hasattr(DataManager, 'delete_backtest')
+        assert callable(DataManager.delete_backtest)
+
+
+# ==============================================================================
+# _helpers 工具函数
+# ==============================================================================
+
+class TestReportHelpers:
+    def test_na_str_none(self):
+        from report._helpers import _na_str
+        assert _na_str(None) == 'N/A'
+
+    def test_na_str_value(self):
+        from report._helpers import _na_str
+        assert _na_str('hello') == 'hello'
+        assert _na_str(123) == '123'
+
+    def test_get_attr_dict(self):
+        from report._helpers import _get_attr
+        d = {'a': 1, 'b': 2}
+        assert _get_attr(d, 'a') == 1
+        assert _get_attr(d, 'c', 'default') == 'default'
+        assert _get_attr(d, 'missing') is None
+
+    def test_get_attr_object(self):
+        from report._helpers import _get_attr
+        class Obj:
+            a = 10
+            b = 20
+        o = Obj()
+        assert _get_attr(o, 'a') == 10
+        assert _get_attr(o, 'c', 99) == 99

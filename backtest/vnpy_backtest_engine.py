@@ -17,7 +17,6 @@ import numpy as np
 from strategies.core.context import TradingContext
 
 from .data_loader import load_csv_data, df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
-from report.dataset_reporter import generate_dataset_report, format_console_report
 from common.formatting import parse_percentage
 from common.constants import (
     DEFAULT_INITIAL_CAPITAL, DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE,
@@ -148,8 +147,8 @@ class VnpyBacktestEngine:
             'success': True,
             'symbol': symbol,
             'result': result,
-            'data_start_date': data_start,
-            'data_end_date': data_end,
+            'start_date': data_start,
+            'end_date': data_end,
             'engine_config': {
                 'initial_capital': self.initial_capital,
                 'commission_rate': self.commission_rate,
@@ -383,24 +382,3 @@ class VnpyBacktestEngine:
             'statistics': statistics,
             'daily_results': daily_results.to_dict('records') if daily_results is not None else [],
         }
-
-    def _format_and_save_report(
-        self,
-        result: dict[str, Any],
-        symbol: str,
-        dataset_name: str,
-        backtest_id: Optional[int] = None,
-    ) -> dict[str, Any]:
-        """格式化并输出单个数据集控制台报告"""
-        report = generate_dataset_report(
-            statistics=result.get('statistics', {}),
-            daily_results=result.get('daily_results', []),
-            dataset_name=dataset_name,
-            symbol=symbol,
-            backtest_id=backtest_id,
-            initial_capital=self.initial_capital,
-        )
-
-        console_report = format_console_report(report, f"[{symbol}]")
-        print(console_report)
-        return report

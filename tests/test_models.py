@@ -39,15 +39,16 @@ class TestBacktestRecord:
             total_return=0.15,
             max_drawdown=0.08,
             win_rate=0.45,
-            profit_factor=1.8,
             total_trades=100,
-            profit_trades=45,
+            win_trades=45,
             loss_trades=55,
-            avg_profit=50.0,
+            avg_win=50.0,
             avg_loss=-30.0,
         )
         assert r.win_rate == 0.45
-        assert r.profit_factor == 1.8
+        assert r.win_trades == 45
+        assert r.avg_win == 50.0
+        assert r.avg_loss == -30.0
 
     def test_to_dict_excludes_none(self):
         """to_dict 排除 None 值"""
@@ -79,10 +80,61 @@ class TestBacktestRecord:
         assert r.total_return == 0.0
         assert r.max_drawdown == 0.0
         assert r.win_rate == 0.0
-        assert r.profit_factor == 0.0
         assert r.total_trades == 0
-        assert r.profit_trades == 0
-        assert r.loss_trades == 0
+        assert r.win_trades is None
+        assert r.loss_trades is None
+        assert r.avg_win is None
+        assert r.avg_loss is None
+
+    def test_from_dict_maps_all_fields(self):
+        """from_dict 正确映射 ORM 全部字段"""
+        orm_data = {
+            'id': 1,
+            'symbol': 'DCE.m2509',
+            'strategy': 'ma',
+            'status': 'success',
+            'total_return': 0.15,
+            'win_rate': 0.6,
+            'total_trades': 50,
+            'win_trades': 30,
+            'loss_trades': 20,
+            'avg_win': 100.0,
+            'avg_loss': -50.0,
+            'sharpe_ratio': 1.2,
+            'max_drawdown': 0.08,
+            'start_date': '2024-01-01',
+            'end_date': '2024-12-31',
+            'initial_capital': 100000.0,
+            'end_balance': 115000.0,
+            'annual_return': 0.15,
+            'daily_std': 0.02,
+            'strategy_version': '1.0',
+            'git_hash': 'abc1234',
+            'error_message': None,
+            'created_at': '2024-06-01 10:00:00',
+        }
+        r = BacktestRecord.from_dict(orm_data)
+
+        assert r.id == 1
+        assert r.symbol == 'DCE.m2509'
+        assert r.total_return == 0.15
+        assert r.win_rate == 0.6
+        assert r.total_trades == 50
+        assert r.win_trades == 30
+        assert r.loss_trades == 20
+        assert r.avg_win == 100.0
+        assert r.avg_loss == -50.0
+        assert r.sharpe_ratio == 1.2
+        assert r.max_drawdown == 0.08
+        assert r.start_date == '2024-01-01'
+        assert r.end_date == '2024-12-31'
+        assert r.initial_capital == 100000.0
+        assert r.end_balance == 115000.0
+        assert r.annual_return == 0.15
+        assert r.daily_std == 0.02
+        assert r.strategy_version == '1.0'
+        assert r.git_hash == 'abc1234'
+        assert r.error_message is None
 
 
 # ==============================================================================

@@ -184,32 +184,7 @@ class DataStore:
             )
     
     # ── 回测记录操作 ────────────────────────────────────────────────
-    
-    def save_backtest(self, record: BacktestRecord) -> int:
-        """保存回测记录"""
-        now = datetime.now()
-        bt = Backtest.create(
-            symbol=record.symbol,
-            strategy=record.strategy,
-            status=record.status,
-            start_date=record.start_date,
-            end_date=record.end_date,
-            total_return=record.total_return,
-            max_drawdown=record.max_drawdown,
-            win_rate=record.win_rate,
-            profit_factor=record.profit_factor,
-            sharpe_ratio=record.sharpe_ratio,
-            sortino_ratio=record.sortino_ratio,
-            total_trades=record.total_trades,
-            profit_trades=record.profit_trades,
-            loss_trades=record.loss_trades,
-            avg_profit=record.avg_profit,
-            avg_loss=record.avg_loss,
-            created_at=now,
-            updated_at=now,
-        )
-        return bt.id
-    
+
     def insert_backtest_detailed(
         self,
         symbol: str,
@@ -219,8 +194,8 @@ class DataStore:
         statistics: dict,
         engine_config: dict,
         params_json: Optional[str],
-        data_start_date: Optional[str],
-        data_end_date: Optional[str],
+        start_date: Optional[str],
+        end_date: Optional[str],
         strategy_version: Optional[str] = None,
         git_hash: Optional[str] = None,
     ) -> int:
@@ -240,8 +215,8 @@ class DataStore:
             git_hash=git_hash,
             status=status,
             error_message=error_message,
-            data_start_date=data_start_date,
-            data_end_date=data_end_date,
+            start_date=start_date,
+            end_date=end_date,
             initial_capital=initial_capital,
             commission_rate=engine_config.get('commission_rate'),
             slippage=engine_config.get('slippage'),
@@ -258,8 +233,8 @@ class DataStore:
             win_rate=win_rate_val,
             max_consecutive_win=statistics.get('max_consecutive_win'),
             max_consecutive_loss=statistics.get('max_consecutive_loss'),
-            average_win=statistics.get('average_win'),
-            average_loss=statistics.get('average_loss'),
+            avg_win=statistics.get('average_win'),
+            avg_loss=statistics.get('average_loss'),
             win_loss_ratio=statistics.get('win_loss_ratio'),
             sharpe_ratio=statistics.get('sharpe_ratio'),
             max_drawdown=_normalize_max_dd(statistics.get('max_drawdown')),
@@ -347,7 +322,10 @@ class DataStore:
         
         records = []
         for row in rows:
-            row['created_at'] = str(row.get('created_at', ''))
+            # ORM DateTimeField → str 转换，Pydantic TradeRecord 期望 str
+            for dt_field in ('datetime', 'created_at'):
+                if row.get(dt_field) is not None:
+                    row[dt_field] = str(row[dt_field])
             row['backtest_id'] = row.pop('backtest_id') if 'backtest_id' in row else backtest_id
             records.append(TradeRecord.from_dict(row))
         return records
@@ -400,3 +378,32 @@ class DataStore:
                 'drawdown': row.get('drawdown', 0),
             })
         return results
+   
+    def delete_backtest(self, backtest_id: int) -> bool:
+        """硬删除回测记录及其关联的交易明细和每日资金曲线
+        
+        Args:
+            backtest_id: 回测记录 ID
+        
+        Returns:
+            是否成功删除
+        """
+        try:
+            bt = Backtest.get_or_none(Backtest.id == backtest_id)
+            if bt is None:
+                logger.warning(f"回测记录不存在 id={backtest_id}")
+                return False
+            # 先删关联数据，再删主记录 (虽然有 CASCADE，显式删除更安全)
+            with database.atomic():
+                BacktestDaily.delete().where(
+                    BacktestDaily.backtest_id == backtest_id
+                ).execute()
+                BacktestTrade.delete().where(
+                    BacktestTrade.backtest_id == backtest_id
+                ).execute()
+                bt.delete_instance()
+            logger.info(f"已删除回测记录 id={backtest_id} 及其关联数据")
+            return True
+        except Exception as e:
+            logger.error(f"删除回测记录失败 id={backtest_id}: {e}")
+            return False

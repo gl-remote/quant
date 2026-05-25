@@ -1,0 +1,146 @@
+"""单次回测详细报告
+
+从数据库读取回测记录、交易明细和资金曲线，生成格式化控制台文本报告。
+"""
+
+from __future__ import annotations
+
+from ._helpers import _na_str, _get_attr
+from data import DataManager
+from common.formatting import format_pct, format_float, ensure_float
+from common.constants import (
+    TRADE_DIRECTION_LONG,
+    TRADE_DIRECTION_SHORT,
+    TRADE_OFFSET_OPEN,
+    TRADE_OFFSET_CLOSE,
+    STATUS_FAILED,
+)
+
+
+def format_single_report(dm: DataManager, backtest_id: int) -> str:
+    """生成单次回测的完整文本报告
+
+    Args:
+        dm: DataManager 实例
+        backtest_id: 回测记录 ID
+
+    Returns:
+        格式化的控制台报告字符串
+    """
+    bt = dm.get_backtest(backtest_id)
+
+    if not bt:
+        return f"错误: 未找到回测记录 id={backtest_id}"
+
+    trades = dm.query_trades(backtest_id)
+    daily = dm.query_daily(backtest_id)
+
+    trade_days: list[str] = sorted(set(
+        str(_get_attr(t, 'datetime'))[:10] for t in trades if _get_attr(t, 'datetime')
+    ))
+    buy_count: int = sum(
+        1 for t in trades
+        if _get_attr(t, 'direction') == TRADE_DIRECTION_LONG and _get_attr(t, 'offset') == TRADE_OFFSET_OPEN
+    )
+    sell_count: int = sum(
+        1 for t in trades
+        if _get_attr(t, 'direction') == TRADE_DIRECTION_SHORT and _get_attr(t, 'offset') == TRADE_OFFSET_CLOSE
+    )
+
+    symbol = bt.symbol
+    strategy = bt.strategy
+    status = bt.status
+    strategy_version = _get_attr(bt, 'strategy_version')
+    git_hash = _get_attr(bt, 'git_hash')
+
+    lines: list[str] = [
+        f"{'=' * 70}",
+        f"  回测报告 #{backtest_id}",
+        f"{'=' * 70}",
+        "",
+        "【基本信息】",
+        f"  品种:       {symbol}",
+        f"  策略:       {strategy}",
+        f"  策略版本:   {strategy_version or 'N/A'}",
+        f"  Git哈希:    {git_hash or 'N/A'}",
+        f"  状态:       {status}",
+        f"  运行时间:   {_get_attr(bt, 'created_at')}",
+    ]
+
+    if status == STATUS_FAILED:
+        error_msg = _get_attr(bt, 'error_message') or 'N/A'
+        lines.append(f"  错误信息:   {error_msg}")
+        lines.append(f"{'=' * 70}")
+        return '\n'.join(lines)
+
+    date_start = bt.start_date
+    date_end = bt.end_date
+
+    lines += [
+        "",
+        "【数据范围】",
+        f"  数据区间:   {_na_str(date_start)} ~ {_na_str(date_end)}",
+        f"  交易日数:   {len(daily)} 天",
+        "",
+        "【资金概况】",
+        f"  初始资金:   {bt.initial_capital:,.2f}",
+        f"  最终权益:   {_get_attr(bt, 'end_balance', 0):,.2f}",
+        f"  总收益率:   {format_pct(bt.total_return)}",
+        f"  年化收益:   {format_pct(_get_attr(bt, 'annual_return'))}",
+        "",
+        "【交易统计】",
+        f"  总交易次数: {bt.total_trades or 0}",
+        f"  盈利交易:   {_get_attr(bt, 'win_trades', 0) or 0}  ({format_pct(bt.win_rate)})",
+        f"  亏损交易:   {_get_attr(bt, 'loss_trades', 0) or 0}",
+        f"  平均盈利:   {format_float(bt.avg_win, ',.0f')}",
+        f"  平均亏损:   {format_float(bt.avg_loss, ',.0f')}",
+        "",
+        "【风险评估】",
+        f"  夏普比率:   {format_float(bt.sharpe_ratio)}",
+        f"  最大回撤:   {format_pct(bt.max_drawdown)}",
+        f"  日均波动率: {format_float(_get_attr(bt, 'daily_std'))}",
+        "",
+        "【交易明细】",
+        f"  成交笔数:   {len(trades)} (开仓{buy_count} / 平仓{sell_count})",
+        f"  交易日期:   {len(trade_days)} 天",
+    ]
+
+    if daily:
+        lines += [
+            "",
+            "【资金曲线（最近10天）】",
+            f"  {'日期':<12} {'权益':>12} {'日收益':>10} {'回撤':>8}",
+            f"  {'-' * 50}",
+        ]
+        for d in daily[-10:]:
+            equity = d.get('equity', 0)
+            daily_return = d.get('daily_return', 0)
+            drawdown = d.get('drawdown', 0)
+            lines.append(
+                f"  {d.get('date', ''):<12} "
+                f"{equity:>12,.2f} "
+                f"{daily_return:>+10,.2f} "
+                f"{drawdown:>8.2%}"
+            )
+
+    if trades:
+        lines += [
+            "",
+            f"  {'时间':<20} {'标的':<16} {'方向':>5} {'开平':>4} {'价格':>9} {'手数':>4}",
+            f"  {'-' * 63}",
+        ]
+        for t in trades[-20:]:
+            d_tag: str = '多' if _get_attr(t, 'direction') == TRADE_DIRECTION_LONG else '空'
+            o_tag: str = '开' if _get_attr(t, 'offset') == TRADE_OFFSET_OPEN else '平'
+            price = _get_attr(t, 'close_price') or _get_attr(t, 'open_price', 0)
+            qty = _get_attr(t, 'quantity', 0)
+            lines.append(
+                f"  {_get_attr(t, 'datetime'):<20} "
+                f"{_get_attr(t, 'symbol'):<16} "
+                f"{d_tag:>5} {o_tag:>4} "
+                f"{ensure_float(price):>9.2f} "
+                f"{qty:>4}"
+            )
+
+    lines.append(f"{'=' * 70}")
+    return '\n'.join(lines)

@@ -181,8 +181,8 @@ def _run_tq_backtest(args, cm, dm):
             },
             engine_config={'type': 'tqsdk', 'gui': args.gui},
             params_json=serialize_strategy_params(strategy_core),
-            data_start_date=args.start,
-            data_end_date=args.end,
+            start_date=args.start,
+            end_date=args.end,
         )
 
         if fills:
@@ -224,8 +224,8 @@ def _run_tq_backtest(args, cm, dm):
             statistics={},
             engine_config={'type': 'tqsdk'},
             params_json='{}',
-            data_start_date=None,
-            data_end_date=None,
+            start_date=None,
+            end_date=None,
         )
         raise
     finally:
@@ -309,8 +309,8 @@ def _run_vnpy_backtest(args, cm, dm):
                     statistics=st,
                     engine_config=ec,
                     params_json=params_json,
-                    data_start_date=r.get('data_start_date'),
-                    data_end_date=r.get('data_end_date'),
+                    start_date=r.get('start_date'),
+                    end_date=r.get('end_date'),
                     strategy_version=strategy_version,
                     git_hash=git_hash,
                 )
@@ -330,13 +330,14 @@ def _run_vnpy_backtest(args, cm, dm):
                     daily_count = dm.insert_backtest_daily(bt_id, dr)
                     logger.debug(f"  {r['symbol']}: 写入 {daily_count} 条每日资金曲线")
                 
-                logger.info(f"\n>>> 生成回测报告 [{r['symbol']}]")
-                ctx = TradingContext.build(
-                    strategy, r['symbol'], cm,
-                    capital=bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL)
-                )
-                engine = VnpyBacktestEngine(bc, context=ctx)
-                engine._format_and_save_report(r['result'], r['symbol'], 'full', bt_id)
+                logger.info(f"\n>>> [{r['symbol']}] 回测完成 id={bt_id}")
+
+                # 输出回测摘要
+                st = r['result'].get('statistics', {})
+                total_return = st.get('total_return', 0)
+                sharpe = st.get('sharpe_ratio', 0)
+                trades_count = st.get('total_trades', 0)
+                print(f"\n  [{r['symbol']}] 收益率={total_return:.2%}  夏普={sharpe:.2f}  交易={trades_count}次")
             else:
                 dm.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),
@@ -346,16 +347,16 @@ def _run_vnpy_backtest(args, cm, dm):
                     statistics={},
                     engine_config={},
                     params_json=params_json,
-                    data_start_date=None,
-                    data_end_date=None,
+                    start_date=None,
+                    end_date=None,
                 )
 
         persisted = len(bt_ids)
         if persisted > 0:
             logger.info(f"回测结果已写入数据库: {persisted} 条成功")
             if mode == MODE_BATCH:
-                ids_str = ','.join(str(i) for i in bt_ids)
-                print(f"\n💡 查看对比报告: python main.py report --compare {ids_str}")
+                ids_str = ', '.join(str(i) for i in bt_ids)
+                print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
             else:
                 print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
 
