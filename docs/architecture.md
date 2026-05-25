@@ -128,7 +128,7 @@ strategies/
 |------|------|
 | [constants.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/constants.py) | 全局常量字典 (60+ 常量：交易方向、信号原因、配置默认值等) |
 | [formulas.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/formulas.py) | 统一量化计算公式库 (15+ 公式：SMA/交叉检测/止损止盈/仓位/FIFO PnL 等) |
-| [schemas.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/schemas.py) | Pandera Schema 定义 (KlineSchema/TradeRecordSchema/BacktestResultSchema/DailyReturnSchema) |
+| [schemas.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/schemas.py) | Pandera Schema 定义 (KlineSchema/DailyReturnSchema) |
 | [metrics.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/metrics.py) | 绩效指标 (max_drawdown/sharp_ratio) |
 | [stats.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/stats.py) | 统计聚合 (rank_by_key/summary_stats) |
 | [formatting.py](file:///Users/REDACTED_API_KEY/Documents/src/quant/common/formatting.py) | 安全格式化 (format_pct/format_float/ensure_float) |

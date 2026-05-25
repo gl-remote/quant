@@ -32,12 +32,8 @@ from .exporter import export_csv
 # 从 common.schemas 导入全局统一的 Pandera Schema
 from common.schemas import (
     KlineSchema,
-    TradeRecordSchema,
-    BacktestResultSchema,
     DailyReturnSchema,
     KlineDataFrame,
-    TradeDataFrame,
-    BacktestDataFrame,
     DailyReturnDataFrame,
 )
 
@@ -46,13 +42,9 @@ __all__ = [
     'DataManager',
     # Pandera Schema（全局统一）
     'KlineSchema',
-    'TradeRecordSchema',
-    'BacktestResultSchema',
     'DailyReturnSchema',
     # DataFrame 类型别名
     'KlineDataFrame',
-    'TradeDataFrame',
-    'BacktestDataFrame',
     'DailyReturnDataFrame',
     # Pydantic 模型
     'BacktestRecord',
