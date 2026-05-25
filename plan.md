@@ -167,18 +167,11 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 > 审计日期: 2026-05-25 (第三次全量审计) | 基准: 量化交易系统行业惯例 | 覆盖: 36 个 .py 文件全部审阅
 
-### 3.1 Bug — 逻辑错误/数值计算错误
+### 3.1 已修复 Bug
 
-| 编号 | 严重度 | 状态 | 问题 | 文件:行 | 根因与影响 | 修复提交 |
-|------|--------|------|------|---------|-----------|---------|
-| BUG-01 | 🔴 严重 | ✅ 已修复 | tq-backtest 盈亏计算错误 (笛卡尔积) | `main.py:458-464` | `for sf in sells: for bf in buys: total += (sf.price - bf.price) * sf.volume` 每笔卖出与**所有**买入逐一配对，不是配对撮合。盈亏总额完全失真 | `3ea2d3e` |
-| BUG-02 | 🔴 严重 | ✅ 已修复 | TQBacktestEngine 零手续费/滑点 | `tq_backtest_engine.py:43-67` | `add_trade` 中买入扣 `price*quantity`、卖出加回同额，无手续费率/滑点扣减。权益曲线系统性偏高 | `7ce71cb` |
-| BUG-03 | 🟡 高 | ✅ 已修复 | `format_pct` 语义启发式不可靠 | `common/formatting.py:27-28` | `abs(v) > 1 → v/100` 在回撤值为 -1.5（比值 -1.5，即 -150%）时被迫归一化为 -0.015（显示 -1.50%），完全错误。整个代码库调用方混用比值和百分比值 | `d1589b9` |
-| BUG-04 | 🟡 高 | ✅ 已修复 | `_run_backtest` 零异常处理 | `vnpy_backtest_engine.py:298-372` | Walk-Forward 200 个窗口中任一 `engine.run_backtesting()` 崩溃，整个循环终止，已成功的窗口结果全部作废 | `d1589b9` |
-| BUG-05 | 🟡 中 | ✅ 已修复 | 买卖统计方向常值混淆 | `sql_reporter.py:68-73` | vnpy 返回 `direction='long'/'short'`（对应开多/开空），但 `MaStrategy` fill 记录使用 `action='buy'/'sell'`。DB 存储 vnpy 方向值，SQL 报告查询 `direction=='long' and offset=='open'` 依赖 vnpy 内部表示，脆弱 | `f889e16` |
-| BUG-06 | 🟡 中 | ✅ 已修复 | Walk-Forward 窗口数公式为近似值 | `data_loader.py:318` | `n/(1+(min_windows-1)*step_ratio)` 在浮点截断 + int 舍入下，实际窗口数可能少于 min_windows，且不警告 | `500312b` |
-| BUG-07 | 🟡 中 | ✅ 已修复 | `annual_return_abs` 命名与值不匹配 | `dataset_reporter.py:119-120` | `annual_return_abs` 命名暗示绝对金额，实际存储 `statistics.get('annual_return', 0)` 即 vnpy 返回的**比值**（如 0.15 = 15%）。comparison_reporter 按 `total_return_abs` 取值时类型预期混乱 | `fc4ca15` |
-| BUG-08 | 🟢 低 | ✅ 已修复 | `config_manager` 静默修改源配置字典 | `config_manager.py:76-79` | `_load` 返回 `self.config` 引用，`get_strategy_config` 对 `tc` 字典写入默认值 → 污染全局配置。后续获取同一 key 会得到默认值而非原始缺失 | `3d505cf` |
+> 不再重复维护已修复 Bug 详情。本版本修复的 8 个逻辑/数值 Bug (BUG-01~08) 已归档至 [`CHANGELOG.md` §[0.2.0-dev] 修复段](./CHANGELOG.md#020-dev---2026-05-25)，含修复提交 hash。
+
+本版本无新增未修复 Bug。
 
 ### 3.2 缺陷 — 质量/鲁棒性/工程实践
 

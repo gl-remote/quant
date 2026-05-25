@@ -49,6 +49,15 @@
   - DEF-BT19: `_run_backtest` 中 `self.context` 赋值改为局部变量，消除副作用
   - DEF-BT20: 多次买入时 `entry_price` 改为加权平均成本价
   - DEF-BT21: `comparison.py` max_drawdown 格式化归一化 `>1` 时 `/100`
+- **第三次全量审计修复 (8 项)**:
+  - BUG-01: 修复 tq-backtest 盈亏计算笛卡尔积配对错误 (`3ea2d3e`)
+  - BUG-02: TQBacktestEngine 新增手续费率/滑点扣减 (`7ce71cb`)
+  - BUG-03: 移除 `format_pct` 启发式归一化，在 DB 层统一处理 (`d1589b9`)
+  - BUG-04: `_run_backtest` 增加逐窗口 try/except 保护 (`d1589b9`)
+  - BUG-05: 引入方向/开平常量消除买卖统计混淆 (`f889e16`)
+  - BUG-06: Walk-Forward 窗口数公式替换为迭代验证算法 (`500312b`)
+  - BUG-07: `annual_return_abs` 重命名为 `annual_return_ratio` 消除命名误导 (`fc4ca15`)
+  - BUG-08: 修复 `config_manager` 合并表达式静默修改源字典 (`3d505cf`)
 
 ### 变更
 
