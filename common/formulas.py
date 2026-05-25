@@ -319,6 +319,9 @@ def drawdown_at_point(peak: float, current: float) -> float:
 def avg_trades_per_day(total_trades: int, total_days: int) -> float:
     """计算日均交易次数
 
+    当 total_days<=0 时使用 1 作为除数（对应原 max(total_days, 1) 逻辑），
+    避免除零错误同时保证单日交易数据仍然有意义。
+
     Args:
         total_trades: 总交易次数
         total_days: 总交易天数
@@ -327,7 +330,7 @@ def avg_trades_per_day(total_trades: int, total_days: int) -> float:
         日均交易次数
     """
     if total_days <= 0:
-        return 0.0
+        return float(total_trades)
     return total_trades / total_days
 
 

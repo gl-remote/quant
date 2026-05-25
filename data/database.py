@@ -29,11 +29,13 @@ from data.models import (
     VnpyDailyResultDict,
     VnpyTradeRecordDict,
 )
-
-# ── 日志自动清理配置 ──────────────────────────────────────────
-# 公开常量，供 tests/test_database.py 通过 monkeypatch 调整阈值
-_MAX_OPERATION_LOG_ROWS: int = 50_000
-_PRUNE_CHECK_INTERVAL: int = 100
+from common.constants import (
+    MAX_OPERATION_LOG_ROWS as _MAX_OPERATION_LOG_ROWS,
+    PRUNE_CHECK_INTERVAL as _PRUNE_CHECK_INTERVAL,
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_ANNUAL_FACTOR,
+)
+from common.formulas import total_return as calc_total_return, win_rate as calc_win_rate
 
 
 def _normalize_max_dd(raw_value: float | None) -> float:
@@ -219,14 +221,13 @@ class Database:
         now = datetime.now().isoformat()
 
         total_trades: int = statistics.get('total_trades', 0) or 0
-        initial_capital: float = float(engine_config.get('initial_capital', 100000.0))
+        initial_capital: float = float(engine_config.get('initial_capital',
+                                                         DEFAULT_INITIAL_CAPITAL))
         end_balance: float = float(statistics.get('end_balance', initial_capital))
-        total_return: float = (
-            (end_balance - initial_capital) / initial_capital
-        ) if initial_capital > 0 and total_trades > 0 else 0.0
-        win_rate: float = (
-            statistics.get('win_trades', 0) / max(total_trades, 1)
-        ) if total_trades > 0 else 0.0
+        total_return: float = calc_total_return(initial_capital, end_balance,
+                                                total_trades=total_trades)
+        win_rate: float = calc_win_rate(
+            statistics.get('win_trades', 0), total_trades)
 
         bt = Backtest.create(
             symbol=symbol,

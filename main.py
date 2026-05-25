@@ -22,6 +22,36 @@ logging.basicConfig(
 from strategies import TqsdkStrategyBridge
 from strategies.core import Strategy, TradingContext, Bar, Fill, Signal
 from backtest import VnpyBacktestEngine, scan_csv_files
+from common.constants import (
+    TRADE_ACTION_BUY,
+    TRADE_ACTION_SELL,
+    TRADE_DIRECTION_LONG,
+    STATUS_SUCCESS,
+    STATUS_FAILED,
+    LOG_STATUS_INFO,
+    LOG_STATUS_SUCCESS,
+    LOG_STATUS_ERROR,
+    CMD_EXPORT,
+    CMD_BACKTEST,
+    CMD_TQ_BACKTEST,
+    CMD_TEST,
+    CMD_LIVE,
+    CMD_REPORT,
+    MODE_SINGLE,
+    MODE_BATCH,
+    MODE_MULTI,
+    STRATEGY_MA,
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_COMMISSION_RATE,
+    DEFAULT_SLIPPAGE,
+    DEFAULT_PRICE_TICK,
+    DEFAULT_CONTRACT_SIZE,
+    DEFAULT_KLINE_PERIOD,
+    DEFAULT_SMA_SHORT,
+    DEFAULT_SMA_LONG,
+    DEFAULT_STOP_LOSS_RATIO,
+    DEFAULT_TAKE_PROFIT_RATIO,
+)
 from data import Database, DBLogHandler, export_csv
 from report import format_single_report, format_comparison_report, format_summary_report
 
@@ -40,8 +70,8 @@ def _calculate_fifo_profit(fills: list) -> float:
     Returns:
         FIFO 盈亏总额 (未扣除手续费/滑点)
     """
-    buy_entries = [(f.price, f.volume) for f in fills if f.action == 'buy']
-    sell_entries = [(f.price, f.volume) for f in fills if f.action == 'sell']
+    buy_entries = [(f.price, f.volume) for f in fills if f.action == TRADE_ACTION_BUY]
+    sell_entries = [(f.price, f.volume) for f in fills if f.action == TRADE_ACTION_SELL]
 
     total_profit = 0.0
     bi = 0          # 当前待匹配买入的索引
@@ -83,7 +113,7 @@ def load_strategy(strategy_name: Optional[str]) -> Strategy:
         FileNotFoundError: 策略文件不存在
     """
     if not strategy_name:
-        strategy_name = "ma"
+        strategy_name = STRATEGY_MA
 
     name = strategy_name
     if name.endswith('.py'):
@@ -122,7 +152,7 @@ def _get_strategy_class_name(strategy: Strategy) -> str:
 # TradingContext 构建
 # ============================================================
 def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
-                   capital: float = 100000.0) -> TradingContext:
+                   capital: float = DEFAULT_INITIAL_CAPITAL) -> TradingContext:
     """从 ConfigManager 构建统一的 TradingContext
 
     Args:
@@ -151,19 +181,19 @@ def _build_context(strategy: Strategy, symbol: str, cm: ConfigManager,
         cfg.capital = capital
 
     if 'contract_size' in valid_keys:
-        cfg.contract_size = bc.get('contract_size', 10)
+        cfg.contract_size = bc.get('contract_size', DEFAULT_CONTRACT_SIZE)
     elif hasattr(cfg, 'contract_size'):
-        cfg.contract_size = bc.get('contract_size', 10)
+        cfg.contract_size = bc.get('contract_size', DEFAULT_CONTRACT_SIZE)
 
     return TradingContext(
         strategy=strategy,
         symbol=symbol,
         capital=capital,
-        kline_period=cm.get_strategy_config().get('kline_period', 5),
-        commission_rate=bc.get('commission_rate', 0.0003),
-        slippage=bc.get('slippage', 1.0),
-        price_tick=bc.get('price_tick', 1.0),
-        contract_size=bc.get('contract_size', 10),
+        kline_period=cm.get_strategy_config().get('kline_period', DEFAULT_KLINE_PERIOD),
+        commission_rate=bc.get('commission_rate', DEFAULT_COMMISSION_RATE),
+        slippage=bc.get('slippage', DEFAULT_SLIPPAGE),
+        price_tick=bc.get('price_tick', DEFAULT_PRICE_TICK),
+        contract_size=bc.get('contract_size', DEFAULT_CONTRACT_SIZE),
         account=account if account else None,
     )
 
@@ -247,13 +277,13 @@ def cmd_test(args):
     logger.info("=" * 60)
     logger.info(f"测试模式 - 策略: {cls_name}")
     logger.info("=" * 60)
-    db.log('test', f"开始: strategy={cls_name}", status='INFO')
+    db.log('test', f"开始: strategy={cls_name}", status=LOG_STATUS_INFO)
 
     try:
         tc = cm.get_trading_config()
-        logger.info(f"策略参数: SMA({tc.get('sma_short', 5)},{tc.get('sma_long', 20)}) "
-                    f"止损={tc.get('stop_loss_ratio', 0.03):.0%} "
-                    f"止盈={tc.get('take_profit_ratio', 0.05):.0%}")
+        logger.info(f"策略参数: SMA({tc.get('sma_short', DEFAULT_SMA_SHORT)},{tc.get('sma_long', DEFAULT_SMA_LONG)}) "
+                    f"止损={tc.get('stop_loss_ratio', DEFAULT_STOP_LOSS_RATIO):.0%} "
+                    f"止盈={tc.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO):.0%}")
 
         # 模拟连续K线: 先空仓→金叉买入→再一根K线触发止损
         bar1 = Bar(symbol="TEST", datetime="2026-01-01",
@@ -261,10 +291,10 @@ def cmd_test(args):
         signal1 = strategy.on_bar(bar1)
         logger.info(f"信号1: action={signal1.action} reason={signal1.reason} volume={signal1.volume}")
 
-        if signal1.action == 'buy':
+        if signal1.action == TRADE_ACTION_BUY:
             strategy.on_fill(Fill(
                 timestamp=bar1.datetime, symbol=bar1.symbol,
-                action='buy', price=bar1.close, volume=signal1.volume,
+                action=TRADE_ACTION_BUY, price=bar1.close, volume=signal1.volume,
                 reason=signal1.reason))
 
             bar2 = Bar(symbol="TEST", datetime="2026-01-02",
@@ -272,22 +302,22 @@ def cmd_test(args):
             signal2 = strategy.on_bar(bar2)
             logger.info(f"信号2: action={signal2.action} reason={signal2.reason}")
 
-            if signal2.action == 'sell':
+            if signal2.action == TRADE_ACTION_SELL:
                 strategy.on_fill(Fill(
                     timestamp=bar2.datetime, symbol=bar2.symbol,
-                    action='sell', price=bar2.close, volume=signal1.volume,
+                    action=TRADE_ACTION_SELL, price=bar2.close, volume=signal1.volume,
                     reason=signal2.reason))
 
         fills = strategy.fills
-        sells = [f for f in fills if f.action == 'sell']
+        sells = [f for f in fills if f.action == TRADE_ACTION_SELL]
         logger.info(f"绩效: 交易{sells.__len__()}次")
-        db.log('test', f"完成: strategy={cls_name}", status='SUCCESS')
+        db.log('test', f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)
         logger.info("\n" + "=" * 60)
         logger.info("测试模式完成")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"测试失败: {e}")
-        db.log('test', f"失败: {e}", status='ERROR')
+        db.log('test', f"失败: {e}", status=LOG_STATUS_ERROR)
         raise
 
 
@@ -314,7 +344,7 @@ def cmd_backtest(args):
     """
     cm = ConfigManager()
     db = Database(cm.get_data_config()['db_path'])
-    _setup_db_logging(db, 'backtest', args.symbol or 'multi')
+    _setup_db_logging(db, 'backtest', args.symbol or MODE_MULTI)
 
     try:
         bc = cm.get_backtest_config()
@@ -325,17 +355,17 @@ def cmd_backtest(args):
         if args.symbol and not args.pattern:
             # 明确指定单品种，直接回测
             symbols = [(args.symbol, None)]
-            mode = 'single'
+            mode = MODE_SINGLE
         else:
             # 按 pattern 扫描 CSV 目录 (pattern=None 扫描全部)
             symbols = scan_csv_files(bc['data_dir'], args.pattern)
             if not symbols:
                 logger.error("未找到匹配的品种数据")
-                db.log('backtest', "未找到匹配的品种数据", symbol='multi', status='ERROR')
+                db.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
                 return
-            mode = 'batch'
+            mode = MODE_BATCH
 
-        logger.info(f"{'单品种' if mode == 'single' else '批量'}回测: {len(symbols)} 个品种"
+        logger.info(f"{'单品种' if mode == MODE_SINGLE else '批量'}回测: {len(symbols)} 个品种"
                      f" strategy={_get_strategy_class_name(strategy)}")
 
         strategy_name = _get_strategy_class_name(strategy)
@@ -346,7 +376,7 @@ def cmd_backtest(args):
         for sym, _ in symbols:
             # 每个品种独立构建 context 和 engine (避免状态污染)
             ctx = _build_context(strategy, sym, cm,
-                                 capital=bc.get('initial_capital', 100000.0))
+                                 capital=bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL))
             engine = VnpyBacktestEngine(bc, context=ctx)
             try:
                 result = engine.run_full_pipeline(
@@ -376,7 +406,7 @@ def cmd_backtest(args):
                 bt_id = db.insert_backtest(
                     symbol=r['symbol'],
                     strategy=strategy_name,
-                    status='success',
+                    status=STATUS_SUCCESS,
                     error_message=None,
                     statistics=st,
                     engine_config=ec,
@@ -392,7 +422,7 @@ def cmd_backtest(args):
                 db.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),
                     strategy=strategy_name,
-                    status='failed',
+                    status=STATUS_FAILED,
                     error_message=r.get('error'),
                     statistics={},
                     engine_config={},
@@ -405,7 +435,7 @@ def cmd_backtest(args):
         persisted = len(bt_ids)
         if persisted > 0:
             logger.info(f"回测结果已写入数据库: {persisted} 条成功")
-            if mode == 'batch':
+            if mode == MODE_BATCH:
                 ids_str = ','.join(str(i) for i in bt_ids)
                 print(f"\n💡 查看对比报告: python main.py report --compare {ids_str}")
             else:
@@ -413,18 +443,18 @@ def cmd_backtest(args):
 
         if succeeded:
             db.log('backtest',
-                   f"{'批量' if mode == 'batch' else ''}回测完成: "
+                   f"{'批量' if mode == MODE_BATCH else ''}回测完成: "
                    f"{len(succeeded)}/{len(all_results)}, "
                    f"已写入 {persisted} 条 DB 记录",
-                   symbol='multi' if mode == 'batch' else args.symbol,
-                   status='SUCCESS')
+                   symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
+                   status=LOG_STATUS_SUCCESS)
         else:
-            db.log('backtest', f"回测全部失败", symbol='multi' if mode == 'batch' else args.symbol,
-                   status='ERROR')
+            db.log('backtest', f"回测全部失败", symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
+                   status=LOG_STATUS_ERROR)
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        db.log('backtest', f"失败: {e}", symbol=args.symbol or 'multi', status='ERROR')
+        db.log('backtest', f"失败: {e}", symbol=args.symbol or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
 
 
@@ -459,7 +489,7 @@ def cmd_tq_backtest(args):
         db.log('backtest',
                f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
                f"strategy={strategy_cls}",
-               symbol=args.symbol, status='INFO')
+               symbol=args.symbol, status=LOG_STATUS_INFO)
 
         auth = TqAuth(account['api_key'], account['api_secret']) if account.get('api_key') else None
         api = TqApi(
@@ -480,10 +510,10 @@ def cmd_tq_backtest(args):
                     signal = bridge.on_bar(klines, idx=i)
 
                     pos = strategy_core.position
-                    if signal.action == 'buy' and pos.direction != 'long':
+                    if signal.action == TRADE_ACTION_BUY and pos.direction != TRADE_DIRECTION_LONG:
                         target_pos.set_target_volume(signal.volume)
                         bridge.notify_fill(signal, float(klines.close.iloc[i]))
-                    elif signal.action == 'sell' and pos.direction == 'long':
+                    elif signal.action == TRADE_ACTION_SELL and pos.direction == TRADE_DIRECTION_LONG:
                         target_pos.set_target_volume(0)
                         bridge.notify_fill(signal, float(klines.close.iloc[i]))
                 prev_kline_len = current_len
@@ -493,7 +523,7 @@ def cmd_tq_backtest(args):
         bc = cm.get_backtest_config()
 
         total_profit = _calculate_fifo_profit(fills)
-        total_trades = len([f for f in fills if f.action == 'sell'])
+        total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
 
         report = (
             f"{'=' * 60}\n"
@@ -509,14 +539,14 @@ def cmd_tq_backtest(args):
             f"{'=' * 60}"
         )
         print(report)
-        db.log('backtest', f"完成:\n{report}", symbol=args.symbol, status='SUCCESS')
+        db.log('backtest', f"完成:\n{report}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
 
         fills = getattr(strategy_core, 'fills', None)
         if fills:
             logger.info("\n交易记录:")
             for f in fills:
                 ts = f.timestamp[:10] if f.timestamp else "N/A"
-                tag = "买入" if f.action == 'buy' else "卖出"
+                tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
                 logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
         if args.gui:
             logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
@@ -527,7 +557,7 @@ def cmd_tq_backtest(args):
                 pass
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        db.log('backtest', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        db.log('backtest', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
         raise
     finally:
         if api:
@@ -547,7 +577,7 @@ def cmd_live(args):
         account = cm.get_account_info()
         if not account:
             logger.error("请先在 config/conf.local.yaml 中配置天勤账号信息")
-            db.log('live', "配置缺失", symbol=args.symbol, status='ERROR')
+            db.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
             sys.exit(1)
 
         from tqsdk import TqAuth
@@ -561,14 +591,14 @@ def cmd_live(args):
 
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
         db.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
-               symbol=args.symbol, status='INFO')
+               symbol=args.symbol, status=LOG_STATUS_INFO)
 
         (bridge.run_with_gui if args.gui else bridge.run)(symbol=args.symbol, auth=auth)
 
-        db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status='SUCCESS')
+        db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
     except Exception as e:
         logger.error(f"实盘交易失败: {e}", exc_info=True)
-        db.log('live', f"失败: {e}", symbol=args.symbol, status='ERROR')
+        db.log('live', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
         raise
 
 

@@ -17,6 +17,14 @@ from typing import List
 
 from .types import TradeRecord, BacktestResult
 from common.metrics import calc_max_drawdown, calc_sharpe_ratio
+from common.constants import (
+    TRADE_ACTION_BUY,
+    TRADE_ACTION_SELL,
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_COMMISSION_RATE,
+    DEFAULT_SLIPPAGE,
+)
+from common.formulas import trade_cost as calc_trade_cost, profit_factor, average_entry_price, total_return
 
 
 class TQBacktestEngine:
@@ -34,9 +42,9 @@ class TQBacktestEngine:
 
     def __init__(
         self,
-        initial_capital: float = 100000.0,
-        commission_rate: float = 0.0003,
-        slippage: float = 1.0,
+        initial_capital: float = DEFAULT_INITIAL_CAPITAL,
+        commission_rate: float = DEFAULT_COMMISSION_RATE,
+        slippage: float = DEFAULT_SLIPPAGE,
     ):
         self.initial_capital = initial_capital
         self.current_capital = initial_capital
@@ -50,8 +58,8 @@ class TQBacktestEngine:
 
     def _trade_cost(self, price: float, quantity: int) -> float:
         """单边交易成本: 手续费 + 滑点"""
-        return (self.commission_rate * price * quantity
-                + self.slippage * quantity)
+        return calc_trade_cost(price, quantity,
+                             self.commission_rate, self.slippage)
 
     def add_trade(self, trade: TradeRecord):
         """记录一笔交易并更新持仓/权益
@@ -64,17 +72,16 @@ class TQBacktestEngine:
         """
         self.trade_history.append(trade)
         cost = self._trade_cost(trade.price, trade.quantity)
-        if trade.direction == 'buy':
+        if trade.direction == TRADE_ACTION_BUY:
             old_pos = self.current_position
             self.current_position += trade.quantity
             self.current_capital -= (trade.price * trade.quantity + cost)
             if old_pos == 0:
                 self.entry_price = trade.price
             else:
-                self.entry_price = (
-                    old_pos * self.entry_price + trade.quantity * trade.price
-                ) / self.current_position
-        elif trade.direction == 'sell':
+                self.entry_price = average_entry_price(
+                    old_pos, self.entry_price, trade.quantity, trade.price)
+        elif trade.direction == TRADE_ACTION_SELL:
             self.current_position -= trade.quantity
             self.current_capital += (trade.price * trade.quantity - cost)
 
@@ -95,7 +102,7 @@ class TQBacktestEngine:
         if not self.trade_history:
             return result
 
-        sells = [t for t in self.trade_history if t.direction == 'sell']
+        sells = [t for t in self.trade_history if t.direction == TRADE_ACTION_SELL]
         result.total_trades = len(sells)
         winning = [t for t in sells if t.profit > 0]
         losing = [t for t in sells if t.profit < 0]
@@ -109,11 +116,9 @@ class TQBacktestEngine:
         if losing:
             result.avg_loss = sum(t.profit for t in losing) / len(losing)
         result.max_drawdown = calc_max_drawdown(self.equity_curve)
-        # 行业标准: gross_profit / abs(gross_loss)，非平均盈亏比
         total_win = sum(t.profit for t in winning)
         total_loss = sum(t.profit for t in losing)
-        if total_loss != 0:
-            result.profit_factor = total_win / abs(total_loss)
+        result.profit_factor = profit_factor(total_win, total_loss)
         result.sharpe_ratio = calc_sharpe_ratio(self.equity_curve)
         return result
 
@@ -130,7 +135,7 @@ class TQBacktestEngine:
             f"{'=' * 60}",
             f"初始资金: {self.initial_capital:,.2f}",
             f"最终资金: {r.final_equity:,.2f}",
-            f"总收益率: {((r.final_equity - self.initial_capital) / self.initial_capital):.2%}",
+            f"总收益率: {total_return(self.initial_capital, r.final_equity):.2%}",
             "",
             f"交易统计:",
             f"  总交易次数: {r.total_trades}",

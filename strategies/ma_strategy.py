@@ -14,19 +14,46 @@ from typing import List, Optional
 
 from .core.base import Strategy
 from .core.types import Bar, Signal, Fill, StrategyPosition
+from common.constants import (
+    TRADE_ACTION_BUY,
+    TRADE_ACTION_SELL,
+    TRADE_DIRECTION_LONG,
+    SIGNAL_STOP_LOSS,
+    SIGNAL_TAKE_PROFIT,
+    SIGNAL_DEATH_CROSS,
+    SIGNAL_GOLDEN_CROSS,
+    STRATEGY_MA,
+    DEFAULT_SMA_SHORT,
+    DEFAULT_SMA_LONG,
+    DEFAULT_STOP_LOSS_RATIO,
+    DEFAULT_TAKE_PROFIT_RATIO,
+    DEFAULT_POSITION_RATIO,
+    DEFAULT_CONTRACT_SIZE,
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_COMMISSION_RATE,
+    DEFAULT_SLIPPAGE,
+)
+from common.formulas import (
+    simple_moving_average,
+    golden_cross,
+    death_cross,
+    stop_loss_triggered,
+    take_profit_triggered,
+    position_size,
+)
 
 
 @dataclass
 class TradingConfig:
-    sma_short: int = 5
-    sma_long: int = 20
-    stop_loss_ratio: float = 0.03
-    take_profit_ratio: float = 0.05
-    position_ratio: float = 0.1
-    contract_size: int = 10
-    capital: float = 100000.0
-    commission_rate: float = 0.0003   # 手续费率 (0.03%)
-    slippage: float = 1.0             # 滑点 (最小变动价位)
+    sma_short: int = DEFAULT_SMA_SHORT
+    sma_long: int = DEFAULT_SMA_LONG
+    stop_loss_ratio: float = DEFAULT_STOP_LOSS_RATIO
+    take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
+    position_ratio: float = DEFAULT_POSITION_RATIO
+    contract_size: int = DEFAULT_CONTRACT_SIZE
+    capital: float = DEFAULT_INITIAL_CAPITAL
+    commission_rate: float = DEFAULT_COMMISSION_RATE
+    slippage: float = DEFAULT_SLIPPAGE
 
 
 class MaStrategyCore(Strategy):
@@ -35,7 +62,7 @@ class MaStrategyCore(Strategy):
     负责全部业务逻辑，Bridge 仅做数据转换和下单执行。
     """
 
-    name: str = "ma"
+    name: str = STRATEGY_MA
 
     def __init__(self, config: Optional[TradingConfig] = None):
         self._config = config or TradingConfig()
@@ -87,24 +114,20 @@ class MaStrategyCore(Strategy):
 
         signal = Signal()
 
-        # 信号优先级 (由 if/elif 顺序决定):
-        #   持仓时: 止损 > 止盈 > 死叉
-        #   空仓时: 金叉买入
-        # 参见 doc/api-reference.md "信号优先级"
-        if self._position.direction == 'long':
+        if self._position.direction == TRADE_DIRECTION_LONG:
             if self._check_stop_loss(bar.close):
-                signal = Signal(action='sell', reason='stop_loss',
+                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_STOP_LOSS,
                                 volume=self._position.volume)
             elif self._check_take_profit(bar.close):
-                signal = Signal(action='sell', reason='take_profit',
+                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_TAKE_PROFIT,
                                 volume=self._position.volume)
             elif self._is_death_cross(cur_short, cur_long):
-                signal = Signal(action='sell', reason='death_cross',
+                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_DEATH_CROSS,
                                 volume=self._position.volume)
         else:
             if self._is_golden_cross(cur_short, cur_long):
                 vol = self._calc_position_size(bar.close)
-                signal = Signal(action='buy', reason='golden_cross', volume=vol)
+                signal = Signal(action=TRADE_ACTION_BUY, reason=SIGNAL_GOLDEN_CROSS, volume=vol)
 
         self._prev_sma_short = cur_short
         self._prev_sma_long = cur_long
@@ -112,45 +135,37 @@ class MaStrategyCore(Strategy):
 
     def on_fill(self, fill: Fill) -> None:
         """成交回执 — Bridge 在下单成交后调用"""
-        if fill.action == 'buy':
+        if fill.action == TRADE_ACTION_BUY:
             self._position = StrategyPosition(
-                direction='long',
+                direction=TRADE_DIRECTION_LONG,
                 entry_price=fill.price,
                 volume=fill.volume,
             )
-        elif fill.action == 'sell':
+        elif fill.action == TRADE_ACTION_SELL:
             self._position = StrategyPosition()
         self._fills.append(fill)
 
     # ---- 内部算法 ----
 
     def _calc_sma(self, period: int) -> float:
-        if not self._close_history or period <= 0:
-            return 0.0
-        chunk = self._close_history[-period:]
-        return sum(chunk) / len(chunk)
+        return simple_moving_average(self._close_history, period)
 
     def _is_golden_cross(self, cur_short: float, cur_long: float) -> bool:
-        return (self._prev_sma_short <= self._prev_sma_long
-                and cur_short > cur_long)
+        return golden_cross(self._prev_sma_short, self._prev_sma_long,
+                            cur_short, cur_long)
 
     def _is_death_cross(self, cur_short: float, cur_long: float) -> bool:
-        return (self._prev_sma_short >= self._prev_sma_long
-                and cur_short < cur_long)
+        return death_cross(self._prev_sma_short, self._prev_sma_long,
+                           cur_short, cur_long)
 
     def _check_stop_loss(self, current_price: float) -> bool:
-        if self._position.entry_price <= 0:
-            return False
-        return ((self._position.entry_price - current_price)
-                / self._position.entry_price >= self._config.stop_loss_ratio)
+        return stop_loss_triggered(self._position.entry_price, current_price,
+                                    self._config.stop_loss_ratio)
 
     def _check_take_profit(self, current_price: float) -> bool:
-        if self._position.entry_price <= 0:
-            return False
-        return ((current_price - self._position.entry_price)
-                / self._position.entry_price >= self._config.take_profit_ratio)
+        return take_profit_triggered(self._position.entry_price, current_price,
+                                      self._config.take_profit_ratio)
 
     def _calc_position_size(self, price: float) -> int:
         c = self._config
-        vol = c.capital * c.position_ratio / (price * c.contract_size)
-        return max(1, int(vol))
+        return position_size(c.capital, c.position_ratio, price, c.contract_size)

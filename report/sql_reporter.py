@@ -15,14 +15,16 @@ from typing import TypedDict
 from data import Database, BacktestDict, BacktestTradeDict
 from common.stats import compute_summary_stats, rank_by_key
 from common.formatting import format_pct, format_float, ensure_float
+from common.constants import (
+    TRADE_DIRECTION_LONG,
+    TRADE_DIRECTION_SHORT,
+    TRADE_OFFSET_OPEN,
+    TRADE_OFFSET_CLOSE,
+    STATUS_SUCCESS,
+    STATUS_FAILED,
+)
 
 logger = logging.getLogger(__name__)
-
-_DIR_LONG = 'long'
-_DIR_SHORT = 'short'
-_OFFSET_OPEN = 'open'
-_OFFSET_CLOSE = 'close'
-
 
 # ── 内部工具 ──────────────────────────────────────────────────
 
@@ -71,10 +73,10 @@ def format_single_report(db: Database, backtest_id: int) -> str:
         t['trade_day'] for t in trades if t.get('trade_day')
     ))
     buy_count: int = sum(
-        1 for t in trades if t['direction'] == _DIR_LONG and t['offset'] == _OFFSET_OPEN
+        1 for t in trades if t['direction'] == TRADE_DIRECTION_LONG and t['offset'] == TRADE_OFFSET_OPEN
     )
     sell_count: int = sum(
-        1 for t in trades if t['direction'] == _DIR_SHORT and t['offset'] == _OFFSET_CLOSE
+        1 for t in trades if t['direction'] == TRADE_DIRECTION_SHORT and t['offset'] == TRADE_OFFSET_CLOSE
     )
 
     symbol = bt['symbol']
@@ -93,7 +95,7 @@ def format_single_report(db: Database, backtest_id: int) -> str:
         f"  运行时间:   {bt['created_at']}",
     ]
 
-    if status == 'failed':
+    if status == STATUS_FAILED:
         lines.append(f"  错误信息:   {bt.get('error_message') or 'N/A'}")
         lines.append(f"{'=' * 70}")
         return '\n'.join(lines)
@@ -158,8 +160,8 @@ def format_single_report(db: Database, backtest_id: int) -> str:
             f"  {'-' * 63}",
         ]
         for t in trades[-20:]:
-            d_tag: str = '多' if t['direction'] == _DIR_LONG else '空'
-            o_tag: str = '开' if t['offset'] == _OFFSET_OPEN else '平'
+            d_tag: str = '多' if t['direction'] == TRADE_DIRECTION_LONG else '空'
+            o_tag: str = '开' if t['offset'] == TRADE_OFFSET_OPEN else '平'
             lines.append(
                 f"  {t['datetime']:<20} "
                 f"{t['symbol']:<16} "
@@ -194,7 +196,7 @@ def format_comparison_report(
     records: list[BacktestDict] = []
     for bid in backtest_ids:
         bt = db.get_backtest(bid)
-        if bt and bt.get('status') == 'success':
+        if bt and bt.get('status') == STATUS_SUCCESS:
             records.append(bt)
 
     if not records:
@@ -363,7 +365,7 @@ def format_summary_report(
     records = db.get_backtests(
         symbol=symbol,
         strategy=strategy,
-        status='success',
+        status=STATUS_SUCCESS,
         limit=limit,
     )
 

@@ -8,6 +8,9 @@ from typing import Any
 
 import numpy as np
 
+from common.constants import DEFAULT_INITIAL_CAPITAL
+from common.formulas import total_return as calc_total_return, win_rate as calc_win_rate, avg_trades_per_day
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +19,7 @@ def generate_dataset_report(
     daily_results: list[dict] | None = None,
     dataset_name: str = "unknown",
     symbol: str = "",
-    initial_capital: float = 100000.0,
+    initial_capital: float = DEFAULT_INITIAL_CAPITAL,
     output_dir: str = ".quant_shared_data/reports",
     save_trades: bool = True,
     save_equity: bool = True,
@@ -100,7 +103,8 @@ def _extract_performance_metrics(statistics: dict, initial_capital: float) -> di
         return _ZERO_RETURN
 
     final_balance = statistics.get('end_balance', initial_capital)
-    total_return = (final_balance - initial_capital) / initial_capital if initial_capital > 0 else 0
+    total_return = calc_total_return(initial_capital, final_balance,
+                                     total_trades=total_trades)
 
     return {
         'initial_capital': initial_capital,
@@ -110,8 +114,8 @@ def _extract_performance_metrics(statistics: dict, initial_capital: float) -> di
         'total_trades': total_trades,
         'winning_trades': statistics.get('win_trades', 0),
         'losing_trades': statistics.get('loss_trades', 0),
-        'win_rate': f"{statistics.get('win_trades', 0) / max(total_trades, 1):.2%}",
-        'win_rate_abs': statistics.get('win_trades', 0) / max(total_trades, 1),
+        'win_rate': f"{calc_win_rate(statistics.get('win_trades', 0), total_trades):.2%}",
+        'win_rate_abs': calc_win_rate(statistics.get('win_trades', 0), total_trades),
         'avg_profit': statistics.get('average_win', 0),
         'avg_loss': statistics.get('average_loss', 0),
         'profit_loss_ratio': statistics.get('win_loss_ratio', 0),
@@ -148,8 +152,9 @@ def _extract_trade_summary(statistics: dict) -> dict:
         'start_date': str(statistics.get('start_date', '')),
         'end_date': str(statistics.get('end_date', '')),
         'total_days': statistics.get('total_days', 0),
-        'avg_trades_per_day': (
-            statistics.get('total_trades', 0) / max(statistics.get('total_days', 1), 1)
+        'avg_trades_per_day': avg_trades_per_day(
+            statistics.get('total_trades', 0),
+            statistics.get('total_days', 1),
         ),
         'max_consecutive_win': statistics.get('max_consecutive_win', 0),
         'max_consecutive_loss': statistics.get('max_consecutive_loss', 0),

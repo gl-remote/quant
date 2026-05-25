@@ -5,6 +5,30 @@ import yaml
 from typing import Dict, Any, Optional
 from pathlib import Path
 
+from common.constants import (
+    STRATEGY_MA,
+    DEFAULT_SMA_SHORT,
+    DEFAULT_SMA_LONG,
+    DEFAULT_STOP_LOSS_RATIO,
+    DEFAULT_TAKE_PROFIT_RATIO,
+    DEFAULT_POSITION_RATIO,
+    DEFAULT_KLINE_PERIOD,
+    DEFAULT_INITIAL_CAPITAL,
+    DEFAULT_COMMISSION_RATE,
+    DEFAULT_SLIPPAGE,
+    DEFAULT_PRICE_TICK,
+    DEFAULT_CONTRACT_SIZE,
+    DEFAULT_TRAIN_RATIO,
+    DEFAULT_VAL_RATIO,
+    DEFAULT_TEST_RATIO,
+    DEFAULT_RANDOM_SEED,
+    DEFAULT_DATA_BASE_DIR,
+    DEFAULT_EXPORT_DIR,
+    DEFAULT_DB_PATH,
+    DEFAULT_REPORT_OUTPUT_DIR,
+    KLINE_INTERVAL_1MIN,
+)
+
 
 class ConfigManager:
     """配置管理器 - 支持基础配置与本地覆盖配置的深度合并"""
@@ -38,7 +62,7 @@ class ConfigManager:
             else:
                 base[k] = v
 
-    def get_strategy_config(self, strategy_name: str = "ma") -> Dict[str, Any]:
+    def get_strategy_config(self, strategy_name: str = STRATEGY_MA) -> Dict[str, Any]:
         """获取指定策略的配置参数
 
         支持多种 YAML 配置格式，按优先级查找:
@@ -64,20 +88,20 @@ class ConfigManager:
         tc = self.config.get('trading', {})
 
         defaults = {
-            'stop_loss_ratio': 0.03,
-            'take_profit_ratio': 0.05,
-            'position_ratio': 0.1,
-            'kline_period': 5,
+            'stop_loss_ratio': DEFAULT_STOP_LOSS_RATIO,
+            'take_profit_ratio': DEFAULT_TAKE_PROFIT_RATIO,
+            'position_ratio': DEFAULT_POSITION_RATIO,
+            'kline_period': DEFAULT_KLINE_PERIOD,
         }
-        if strategy_name == 'ma':
-            defaults['sma_short'] = 5
-            defaults['sma_long'] = 20
+        if strategy_name == STRATEGY_MA:
+            defaults['sma_short'] = DEFAULT_SMA_SHORT
+            defaults['sma_long'] = DEFAULT_SMA_LONG
 
         return {**defaults, **sp, **risk, **tc}
 
     def get_trading_config(self) -> Dict[str, Any]:
         """获取交易配置 (兼容旧接口，委托给 get_strategy_config)"""
-        return self.get_strategy_config('ma')
+        return self.get_strategy_config(STRATEGY_MA)
 
     def get_account_info(self) -> Dict[str, str]:
         """获取天勤 API 凭证，环境变量优先于配置文件
@@ -119,15 +143,15 @@ class ConfigManager:
     def get_data_config(self) -> Dict[str, str]:
         dc = self.config.get('data', {})
         return {
-            'base_dir': self._resolve(dc.get('base_dir', '.quant_shared_data')),
-            'export_dir': self._resolve(dc.get('export_dir', '.quant_shared_data/csv')),
-            'db_path': self._resolve(dc.get('db_path', '.quant_shared_data/quant_shared.db')),
+            'base_dir': self._resolve(dc.get('base_dir', DEFAULT_DATA_BASE_DIR)),
+            'export_dir': self._resolve(dc.get('export_dir', DEFAULT_EXPORT_DIR)),
+            'db_path': self._resolve(dc.get('db_path', DEFAULT_DB_PATH)),
         }
 
     def get_export_config(self) -> Dict[str, str]:
         ec = self.config.get('export', {})
         return {
-            'default_dir': self._resolve(ec.get('default_dir', '.quant_shared_data/csv')),
+            'default_dir': self._resolve(ec.get('default_dir', DEFAULT_EXPORT_DIR)),
             'filename_template': ec.get('filename_template', '{symbol}_qlib.csv'),
         }
 
@@ -136,22 +160,22 @@ class ConfigManager:
         split_cfg = bc.get('split', {})
         report_cfg = bc.get('report', {})
         return {
-            'data_dir': self._resolve(bc.get('data_dir', '.quant_shared_data/csv')),
-            'initial_capital': bc.get('initial_capital', 100000.0),
-            'commission_rate': bc.get('commission_rate', 0.0003),
-            'slippage': bc.get('slippage', 1.0),
-            'price_tick': bc.get('price_tick', 1.0),
-            'contract_size': bc.get('contract_size', 10),
-            'interval': bc.get('interval', '1m'),
+            'data_dir': self._resolve(bc.get('data_dir', DEFAULT_EXPORT_DIR)),
+            'initial_capital': bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL),
+            'commission_rate': bc.get('commission_rate', DEFAULT_COMMISSION_RATE),
+            'slippage': bc.get('slippage', DEFAULT_SLIPPAGE),
+            'price_tick': bc.get('price_tick', DEFAULT_PRICE_TICK),
+            'contract_size': bc.get('contract_size', DEFAULT_CONTRACT_SIZE),
+            'interval': bc.get('interval', KLINE_INTERVAL_1MIN),
             'split': {
-                'train_ratio': split_cfg.get('train_ratio', 0.6),
-                'val_ratio': split_cfg.get('val_ratio', 0.2),
-                'test_ratio': split_cfg.get('test_ratio', 0.2),
-                'random_seed': split_cfg.get('random_seed', 42),
+                'train_ratio': split_cfg.get('train_ratio', DEFAULT_TRAIN_RATIO),
+                'val_ratio': split_cfg.get('val_ratio', DEFAULT_VAL_RATIO),
+                'test_ratio': split_cfg.get('test_ratio', DEFAULT_TEST_RATIO),
+                'random_seed': split_cfg.get('random_seed', DEFAULT_RANDOM_SEED),
                 'shuffle': split_cfg.get('shuffle', False),
             },
             'report': {
-                'output_dir': self._resolve(report_cfg.get('output_dir', '.quant_shared_data/reports')),
+                'output_dir': self._resolve(report_cfg.get('output_dir', DEFAULT_REPORT_OUTPUT_DIR)),
                 'save_trade_records': report_cfg.get('save_trade_records', True),
                 'save_equity_curve': report_cfg.get('save_equity_curve', True),
                 'format': report_cfg.get('format', 'json'),
@@ -160,7 +184,7 @@ class ConfigManager:
 
     def validate_config(self) -> bool:
         try:
-            sc = self.get_strategy_config('ma')
+            sc = self.get_strategy_config(STRATEGY_MA)
             if not (0 < sc['stop_loss_ratio'] <= 1 and 0 < sc['take_profit_ratio'] <= 1):
                 return False
             if not (0 < sc['position_ratio'] <= 1):
