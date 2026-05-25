@@ -63,6 +63,7 @@ class MaStrategyCore(Strategy):
     """
 
     name: str = STRATEGY_MA
+    VERSION: str = "v1.0.0"
 
     def __init__(self, config: Optional[TradingConfig] = None):
         self._config = config or TradingConfig()

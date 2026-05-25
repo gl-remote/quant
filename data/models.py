@@ -164,6 +164,8 @@ class Backtest(BaseModel):
     """回测记录（与数据库表结构保持一致）"""
     symbol = CharField()
     strategy = CharField()
+    strategy_version = CharField(null=True)  # 策略版本号
+    git_hash = CharField(null=True)          # 回测时的 Git 提交哈希
     status = CharField()
     error_message = TextField(null=True)
     data_start_date = CharField(null=True, max_length=10)
@@ -220,10 +222,23 @@ class BacktestTrade(BaseModel):
         table_name = 'backtest_trades'
 
 
+class BacktestDaily(BaseModel):
+    """回测每日资金曲线"""
+    backtest = ForeignKeyField(Backtest, backref='daily', on_delete='CASCADE')
+    date = DateField()
+    equity = FloatField()  # 当日资金净值
+    daily_return = FloatField()  # 当日收益率
+    drawdown = FloatField()  # 当日回撤
+    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    
+    class Meta:
+        table_name = 'backtest_daily'
+
+
 def init_database(db_path: str):
     """初始化数据库连接"""
     database.init(db_path)
-    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade], safe=True)
+    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)
 
 
 def close_database():

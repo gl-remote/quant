@@ -22,8 +22,8 @@ def generate_dataset_report(
     backtest_id: Optional[int] = None,
     initial_capital: float = DEFAULT_INITIAL_CAPITAL,
     output_dir: str = ".quant_shared_data/reports",
-    save_trades: bool = True,
-    save_equity: bool = True,
+    save_trades: bool = False,  # 默认不保存文件，数据已在数据库
+    save_equity: bool = False,  # 默认不保存文件，数据已在数据库
 ) -> dict[str, Any]:
     """为单个回测结果生成详细报告
 

@@ -55,6 +55,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         return f"错误: 未找到回测记录 id={backtest_id}"
 
     trades = dm.query_trades(backtest_id)
+    daily = dm.query_daily(backtest_id)
 
     trade_days: list[str] = sorted(set(
         str(_get_attr(t, 'datetime'))[:10] for t in trades if _get_attr(t, 'datetime')
@@ -71,6 +72,8 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
     symbol = bt.symbol
     strategy = bt.strategy
     status = bt.status
+    strategy_version = _get_attr(bt, 'strategy_version')
+    git_hash = _get_attr(bt, 'git_hash')
 
     lines: list[str] = [
         f"{'=' * 70}",
@@ -80,6 +83,8 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "【基本信息】",
         f"  品种:       {symbol}",
         f"  策略:       {strategy}",
+        f"  策略版本:   {strategy_version or 'N/A'}",
+        f"  Git哈希:    {git_hash or 'N/A'}",
         f"  状态:       {status}",
         f"  运行时间:   {_get_attr(bt, 'created_at')}",
     ]
@@ -94,10 +99,13 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "",
         "【数据范围】",
         f"  数据区间:   {_na_str(_get_attr(bt, 'start_date'))} ~ {_na_str(_get_attr(bt, 'end_date'))}",
-        f"  交易日数:   {_na_str(None)}",
+        f"  交易日数:   {len(daily)} 天",
         "",
         "【资金概况】",
+        f"  初始资金:   {_get_attr(bt, 'initial_capital', 0):,.2f}",
+        f"  最终权益:   {_get_attr(bt, 'end_balance', 0):,.2f}",
         f"  总收益率:   {format_pct(_get_attr(bt, 'total_return'))}",
+        f"  年化收益:   {format_pct(_get_attr(bt, 'annual_return'))}",
         "",
         "【交易统计】",
         f"  总交易次数: {_get_attr(bt, 'total_trades', 0) or 0}",
@@ -109,11 +117,30 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "【风险评估】",
         f"  夏普比率:   {format_float(_get_attr(bt, 'sharpe_ratio'))}",
         f"  最大回撤:   {format_pct(_get_attr(bt, 'max_drawdown'))}",
+        f"  日均波动率: {format_float(_get_attr(bt, 'daily_std'))}",
         "",
         "【交易明细】",
         f"  成交笔数:   {len(trades)} (开仓{buy_count} / 平仓{sell_count})",
         f"  交易日期:   {len(trade_days)} 天",
     ]
+    
+    if daily:
+        lines += [
+            "",
+            "【资金曲线（最近10天）】",
+            f"  {'日期':<12} {'权益':>12} {'日收益':>10} {'回撤':>8}",
+            f"  {'-' * 50}",
+        ]
+        for d in daily[-10:]:
+            equity = d.get('equity', 0)
+            daily_return = d.get('daily_return', 0)
+            drawdown = d.get('drawdown', 0)
+            lines.append(
+                f"  {d.get('date', ''):<12} "
+                f"{equity:>12,.2f} "
+                f"{daily_return:>+10,.2f} "
+                f"{drawdown:>8.2%}"
+            )
 
     if trades:
         lines += [
@@ -334,21 +361,25 @@ def format_summary_report(
         return f"未找到符合条件的回测记录 ({fstr})"
 
     lines: list[str] = [
-        f"{'=' * 90}",
+        f"{'=' * 110}",
         f"  回测汇总 ({len(records)} 条)",
-        f"{'=' * 90}",
-        f"  {'#':>5} {'品种':<18} {'策略':<6} {'收益率':>8} {'夏普':>7} {'回撤':>7} {'胜率':>7} {'交易':>5} {'时间':<16}",
-        f"  {'-' * 80}",
+        f"{'=' * 110}",
+        f"  {'#':>4} {'品种':<14} {'策略':<6} {'版本':<8} {'Git':<8} {'收益率':>8} {'夏普':>7} {'回撤':>7} {'胜率':>7} {'交易':>5} {'时间':<16}",
+        f"  {'-' * 100}",
     ]
 
     for bt in records:
         sym: str = bt.symbol or 'N/A'
         strat: str = bt.strategy or 'N/A'
+        version: str = getattr(bt, 'strategy_version', None) or 'N/A'
+        git: str = getattr(bt, 'git_hash', None) or 'N/A'
         created: str = str(bt.created_at or '')[:16]
         lines.append(
-            f"  {bt.id:>5} "
-            f"{sym:<18} "
+            f"  {bt.id:>4} "
+            f"{sym:<14} "
             f"{strat:<6} "
+            f"{version:<8} "
+            f"{git:<8} "
             f"{format_pct(bt.total_return):>8} "
             f"{format_float(bt.sharpe_ratio):>7} "
             f"{format_pct(bt.max_drawdown):>7}  "
@@ -357,6 +388,6 @@ def format_summary_report(
             f"{created:<16}"
         )
 
-    lines.append(f"{'=' * 90}")
+    lines.append(f"{'=' * 110}")
     lines.append(f"  使用 'python main.py report --id <ID>' 查看完整报告")
     return '\n'.join(lines)

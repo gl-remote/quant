@@ -30,6 +30,7 @@ class Strategy(ABC):
     """
 
     name: str = "base"
+    VERSION: str = "v0.0.0"
 
     # ---- 核心交易接口 ----
 

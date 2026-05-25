@@ -18,6 +18,7 @@ from .models import (
     OperationLog,
     Backtest,
     BacktestTrade,
+    BacktestDaily,
     BacktestRecord,
     TradeRecord,
     SymbolInfo,
@@ -55,7 +56,7 @@ class DataStore:
     def _init_tables(self):
         """初始化数据库表"""
         database.create_tables(
-            [ExportMetadata, OperationLog, Backtest, BacktestTrade],
+            [ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily],
             safe=True,
         )
     
@@ -223,6 +224,8 @@ class DataStore:
         params_json: Optional[str],
         data_start_date: Optional[str],
         data_end_date: Optional[str],
+        strategy_version: Optional[str] = None,
+        git_hash: Optional[str] = None,
     ) -> int:
         """插入完整的回测记录"""
         now = datetime.now()
@@ -236,6 +239,8 @@ class DataStore:
         bt = Backtest.create(
             symbol=symbol,
             strategy=strategy,
+            strategy_version=strategy_version,
+            git_hash=git_hash,
             status=status,
             error_message=error_message,
             data_start_date=data_start_date,
@@ -349,3 +354,52 @@ class DataStore:
             row['backtest_id'] = row.pop('backtest_id') if 'backtest_id' in row else backtest_id
             records.append(TradeRecord.from_dict(row))
         return records
+    
+    def insert_backtest_daily(self, backtest_id: int, daily_results: List[Dict]) -> int:
+        """批量插入每日资金曲线数据"""
+        now = datetime.now()
+        rows = []
+        
+        for daily in daily_results:
+            # 提取日期
+            dt = daily.get('datetime')
+            if not dt:
+                continue
+            # 格式化日期
+            date_str = str(dt).split(' ')[0] if ' ' in str(dt) else str(dt).split('T')[0]
+            
+            rows.append({
+                'backtest_id': backtest_id,
+                'date': date_str,
+                'equity': float(daily.get('balance', daily.get('equity', 0))),
+                'daily_return': float(daily.get('net_pnl', daily.get('daily_return', 0))),
+                'drawdown': float(daily.get('drawdown', 0)),
+                'created_at': now,
+            })
+        
+        if not rows:
+            return 0
+        
+        with database.atomic():
+            BacktestDaily.insert_many(rows).execute()
+        return len(rows)
+    
+    def query_daily(self, backtest_id: int) -> List[Dict]:
+        """查询每日资金曲线"""
+        rows = list(
+            BacktestDaily
+            .select()
+            .where(BacktestDaily.backtest_id == backtest_id)
+            .order_by(BacktestDaily.date.asc())
+            .dicts()
+        )
+        
+        results = []
+        for row in rows:
+            results.append({
+                'date': str(row.get('date', '')),
+                'equity': row.get('equity', 0),
+                'daily_return': row.get('daily_return', 0),
+                'drawdown': row.get('drawdown', 0),
+            })
+        return results

@@ -287,7 +287,9 @@ class DataManager:
     def insert_backtest(self, symbol: str, strategy: str, status: str,
                         error_message: Optional[str], statistics: dict,
                         engine_config: dict, params_json: Optional[str],
-                        data_start_date: Optional[str], data_end_date: Optional[str]) -> int:
+                        data_start_date: Optional[str], data_end_date: Optional[str],
+                        strategy_version: Optional[str] = None,
+                        git_hash: Optional[str] = None) -> int:
         """插入完整的回测记录"""
         return self.store.insert_backtest_detailed(
             symbol=symbol,
@@ -299,6 +301,8 @@ class DataManager:
             params_json=params_json,
             data_start_date=data_start_date,
             data_end_date=data_end_date,
+            strategy_version=strategy_version,
+            git_hash=git_hash,
         )
     
     def insert_backtest_trades(self, backtest_id: int, trades: List[Dict]) -> int:
@@ -322,6 +326,14 @@ class DataManager:
     def query_trades(self, backtest_id: int) -> List[TradeRecord]:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
+    
+    def insert_backtest_daily(self, backtest_id: int, daily_results: List[Dict]) -> int:
+        """批量插入每日资金曲线数据"""
+        return self.store.insert_backtest_daily(backtest_id, daily_results)
+    
+    def query_daily(self, backtest_id: int) -> List[Dict]:
+        """查询每日资金曲线"""
+        return self.store.query_daily(backtest_id)
     
     # ── 资源管理 ────────────────────────────────────────────
     

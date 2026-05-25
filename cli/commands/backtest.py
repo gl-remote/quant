@@ -12,8 +12,10 @@
 """
 
 import logging
+import subprocess
 from datetime import datetime
-from typing import List, Tuple, Any
+from pathlib import Path
+from typing import List, Tuple, Any, Optional
 
 from config import ConfigManager
 from data import DataManager
@@ -40,6 +42,28 @@ from strategies.core import (
 from common.formulas import calculate_fifo_profit
 
 logger = logging.getLogger(__name__)
+
+
+def get_git_hash() -> Optional[str]:
+    """获取当前 Git 提交的短哈希值（7位）
+    
+    Returns:
+        Git 提交哈希，如果不在 git 仓库中则返回 None
+    """
+    try:
+        repo_root = Path(__file__).parent.parent.parent
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception as e:
+        logger.warning(f"获取 Git 哈希失败: {e}")
+    return None
 
 
 def cmd_backtest(args):
@@ -236,6 +260,12 @@ def _run_vnpy_backtest(args, cm, dm):
 
         strategy_name = get_strategy_class_name(strategy)
         params_json = serialize_strategy_params(strategy)
+        git_hash = get_git_hash()
+        strategy_version = getattr(strategy, 'VERSION', None)
+        
+        if git_hash:
+            logger.info(f"Git 提交哈希: {git_hash}")
+        logger.info(f"策略版本: {strategy_version or 'N/A'}")
 
         all_results = []
         failed = []
@@ -281,12 +311,24 @@ def _run_vnpy_backtest(args, cm, dm):
                     params_json=params_json,
                     data_start_date=r.get('data_start_date'),
                     data_end_date=r.get('data_end_date'),
+                    strategy_version=strategy_version,
+                    git_hash=git_hash,
                 )
                 bt_ids.append(bt_id)
                 
                 if dr:
-                    trade_count = dm.insert_backtest_trades(bt_id, dr)
-                    logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
+                    # 1. 保存交易明细（从 daily_results 中提取 trades）
+                    trades = []
+                    for daily in dr:
+                        if 'trades' in daily:
+                            trades.extend(daily.get('trades', []))
+                    if trades:
+                        trade_count = dm.insert_backtest_trades(bt_id, trades)
+                        logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
+                    
+                    # 2. 保存每日资金曲线
+                    daily_count = dm.insert_backtest_daily(bt_id, dr)
+                    logger.debug(f"  {r['symbol']}: 写入 {daily_count} 条每日资金曲线")
                 
                 logger.info(f"\n>>> 生成回测报告 [{r['symbol']}]")
                 ctx = TradingContext.build(
