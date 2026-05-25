@@ -343,6 +343,32 @@ vol = capital * 0.1 / (price * 10)
 
 ---
 
+### 规则 9.2: 统一文档版本号（触发式同步）
+
+**唯一版本号来源**：`pyproject.toml` 的 `version` 字段是项目所有文档版本的唯一权威源。
+
+**版本标注格式**：所有文档在文件头第 3 行统一使用：
+```
+> 版本: X.Y.Z | 更新日期: YYYY-MM-DD
+```
+（`README.md` 用 Shields.io 徽章、`CHANGELOG.md` 用 Keep a Changelog H2 标题，其余全部使用此行格式）
+
+**同步策略——触发式（Lazy Sync）**：
+- **不**全量扫描、不主动巡检。仅在 AI 打开/修改/读取某文档时，检查其版本号是否与 `pyproject.toml` 一致。
+- 不一致 → 立即修正文件头版本号（仅修版本号，不强制同步内容）。
+- 内容同步遵循规则 9 的更新触发条件（API 变更才改 api-reference.md，配置变更才改 configuration.md，等等）。
+
+**同步检查流**：
+```
+打开文档 → 读文件头第 3 行 → 版本号 == pyproject.toml version?
+  ├─ 是 → 继续
+  └─ 否 → 自动修正为当前版本，更新日期为今天
+```
+
+**pyproject.toml 版本变更时**：不需要在 CHANGELOG 之外另行批量改文档。下次 AI 碰到哪个文档就会自动对齐。
+
+---
+
 ## 十、变更日志
 
 **重要改动统一记录在 `CHANGELOG.md`**，格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
