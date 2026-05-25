@@ -1,6 +1,6 @@
 # 贡献指南
 
-> 版本: 0.2.0 | 更新日期: 2026-05-24
+> 版本: 0.2.0 | 更新日期: 2026-05-25
 
 欢迎为天勤量化交易系统贡献代码。请先阅读本文，了解代码规范和提交流程。
 
@@ -31,7 +31,10 @@ pytest tests/ -q
 
 ```
 quant/
-├── main.py                    # CLI 入口
+├── main.py                    # CLI 入口 (转发器, 19 行)
+├── cli/                       # CLI 命令子包
+│   ├── main.py                #   参数解析与命令分发
+│   └── commands/              #   子命令 (export/test/backtest/report/live)
 ├── strategies/
 │   ├── core/                  # 策略抽象层 (ABC + 类型定义)
 │   │   ├── base.py            #   Strategy 基类
@@ -40,10 +43,11 @@ quant/
 │   ├── bridges/               # 框架桥接器
 │   │   ├── vnpy_bridge.py     #   vn.py CtaTemplate
 │   │   └── tqsdk_bridge.py    #   天勤 SDK
-│   ├── ma_strategy.py         # 均线策略核心
+│   ├── ma_strategy.py         # 均线策略核心 (173 行)
 ├── common/                    # 通用纯函数工具层（零 I/O、零依赖）
-│   ├── constants.py           #   全局业务常量字典
-│   ├── formulas.py            #   统一量化计算公式库
+│   ├── constants.py           #   全局业务常量字典 (60+)
+│   ├── formulas.py            #   统一量化计算公式库 (15+)
+│   ├── schemas.py             #   Pandera Schema 定义
 │   ├── metrics.py             #   绩效指标 (max_drawdown/sharpe)
 │   ├── stats.py               #   统计聚合 (rank_by_key/summary_stats)
 │   └── formatting.py          #   安全格式化 (format_pct/format_float)
@@ -51,14 +55,16 @@ quant/
 │   ├── vnpy_backtest_engine.py
 │   ├── tq_backtest_engine.py
 │   ├── data_loader.py
-│   ├── report.py
-│   ├── comparison.py
-│   ├── aggregator.py
-│   ├── metrics.py
 │   └── types.py
+├── report/                    # 报告子系统
+│   ├── dataset_reporter.py
+│   ├── comparison_reporter.py
+│   └── sql_reporter.py
 ├── data/                      # 数据子系统
-│   ├── exporter.py
-│   └── database.py
+│   ├── manager.py             #   DataManager 统一入口
+│   ├── models.py              #   Pydantic + peewee ORM 模型
+│   ├── store.py               #   SQLite 持久化层
+│   └── exporter.py            #   天勤→CSV 导出
 ├── config/                    # 配置管理
 ├── tests/                     # 测试
 ├── doc/                       # 文档
@@ -226,12 +232,12 @@ pytest tests/ --cov=. --cov-report=term-missing
 ```
 tests/
 ├── conftest.py              # 共享 fixtures
-├── test_ma_strategy.py      # 策略核心测试
-├── test_vnpy_bridge.py      # vn.py 桥接器测试
-├── test_tqsdk_bridge.py     # 天勤桥接器测试
-├── test_export.py           # 数据导出测试
-├── test_backtest.py         # 回测引擎测试
-└── test_aggregator.py       # 指标计算测试
+├── test_ma_strategy.py      # 策略核心测试 (425 行)
+├── test_common.py           # common/ 工具函数测试
+├── test_config_manager.py   # 配置管理器测试
+├── test_data_loader.py      # 数据加载测试
+├── test_database.py         # 数据库测试
+└── test_report_comparison.py # 报告对比测试 (425 行)
 ```
 
 ### 编写测试的原则

@@ -1,6 +1,6 @@
 # AI 行为规范约束
 
-> 版本: 0.2.0-dev | 更新日期: 2026-05-24
+> 版本: 0.2.0-dev | 更新日期: 2026-05-25
 
 ---
 
@@ -42,25 +42,38 @@ vn.py 和 tqsdk 为强制依赖，不再支持降级模式。
 
 ```
 quant/
-├── main.py                 # 命令行入口（子命令模式）
+├── main.py                 # 命令行入口转发器 (19 行)
 ├── plan.md                 # 项目改进计划（仅含未解决问题）
 ├── AI_BEHAVIOR_RULES.md    # 本文档
 ├── CHANGELOG.md            # 重要变更记录
 ├── .memory_rules.md         # 知识图谱记忆规则
 ├── run.sh / activate_env.sh
-├── tests/                  # 测试目录 (135 用例)
+├── tests/                  # 测试目录 (162 用例)
 │
+├── cli/                    # CLI 命令子包
+│   ├── main.py             #   参数解析与命令分发
+│   └── commands/           #   子命令实现 (export/test/backtest/report/live)
 ├── config/                 # 配置管理（YAML 分层合并）
 │   ├── conf.yaml           #   基础配置（提交版本控制）
 │   ├── conf.local.yaml     #   本地密钥覆盖（不提交）
 │   └── conf.example.yaml   #   配置模板
 ├── strategies/             # 策略子系统
 │   ├── core/               #   策略基类接口 (Strategy ABC)
-│   │   └── base.py         #     抽象基类定义
-│   ├── ma_strategy.py      #   均线交叉策略 (顶层，供 --strategy 发现)
+│   │   ├── base.py         #     抽象基类定义
+│   │   ├── types.py        #     Bar/Signal/Fill/StrategyPosition
+│   │   └── context.py      #     TradingContext
+│   ├── ma_strategy.py      #   均线交叉策略 (173 行, 99% 覆盖)
 │   └── bridges/            #   vn.py / 天勤 桥接器
+├── common/                 # 通用工具层（零 I/O、零依赖）
+│   ├── constants.py        #   全局常量字典 (60+)
+│   ├── formulas.py         #   量化计算公式库 (15+)
+│   ├── schemas.py          #   Pandera Schema 定义
+│   ├── metrics.py          #   绩效指标
+│   ├── stats.py            #   统计聚合
+│   └── formatting.py       #   安全格式化
 ├── backtest/               # 回测子系统（引擎+数据+报告+对比）
-├── data/                   # 数据子系统（导出+SQLite）
+├── report/                 # 报告生成（单数据集/多品种/DB）
+├── data/                   # 数据子系统（manager/models/store/exporter）
 └── doc/                    # 项目文档
 ```
 

@@ -1,6 +1,6 @@
 # 天勤量化交易系统
 
-![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-163%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-53%25-brightgreen)
+![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-162%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-51%25-yellow)
 
 基于双均线交叉（SMA Crossover）策略的自动化量化交易系统，支持数据获取、三阶段回测、过拟合评估及实盘交易。
 
@@ -32,7 +32,15 @@ quant/
 │   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
 │   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测引擎、数据加载、报告对比
-├── data/                   # 数据导出、SQLite 管理
+├── report/                 # 报告生成 (单数据集/多品种对比/DB 报告)
+├── data/                   # 数据管理 (models/store/manager/exporter)
+├── common/                 # 公共工具（零依赖）
+│   ├── constants.py        #   全局常量字典 (60+)
+│   ├── formulas.py         #   量化计算公式库 (15+)
+│   ├── schemas.py          #   Pandera Schema 定义
+│   ├── metrics.py          #   绩效指标计算
+│   ├── stats.py            #   统计聚合
+│   └── formatting.py       #   安全格式化
 ├── cli/                    # 命令行接口（重构后）
 │   ├── main.py             #   参数解析与命令分发
 │   └── commands/           #   命令实现

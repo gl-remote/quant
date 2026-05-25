@@ -10,40 +10,49 @@
 
 | 指标 | 数值 |
 |------|------|
-| 生产代码 | 4,568 行 (36 个 .py 文件) |
-| 测试代码 | ~1,600 行 (7 个 test 文件) |
+| 生产代码 | 7,819 行 (48 个 .py 文件) |
+| 测试代码 | ~2,000 行 (7 个 test 文件) |
 | 测试用例 | **162** 个全通过，0 失败 |
-| 覆盖率 | **66%** (1,315 stmts / 445 missed) |
+| 覆盖率 | **51%** (2,098 stmts / 1,021 missed) |
 | 策略类型 | 1 (双均线 MA) |
 | CI | GitHub Actions (pytest + flake8) |
 | Python | 3.10+ |
 
+> 覆盖率下降因代码量增长 71%（4,568→7,819）但测试未同比扩充。核心策略模块 `ma_strategy.py` 覆盖率 99%。
+
 ### 1.2 模块架构
 
 ```
-main.py (678 行 CLI 入口)
-├── strategies/      策略核心 (框架无关)
-│   ├── core/        Strategy ABC + Bar/Signal/Fill/Position 类型
-│   ├── bridges/     vnpy 桥接 + 天勤桥接 (协议转换层)
-│   └── ma_strategy.py  双均线策略实现
-├── backtest/        回测引擎
-│   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward (包装官方引擎)
-│   ├── tq_backtest_engine.py     天勤 GUI 回测 (单标的图形化)
-│   ├── data_loader.py            CSV 加载 / 窗口切分
-│   └── types.py                  回测结果类型
-├── data/            数据层
-│   ├── database.py  SQLite + peewee ORM
-│   ├── models.py    完整 TypedDict 体系
-│   └── exporter.py  天勤 → Qlib CSV 导出
-├── report/          报告层
+main.py (19 行转发器) → cli/ (命令行子包)
+├── cli/main.py          参数解析 + 命令分发 (149 行)
+│   └── commands/        5 个子命令 (export/test/backtest/report/live)
+├── strategies/          策略核心 (框架无关)
+│   ├── core/            Strategy ABC + Bar/Signal/Fill/Position 类型
+│   ├── bridges/         vnpy 桥接 + 天勤桥接 (协议转换层)
+│   └── ma_strategy.py  双均线策略 (173 行, 99% 覆盖)
+├── backtest/            回测引擎
+│   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward (415 行)
+│   ├── tq_backtest_engine.py    天勤 GUI 回测 (单标的图形化)
+│   ├── data_loader.py           CSV 加载 / 窗口切分
+│   └── types.py                 回测结果类型
+├── data/                数据层
+│   ├── store.py          SQLite + peewee ORM (405 行)
+│   ├── models.py         Pydantic + ORM 模型 (246 行)
+│   ├── manager.py        DataManager 统一入口
+│   └── exporter.py       天勤 → CSV 导出
+├── report/              报告层
 │   ├── dataset_reporter.py     单数据集 JSON 报告
 │   ├── comparison_reporter.py  多品种横向对比 + 排名
 │   └── sql_reporter.py         SQLite 只读报告
-├── common/          纯函数工具层 (零 I/O)
-│   ├── metrics.py   max_drawdown / sharpe_ratio
-│   ├── stats.py     rank_by_key / summary_stats
-│   └── formatting.py  百分比/浮点数格式化
-└── config/          配置管理 (YAML)
+├── common/              纯函数工具层 (零 I/O)
+│   ├── constants.py     全局常量字典 (166 行, 60+ 常量)
+│   ├── formulas.py      统一量化计算公式库 (437 行, 15+ 公式)
+│   ├── schemas.py        Pandera Schema 定义 (124 行, 4 Schema)
+│   ├── metrics.py        max_drawdown / sharpe_ratio
+│   ├── stats.py          rank_by_key / summary_stats
+│   └── formatting.py     百分比/浮点数格式化
+└── config/              配置管理
+    └── config_manager.py YAML 分层合并 + 校验 (220 行)
 ```
 
 ### 1.3 架构决策记录
@@ -54,22 +63,29 @@ main.py (678 行 CLI 入口)
 | **复用官方回测引擎** | vnpy BacktestingEngine 负责订单撮合/滑点/手续费/逐日盯市，外层仅做数据注入和批量编排 |
 | **绩效单一来源** | 盈亏/夏普/回撤统一从 vnpy calculate_statistics 获取，Strategy 不自算 (已移除 Performance 类) |
 | **fills 作为交易日志** | Strategy.fills 记录每笔成交的方向/价格/手数/原因，只读不计算 |
-| **peewee ORM** | 替代 raw SQL，完整的 type-safe 数据库层 |
+| **全局常量字典** | 60+ 业务常量统一在 `common/constants.py`，消除全部魔术数字/字符串 |
+| **统一公式库** | 15+ 量化公式统一在 `common/formulas.py`，零重复实现、可独立测试 |
+| **Pandera Schema** | 4 个 DataFrame Schema 全局统一定义在 `common/schemas.py`，数据加载自动校验 |
+| **Pydantic + peewee ORM** | 单条记录 Pydantic 校验 + 持久层 peewee ORM，完整类型安全 |
+| **CLI 子包化** | `main.py` 为 19 行转发器，命令实现在 `cli/commands/`，每个命令独立模块 |
 | **common/ 零依赖** | 纯函数、零 I/O、零副作用，可被所有模块安全引用 |
 
-### 1.4 近期变更 (2026-05-25, 自上次 plan 更新以来)
+### 1.4 近期变更 (2026-05-25)
 
 | 提交 | 变更 |
 |------|------|
+| `164d00d` | **refactor**: 数据模块配置管理：移除硬编码，统一通过 config 读取 |
+| `a342811` | **feat**: 全项目代码升级与清理 |
+| `6a13da1` | **feat**: 在 common/schemas.py 定义全局统一的 Pandera Schema |
+| `11ac75f` | **refactor**: 重构 data 模块，全面使用 Pandera + Pydantic 验证 |
+| `56ed973` | **refactor**: CLI 架构重构完成 + 文档同步更新 |
+| `f5fac35` | **fix**: vnpy_backtest_engine 全局常量替换 + 数据不足边界修复 |
+| `27e14b6` | **docs**: 常量字典+公式库规范写入 AI_BEHAVIOR_RULES + CONTRIBUTING |
+| `6041db1` | **refactor**: 全局常量标准化 + 公式库统一替换 |
+| `5f561bd` | **feat(common)**: 新增 constants.py 全局常量字典 + formulas.py 统一计算公式库 |
+| `43ac62a` | **docs**: .memory_rules.md 新增 Bug 修复记录表 |
 | `b271654` | **refactor**: 移除 Strategy.performance，绩效单一来源为 vnpy |
-| `eb18b81` | **refactor**: symbols_data 扁平化，删除 backtest.aggregator |
-| `882f555` | **refactor**: 重构回测模块，报表逻辑移至 report 包 |
-| `3ac1307` | **refactor**: 强制类型化 ORM 架构，消除 Any 残留 |
-| `fab775e` | **refactor**: 引入 peewee ORM 替代 raw SQL |
-| `ef2e586` | **test**: 新增 tests/test_common.py，覆盖 common/ 全部纯函数 |
-| `e60eee8` | **fix**: 重命名 lib/ → common/ |
-| `0a880a8` | **refactor**: 提取 common/ 通用纯函数模块 |
-| `cdf0982` | **feat**: 回测执行与报告解耦 (DB 持久化 + cmd_report) |
+| `a3af52a` | **docs**: 刷新 plan.md 项目状态和缺陷清单 |
 
 ---
 
@@ -89,7 +105,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | **S3** 生产加固 | 风控熔断 + 通知 | 未开始 |
 | **S4** 基础设施 | Docker + 多数据源 | 未开始 |
 
-> 当前处于 **S0: 工程基础打磨完成**，工具链/测试/CI/架构已就绪，可以进入 S1。
+> 当前处于 **S0: 工程基础打磨完成**，全局常量/公式库/CLI 重构/Pandera 校验已就绪，代码量 7,819 行，8 Bug 全部修复，可进入 S1。
 
 ### S1: 策略研发工具
 
@@ -165,7 +181,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-01 | 🟡 高 | `_calc_position_size` 总是最少买 1 手 | `ma_strategy.py:153-156` | `max(1, int(vol))` 在资金不足时仍返回 1，下单会超资金限额被 vnpy 拒绝，但无前置检查 |
 | DEF-02 | 🟡 中 | `compute_summary_stats` 对 NaN 无防护 | `common/stats.py:46-57` | `np.mean/median/std` 对含 NaN 数组返回 NaN，调用方（comparison_reporter）直接格式化输出 |
 | DEF-03 | 🟡 中 | `calc_sharpe_ratio` 零权益无防护 | `common/metrics.py:48-49` | `returns = np.diff(curve) / curve[:-1]` 当 curve 含零时除零 → inf/nan。`std==0` 返回 999 或 0，但 inf mean 未处理 |
-| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作有竞态窗口 | `data/database.py:147-183` | SELECT → 判断存在 → UPDATE/CREATE 分两步，并发 exporter 可能产生重复记录 |
+| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作有竞态窗口 | `data/store.py` | SELECT → 判断存在 → UPDATE/CREATE 分两步，并发 exporter 可能产生重复记录 |
 | DEF-05 | 🟡 中 | `_InjectedStrategy` 闭包+临时属性时序脆弱 | `vnpy_backtest_engine.py:87-98` | 闭包捕获 `self._backtest_context`，该属性在 batch 模式下每品种覆写。虽然当前单线程安全，但属性语义是"最后的品种"而非"当前品种" |
 | DEF-06 | 🟡 中 | tqsdk 实盘硬编码日线 | `tqsdk_bridge.py:136` | `api.get_kline_serial(symbol, 86400)` 硬编码 86400 秒（日线），不通过配置传入 |
 | DEF-07 | 🟡 中 | max_drawdown 归一化三处重复且不一致 | `comparison_reporter.py:275`, `sql_reporter.py:386`, `formatting.py:27` | 同样 `abs(dd)>1 → /100` 逻辑分散三处，与 `format_pct` 的归一化逻辑不同，混用时结果不一致 |
@@ -200,7 +216,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | ARC-01 | `_InjectedStrategy` 闭包注入脆弱 | 中 | 依赖 `self._backtest_context` 临时属性+闭包捕获，并发调用会竞态 |
 | ARC-02 | `data_loader.py` 覆盖率仅 37% | 中 | Walk-Forward 切分/CSV 扫描路径几乎无测试 |
 | ARC-03 | `vnpy_backtest_engine.py` 覆盖率 11% | 中 | 核心引擎依赖 vnpy 运行时，无法在 CI 环境 mock |
-| ARC-04 | `main.py` 678 行单一入口 | 低 | CLI 子命令逻辑内联，后续可拆分为 `cli/` 包 |
+| ARC-04 | ~~`main.py` 678 行单一入口~~ ✅ 已修复 | — | 已重构为 `cli/` 子包，`main.py` 仅 19 行转发 |
 | ARC-05 | `sql_reporter.py` 覆盖率 19% | 低 | SQL 报告路径几乎未测试 |
 
 ### 3.5 本次审计已确认安全 ✅
@@ -252,12 +268,12 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 指标 | 当前 (2026-05-25) | S1 目标 | S2 目标 | S3 目标 |
 |------|-------------------|---------|---------|---------|
-| Bug 数 | **8** (0 → 8) | 0 | 0 | 0 |
+| Bug 数 | **0** (8/8 已修复) | 0 | 0 | 0 |
 | 测试用例数 | 162 ✅ | 165+ | 175+ | 185+ |
-| 覆盖率 | 66% | ≥ 70% | ≥ 75% | ≥ 80% |
+| 覆盖率 | 51% | ≥ 55% | ≥ 65% | ≥ 75% |
 | 策略类型数 | 1 (MA) | 1 | 2+ | 2+ |
 | CI 状态 | ✅ 通过 | 通过 | 通过 | 通过 |
-| 库存问题数 | **31** (8 Bug + 23 缺陷/架构) | — | — | — |
+| 生产代码行 | 7,819 | — | — | — |
 
 ---
 
@@ -265,7 +281,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| **0.2.0-dev** | **2026-05-25** | 第三次全量审计：发现 8 项 Bug（含 2 严重）、11 项缺陷；确认保留 12 项存量缺陷；Bug 清零后再考虑进入 S1 |
-| 0.2.0-dev | 2026-05-25 | 移除双重绩效系统；symbols_data 扁平化；删除 aggregator；引入 peewee ORM；lib→common；回测与报告解耦 |
+| **0.2.0-dev** | **2026-05-25** | 第四次全量审计：全局常量标准化 + 公式库统一 + Pandera 校验 + CLI 重构完成。代码量 7,819 行，8 Bug 全部修复 |
+| 0.2.0-dev | 2026-05-25 | 第三次审计：移除双重绩效系统；symbols_data 扁平化；peewee ORM；lib→common；回测与报告解耦 |
 | 0.2.0-dev | 2026-05-24 | backtest 两轮审计修复 (15 项 Bug/缺陷)；DB 持久化 + cmd_report；S1-S4 四阶段规划 |
 | 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备 |
