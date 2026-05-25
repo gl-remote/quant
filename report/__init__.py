@@ -14,8 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from data import DataManager
-from .single import format_single_report
-from .summary import format_summary_report
+from .reports import format_single_report, format_summary_report
 from .charts import create_figure
 from ._html import render_html
 
