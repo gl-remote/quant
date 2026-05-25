@@ -13,7 +13,6 @@ vn.py 为强制依赖。
 """
 
 import logging
-from datetime import datetime
 from typing import Any, Optional
 
 from vnpy_ctastrategy import CtaTemplate

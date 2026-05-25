@@ -15,6 +15,7 @@ from common.constants import (
     DEFAULT_SLIPPAGE,
     DEFAULT_PRICE_TICK,
     DEFAULT_CONTRACT_SIZE,
+    DEFAULT_KLINE_PERIOD,
 )
 
 
@@ -40,7 +41,7 @@ class TradingContext:
     strategy: Strategy
     symbol: str = ""
     capital: float = DEFAULT_INITIAL_CAPITAL
-    kline_period: int = 5
+    kline_period: int = DEFAULT_KLINE_PERIOD
     commission_rate: float = DEFAULT_COMMISSION_RATE
     slippage: float = DEFAULT_SLIPPAGE
     price_tick: float = DEFAULT_PRICE_TICK
@@ -85,7 +86,7 @@ class TradingContext:
             strategy=strategy,
             symbol=symbol,
             capital=capital,
-            kline_period=config_manager.get_strategy_config().get('kline_period', 5),
+            kline_period=config_manager.get_strategy_config().get('kline_period', DEFAULT_KLINE_PERIOD),
             commission_rate=bc.get('commission_rate', DEFAULT_COMMISSION_RATE),
             slippage=bc.get('slippage', DEFAULT_SLIPPAGE),
             price_tick=bc.get('price_tick', DEFAULT_PRICE_TICK),

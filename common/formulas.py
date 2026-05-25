@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import math
 
+# 每交易日交易秒数 (4 小时)
+_SECONDS_PER_TRADING_DAY = 14400
+
 
 # ============================================================================
 # FIFO 盈亏计算 (FIFO PnL Calculation)
@@ -433,6 +436,6 @@ def convert_annual_factor(kline_seconds: int) -> int:
     """
     if kline_seconds <= 0:
         return 252
-    seconds_per_day = 14400  # 4 小时 = 14400 秒
+    seconds_per_day = _SECONDS_PER_TRADING_DAY
     periods_per_day = seconds_per_day / kline_seconds
     return int(periods_per_day * 252)

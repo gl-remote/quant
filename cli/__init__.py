@@ -28,9 +28,10 @@ from strategies.core import (
     TradingContext,
 )
 from common.formulas import calculate_fifo_profit
+from common.constants import DEFAULT_INITIAL_CAPITAL
 
 
-def build_context(strategy, symbol, config_manager, capital=100000.0):
+def build_context(strategy, symbol, config_manager, capital=DEFAULT_INITIAL_CAPITAL):
     """兼容性包装：委托给 TradingContext.build"""
     return TradingContext.build(strategy, symbol, config_manager, capital)
 

@@ -6,8 +6,6 @@ from pathlib import Path
 from datetime import datetime
 from typing import Any, Optional
 
-import numpy as np
-
 from common.constants import DEFAULT_INITIAL_CAPITAL
 from common.formulas import total_return as calc_total_return, win_rate as calc_win_rate, avg_trades_per_day
 

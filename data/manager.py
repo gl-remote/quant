@@ -14,6 +14,8 @@
 import logging
 import re
 from typing import Optional, List, Dict, Any
+
+from common.constants import COMMON_KLINE_INTERVALS, Qlib_SUFFIX, Qlib_SUFFIX_LEN
 import pandas as pd
 from pathlib import Path
 
@@ -114,14 +116,14 @@ class DataManager:
             if last_dot != -1:
                 suffix_part = name[last_dot + 1:]
                 # 检查后面的部分是否像常见的interval
-                common_intervals = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M', '3M', '6M', '1Y']
+                common_intervals = COMMON_KLINE_INTERVALS
                 if suffix_part in common_intervals:
                     symbol = name[:last_dot]
             
             # 如果新格式没匹配到，尝试旧格式或无后缀格式
             if symbol is None:
-                if name.endswith('_qlib'):
-                    symbol = name[:-5]
+                if name.endswith(Qlib_SUFFIX):
+                    symbol = name[:-Qlib_SUFFIX_LEN]
                 else:
                     # 直接用文件名作为symbol
                     symbol = name

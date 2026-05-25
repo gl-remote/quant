@@ -15,6 +15,7 @@ import argparse
 import logging
 
 from config import ConfigManager
+from common.constants import DEFAULT_INITIAL_CAPITAL
 
 # 配置日志（必须在导入其他模块之前）
 cm = ConfigManager()
@@ -89,7 +90,7 @@ def main():
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD（可选）')
     p.add_argument('--strategy', default=None,
                    help='策略名称 (e.g. ma/ma_strategy/ma_strategy.py)，默认 ma')
-    p.add_argument('--capital', type=float, default=100000.0, help='初始资金（默认 100000）')
+    p.add_argument('--capital', type=float, default=DEFAULT_INITIAL_CAPITAL, help='初始资金（默认 100000）')
     p.add_argument('--gui', action='store_true', help='启用图形界面（仅单品种模式生效）')
 
     # ---- report ----
