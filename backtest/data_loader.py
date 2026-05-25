@@ -295,7 +295,7 @@ def walk_forward_split_by_ratio(
     """Walk-Forward 时间序列交叉验证 — 基于比例参数
 
     将 walk_forward_split 的行数参数转换为比例参数，
-    自动计算合适的窗口大小。
+    自动计算合适的窗口大小，保证至少 min_windows 个窗口。
 
     Args:
         df: 按时间排序的完整历史数据集
@@ -307,31 +307,63 @@ def walk_forward_split_by_ratio(
 
     Returns:
         [(train_df, val_df, test_df), ...] 按时间顺序排列的窗口列表
+
+    Raises:
+        ValueError: 比例之和不为 1.0 或数据量不足以产生至少 1 个窗口
     """
     total_ratio = train_ratio + val_ratio + test_ratio
     if abs(total_ratio - 1.0) > 1e-9:
         raise ValueError(f"比例之和必须为 1.0，当前: {total_ratio}")
 
     n = len(df)
-    # 窗口总行数 = 全量数据 / (1 + (min_windows - 1) * step_ratio)
-    # 使得至少有 min_windows 个窗口
-    window_total = int(n / (1 + (min_windows - 1) * step_ratio))
+    if n < 1:
+        raise ValueError("数据量为 0，无法划分窗口")
 
-    train_size = int(window_total * train_ratio)
-    val_size = int(window_total * val_ratio)
-    # 用剩余行数兜底，避免多次 int 截断导致每个窗口丢 1~2 行
-    test_size = window_total - train_size - val_size
-    step = max(1, int(window_total * step_ratio))
+    def _calc_sizes(ratio: float) -> tuple:
+        window_total = int(n / (1 + (min_windows - 1) * ratio))
+        if window_total < 1:
+            return 0, 0, 0, 0
+        train_size = int(window_total * train_ratio)
+        val_size = int(window_total * val_ratio)
+        test_size = window_total - train_size - val_size
+        step = max(1, int(window_total * ratio))
+        return train_size, val_size, test_size, step
 
-    # 修正浮点导致的窗口总大小偏差
+    def _count_windows(ts: int, vs: int, tes: int, st: int) -> int:
+        wsize = ts + vs + tes
+        if wsize > n or st < 1:
+            return 0
+        return (n - wsize) // st + 1
+
+    effective_ratio = step_ratio
+    train_size, val_size, test_size, step = _calc_sizes(effective_ratio)
+
+    max_attempts = 10
+    for attempt in range(max_attempts):
+        actual_windows = _count_windows(train_size, val_size, test_size, step)
+        if actual_windows < min_windows:
+            effective_ratio *= 0.8
+            train_size, val_size, test_size, step = _calc_sizes(effective_ratio)
+            if train_size < 1:
+                break
+        else:
+            break
+
+    if train_size < 1:
+        raise ValueError(f"数据量 {n} 不足以产生至少 {min_windows} 个窗口")
+
     actual_window = train_size + val_size + test_size
-    if actual_window + step > n:
-        step = max(1, (n - actual_window) // max(min_windows - 1, 1))
+    actual_windows = _count_windows(train_size, val_size, test_size, step)
+    if actual_windows < min_windows:
+        logger.warning(
+            f"Walk-Forward 只能产生 {actual_windows} 个窗口 (min_windows={min_windows})，"
+            f"数据量 {n} 不足，使用实际窗口数"
+        )
 
     logger.info(
         f"Walk-Forward (按比例): 窗口总行={actual_window} "
         f"(train={train_size}, val={val_size}, test={test_size}), "
-        f"step={step}, 数据量={n}"
+        f"step={step}, 窗口数={actual_windows}, 数据量={n}"
     )
 
     return walk_forward_split(df, train_size, val_size, test_size, step)
