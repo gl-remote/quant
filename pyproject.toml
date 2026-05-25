@@ -41,7 +41,7 @@ dev = [
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html"
+addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "core: tests for strategy core module",

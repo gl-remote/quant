@@ -67,7 +67,7 @@ logs/
 # Testing
 .pytest_cache/
 .coverage
-htmlcov/
+output/
 
 # Distribution / packaging
 *.egg-info/
