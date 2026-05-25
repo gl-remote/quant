@@ -15,8 +15,7 @@ import logging
 
 from config import ConfigManager
 from data import DataManager
-from report import format_single_report, format_summary_report
-from visualizer import build_report
+from report import format_single_report, format_summary_report, build_report
 
 logger = logging.getLogger(__name__)
 
