@@ -143,32 +143,57 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ## 三、代码审计：缺陷清单
 
-> 审计日期: 2026-05-25 | 基准: 量化交易系统行业惯例
+> 审计日期: 2026-05-25 (第三次全量审计) | 基准: 量化交易系统行业惯例 | 覆盖: 36 个 .py 文件全部审阅
 
-### 3.1 存量缺陷 (10 项)
+### 3.1 Bug — 逻辑错误/数值计算错误
+
+| 编号 | 严重度 | 问题 | 文件:行 | 根因与影响 |
+|------|--------|------|---------|-----------|
+| BUG-01 | 🔴 严重 | tq-backtest 盈亏计算错误 (笛卡尔积) | `main.py:458-464` | `for sf in sells: for bf in buys: total += (sf.price - bf.price) * sf.volume` 每笔卖出与**所有**买入逐一配对，不是配对撮合。盈亏总额完全失真 |
+| BUG-02 | 🔴 严重 | TQBacktestEngine 零手续费/滑点 | `tq_backtest_engine.py:43-67` | `add_trade` 中买入扣 `price*quantity`、卖出加回同额，无手续费率/滑点扣减。权益曲线系统性偏高 |
+| BUG-03 | 🟡 高 | `format_pct` 语义启发式不可靠 | `common/formatting.py:27-28` | `abs(v) > 1 → v/100` 在回撤值为 -1.5（比值 -1.5，即 -150%）时被迫归一化为 -0.015（显示 -1.50%），完全错误。整个代码库调用方混用比值和百分比值 |
+| BUG-04 | 🟡 高 | `_run_backtest` 零异常处理 | `vnpy_backtest_engine.py:298-372` | Walk-Forward 200 个窗口中任一 `engine.run_backtesting()` 崩溃，整个循环终止，已成功的窗口结果全部作废 |
+| BUG-05 | 🟡 中 | 买卖统计方向常值混淆 | `sql_reporter.py:68-73` | vnpy 返回 `direction='long'/'short'`（对应开多/开空），但 `MaStrategy` fill 记录使用 `action='buy'/'sell'`。DB 存储 vnpy 方向值，SQL 报告查询 `direction=='long' and offset=='open'` 依赖 vnpy 内部表示，脆弱 |
+| BUG-06 | 🟡 中 | Walk-Forward 窗口数公式为近似值 | `data_loader.py:318` | `n/(1+(min_windows-1)*step_ratio)` 在浮点截断 + int 舍入下，实际窗口数可能少于 min_windows，且不警告 |
+| BUG-07 | 🟡 中 | `annual_return_abs` 命名与值不匹配 | `dataset_reporter.py:119-120` | `annual_return_abs` 命名暗示绝对金额，实际存储 `statistics.get('annual_return', 0)` 即 vnpy 返回的**比值**（如 0.15 = 15%）。comparison_reporter 按 `total_return_abs` 取值时类型预期混乱 |
+| BUG-08 | 🟢 低 | `config_manager` 静默修改源配置字典 | `config_manager.py:76-79` | `_load` 返回 `self.config` 引用，`get_strategy_config` 对 `tc` 字典写入默认值 → 污染全局配置。后续获取同一 key 会得到默认值而非原始缺失 |
+
+### 3.2 缺陷 — 质量/鲁棒性/工程实践
+
+| 编号 | 严重度 | 问题 | 文件:行 | 说明 |
+|------|--------|------|---------|------|
+| DEF-01 | 🟡 高 | `_calc_position_size` 总是最少买 1 手 | `ma_strategy.py:153-156` | `max(1, int(vol))` 在资金不足时仍返回 1，下单会超资金限额被 vnpy 拒绝，但无前置检查 |
+| DEF-02 | 🟡 中 | `compute_summary_stats` 对 NaN 无防护 | `common/stats.py:46-57` | `np.mean/median/std` 对含 NaN 数组返回 NaN，调用方（comparison_reporter）直接格式化输出 |
+| DEF-03 | 🟡 中 | `calc_sharpe_ratio` 零权益无防护 | `common/metrics.py:48-49` | `returns = np.diff(curve) / curve[:-1]` 当 curve 含零时除零 → inf/nan。`std==0` 返回 999 或 0，但 inf mean 未处理 |
+| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作有竞态窗口 | `data/database.py:147-183` | SELECT → 判断存在 → UPDATE/CREATE 分两步，并发 exporter 可能产生重复记录 |
+| DEF-05 | 🟡 中 | `_InjectedStrategy` 闭包+临时属性时序脆弱 | `vnpy_backtest_engine.py:87-98` | 闭包捕获 `self._backtest_context`，该属性在 batch 模式下每品种覆写。虽然当前单线程安全，但属性语义是"最后的品种"而非"当前品种" |
+| DEF-06 | 🟡 中 | tqsdk 实盘硬编码日线 | `tqsdk_bridge.py:136` | `api.get_kline_serial(symbol, 86400)` 硬编码 86400 秒（日线），不通过配置传入 |
+| DEF-07 | 🟡 中 | max_drawdown 归一化三处重复且不一致 | `comparison_reporter.py:275`, `sql_reporter.py:386`, `formatting.py:27` | 同样 `abs(dd)>1 → /100` 逻辑分散三处，与 `format_pct` 的归一化逻辑不同，混用时结果不一致 |
+| DEF-08 | 🟡 中 | `get_strategy_config` 合并顺序无文档 | `config_manager.py:80` | `{**defaults, **sp, **risk, **tc}` 优先级隐式。tc (trading) 覆盖 risk 覆盖 strategy_params，同 key 从何处生效不可预测 |
+| DEF-09 | 🟡 中 | test 模式 — 测试用例只验证固定两行模拟数据 | `main.py:224-239` | 金叉/止损各一行测试，回测结果无任何数值断言；通过 ≠ 正确 |
+| DEF-10 | 🟢 低 | `np.std` 多处未统一 ddof | `vnpy_backtest_engine.py:265`, `common/stats.py:64` | WF 用 `ddof=1`(样本)，stats 用 `ddof=0`(总体)，不一致导致 Walk-Forward 对比 report 聚合结果偏差 |
+| DEF-11 | 🟢 低 | `DataFrame.iterrows()` 逐行构造 BarData 性能差 | `data_loader.py:174` | 数千行 K 线逐行 `BarData(...)` 创建，可用列表推导或矢量化 |
+
+### 3.3 保留的存量缺陷 (12 项)
+
+以下为前次审计保留且本次重新审查确认仍然存在的缺陷：
 
 | 编号 | 分类 | 问题 | 文件 | 说明 |
 |------|------|------|------|------|
-| DEF-01 | 测试 | 覆盖率排除核心文件 | `pyproject.toml` | main.py/bridges/exporter/backtest_engine 被排除，覆盖率 66% 非真实值 |
-| DEF-02 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | ~300 行关键桥接代码无测试 |
-| DEF-03 | 测试 | 无集成/端到端测试 | `tests/` | 缺少导出→回测→报告完整流程测试 |
-| DEF-04 | 策略 | 止损/止盈使用固定比例 | `ma_strategy.py` | 不同品种波动率差异大，应用 ATR 动态调整 |
-| DEF-05 | 策略 | 信号优先级隐式 | `ma_strategy.py` | 止损>止盈>死叉由 if/elif 顺序隐式定义 |
-| DEF-06 | 数据 | money 字段为近似值 | `exporter.py` | `close*volume` 不反映期货保证金的实际资金占用 |
-| DEF-07 | 数据 | 缺少数据完整性校验 | `data_loader.py` | 未检查 K 线时间连续性、OHLC 一致性、价格跳空 |
-| DEF-08 | 风控 | 无实盘风控模块 | — | 无日亏损限额/连续亏损暂停/最大回撤硬止损 |
-| DEF-09 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
-| DEF-10 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py` | 实盘运行无对连接断开的自动检测与重连 |
+| DEF-S01 | 测试 | 覆盖率排除核心文件 | `pyproject.toml` | main.py/bridges/exporter/vnpy_backtest_engine 被排除，66% 非真实值 |
+| DEF-S02 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | ~300 行关键桥接代码无测试 |
+| DEF-S03 | 测试 | 无集成/端到端测试 | `tests/` | 缺少导出→回测→报告完整流程测试 |
+| DEF-S04 | 策略 | 止损/止盈使用固定比例 | `ma_strategy.py` | 不同品种波动率差异大，应用 ATR 动态调整 |
+| DEF-S05 | 策略 | 信号优先级隐式 | `ma_strategy.py` | 止损>止盈>死叉由 if/elif 顺序隐式定义 |
+| DEF-S06 | 数据 | money 字段为近似值 | `exporter.py` | `close*volume` 不反映期货保证金的实际资金占用 |
+| DEF-S07 | 数据 | 缺少数据完整性校验 | `data_loader.py` | 未检查 K 线时间连续性、OHLC 一致性 |
+| DEF-S08 | 风控 | 无实盘风控模块 | — | 无日亏损限额/连续亏损暂停/最大回撤硬止损 |
+| DEF-S09 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
+| DEF-S10 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py` | 实盘运行无断线自动检测与重连 |
+| DEF-S11 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `common/metrics.py` | 假设 rfr=0，对中国期货影响小但应文档化 |
+| DEF-S12 | 指标 | 缺少 Sortino/Calmar/基准对比 | — | 缺下行风险指标、年化收益/回撤比 |
 
-### 3.2 指标/架构层面 (3 项)
-
-| 编号 | 分类 | 问题 | 说明 |
-|------|------|------|------|
-| DEF-11 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `metrics.py` — 假设 rfr=0，对中国期货影响小但应文档化 |
-| DEF-12 | 架构 | context 为空时硬编码策略类型 | `vnpy_backtest_engine.py` — 回退到 MaStrategyCore |
-| DEF-13 | 指标 | 缺少 Sortino/Calmar/基准对比 | 缺下行风险指标、年化收益/回撤比、buy-and-hold 基准 |
-
-### 3.3 架构层面发现
+### 3.4 架构层面发现 (5 项 — 与上次审计一致，无新增)
 
 | 编号 | 发现 | 严重度 | 说明 |
 |------|------|--------|------|
@@ -178,27 +203,39 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | ARC-04 | `main.py` 678 行单一入口 | 低 | CLI 子命令逻辑内联，后续可拆分为 `cli/` 包 |
 | ARC-05 | `sql_reporter.py` 覆盖率 19% | 低 | SQL 报告路径几乎未测试 |
 
-### 3.4 已修复项 ✅
+### 3.5 本次审计已确认安全 ✅
+
+| 项 | 结论 |
+|----|------|
+| peewee ORM 参数化查询 | 无 SQL 注入风险 |
+| DatabaseProxy 延迟绑定模式 | 实现正确（`__init__` 内完成绑定） |
+| TypedDict 与 ORM 模型字段一致性 | 逐字段核对一致 ✓ |
+| 配置中 API 密钥管理 | 环境变量优先 + placeholder 保护 ✓ |
+| `parse_percentage` / `ensure_float` | 边界安全，None/str 均有防护 |
+
+### 3.6 已修复项 ✅
 
 | 编号 | 说明 | 日期 |
 |------|------|------|
-| PERF-01 | Strategy.performance 双重绩效系统 | 2026-05-25 移除，统一为 vnpy 官方统计 |
-| AGG-01 | backtest.aggregator 自定义 rank_by_key | 2026-05-25 删除，改用 common.stats.rank_by_key |
-| BT16~21 | 第二轮审计修复 6 项 (标准差 ddof、回撤守卫、窗口截断等) | 2026-05-24 |
+| PERF-01 | Strategy.performance 双重绩效系统 | 2026-05-25 |
+| AGG-01 | backtest.aggregator 自定义 rank_by_key | 2026-05-25 |
+| BT16~21 | 第二轮审计修复 6 项 | 2026-05-24 |
 | BT1~9 | 第一轮审计修复 9 项 Bug | 2026-05-24 |
 
 ---
 
 ## 四、风险评估
 
-### 4.1 已发现风险
+### 4.1 当前已发现风险
 
-| 风险 | 可能性 | 影响 | 缓解措施 |
-|------|--------|------|---------|
-| 实盘无风控裸奔 | 中 | 🔴 高 | S3-A15 风控熔断 |
-| Bridge 层无测试 | 高 | 🟡 中 | mock 测试补充 (低优先级) |
-| vnpy 引擎无法在 CI mock | 高 | 🟡 中 | 回测引擎覆盖率 11%，但核心撮合逻辑走官方已检验代码 |
-| `_InjectedStrategy` 竞态 | 低 | 🟡 中 | 当前单线程运行，并发场景需要重构为显式依赖注入 |
+| 风险 | 可能性 | 影响 | 关联问题 | 缓解措施 |
+|------|--------|------|---------|---------|
+| tq-backtest 盈亏全错 | 每次触发 | 🔴 高 | **BUG-01, BUG-02** | 优先修复卡尔积 + 加手续费扣减 |
+| Walk-Forward 崩溃丢弃数据 | 数据异常时 | 🔴 高 | **BUG-04** | `_run_backtest` 加 try/except 逐窗口保护 |
+| format_pct 格式化错误 | 中 | 🟡 高 | **BUG-03** | 统一 DB 入库语义（全部存比值），消除启发式 |
+| 实盘无风控裸奔 | 中 | 🔴 高 | DEF-S08 | S3-A15 风控熔断 |
+| 报告数值不可靠 | 高 | 🟡 中 | BUG-05~07, DEF-02, DEF-07 | 统一数值语义，修复三处归一化 |
+| `_InjectedStrategy` 竞态 | 低 | 🟡 中 | ARC-01 | 当前单线程安全，重构时再处理 |
 
 ### 4.2 前瞻风险
 
@@ -206,9 +243,8 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 |------|--------|------|---------|
 | 策略无法在测试集稳定盈利 | 高 | 高 | 放宽标准至夏普 > 0；多品种分散 |
 | 参数优化过拟合 | 高 | 高 | Walk-Forward 验证 + 过拟合评分；限制搜索空间 |
-| vn.py API 变更 | 中 | 高 | 锁定版本 (==3.8.0)；CI 依赖一致性检查 |
+| vn.py API 变更 | 中 | 高 | 锁定版本；CI 依赖一致性检查 |
 | 天勤 SDK 升级不兼容 | 中 | 高 | 数据接口抽象层 |
-| 可视化/优化器开发耗时 | 中 | 中 | 优先最小可用版本，先跑通再完善 |
 
 ---
 
@@ -216,14 +252,12 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 指标 | 当前 (2026-05-25) | S1 目标 | S2 目标 | S3 目标 |
 |------|-------------------|---------|---------|---------|
+| Bug 数 | **8** (0 → 8) | 0 | 0 | 0 |
 | 测试用例数 | 162 ✅ | 165+ | 175+ | 185+ |
 | 覆盖率 | 66% | ≥ 70% | ≥ 75% | ≥ 80% |
 | 策略类型数 | 1 (MA) | 1 | 2+ | 2+ |
-| 最大回撤 (测试集) | — | — | < 20% | < 20% |
-| 夏普比率 (测试集) | — | — | ≥ 0.5 | ≥ 0.5 |
-| 过拟合评分 | — | — | < 15 | < 15 |
 | CI 状态 | ✅ 通过 | 通过 | 通过 | 通过 |
-| 库存缺陷数 | 13 项 | — | — | — |
+| 库存问题数 | **31** (8 Bug + 23 缺陷/架构) | — | — | — |
 
 ---
 
@@ -231,7 +265,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| **0.2.0-dev** | **2026-05-25** | 移除双重绩效系统；symbols_data 扁平化；删除 aggregator；引入 peewee ORM；lib→common；回测与报告解耦；架构评估更新至 162 测试/66% 覆盖 |
+| **0.2.0-dev** | **2026-05-25** | 第三次全量审计：发现 8 项 Bug（含 2 严重）、11 项缺陷；确认保留 12 项存量缺陷；Bug 清零后再考虑进入 S1 |
+| 0.2.0-dev | 2026-05-25 | 移除双重绩效系统；symbols_data 扁平化；删除 aggregator；引入 peewee ORM；lib→common；回测与报告解耦 |
 | 0.2.0-dev | 2026-05-24 | backtest 两轮审计修复 (15 项 Bug/缺陷)；DB 持久化 + cmd_report；S1-S4 四阶段规划 |
 | 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备 |
-| 0.0.8~11 | 2026-05-24 | 多品种回测、export 覆盖、根目录瘦身、工程化 |

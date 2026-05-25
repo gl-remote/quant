@@ -50,7 +50,7 @@ def generate_merged_report(
         symbols_data.append({
             'symbol': r.get('symbol', 'unknown'),
             'total_return': float(perf.get('total_return_abs', 0)),
-            'annual_return': float(perf.get('annual_return_abs', 0)),
+            'annual_return': float(perf.get('annual_return_ratio', 0)),
             'sharpe_ratio': float(perf.get('sharpe_ratio', 0)),
             'max_drawdown': float(risk.get('max_drawdown_abs', 0)),
             'win_rate': float(perf.get('win_rate_abs', 0)),

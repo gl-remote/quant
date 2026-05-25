@@ -87,7 +87,7 @@ def _extract_performance_metrics(statistics: dict, initial_capital: float) -> di
         'profit_loss_ratio': 0,
         'sharpe_ratio': 0.0,
         'annual_return': '0.00%',
-        'annual_return_abs': 0.0,
+        'annual_return_ratio': 0.0,
     }
 
     if not isinstance(statistics, dict) or not statistics:
@@ -117,7 +117,7 @@ def _extract_performance_metrics(statistics: dict, initial_capital: float) -> di
         'profit_loss_ratio': statistics.get('win_loss_ratio', 0),
         'sharpe_ratio': statistics.get('sharpe_ratio', 0),
         'annual_return': f"{statistics.get('annual_return', 0):.2%}",
-        'annual_return_abs': statistics.get('annual_return', 0),
+        'annual_return_ratio': statistics.get('annual_return', 0),
     }
 
 

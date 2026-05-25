@@ -34,7 +34,7 @@ class TestExtractPerformanceMetrics:
         assert result['profit_loss_ratio'] == 0
         assert result['sharpe_ratio'] == 0
         assert result['annual_return'] == '0.00%'
-        assert result['annual_return_abs'] == 0
+        assert result['annual_return_ratio'] == 0
 
     def test_none_stats_returns_defaults(self):
         result = _extract_performance_metrics(None, 100000.0)
@@ -73,7 +73,7 @@ class TestExtractPerformanceMetrics:
         assert result['profit_loss_ratio'] == 2.0
         assert result['sharpe_ratio'] == 1.5
         assert result['annual_return'] == '25.00%'
-        assert result['annual_return_abs'] == 0.25
+        assert result['annual_return_ratio'] == 0.25
 
     def test_stats_with_zero_trades(self):
         stats = {
@@ -304,7 +304,7 @@ class TestGenerateMergedReport:
                     'win_rate_abs': wr,
                     'profit_loss_ratio': 1.5,
                     'total_trades': trades,
-                    'annual_return_abs': 0.25,
+                    'annual_return_ratio': 0.25,
                 },
                 'risk': {
                     'max_drawdown_abs': dd,
