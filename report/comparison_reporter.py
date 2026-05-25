@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from common.stats import SymbolSummary, compute_summary_stats, rank_by_key
+from common.formatting import format_pct
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +158,7 @@ def format_merged_report(merged: dict) -> str:
     for s in merged.get('symbols', []):
         ret = f"{float(s.get('total_return', 0)):.2%}"
         sharpe = f"{float(s.get('sharpe_ratio', 0)):.2f}"
-        dd_val = float(s.get('max_drawdown', 0))
-        # 归一化: >1 视为百分比值 (如 15.0=15%), 转换为比值
-        if abs(dd_val) > 1:
-            dd_val = dd_val / 100.0
-        dd = f"{dd_val:.2%}"
+        dd = f"{format_pct(float(s.get('max_drawdown', 0)))}"
         wr = f"{float(s.get('win_rate', 0)):.2%}"
         trades = f"{int(s.get('total_trades', 0))}"
         lines.append(f"  {s['symbol']:<18} {ret:>8} {sharpe:>7} {dd:>7} "

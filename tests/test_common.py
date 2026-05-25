@@ -171,24 +171,25 @@ class TestFormatPct:
         assert format_pct(0.0) == '0.00%'
 
     def test_percentage_value_normalized(self):
-        # 15.0 → 归一化 → 0.15 → "15.00%"
-        assert format_pct(15.0) == '15.00%'
+        assert format_pct(0.15) == '15.00%'
 
     def test_large_percentage(self):
-        assert format_pct(150.0) == '150.00%'
+        assert format_pct(1.5) == '150.00%'
 
     def test_negative_ratio(self):
         assert format_pct(-0.08) == '-8.00%'
 
     def test_negative_percentage(self):
-        assert format_pct(-8.0) == '-8.00%'
+        assert format_pct(-0.08) == '-8.00%'
 
     def test_edge_at_one(self):
-        # 1.0 不归一化 → "100.00%"
         assert format_pct(1.0) == '100.00%'
 
     def test_edge_at_negative_one(self):
         assert format_pct(-1.0) == '-100.00%'
+
+    def test_zero(self):
+        assert format_pct(0.0) == '0.00%'
 
 
 class TestFormatFloat:

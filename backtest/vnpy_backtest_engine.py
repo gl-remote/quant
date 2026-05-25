@@ -141,6 +141,9 @@ class VnpyBacktestEngine:
         # ---- 步骤2: 全量回测 ----
         logger.info("\n>>> 执行全量回测")
         result = self._run_backtest(df, symbol, 'full')
+        if 'error' in result:
+            logger.error(f"全量回测失败 [{symbol}]: {result['error']}")
+            return {'success': False, 'error': result['error'], 'symbol': symbol}
 
         # ---- 步骤3: 生成报告 ----
         logger.info("\n>>> 生成回测报告")
@@ -216,14 +219,21 @@ class VnpyBacktestEngine:
         window_results = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
             logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
-            # In-Sample: 训练集上回测 (观察策略在该时间段的表现)
             train_result = self._run_backtest(train_df, symbol, f'wf_{wi}_train')
             if self.context and self.context.strategy:
                 self.context.strategy.reset()
-            # Out-of-Sample: 测试集上回测 (真正评估预测能力)
             test_result = self._run_backtest(test_df, symbol, f'wf_{wi}_test')
             if self.context and self.context.strategy:
                 self.context.strategy.reset()
+
+            if 'error' in train_result or 'error' in test_result:
+                logger.warning(
+                    f"窗口 {wi + 1} 回测异常，跳过: "
+                    f"train_error={train_result.get('error')}, "
+                    f"test_error={test_result.get('error')}"
+                )
+                continue
+
             window_results.append({
                 'window': wi,
                 'train_rows': len(train_df),
@@ -361,9 +371,18 @@ class VnpyBacktestEngine:
         bars = df_to_vnpy_datalines(df, vt_symbol, interval)
         engine.history_data = bars
 
-        engine.run_backtesting()
-        daily_results = engine.calculate_result()
-        statistics = engine.calculate_statistics()
+        try:
+            engine.run_backtesting()
+            daily_results = engine.calculate_result()
+            statistics = engine.calculate_statistics()
+        except Exception as e:
+            logger.error(f"回测执行异常 [{symbol}][{dataset_name}]: {e}", exc_info=True)
+            return {
+                'dataset_name': dataset_name,
+                'statistics': {},
+                'daily_results': [],
+                'error': str(e),
+            }
 
         return {
             'dataset_name': dataset_name,

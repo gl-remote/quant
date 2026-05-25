@@ -36,6 +36,21 @@ _MAX_OPERATION_LOG_ROWS: int = 50_000
 _PRUNE_CHECK_INTERVAL: int = 100
 
 
+def _normalize_max_dd(raw_value: float | None) -> float:
+    """将 vnpy 返回的 max_drawdown 归一化为比值
+
+    vnpy calculate_statistics() 返回的 max_drawdown 为百分比值
+    (如 15.0 = 15%)，但其他指标 (total_return/win_rate 等) 为比值。
+    此函数将百分比值统一转为比值 (15.0 → 0.15)，确保 DB 存储语义一致。
+    """
+    if raw_value is None:
+        return 0.0
+    v = float(raw_value)
+    if abs(v) > 1:
+        return v / 100.0
+    return v
+
+
 class Database:
     """SQLite 数据库管理 (peewee ORM 适配)"""
 
@@ -243,7 +258,7 @@ class Database:
             average_loss=statistics.get('average_loss'),
             win_loss_ratio=statistics.get('win_loss_ratio'),
             sharpe_ratio=statistics.get('sharpe_ratio'),
-            max_drawdown=statistics.get('max_drawdown'),
+            max_drawdown=_normalize_max_dd(statistics.get('max_drawdown')),
             max_drawdown_duration=statistics.get('max_ddpercent_duration'),
             daily_std=statistics.get('daily_std'),
             return_drawdown_ratio=statistics.get('return_drawdown_ratio'),

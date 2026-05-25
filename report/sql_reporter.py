@@ -276,14 +276,11 @@ def format_comparison_report(
     ]
 
     for s in symbols_data:
-        dd_val: float = s['max_drawdown']
-        if abs(dd_val) > 1:
-            dd_val = dd_val / 100.0
         lines.append(
             f"  {s['id']:>4} {s['symbol']:<18} "
             f"{format_pct(s['total_return']):>8} "
             f"{format_float(s['sharpe_ratio']):>7} "
-            f"{dd_val:.2%} "
+            f"{format_pct(s['max_drawdown']):>7} "
             f"{format_pct(s['win_rate']):>7} "
             f"{s['total_trades']:>6}"
         )
@@ -388,9 +385,6 @@ def format_summary_report(
     ]
 
     for bt in records:
-        dd_val: float = ensure_float(bt.get('max_drawdown'))
-        if abs(dd_val) > 1:
-            dd_val = dd_val / 100.0
         sym: str = bt.get('symbol') or 'N/A'
         strat: str = bt.get('strategy') or 'N/A'
         created: str = str(bt.get('created_at') or '')[:16]
@@ -400,7 +394,7 @@ def format_summary_report(
             f"{strat:<6} "
             f"{format_pct(bt.get('total_return')):>8} "
             f"{format_float(bt.get('sharpe_ratio')):>7} "
-            f"{dd_val:.2%}  "
+            f"{format_pct(bt.get('max_drawdown')):>7}  "
             f"{format_pct(bt.get('win_rate')):>7} "
             f"{bt.get('total_trades', 0) or 0:>5} "
             f"{created:<16}"
