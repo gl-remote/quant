@@ -2,80 +2,21 @@
 """数据类型定义模块
 
 包含：
-1. Pandera DataFrameSchema - 用于 DataFrame 级别的数据验证
+1. Pandera DataFrameSchema - 从 common.schemas 导入（全局统一）
 2. Pydantic BaseModel - 用于单条记录的验证
 3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
-import pandas as pd
-import pandera.pandas as pa
-from pandera.typing import Series
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict
 from peewee import *
 
-# ==============================================================================
-# Pandera DataFrame Schema（对外暴露，用于数据验证）
-# ==============================================================================
-
-class KlineSchema(pa.DataFrameModel):
-    """K线数据验证Schema
-    
-    用于验证从 CSV 加载的 K线数据，确保数据质量和一致性。
-    """
-    datetime: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
-    open: Series[float] = pa.Field(ge=0.0)
-    high: Series[float] = pa.Field(ge=0.0)
-    low: Series[float] = pa.Field(ge=0.0)
-    close: Series[float] = pa.Field(ge=0.0)
-    volume: Series[int] = pa.Field(ge=0)
-    
-    @pa.dataframe_check
-    def check_high_greater_than_open_close(cls, df: pd.DataFrame) -> bool:
-        """验证最高价 >= 开盘价和收盘价"""
-        return (df['high'] >= df[['open', 'close']].max(axis=1)).all()
-    
-    @pa.dataframe_check
-    def check_low_less_than_open_close(cls, df: pd.DataFrame) -> bool:
-        """验证最低价 <= 开盘价和收盘价"""
-        return (df['low'] <= df[['open', 'close']].min(axis=1)).all()
-    
-    @pa.dataframe_check
-    def check_price_range_valid(cls, df: pd.DataFrame) -> bool:
-        """验证价格区间有效性：low <= close <= high"""
-        return (df['low'] <= df['close']).all() & (df['close'] <= df['high']).all()
-    
-    class Config:
-        coerce = True
-
-
-class TradeRecordSchema(pa.DataFrameModel):
-    """交易记录验证Schema"""
-    datetime: Series[pd.DatetimeTZDtype] = pa.Field()
-    symbol: Series[str] = pa.Field()
-    direction: Series[str] = pa.Field(isin=['long', 'short'])
-    open_price: Series[float] = pa.Field(ge=0.0)
-    close_price: Series[float] = pa.Field(ge=0.0)
-    quantity: Series[int] = pa.Field(gt=0)
-    pnl: Series[float] = pa.Field()
-    commission: Series[float] = pa.Field(ge=0.0)
-    
-    class Config:
-        coerce = True
-
-
-class BacktestResultSchema(pa.DataFrameModel):
-    """回测结果验证Schema"""
-    datetime: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
-    equity: Series[float] = pa.Field(ge=0.0)
-    cash: Series[float] = pa.Field(ge=0.0)
-    position: Series[int] = pa.Field()
-    pnl: Series[float] = pa.Field()
-    drawdown: Series[float] = pa.Field(ge=0.0)
-    
-    class Config:
-        coerce = True
-
+# 从 common.schemas 导入全局统一的 Pandera Schema
+from common.schemas import (
+    KlineSchema,
+    TradeRecordSchema,
+    BacktestResultSchema,
+)
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）

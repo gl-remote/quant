@@ -10,12 +10,23 @@ common — 通用纯函数工具层
   - metrics:    绩效指标计算 (max_drawdown, sharpe_ratio)
   - stats:      统计聚合工具 (compute_summary_stats, rank_by_key)
   - formatting: 安全格式化 (format_pct, format_float, ensure_float)
+  - schemas:    Pandera Schema 定义 (KlineSchema, TradeRecordSchema)
 """
 
 from .formulas import calculate_fifo_profit
 from .metrics import calc_max_drawdown, calc_sharpe_ratio
 from .stats import compute_summary_stats, rank_by_key
 from .formatting import format_pct, format_float, ensure_float
+from .schemas import (
+    KlineSchema,
+    TradeRecordSchema,
+    BacktestResultSchema,
+    DailyReturnSchema,
+    KlineDataFrame,
+    TradeDataFrame,
+    BacktestDataFrame,
+    DailyReturnDataFrame,
+)
 
 __all__ = [
     'calculate_fifo_profit',
@@ -26,4 +37,14 @@ __all__ = [
     'format_pct',
     'format_float',
     'ensure_float',
+    # Schema 定义
+    'KlineSchema',
+    'TradeRecordSchema',
+    'BacktestResultSchema',
+    'DailyReturnSchema',
+    # DataFrame 类型别名
+    'KlineDataFrame',
+    'TradeDataFrame',
+    'BacktestDataFrame',
+    'DailyReturnDataFrame',
 ]
