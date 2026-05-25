@@ -1,294 +1,280 @@
-"""peewee ORM 模型定义 — SQLite 数据库表映射 + TypedDict 类型体系
+# -*- coding: utf-8 -*-
+"""数据类型定义模块
 
-本模块定义:
-  ORM 模型 (4 张表):
-    - ExportMetadata  : CSV 数据导出元数据
-    - OperationLog    : 系统操作日志
-    - Backtest        : 回测运行主表
-    - BacktestTrade   : 回测交易明细 (ForeignKey → Backtest)
-
-  TypedDict 类型 (精确描述 .dicts() 返回的字典形状):
-    - ExportMetadataDict / OperationLogDict / BacktestDict / BacktestTradeDict
-    - BacktestStatsDict / EngineConfigDict / VnpyDailyResultDict (外部输入形状)
-
-所有模型通过 database_proxy (DatabaseProxy) 延迟绑定实际数据库连接，
-在 Database.__init__ 时由 data/database.py 完成绑定。
+包含：
+1. Pandera DataFrameSchema - 用于 DataFrame 级别的数据验证
+2. Pydantic BaseModel - 用于单条记录的验证
+3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
-from __future__ import annotations
+import pandas as pd
+import pandera.pandas as pa
+from pandera.typing import Series
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Optional, List, Dict
+from peewee import *
 
-from typing import TypedDict
+# ==============================================================================
+# Pandera DataFrame Schema（对外暴露，用于数据验证）
+# ==============================================================================
 
-import peewee as pw
+class KlineSchema(pa.DataFrameModel):
+    """K线数据验证Schema
+    
+    用于验证从 CSV 加载的 K线数据，确保数据质量和一致性。
+    """
+    datetime: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
+    open: Series[float] = pa.Field(ge=0.0)
+    high: Series[float] = pa.Field(ge=0.0)
+    low: Series[float] = pa.Field(ge=0.0)
+    close: Series[float] = pa.Field(ge=0.0)
+    volume: Series[int] = pa.Field(ge=0)
+    
+    @pa.dataframe_check
+    def check_high_greater_than_open_close(cls, df: pd.DataFrame) -> bool:
+        """验证最高价 >= 开盘价和收盘价"""
+        return (df['high'] >= df[['open', 'close']].max(axis=1)).all()
+    
+    @pa.dataframe_check
+    def check_low_less_than_open_close(cls, df: pd.DataFrame) -> bool:
+        """验证最低价 <= 开盘价和收盘价"""
+        return (df['low'] <= df[['open', 'close']].min(axis=1)).all()
+    
+    @pa.dataframe_check
+    def check_price_range_valid(cls, df: pd.DataFrame) -> bool:
+        """验证价格区间有效性：low <= close <= high"""
+        return (df['low'] <= df['close']).all() & (df['close'] <= df['high']).all()
+    
+    class Config:
+        coerce = True
 
-# 数据库代理 — 模块级单例，运行时由 Database 类完成绑定和解绑
-database_proxy = pw.DatabaseProxy()
+
+class TradeRecordSchema(pa.DataFrameModel):
+    """交易记录验证Schema"""
+    datetime: Series[pd.DatetimeTZDtype] = pa.Field()
+    symbol: Series[str] = pa.Field()
+    direction: Series[str] = pa.Field(isin=['long', 'short'])
+    open_price: Series[float] = pa.Field(ge=0.0)
+    close_price: Series[float] = pa.Field(ge=0.0)
+    quantity: Series[int] = pa.Field(gt=0)
+    pnl: Series[float] = pa.Field()
+    commission: Series[float] = pa.Field(ge=0.0)
+    
+    class Config:
+        coerce = True
 
 
-class BaseModel(pw.Model):
-    """所有模型的基类，统一绑定 database_proxy"""
+class BacktestResultSchema(pa.DataFrameModel):
+    """回测结果验证Schema"""
+    datetime: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
+    equity: Series[float] = pa.Field(ge=0.0)
+    cash: Series[float] = pa.Field(ge=0.0)
+    position: Series[int] = pa.Field()
+    pnl: Series[float] = pa.Field()
+    drawdown: Series[float] = pa.Field(ge=0.0)
+    
+    class Config:
+        coerce = True
+
+
+# ==============================================================================
+# Pydantic 模型（对外暴露，用于单条记录验证）
+# ==============================================================================
+
+class BacktestRecord(BaseModel):
+    """回测记录"""
+    id: Optional[int] = None
+    symbol: str
+    strategy: str
+    status: str = "success"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    total_return: float = 0.0
+    max_drawdown: float = 0.0
+    win_rate: float = 0.0
+    profit_factor: float = 0.0
+    sharpe_ratio: Optional[float] = None
+    sortino_ratio: Optional[float] = None
+    total_trades: int = 0
+    profit_trades: int = 0
+    loss_trades: int = 0
+    avg_profit: float = 0.0
+    avg_loss: float = 0.0
+    created_at: Optional[str] = None
+    
+    def to_dict(self) -> Dict:
+        """转换为字典"""
+        return self.model_dump(exclude_none=True)
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "BacktestRecord":
+        """从字典创建"""
+        return cls(**data)
+
+
+class TradeRecord(BaseModel):
+    """交易记录"""
+    id: Optional[int] = None
+    backtest_id: int
+    datetime: str
+    symbol: str
+    direction: str
+    offset: str = "open"
+    open_price: float
+    close_price: float
+    quantity: int
+    pnl: float = 0.0
+    commission: float = 0.0
+    created_at: Optional[str] = None
+    
+    @field_validator('quantity')
+    @classmethod
+    def validate_quantity(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError('quantity must be greater than 0')
+        return v
+    
+    @field_validator('commission')
+    @classmethod
+    def validate_commission(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError('commission must be >= 0')
+        return v
+    
+    def to_dict(self) -> Dict:
+        """转换为字典"""
+        return self.model_dump(exclude_none=True)
+    
+    @classmethod
+    def from_dict(cls, data: Dict) -> "TradeRecord":
+        """从字典创建"""
+        return cls(**data)
+
+
+class SymbolInfo(BaseModel):
+    """品种信息"""
+    symbol: str
+    available: bool
+    filepath: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    total_rows: Optional[int] = None
+    error: Optional[str] = None
+
+
+class DataSummary(BaseModel):
+    """数据汇总"""
+    total_symbols: int
+    symbols: List[SymbolInfo]
+
+
+class DataLoadResult(BaseModel):
+    """数据加载结果"""
+    success: bool
+    symbol: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    row_count: int = 0
+    message: str
+
+
+# ==============================================================================
+# ORM 模型（内部使用，不对外暴露）
+# ==============================================================================
+
+database = SqliteDatabase(None)
+
+
+class BaseModel(Model):
+    """基础模型"""
     class Meta:
-        database = database_proxy
+        database = database
 
-
-# ── export_metadata ──────────────────────────────────────────────
 
 class ExportMetadata(BaseModel):
-    """CSV 数据导出元数据 — 每次天勤导出时 upsert 一条记录"""
-
-    symbol = pw.CharField(max_length=64)
-    filepath = pw.CharField(max_length=512)
-    start_date = pw.CharField(max_length=10, null=True)
-    end_date = pw.CharField(max_length=10, null=True)
-    min_dt = pw.CharField(max_length=19, null=True)
-    max_dt = pw.CharField(max_length=19, null=True)
-    total_rows = pw.IntegerField(default=0)
-    created_at = pw.CharField(max_length=26)
-    updated_at = pw.CharField(max_length=26)
-
+    """导出元数据"""
+    symbol = CharField(unique=True)
+    filepath = CharField()
+    start_date = DateField(null=True)
+    end_date = DateField(null=True)
+    min_dt = DateField(null=True)
+    max_dt = DateField(null=True)
+    total_rows = IntegerField(default=0)
+    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    updated_at = DateTimeField(null=True)
+    
     class Meta:
         table_name = 'export_metadata'
 
 
-# ── operation_logs ───────────────────────────────────────────────
-
 class OperationLog(BaseModel):
-    """系统操作日志 — 记录 export/backtest/live/test 等命令执行历史
-
-    自动清理: 超过 _MAX_OPERATION_LOG_ROWS 条时触发，逻辑在 Database._prune_old_logs
-    """
-
-    command = pw.CharField(max_length=32)
-    symbol = pw.CharField(max_length=64, null=True)
-    message = pw.TextField(null=True)
-    status = pw.CharField(max_length=16, default='INFO')
-    created_at = pw.CharField(max_length=26)
-
+    """操作日志"""
+    command = CharField()
+    symbol = CharField(null=True)
+    message = TextField()
+    status = CharField()
+    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    
     class Meta:
         table_name = 'operation_logs'
 
 
-# ── backtests ────────────────────────────────────────────────────
-
 class Backtest(BaseModel):
-    """回测运行主表 — 每次 run_full_pipeline 产生一条记录"""
-
-    symbol = pw.CharField(max_length=64)
-    strategy = pw.CharField(max_length=64)
-    status = pw.CharField(max_length=16, default='running')
-    error_message = pw.TextField(null=True)
-    # 数据范围
-    data_start_date = pw.CharField(max_length=10, null=True)
-    data_end_date = pw.CharField(max_length=10, null=True)
-    start_date = pw.CharField(max_length=10, null=True)
-    end_date = pw.CharField(max_length=10, null=True)
-    total_days = pw.IntegerField(null=True)
-    # 引擎参数
-    initial_capital = pw.FloatField()
-    commission_rate = pw.FloatField(null=True)
-    slippage = pw.FloatField(null=True)
-    price_tick = pw.FloatField(null=True)
-    contract_size = pw.IntegerField(null=True)
-    kline_interval = pw.CharField(max_length=8, null=True)
-    params_json = pw.TextField(null=True)
-    # 资金
-    end_balance = pw.FloatField(null=True)
-    total_return = pw.FloatField(null=True)
-    annual_return = pw.FloatField(null=True)
-    # 交易统计
-    total_trades = pw.IntegerField(null=True)
-    win_trades = pw.IntegerField(null=True)
-    loss_trades = pw.IntegerField(null=True)
-    win_rate = pw.FloatField(null=True)
-    max_consecutive_win = pw.IntegerField(null=True)
-    max_consecutive_loss = pw.IntegerField(null=True)
-    average_win = pw.FloatField(null=True)
-    average_loss = pw.FloatField(null=True)
-    win_loss_ratio = pw.FloatField(null=True)
-    # 风险
-    sharpe_ratio = pw.FloatField(null=True)
-    max_drawdown = pw.FloatField(null=True)
-    max_drawdown_duration = pw.IntegerField(null=True)
-    daily_std = pw.FloatField(null=True)
-    return_drawdown_ratio = pw.FloatField(null=True)
-    # 时间戳
-    created_at = pw.CharField(max_length=26)
-    updated_at = pw.CharField(max_length=26)
-
+    """回测记录"""
+    symbol = CharField()
+    strategy = CharField()
+    status = CharField()
+    start_date = DateField(null=True)
+    end_date = DateField(null=True)
+    error_message = TextField(null=True)
+    
+    total_return = FloatField(null=True)
+    max_drawdown = FloatField(null=True)
+    win_rate = FloatField(null=True)
+    profit_factor = FloatField(null=True)
+    sharpe_ratio = FloatField(null=True)
+    sortino_ratio = FloatField(null=True)
+    total_trades = IntegerField(null=True)
+    profit_trades = IntegerField(null=True)
+    loss_trades = IntegerField(null=True)
+    avg_profit = FloatField(null=True)
+    avg_loss = FloatField(null=True)
+    
+    engine_config = TextField(null=True)
+    params_json = TextField(null=True)
+    
+    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    updated_at = DateTimeField(null=True)
+    
     class Meta:
-        table_name = 'backtests'
-        indexes = (
-            (('symbol',), False),
-            (('strategy',), False),
-            (('created_at',), False),
-            (('symbol', 'strategy'), False),
-        )
+        table_name = 'backtest'
 
-
-# ── backtest_trades ──────────────────────────────────────────────
 
 class BacktestTrade(BaseModel):
-    """回测交易明细 — 每笔成交一条，FK 关联 backtests.id"""
-
-    backtest_id = pw.ForeignKeyField(
-        Backtest, backref='trades', on_delete='CASCADE',
-    )
-    symbol = pw.CharField(max_length=64)
-    datetime = pw.CharField(max_length=26)
-    direction = pw.CharField(max_length=8)
-    offset = pw.CharField(max_length=8, default='open')
-    price = pw.FloatField()
-    volume = pw.IntegerField()
-    trade_day = pw.CharField(max_length=10, null=True)
-    created_at = pw.CharField(max_length=26)
-    updated_at = pw.CharField(max_length=26)
-
+    """回测交易明细"""
+    backtest = ForeignKeyField(Backtest, backref='trades', on_delete='CASCADE')
+    datetime = DateTimeField()
+    symbol = CharField()
+    direction = CharField()
+    offset = CharField()
+    open_price = FloatField()
+    close_price = FloatField()
+    quantity = IntegerField()
+    pnl = FloatField()
+    commission = FloatField()
+    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    
     class Meta:
-        table_name = 'backtest_trades'
-        indexes = (
-            (('backtest_id',), False),
-            (('symbol',), False),
-            (('datetime',), False),
-            (('trade_day',), False),
-        )
+        table_name = 'backtest_trade'
 
 
-# ═══════════════════════════════════════════════════════════════════
-#  TypedDict 类型体系 — 精确描述 .dicts() 返回值及外部输入形状
-# ═══════════════════════════════════════════════════════════════════
-
-# ── 数据库行类型 (.dicts() 返回值) ──────────────────────────────
-
-class ExportMetadataDict(TypedDict):
-    """export_metadata 表的行类型"""
-    id: int
-    symbol: str
-    filepath: str
-    start_date: str | None
-    end_date: str | None
-    min_dt: str | None
-    max_dt: str | None
-    total_rows: int
-    created_at: str
-    updated_at: str
+def init_database(db_path: str):
+    """初始化数据库连接"""
+    database.init(db_path)
+    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade], safe=True)
 
 
-class OperationLogDict(TypedDict):
-    """operation_logs 表的行类型"""
-    id: int
-    command: str
-    symbol: str | None
-    message: str | None
-    status: str
-    created_at: str
-
-
-class BacktestDict(TypedDict):
-    """backtests 表的行类型 — 共 34 个字段"""
-    id: int
-    symbol: str
-    strategy: str
-    status: str
-    error_message: str | None
-    # 数据范围
-    data_start_date: str | None
-    data_end_date: str | None
-    start_date: str | None
-    end_date: str | None
-    total_days: int | None
-    # 引擎参数
-    initial_capital: float
-    commission_rate: float | None
-    slippage: float | None
-    price_tick: float | None
-    contract_size: int | None
-    kline_interval: str | None
-    params_json: str | None
-    # 资金
-    end_balance: float | None
-    total_return: float | None
-    annual_return: float | None
-    # 交易统计
-    total_trades: int | None
-    win_trades: int | None
-    loss_trades: int | None
-    win_rate: float | None
-    max_consecutive_win: int | None
-    max_consecutive_loss: int | None
-    average_win: float | None
-    average_loss: float | None
-    win_loss_ratio: float | None
-    # 风险
-    sharpe_ratio: float | None
-    max_drawdown: float | None
-    max_drawdown_duration: int | None
-    daily_std: float | None
-    return_drawdown_ratio: float | None
-    # 时间戳
-    created_at: str
-    updated_at: str
-
-
-class BacktestTradeDict(TypedDict):
-    """backtest_trades 表的行类型"""
-    id: int
-    backtest_id: int
-    symbol: str
-    datetime: str
-    direction: str
-    offset: str
-    price: float
-    volume: int
-    trade_day: str | None
-    created_at: str
-    updated_at: str
-
-
-# ── 外部输入类型 (vnpy / 天勤 → Database) ───────────────────────
-
-class BacktestStatsDict(TypedDict, total=False):
-    """vnpy calculate_statistics() 返回的统计字典 (字段均为可选)"""
-    start_date: str
-    end_date: str
-    total_days: int
-    end_balance: float
-    annual_return: float
-    total_trades: int
-    win_trades: int
-    loss_trades: int
-    max_consecutive_win: int
-    max_consecutive_loss: int
-    average_win: float
-    average_loss: float
-    win_loss_ratio: float
-    sharpe_ratio: float
-    max_drawdown: float
-    max_ddpercent_duration: int
-    daily_std: float
-    return_drawdown_ratio: float
-
-
-class EngineConfigDict(TypedDict, total=False):
-    """回测引擎配置字典 (字段均为可选)"""
-    initial_capital: float
-    commission_rate: float
-    slippage: float
-    price_tick: float
-    contract_size: int
-    kline_interval: str
-
-
-class VnpyTradeRecordDict(TypedDict, total=False):
-    """vnpy 单笔成交记录 (calculate_result 中 trades 的子元素)"""
-    vt_symbol: str
-    datetime: str
-    direction: str
-    offset: str
-    price: float
-    volume: int
-
-
-class VnpyDailyResultDict(TypedDict, total=False):
-    """vnpy 每日回测结果 (calculate_result().to_dict('records') 单行)"""
-    datetime: str
-    trades: list[VnpyTradeRecordDict]
+def close_database():
+    """关闭数据库连接"""
+    if not database.is_closed():
+        database.close()

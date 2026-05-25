@@ -1,6 +1,6 @@
 """基于 SQLite 数据库的回测报告生成器 (强类型)
 
-完全解耦：仅依赖 data.database.Database (只读查询) + common (纯函数工具)，
+完全解耦：仅依赖 data.manager.DataManager (只读查询) + common (纯函数工具)，
 不 import backtest / strategies / data.exporter 等业务模块。
 """
 
@@ -10,9 +10,9 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import TypedDict
+from typing import Optional
 
-from data import Database, BacktestDict, BacktestTradeDict
+from data import DataManager, BacktestRecord, TradeRecord
 from common.stats import compute_summary_stats, rank_by_key
 from common.formatting import format_pct, format_float, ensure_float
 from common.constants import (
@@ -26,62 +26,52 @@ from common.constants import (
 
 logger = logging.getLogger(__name__)
 
-# ── 内部工具 ──────────────────────────────────────────────────
 
-def _na_str(v: object) -> str:
+def _na_str(v) -> str:
     """将可能为 None 的值转为展示字符串"""
     return 'N/A' if v is None else str(v)
 
 
-# ── 对比报告用的内部数据类型 ─────────────────────────────────
-
-class _SymbolMetrics(TypedDict):
-    """format_comparison_report 中的品种指标项"""
-    id: int
-    symbol: str
-    strategy: str
-    total_return: float
-    annual_return: float
-    sharpe_ratio: float
-    max_drawdown: float
-    win_rate: float
-    win_loss_ratio: float
-    total_trades: int
-    created_at: str
+def _get_attr(obj, key, default=None):
+    """获取对象属性值（支持 dict 或 Pydantic model）"""
+    if hasattr(obj, key):
+        return getattr(obj, key, default)
+    return obj.get(key, default) if isinstance(obj, dict) else default
 
 
-# ── 单次报告 ──────────────────────────────────────────────────
-
-def format_single_report(db: Database, backtest_id: int) -> str:
+def format_single_report(db_path: str, backtest_id: int) -> str:
     """生成单次回测的完整文本报告
 
     Args:
-        db: Database 实例
+        db_path: 数据库路径
         backtest_id: 回测记录 ID
 
     Returns:
         格式化的控制台报告字符串
     """
-    bt = db.get_backtest(backtest_id)
+    dm = DataManager()
+    bt = dm.get_backtest(backtest_id)
+    
     if not bt:
         return f"错误: 未找到回测记录 id={backtest_id}"
 
-    trades = db.get_backtest_trades(backtest_id)
+    trades = dm.query_trades(backtest_id)
 
-    # 按交易日聚合交易统计
     trade_days: list[str] = sorted(set(
-        t['trade_day'] for t in trades if t.get('trade_day')
+        str(_get_attr(t, 'datetime'))[:10] for t in trades if _get_attr(t, 'datetime')
     ))
     buy_count: int = sum(
-        1 for t in trades if t['direction'] == TRADE_DIRECTION_LONG and t['offset'] == TRADE_OFFSET_OPEN
+        1 for t in trades 
+        if _get_attr(t, 'direction') == TRADE_DIRECTION_LONG and _get_attr(t, 'offset') == TRADE_OFFSET_OPEN
     )
     sell_count: int = sum(
-        1 for t in trades if t['direction'] == TRADE_DIRECTION_SHORT and t['offset'] == TRADE_OFFSET_CLOSE
+        1 for t in trades 
+        if _get_attr(t, 'direction') == TRADE_DIRECTION_SHORT and _get_attr(t, 'offset') == TRADE_OFFSET_CLOSE
     )
 
-    symbol = bt['symbol']
-    strategy = bt['strategy']
-    status = bt['status']
+    symbol = bt.symbol
+    strategy = bt.strategy
+    status = bt.status
 
     lines: list[str] = [
         f"{'=' * 70}",
@@ -92,67 +82,40 @@ def format_single_report(db: Database, backtest_id: int) -> str:
         f"  品种:       {symbol}",
         f"  策略:       {strategy}",
         f"  状态:       {status}",
-        f"  运行时间:   {bt['created_at']}",
+        f"  运行时间:   {_get_attr(bt, 'created_at')}",
     ]
 
     if status == STATUS_FAILED:
-        lines.append(f"  错误信息:   {bt.get('error_message') or 'N/A'}")
+        error_msg = _get_attr(bt, 'error_message') or 'N/A'
+        lines.append(f"  错误信息:   {error_msg}")
         lines.append(f"{'=' * 70}")
         return '\n'.join(lines)
 
     lines += [
         "",
         "【数据范围】",
-        f"  数据区间:   {_na_str(bt.get('data_start_date'))} ~ {_na_str(bt.get('data_end_date'))}",
-        f"  回测区间:   {_na_str(bt.get('start_date'))} ~ {_na_str(bt.get('end_date'))}",
-        f"  交易日数:   {_na_str(bt.get('total_days'))}",
-        "",
-        "【引擎参数】",
-        f"  初始资金:   {ensure_float(bt.get('initial_capital')):,.0f}",
-        f"  手续费率:   {ensure_float(bt.get('commission_rate')):.4%}",
-        f"  滑点:       {_na_str(bt.get('slippage'))}",
-        f"  合约乘数:   {_na_str(bt.get('contract_size'))}",
-        f"  K线周期:    {_na_str(bt.get('kline_interval'))}",
-    ]
-
-    params_json = bt.get('params_json')
-    if params_json:
-        try:
-            params = json.loads(params_json)
-            lines.append(f"  策略参数:   {json.dumps(params, ensure_ascii=False)}")
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    lines += [
+        f"  数据区间:   {_na_str(_get_attr(bt, 'start_date'))} ~ {_na_str(_get_attr(bt, 'end_date'))}",
+        f"  交易日数:   {_na_str(None)}",
         "",
         "【资金概况】",
-        f"  最终权益:   {ensure_float(bt.get('end_balance')):,.0f}",
-        f"  总收益率:   {format_pct(bt.get('total_return'))}",
-        f"  年化收益:   {format_pct(bt.get('annual_return'))}",
+        f"  总收益率:   {format_pct(_get_attr(bt, 'total_return'))}",
         "",
         "【交易统计】",
-        f"  总交易次数: {bt.get('total_trades', 0) or 0}",
-        f"  盈利交易:   {bt.get('win_trades', 0) or 0}  ({format_pct(bt.get('win_rate'))})",
-        f"  亏损交易:   {bt.get('loss_trades', 0) or 0}",
-        f"  平均盈利:   {format_float(bt.get('average_win'), ',.0f')}",
-        f"  平均亏损:   {format_float(bt.get('average_loss'), ',.0f')}",
-        f"  盈亏比:     {format_float(bt.get('win_loss_ratio'))}",
-        f"  最大连胜:   {bt.get('max_consecutive_win', 0) or 0}",
-        f"  最大连亏:   {bt.get('max_consecutive_loss', 0) or 0}",
+        f"  总交易次数: {_get_attr(bt, 'total_trades', 0) or 0}",
+        f"  盈利交易:   {_get_attr(bt, 'profit_trades', 0) or 0}  ({format_pct(_get_attr(bt, 'win_rate'))})",
+        f"  亏损交易:   {_get_attr(bt, 'loss_trades', 0) or 0}",
+        f"  平均盈利:   {format_float(_get_attr(bt, 'avg_profit'), ',.0f')}",
+        f"  平均亏损:   {format_float(_get_attr(bt, 'avg_loss'), ',.0f')}",
         "",
         "【风险评估】",
-        f"  夏普比率:   {format_float(bt.get('sharpe_ratio'))}",
-        f"  最大回撤:   {format_pct(bt.get('max_drawdown'))}",
-        f"  回撤天数:   {bt.get('max_drawdown_duration', 0) or 0}",
-        f"  日波动率:   {format_float(bt.get('daily_std'), '.4f')}",
-        f"  收益回撤比: {format_float(bt.get('return_drawdown_ratio'))}",
+        f"  夏普比率:   {format_float(_get_attr(bt, 'sharpe_ratio'))}",
+        f"  最大回撤:   {format_pct(_get_attr(bt, 'max_drawdown'))}",
         "",
         "【交易明细】",
         f"  成交笔数:   {len(trades)} (开仓{buy_count} / 平仓{sell_count})",
         f"  交易日期:   {len(trade_days)} 天",
     ]
 
-    # 最近 20 笔交易
     if trades:
         lines += [
             "",
@@ -160,24 +123,24 @@ def format_single_report(db: Database, backtest_id: int) -> str:
             f"  {'-' * 63}",
         ]
         for t in trades[-20:]:
-            d_tag: str = '多' if t['direction'] == TRADE_DIRECTION_LONG else '空'
-            o_tag: str = '开' if t['offset'] == TRADE_OFFSET_OPEN else '平'
+            d_tag: str = '多' if _get_attr(t, 'direction') == TRADE_DIRECTION_LONG else '空'
+            o_tag: str = '开' if _get_attr(t, 'offset') == TRADE_OFFSET_OPEN else '平'
+            price = _get_attr(t, 'close_price') or _get_attr(t, 'open_price', 0)
+            qty = _get_attr(t, 'quantity', 0)
             lines.append(
-                f"  {t['datetime']:<20} "
-                f"{t['symbol']:<16} "
+                f"  {_get_attr(t, 'datetime'):<20} "
+                f"{_get_attr(t, 'symbol'):<16} "
                 f"{d_tag:>5} {o_tag:>4} "
-                f"{ensure_float(t['price']):>9.2f} "
-                f"{t['volume']:>4}"
+                f"{ensure_float(price):>9.2f} "
+                f"{qty:>4}"
             )
 
     lines.append(f"{'=' * 70}")
     return '\n'.join(lines)
 
 
-# ── 对比报告 ──────────────────────────────────────────────────
-
 def format_comparison_report(
-    db: Database,
+    db_path: str,
     backtest_ids: list[int],
     save_json: bool = False,
     output_dir: str = ".quant_shared_data/reports",
@@ -185,7 +148,7 @@ def format_comparison_report(
     """比较多条回测记录并生成排名报告
 
     Args:
-        db: Database 实例
+        db_path: 数据库路径
         backtest_ids: 要对比的回测 ID 列表
         save_json: 是否保存 JSON 文件
         output_dir: JSON 输出目录
@@ -193,41 +156,40 @@ def format_comparison_report(
     Returns:
         格式化的对比报告字符串
     """
-    records: list[BacktestDict] = []
+    dm = DataManager()
+    records: list[BacktestRecord] = []
     for bid in backtest_ids:
-        bt = db.get_backtest(bid)
-        if bt and bt.get('status') == STATUS_SUCCESS:
+        bt = dm.get_backtest(bid)
+        if bt and bt.status == STATUS_SUCCESS:
             records.append(bt)
 
     if not records:
         return "错误: 没有找到有效的回测记录"
 
-    # 构建对比数据
-    symbols_data: list[_SymbolMetrics] = []
+    symbols_data: list[dict] = []
     for bt in records:
-        sym: str = bt.get('symbol') or 'N/A'
-        strat: str = bt.get('strategy') or 'N/A'
+        sym: str = bt.symbol or 'N/A'
+        strat: str = bt.strategy or 'N/A'
         symbols_data.append({
-            'id': bt['id'],
+            'id': bt.id,
             'symbol': sym,
             'strategy': strat,
-            'total_return': ensure_float(bt.get('total_return')),
-            'annual_return': ensure_float(bt.get('annual_return')),
-            'sharpe_ratio': ensure_float(bt.get('sharpe_ratio')),
-            'max_drawdown': ensure_float(bt.get('max_drawdown')),
-            'win_rate': ensure_float(bt.get('win_rate')),
-            'win_loss_ratio': ensure_float(bt.get('win_loss_ratio')),
-            'total_trades': bt.get('total_trades', 0) or 0,
-            'created_at': bt.get('created_at') or '',
+            'total_return': ensure_float(bt.total_return),
+            'annual_return': 0.0,
+            'sharpe_ratio': ensure_float(bt.sharpe_ratio),
+            'max_drawdown': ensure_float(bt.max_drawdown),
+            'win_rate': ensure_float(bt.win_rate),
+            'win_loss_ratio': bt.avg_profit / abs(bt.avg_loss) if bt.avg_loss else 0,
+            'total_trades': bt.total_trades or 0,
+            'created_at': bt.created_at or '',
         })
 
-    # 聚合统计
     returns: list[float] = [s['total_return'] for s in symbols_data]
     sharpes: list[float] = [s['sharpe_ratio'] for s in symbols_data]
     drawdowns: list[float] = [s['max_drawdown'] for s in symbols_data]
     win_rates: list[float] = [s['win_rate'] for s in symbols_data]
 
-    agg: dict[str, object] = {
+    agg: dict = {
         'total_return': compute_summary_stats(returns),
         'sharpe_ratio': compute_summary_stats(sharpes),
         'max_drawdown': compute_summary_stats(drawdowns),
@@ -237,19 +199,17 @@ def format_comparison_report(
         'profitable_ratio': (sum(1 for v in returns if v > 0) / len(returns)) if returns else 0,
     }
 
-    # 排名
-    ranking: dict[str, list[dict[str, object]]] = {
+    ranking: dict = {
         'total_return': rank_by_key(symbols_data, 'total_return'),
         'sharpe_ratio': rank_by_key(symbols_data, 'sharpe_ratio'),
         'max_drawdown': rank_by_key(symbols_data, 'max_drawdown', reverse=False),
         'win_rate': rank_by_key(symbols_data, 'win_rate'),
     }
 
-    # 保存 JSON
     if save_json:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        merged: dict[str, object] = {
+        merged: dict = {
             'meta': {
                 'backtest_ids': backtest_ids,
                 'symbol_count': len(symbols_data),
@@ -264,7 +224,6 @@ def format_comparison_report(
             json.dump(merged, f, ensure_ascii=False, indent=2, default=str)
         logger.info(f"对比报告已保存: {merged_path}")
 
-    # 格式化文本输出
     lines: list[str] = [
         f"{'=' * 80}",
         f"  多品种 / 多次回测对比报告",
@@ -292,7 +251,7 @@ def format_comparison_report(
         "【整体聚合统计】",
     ]
 
-    _stat_formatters: list[tuple[str, str, str]] = [
+    _stat_formatters: list[tuple] = [
         ('total_return', '总收益率', '.2%'),
         ('sharpe_ratio', '夏普比率', '.2f'),
         ('max_drawdown', '最大回撤', '.2%'),
@@ -319,7 +278,7 @@ def format_comparison_report(
         "【各指标排名 TOP 3】",
     ]
 
-    _metric_labels: list[tuple[str, str]] = [
+    _metric_labels: list[tuple] = [
         ('total_return', '收益率'),
         ('sharpe_ratio', '夏普比率'),
         ('max_drawdown', '回撤(低)'),
@@ -343,18 +302,16 @@ def format_comparison_report(
     return '\n'.join(lines)
 
 
-# ── 汇总报告 ──────────────────────────────────────────────────
-
 def format_summary_report(
-    db: Database,
-    symbol: str | None = None,
-    strategy: str | None = None,
+    db_path: str,
+    symbol: Optional[str] = None,
+    strategy: Optional[str] = None,
     limit: int = 20,
 ) -> str:
     """生成最近回测的汇总列表
 
     Args:
-        db: Database 实例
+        db_path: 数据库路径
         symbol: 品种过滤
         strategy: 策略过滤
         limit: 最大条数
@@ -362,7 +319,8 @@ def format_summary_report(
     Returns:
         格式化的汇总表格
     """
-    records = db.get_backtests(
+    dm = DataManager()
+    records = dm.query_backtests(
         symbol=symbol,
         strategy=strategy,
         status=STATUS_SUCCESS,
@@ -387,18 +345,18 @@ def format_summary_report(
     ]
 
     for bt in records:
-        sym: str = bt.get('symbol') or 'N/A'
-        strat: str = bt.get('strategy') or 'N/A'
-        created: str = str(bt.get('created_at') or '')[:16]
+        sym: str = bt.symbol or 'N/A'
+        strat: str = bt.strategy or 'N/A'
+        created: str = str(bt.created_at or '')[:16]
         lines.append(
-            f"  {bt['id']:>5} "
+            f"  {bt.id:>5} "
             f"{sym:<18} "
             f"{strat:<6} "
-            f"{format_pct(bt.get('total_return')):>8} "
-            f"{format_float(bt.get('sharpe_ratio')):>7} "
-            f"{format_pct(bt.get('max_drawdown')):>7}  "
-            f"{format_pct(bt.get('win_rate')):>7} "
-            f"{bt.get('total_trades', 0) or 0:>5} "
+            f"{format_pct(bt.total_return):>8} "
+            f"{format_float(bt.sharpe_ratio):>7} "
+            f"{format_pct(bt.max_drawdown):>7}  "
+            f"{format_pct(bt.win_rate):>7} "
+            f"{bt.total_trades or 0:>5} "
             f"{created:<16}"
         )
 

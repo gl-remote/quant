@@ -7,7 +7,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import pytest
 import logging
 import io
-from data.database import Database, DBLogHandler, _MAX_OPERATION_LOG_ROWS, _PRUNE_CHECK_INTERVAL
+from data.compat import Database, DBLogHandler
+from common.constants import MAX_OPERATION_LOG_ROWS, PRUNE_CHECK_INTERVAL
 
 
 class TestDatabaseInit:
@@ -154,8 +155,8 @@ class TestLogPruning:
 
     def test_no_prune_below_threshold(self, temp_db_path, monkeypatch):
         """未超过阈值时不触发清理"""
-        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 100)
-        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        monkeypatch.setattr('common.constants.MAX_OPERATION_LOG_ROWS', 100)
+        monkeypatch.setattr('common.constants.PRUNE_CHECK_INTERVAL', 1)
         db = Database(temp_db_path)
         for i in range(10):
             db.log('test', f'message {i}')
@@ -164,8 +165,8 @@ class TestLogPruning:
 
     def test_prune_triggers_above_threshold(self, temp_db_path, monkeypatch):
         """超过阈值后自动清理旧记录，总量被限制"""
-        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
-        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        monkeypatch.setattr('common.constants.MAX_OPERATION_LOG_ROWS', 10)
+        monkeypatch.setattr('common.constants.PRUNE_CHECK_INTERVAL', 1)
         db = Database(temp_db_path)
 
         for i in range(20):
@@ -179,8 +180,8 @@ class TestLogPruning:
 
     def test_multiple_prune_cycles(self, temp_db_path, monkeypatch):
         """多次清理周期后总量始终受控"""
-        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
-        monkeypatch.setattr('data.database._PRUNE_CHECK_INTERVAL', 1)
+        monkeypatch.setattr('common.constants.MAX_OPERATION_LOG_ROWS', 10)
+        monkeypatch.setattr('common.constants.PRUNE_CHECK_INTERVAL', 1)
         db = Database(temp_db_path)
 
         for i in range(50):
@@ -192,7 +193,7 @@ class TestLogPruning:
 
     def test_prune_idempotent(self, temp_db_path, monkeypatch):
         """手动多次调用 _prune_old_logs 不抛异常"""
-        monkeypatch.setattr('data.database._MAX_OPERATION_LOG_ROWS', 10)
+        monkeypatch.setattr('common.constants.MAX_OPERATION_LOG_ROWS', 10)
         db = Database(temp_db_path)
         for i in range(5):
             db.log('test', f'message {i}')
