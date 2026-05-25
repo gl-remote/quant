@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from data import DataManager, BacktestRecord, TradeRecord
+from data import DataManager, BacktestRecord
 from common.stats import compute_summary_stats, rank_by_key
 from common.formatting import format_pct, format_float, ensure_float
 from common.constants import (
@@ -39,17 +39,16 @@ def _get_attr(obj, key, default=None):
     return obj.get(key, default) if isinstance(obj, dict) else default
 
 
-def format_single_report(db_path: str, backtest_id: int) -> str:
+def format_single_report(dm: DataManager, backtest_id: int) -> str:
     """生成单次回测的完整文本报告
 
     Args:
-        db_path: 数据库路径
+        dm: DataManager 实例
         backtest_id: 回测记录 ID
 
     Returns:
         格式化的控制台报告字符串
     """
-    dm = DataManager()
     bt = dm.get_backtest(backtest_id)
     
     if not bt:
@@ -140,7 +139,7 @@ def format_single_report(db_path: str, backtest_id: int) -> str:
 
 
 def format_comparison_report(
-    db_path: str,
+    dm: DataManager,
     backtest_ids: list[int],
     save_json: bool = False,
     output_dir: str = ".quant_shared_data/reports",
@@ -148,7 +147,7 @@ def format_comparison_report(
     """比较多条回测记录并生成排名报告
 
     Args:
-        db_path: 数据库路径
+        dm: DataManager 实例
         backtest_ids: 要对比的回测 ID 列表
         save_json: 是否保存 JSON 文件
         output_dir: JSON 输出目录
@@ -156,7 +155,6 @@ def format_comparison_report(
     Returns:
         格式化的对比报告字符串
     """
-    dm = DataManager()
     records: list[BacktestRecord] = []
     for bid in backtest_ids:
         bt = dm.get_backtest(bid)
@@ -303,7 +301,7 @@ def format_comparison_report(
 
 
 def format_summary_report(
-    db_path: str,
+    dm: DataManager,
     symbol: Optional[str] = None,
     strategy: Optional[str] = None,
     limit: int = 20,
@@ -311,7 +309,7 @@ def format_summary_report(
     """生成最近回测的汇总列表
 
     Args:
-        db_path: 数据库路径
+        dm: DataManager 实例
         symbol: 品种过滤
         strategy: 策略过滤
         limit: 最大条数
@@ -319,7 +317,6 @@ def format_summary_report(
     Returns:
         格式化的汇总表格
     """
-    dm = DataManager()
     records = dm.query_backtests(
         symbol=symbol,
         strategy=strategy,

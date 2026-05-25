@@ -13,7 +13,7 @@
 import logging
 
 from config import ConfigManager
-from data import Database, setup_db_logging
+from data import DataManager
 from strategies.core import Bar, Fill, load_strategy, apply_strategy_config, get_strategy_class_name
 from common.constants import (
     TRADE_ACTION_BUY,
@@ -40,8 +40,7 @@ def cmd_test(args):
             strategy: 策略名称（可选，默认 ma）
     """
     cm = ConfigManager()
-    db = Database(cm.get_data_config()['db_path'])
-    setup_db_logging(db, 'test')
+    dm = DataManager(cm)
 
     strategy = load_strategy(args.strategy or None)
     apply_strategy_config(strategy, cm)
@@ -50,7 +49,7 @@ def cmd_test(args):
     logger.info("=" * 60)
     logger.info(f"测试模式 - 策略: {cls_name}")
     logger.info("=" * 60)
-    db.log('test', f"开始: strategy={cls_name}", status=LOG_STATUS_INFO)
+    dm.store.log('test', f"开始: strategy={cls_name}", status=LOG_STATUS_INFO)
 
     try:
         tc = cm.get_trading_config()
@@ -61,7 +60,6 @@ def cmd_test(args):
             f"止盈={tc.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO):.0%}"
         )
 
-        # 模拟连续K线: 先空仓→金叉买入→再一根K线触发止损
         bar1 = Bar(symbol="TEST", datetime="2026-01-01",
                    open=10, high=15, low=10, close=15, volume=1000)
         signal1 = strategy.on_bar(bar1)
@@ -90,11 +88,11 @@ def cmd_test(args):
         fills = strategy.fills
         sells = [f for f in fills if f.action == TRADE_ACTION_SELL]
         logger.info(f"绩效: 交易{sells.__len__()}次")
-        db.log('test', f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)
+        dm.store.log('test', f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)
         logger.info("\n" + "=" * 60)
         logger.info("测试模式完成")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"测试失败: {e}")
-        db.log('test', f"失败: {e}", status=LOG_STATUS_ERROR)
+        dm.store.log('test', f"失败: {e}", status=LOG_STATUS_ERROR)
         raise

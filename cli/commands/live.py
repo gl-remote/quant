@@ -14,7 +14,7 @@ import sys
 import logging
 
 from config import ConfigManager
-from data import Database, setup_db_logging
+from data import DataManager
 from strategies import TqsdkStrategyBridge
 from strategies.core import (
     load_strategy,
@@ -44,15 +44,14 @@ def cmd_live(args):
             strategy: 策略名称（可选）
     """
     cm = ConfigManager(args.config)
-    db = Database(cm.get_data_config()['db_path'])
-    setup_db_logging(db, 'live', args.symbol)
+    dm = DataManager(cm)
 
     try:
         cm.validate_config()
         account = cm.get_account_info()
         if not account:
             logger.error("请先在 config/conf.local.yaml 中配置天勤账号信息")
-            db.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
+            dm.store.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
             sys.exit(1)
 
         from tqsdk import TqAuth
@@ -65,13 +64,13 @@ def cmd_live(args):
         bridge = TqsdkStrategyBridge(context=context)
 
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
-        db.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
+        dm.store.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
                symbol=args.symbol, status=LOG_STATUS_INFO)
 
         (bridge.run_with_gui if args.gui else bridge.run)(symbol=args.symbol, auth=auth)
 
-        db.log('live', f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
+        dm.store.log('live', f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
     except Exception as e:
         logger.error(f"实盘交易失败: {e}", exc_info=True)
-        db.log('live', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
+        dm.store.log('live', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
         raise

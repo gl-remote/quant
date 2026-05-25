@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict
 
-from .store import DataStore
+from .manager import DataManager
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def _do_fetch(symbol: str, start_date: str, end_date: str,
     return df
 
 
-def export_csv(symbol: str, start_date: str, end_date: str, db_path: str,
+def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
                config_manager, output_path: Optional[str] = None,
                force: bool = False):
     """导出 Qlib 格式 CSV
@@ -111,13 +111,11 @@ def export_csv(symbol: str, start_date: str, end_date: str, db_path: str,
         symbol: 品种代码 (e.g. DCE.m2509)
         start_date: 开始日期 YYYY-MM-DD
         end_date: 结束日期 YYYY-MM-DD
-        db_path: 数据库路径
+        dm: DataManager 实例
         config_manager: ConfigManager 实例
         output_path: 自定义输出路径，优先级最高
         force: 强制覆盖模式，跳过已有数据合并，直接覆盖 CSV 和元数据
     """
-    store = DataStore(db_path)
-    
     try:
         dc = config_manager.get_data_config()
         ec = config_manager.get_export_config()
@@ -134,12 +132,12 @@ def export_csv(symbol: str, start_date: str, end_date: str, db_path: str,
         if new_df.empty:
             msg = "未获取到任何数据"
             logger.warning(msg)
-            store.log('export', msg, symbol=symbol, status='WARNING')
+            dm.store.log('export', msg, symbol=symbol, status='WARNING')
             return False
 
         logger.info(f"从天勤获取 {len(new_df)} 条K线")
 
-        meta = store.get_metadata(symbol)
+        meta = dm.store.get_metadata(symbol)
         merged_rows = len(new_df)
         if force:
             logger.info("强制覆盖模式：跳过已有数据合并")
@@ -167,15 +165,15 @@ def export_csv(symbol: str, start_date: str, end_date: str, db_path: str,
 
         min_dt = new_df['datetime'].min()
         max_dt = new_df['datetime'].max()
-        store.upsert_metadata(
+        dm.store.upsert_metadata(
             symbol=symbol, filepath=output_path,
             start_date=start_date, end_date=end_date,
             min_dt=min_dt, max_dt=max_dt, total_rows=merged_rows)
-        store.log('export',
+        dm.store.log('export',
                    f"完成: {symbol} {start_date}~{end_date} -> {output_path} "
                    f"({merged_rows}行, {min_dt}~{max_dt})",
                    symbol=symbol, status='SUCCESS')
         logger.info(f"导出完成: {merged_rows}行, 时间区间 {min_dt} ~ {max_dt}")
         return True
     finally:
-        store.close()
+        dm.close()

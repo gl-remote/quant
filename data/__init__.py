@@ -1,84 +1,64 @@
 # -*- coding: utf-8 -*-
-"""数据模块 - 统一数据访问接口
+"""
+data — 统一数据访问模块
 
-对外隐藏数据库实现细节，提供简洁的数据存取接口。
-所有 DataFrame 交互都经过 Pandera Schema 验证，单条记录都经过 Pydantic 验证。
+对外仅暴露以下接口，隐藏数据库实现细节：
 
-外部模块只需了解：
-  - DataManager: 统一数据管理器（核心接口）
-  - Pandera Schema: KlineSchema, TradeRecordSchema, BacktestResultSchema
-  - Pydantic Model: BacktestRecord, TradeRecord, SymbolInfo, DataSummary
-  - export_csv: 数据导出函数
+核心接口：
+  - DataManager:      统一数据访问入口（推荐使用）
+  - KlineSchema:      K线数据验证Schema
+  - BacktestRecord:   回测记录模型（Pydantic）
+  - TradeRecord:      交易记录模型（Pydantic）
+  - SymbolInfo:       品种信息模型（Pydantic）
+  - DataSummary:      数据汇总模型（Pydantic）
+  - export_csv:       数据导出函数
 
-DataManager 核心方法：
-    # 元数据查询
-    get_all_symbols()      -> List[str]          # 获取所有可用品种
-    search_symbols(pattern) -> List[str]        # 正则搜索品种
-    get_symbol_info(symbol) -> SymbolInfo        # 获取品种详细信息
-    get_data_summary()      -> DataSummary       # 获取数据汇总
-    
-    # 数据加载（返回 Pandera 验证的 DataFrame）
-    load_kline(symbol, start_date, end_date) -> DataFrame[KlineSchema]
-    
-    # 回测记录（返回 Pydantic Model）
-    save_backtest(record: BacktestRecord) -> int
-    query_backtests(symbol, strategy) -> List[BacktestRecord]
-    query_trades(backtest_id) -> List[TradeRecord]
+设计原则：
+  1. 隐藏数据库概念，外部仅通过 DataManager 交互
+  2. DataFrame 数据自动通过 Pandera Schema 验证
+  3. 单条记录使用 Pydantic 进行运行时验证
+  4. 所有数据类型约定清晰，无需关心内部实现
 """
 
-import pandera.pandas as pa
-from pandera.typing import DataFrame
-
-# Pandera Schema（对外暴露，用于 DataFrame 验证）
-from .models import (
-    KlineSchema,
-    TradeRecordSchema,
-    BacktestResultSchema,
-)
-
-# 核心数据访问接口
 from .manager import DataManager
-
-# Pydantic 模型（对外暴露，用于单条记录验证）
 from .models import (
     BacktestRecord,
     TradeRecord,
     SymbolInfo,
     DataSummary,
 )
-
-# 数据导出函数
 from .exporter import export_csv
 
-# 向后兼容
-from .compat import Database, DBLogHandler, setup_db_logging
-
-# 类型别名（向后兼容）
-BacktestDict = BacktestRecord
-BacktestTradeDict = TradeRecord
+# 从 common.schemas 导入全局统一的 Pandera Schema
+from common.schemas import (
+    KlineSchema,
+    TradeRecordSchema,
+    BacktestResultSchema,
+    DailyReturnSchema,
+    KlineDataFrame,
+    TradeDataFrame,
+    BacktestDataFrame,
+    DailyReturnDataFrame,
+)
 
 __all__ = [
-    # Pandera Schema
+    # 核心管理器
+    'DataManager',
+    # Pandera Schema（全局统一）
     'KlineSchema',
     'TradeRecordSchema',
     'BacktestResultSchema',
-    
-    # DataManager
-    'DataManager',
-    
-    # Pydantic Model
+    'DailyReturnSchema',
+    # DataFrame 类型别名
+    'KlineDataFrame',
+    'TradeDataFrame',
+    'BacktestDataFrame',
+    'DailyReturnDataFrame',
+    # Pydantic 模型
     'BacktestRecord',
     'TradeRecord',
     'SymbolInfo',
     'DataSummary',
-    
-    # 工具函数
+    # 导出函数
     'export_csv',
-    
-    # 向后兼容
-    'Database',
-    'DBLogHandler',
-    'setup_db_logging',
-    'BacktestDict',
-    'BacktestTradeDict',
 ]

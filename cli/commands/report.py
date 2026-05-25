@@ -15,7 +15,7 @@ import sys
 import logging
 
 from config import ConfigManager
-from data import Database
+from data import DataManager
 from report import format_single_report, format_comparison_report, format_summary_report
 from common.constants import DEFAULT_REPORT_OUTPUT_DIR
 
@@ -37,16 +37,14 @@ def cmd_report(args):
             save_json: 是否保存 JSON 文件
     """
     cm = ConfigManager()
-    db = Database(cm.get_data_config()['db_path'])
+    dm = DataManager(cm)
 
     try:
         if args.id is not None:
-            # 单次报告
-            report = format_single_report(db, args.id)
+            report = format_single_report(dm, args.id)
             print(report)
 
         elif args.compare:
-            # 多条对比报告
             try:
                 ids = [int(i.strip()) for i in args.compare.split(',') if i.strip()]
             except ValueError:
@@ -57,7 +55,7 @@ def cmd_report(args):
                 sys.exit(1)
 
             report = format_comparison_report(
-                db, ids,
+                dm, ids,
                 save_json=args.save_json,
                 output_dir=cm.get_backtest_config().get('report', {}).get(
                     'output_dir', DEFAULT_REPORT_OUTPUT_DIR),
@@ -65,9 +63,8 @@ def cmd_report(args):
             print(report)
 
         else:
-            # 汇总列表
             report = format_summary_report(
-                db,
+                dm,
                 symbol=args.symbol,
                 strategy=args.strategy,
                 limit=args.limit or 20,

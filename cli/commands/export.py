@@ -14,7 +14,7 @@ import sys
 import logging
 
 from config import ConfigManager
-from data import Database, export_csv, setup_db_logging
+from data import DataManager, export_csv
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +33,17 @@ def cmd_export(args):
             force: 是否强制覆盖
     """
     cm = ConfigManager()
-    db = Database(cm.get_data_config()['db_path'])
-    setup_db_logging(db, 'export', args.symbol)
+    dm = DataManager(cm)
 
     logger.info(f"数据导出: {args.symbol} {args.start} ~ {args.end}")
-    db.log('export', f"开始: {args.symbol} {args.start}~{args.end}",
+    dm.store.log('export', f"开始: {args.symbol} {args.start}~{args.end}",
            symbol=args.symbol, status='INFO')
 
     success = export_csv(
         symbol=args.symbol,
         start_date=args.start,
         end_date=args.end,
-        db=db,
+        dm=dm,
         config_manager=cm,
         output_path=args.output,
         force=args.force,

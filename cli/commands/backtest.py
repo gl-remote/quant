@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import List, Tuple, Any
 
 from config import ConfigManager
-from data import Database, setup_db_logging
+from data import DataManager
 from common.constants import (
     STATUS_SUCCESS,
     STATUS_FAILED,
@@ -60,21 +60,16 @@ def cmd_backtest(args):
             gui: 是否启用图形界面（仅单标的模式生效）
     """
     cm = ConfigManager()
-    db = Database(cm.get_data_config()['db_path'])
+    dm = DataManager(cm)
 
-    # 确定回测模式
     is_single_mode = args.symbol and not args.pattern
     if is_single_mode:
-        # 单标的模式使用 TqSdk
-        setup_db_logging(db, 'backtest', args.symbol)
-        _run_tq_backtest(args, cm, db)
+        _run_tq_backtest(args, cm, dm)
     else:
-        # 批量模式使用 vn.py
-        setup_db_logging(db, 'backtest', MODE_MULTI)
-        _run_vnpy_backtest(args, cm, db)
+        _run_vnpy_backtest(args, cm, dm)
 
 
-def _run_tq_backtest(args, cm, db):
+def _run_tq_backtest(args, cm, dm):
     """使用 TqSdk 执行单标的回测"""
     from tqsdk import TqApi, TqAuth, TqBacktest, TargetPosTask
     from tqsdk.exceptions import BacktestFinished
@@ -95,7 +90,7 @@ def _run_tq_backtest(args, cm, db):
             f"回测: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
             f"strategy={strategy_cls} GUI={args.gui}"
         )
-        db.log('backtest',
+        dm.store.log('backtest',
                f"开始: {args.symbol} {args.start}~{args.end} 资金={args.capital} "
                f"strategy={strategy_cls}",
                symbol=args.symbol, status=LOG_STATUS_INFO)
@@ -151,8 +146,7 @@ def _run_tq_backtest(args, cm, db):
         )
         print(report)
 
-        # 数据落地
-        bt_id = db.insert_backtest(
+        bt_id = dm.insert_backtest(
             symbol=args.symbol,
             strategy=strategy_cls,
             status=STATUS_SUCCESS,
@@ -177,7 +171,7 @@ def _run_tq_backtest(args, cm, db):
                     'volume': f.volume,
                     'reason': f.reason,
                 })
-            db.insert_backtest_trades(bt_id, trade_dicts)
+            dm.insert_backtest_trades(bt_id, trade_dicts)
 
             logger.info("\n交易记录:")
             for f in fills:
@@ -185,7 +179,7 @@ def _run_tq_backtest(args, cm, db):
                 tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
                 logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
 
-        db.log('backtest', f"完成:\n{report}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
+        dm.store.log('backtest', f"完成:\n{report}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
         print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
 
         if args.gui:
@@ -197,8 +191,8 @@ def _run_tq_backtest(args, cm, db):
                 pass
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        db.log('backtest', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
-        db.insert_backtest(
+        dm.store.log('backtest', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
+        dm.insert_backtest(
             symbol=args.symbol,
             strategy=get_strategy_class_name(strategy_core) if 'strategy_core' in locals() else 'unknown',
             status=STATUS_FAILED,
@@ -215,7 +209,7 @@ def _run_tq_backtest(args, cm, db):
             api.close()
 
 
-def _run_vnpy_backtest(args, cm, db):
+def _run_vnpy_backtest(args, cm, dm):
     """使用 vn.py 执行批量回测"""
     from backtest import VnpyBacktestEngine, scan_csv_files
 
@@ -224,7 +218,6 @@ def _run_vnpy_backtest(args, cm, db):
         strategy = load_strategy(args.strategy)
         apply_strategy_config(strategy, cm)
 
-        # 确定品种列表
         if args.symbol and not args.pattern:
             symbols = [(args.symbol, None)]
             mode = MODE_SINGLE
@@ -232,7 +225,7 @@ def _run_vnpy_backtest(args, cm, db):
             symbols = scan_csv_files(bc['data_dir'], args.pattern)
             if not symbols:
                 logger.error("未找到匹配的品种数据")
-                db.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
+                dm.store.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
                 return
             mode = MODE_BATCH
 
@@ -278,7 +271,7 @@ def _run_vnpy_backtest(args, cm, db):
                 st = r['result'].get('statistics', {})
                 dr = r['result'].get('daily_results', [])
                 ec = r.get('engine_config', {})
-                bt_id = db.insert_backtest(
+                bt_id = dm.insert_backtest(
                     symbol=r['symbol'],
                     strategy=strategy_name,
                     status=STATUS_SUCCESS,
@@ -291,10 +284,10 @@ def _run_vnpy_backtest(args, cm, db):
                 )
                 bt_ids.append(bt_id)
                 if dr:
-                    trade_count = db.insert_backtest_trades(bt_id, dr)
+                    trade_count = dm.insert_backtest_trades(bt_id, dr)
                     logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
             else:
-                db.insert_backtest(
+                dm.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),
                     strategy=strategy_name,
                     status=STATUS_FAILED,
@@ -316,18 +309,18 @@ def _run_vnpy_backtest(args, cm, db):
                 print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
 
         if succeeded:
-            db.log('backtest',
+            dm.store.log('backtest',
                    f"{'批量' if mode == MODE_BATCH else ''}回测完成: "
                    f"{len(succeeded)}/{len(all_results)}, "
                    f"已写入 {persisted} 条 DB 记录",
                    symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
                    status=LOG_STATUS_SUCCESS)
         else:
-            db.log('backtest', f"回测全部失败",
+            dm.store.log('backtest', f"回测全部失败",
                    symbol=MODE_MULTI if mode == MODE_BATCH else args.symbol,
                    status=LOG_STATUS_ERROR)
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        db.log('backtest', f"失败: {e}", symbol=args.symbol or MODE_MULTI, status=LOG_STATUS_ERROR)
+        dm.store.log('backtest', f"失败: {e}", symbol=args.symbol or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
