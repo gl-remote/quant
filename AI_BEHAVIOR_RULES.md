@@ -189,6 +189,66 @@ def parse_symbol_exchange(symbol: str):
 
 `data_loader.py` 和 `backtest_engine.py` 均通过此函数解析品种代码与交易所。
 
+### 规则 4.9: 全局常量字典（强制执行）
+
+项目内所有硬编码的业务字符串、魔术数字、状态码、标识符**必须**使用 `common/constants.py` 中定义的统一常量，严禁散落硬编码字面量。
+
+```python
+# ✅ 正确：使用统一常量
+from common.constants import TRADE_ACTION_BUY, STATUS_SUCCESS, DEFAULT_INITIAL_CAPITAL
+signal = Signal(action=TRADE_ACTION_BUY, reason=SIGNAL_GOLDEN_CROSS)
+capital = bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL)
+
+# ❌ 禁止：硬编码魔术字符串/数字
+signal = Signal(action='buy', reason='golden_cross')
+capital = bc.get('initial_capital', 100000.0)
+```
+
+覆盖范围：
+- 交易方向/动作（TRADE_ACTION_BUY/SELL, TRADE_DIRECTION_LONG/SHORT）
+- 开平仓标识（TRADE_OFFSET_OPEN/CLOSE）
+- 信号原因（SIGNAL_STOP_LOSS/TAKE_PROFIT/DEATH_CROSS/GOLDEN_CROSS）
+- 状态码（STATUS_SUCCESS/FAILED, LOG_STATUS_*）
+- CLI 命令名（CMD_EXPORT/BACKTEST/TQ_BACKTEST/TEST/LIVE/REPORT）
+- 回测运行模式（MODE_SINGLE/BATCH/MULTI）
+- 策略标识名（STRATEGY_MA）
+- 所有配置默认值（DEFAULT_* 系列）
+- 量化金融常数（TRADING_DAYS_PER_YEAR=252）
+- 格式化字符串（FMT_*）
+
+新增业务常量时：先评估是否已有适用的常量 → 若无，在 `constants.py` 中新增 → 全局替换。
+
+### 规则 4.10: 统一计算公式库（强制执行）
+
+项目内所有量化统计、交易指标、风控测算的计算**必须**使用 `common/formulas.py` 中定义的统一函数，严禁内联重复实现计算公式。
+
+```python
+# ✅ 正确：使用公式库
+from common.formulas import total_return, win_rate, position_size
+ret = total_return(initial_capital, final_equity, total_trades=total_trades)
+wr = win_rate(win_trades, total_trades)
+vol = position_size(capital, position_ratio, price, contract_size)
+
+# ❌ 禁止：内联重复计算
+ret = (final_equity - initial_capital) / initial_capital
+wr = win_trades / max(total_trades, 1)
+vol = capital * 0.1 / (price * 10)
+```
+
+已封装的公式（20+ 函数）：
+- **收益类**: total_return(), annualized_return()
+- **胜率盈亏比**: win_rate(), profit_factor()
+- **交易成本**: trade_cost()
+- **仓位计算**: position_size()
+- **均线**: simple_moving_average()
+- **交叉检测**: golden_cross(), death_cross()
+- **止损止盈**: stop_loss_triggered(), take_profit_triggered()
+- **持仓均价**: average_entry_price()
+- **回撤**: drawdown_at_point()
+- **统计**: avg_trades_per_day(), profitable_ratio(), convert_annual_factor()
+
+新增公式时：先确认公式库中无等价的函数 → 在 `formulas.py` 中实现（纯函数、零依赖）→ 补充单元测试于 `tests/test_common.py` → 全局替换。
+
 ---
 
 ## 五、回测流水线

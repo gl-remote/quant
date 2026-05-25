@@ -40,7 +40,13 @@ quant/
 │   ├── bridges/               # 框架桥接器
 │   │   ├── vnpy_bridge.py     #   vn.py CtaTemplate
 │   │   └── tqsdk_bridge.py    #   天勤 SDK
-│   └── ma_strategy.py         # 均线策略核心
+│   ├── ma_strategy.py         # 均线策略核心
+├── common/                    # 通用纯函数工具层（零 I/O、零依赖）
+│   ├── constants.py           #   全局业务常量字典
+│   ├── formulas.py            #   统一量化计算公式库
+│   ├── metrics.py             #   绩效指标 (max_drawdown/sharpe)
+│   ├── stats.py               #   统计聚合 (rank_by_key/summary_stats)
+│   └── formatting.py          #   安全格式化 (format_pct/format_float)
 ├── backtest/                  # 回测子系统
 │   ├── vnpy_backtest_engine.py
 │   ├── tq_backtest_engine.py
@@ -92,6 +98,39 @@ mypy strategies/ backtest/ data/
 2. **显式优于隐式**: 信号优先级、数据流方向必须有文档或注释说明
 3. **防御性编程**: 外部输入必须校验（价格 > 0、手数 >= 1 等）
 4. **不可变性优先**: 对外暴露的属性返回副本而非引用（如 `fills`）
+
+### 全局常量字典 (`common/constants.py`)
+
+所有业务字符串、魔术数字、状态码必须使用统一常量，严禁散落硬编码字面量：
+
+```python
+# ✅ 使用统一常量
+from common.constants import TRADE_ACTION_BUY, DEFAULT_INITIAL_CAPITAL
+
+signal = Signal(action=TRADE_ACTION_BUY)
+capital = bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL)
+```
+
+涵盖 60+ 个常量，分类包括：交易方向/动作、开平仓、信号原因、状态码、命令名、运行模式、策略标识、配置默认值、金融常数、格式化字符串。
+
+新增业务常量流程：检查已有常量 → `constants.py` 中新增 → 全局替换旧硬编码。
+
+### 统一计算公式库 (`common/formulas.py`)
+
+所有量化计算必须使用公式库函数，严禁内联重复实现：
+
+```python
+# ✅ 使用公式库
+from common.formulas import total_return, win_rate, position_size
+
+ret = total_return(initial_capital, final_equity, total_trades=total_trades)
+wr = win_rate(win_trades, total_trades)
+vol = position_size(capital, position_ratio, price, contract_size)
+```
+
+已封装 20+ 个公式：收益类、胜率盈亏比、交易成本、仓位计算、均线、交叉检测、止损止盈、持仓均价、回撤、统计。
+
+新增公式流程：确认无等价函数 → `formulas.py` 中实现（纯函数、零依赖）→ 补充单元测试 → 全局替换。
 
 ---
 
