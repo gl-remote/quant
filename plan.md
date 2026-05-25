@@ -147,16 +147,16 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ### 3.1 Bug — 逻辑错误/数值计算错误
 
-| 编号 | 严重度 | 问题 | 文件:行 | 根因与影响 |
-|------|--------|------|---------|-----------|
-| BUG-01 | 🔴 严重 | tq-backtest 盈亏计算错误 (笛卡尔积) | `main.py:458-464` | `for sf in sells: for bf in buys: total += (sf.price - bf.price) * sf.volume` 每笔卖出与**所有**买入逐一配对，不是配对撮合。盈亏总额完全失真 |
-| BUG-02 | 🔴 严重 | TQBacktestEngine 零手续费/滑点 | `tq_backtest_engine.py:43-67` | `add_trade` 中买入扣 `price*quantity`、卖出加回同额，无手续费率/滑点扣减。权益曲线系统性偏高 |
-| BUG-03 | 🟡 高 | `format_pct` 语义启发式不可靠 | `common/formatting.py:27-28` | `abs(v) > 1 → v/100` 在回撤值为 -1.5（比值 -1.5，即 -150%）时被迫归一化为 -0.015（显示 -1.50%），完全错误。整个代码库调用方混用比值和百分比值 |
-| BUG-04 | 🟡 高 | `_run_backtest` 零异常处理 | `vnpy_backtest_engine.py:298-372` | Walk-Forward 200 个窗口中任一 `engine.run_backtesting()` 崩溃，整个循环终止，已成功的窗口结果全部作废 |
-| BUG-05 | 🟡 中 | 买卖统计方向常值混淆 | `sql_reporter.py:68-73` | vnpy 返回 `direction='long'/'short'`（对应开多/开空），但 `MaStrategy` fill 记录使用 `action='buy'/'sell'`。DB 存储 vnpy 方向值，SQL 报告查询 `direction=='long' and offset=='open'` 依赖 vnpy 内部表示，脆弱 |
-| BUG-06 | 🟡 中 | Walk-Forward 窗口数公式为近似值 | `data_loader.py:318` | `n/(1+(min_windows-1)*step_ratio)` 在浮点截断 + int 舍入下，实际窗口数可能少于 min_windows，且不警告 |
-| BUG-07 | 🟡 中 | `annual_return_abs` 命名与值不匹配 | `dataset_reporter.py:119-120` | `annual_return_abs` 命名暗示绝对金额，实际存储 `statistics.get('annual_return', 0)` 即 vnpy 返回的**比值**（如 0.15 = 15%）。comparison_reporter 按 `total_return_abs` 取值时类型预期混乱 |
-| BUG-08 | 🟢 低 | `config_manager` 静默修改源配置字典 | `config_manager.py:76-79` | `_load` 返回 `self.config` 引用，`get_strategy_config` 对 `tc` 字典写入默认值 → 污染全局配置。后续获取同一 key 会得到默认值而非原始缺失 |
+| 编号 | 严重度 | 状态 | 问题 | 文件:行 | 根因与影响 | 修复提交 |
+|------|--------|------|------|---------|-----------|---------|
+| BUG-01 | 🔴 严重 | ✅ 已修复 | tq-backtest 盈亏计算错误 (笛卡尔积) | `main.py:458-464` | `for sf in sells: for bf in buys: total += (sf.price - bf.price) * sf.volume` 每笔卖出与**所有**买入逐一配对，不是配对撮合。盈亏总额完全失真 | `3ea2d3e` |
+| BUG-02 | 🔴 严重 | ✅ 已修复 | TQBacktestEngine 零手续费/滑点 | `tq_backtest_engine.py:43-67` | `add_trade` 中买入扣 `price*quantity`、卖出加回同额，无手续费率/滑点扣减。权益曲线系统性偏高 | `7ce71cb` |
+| BUG-03 | 🟡 高 | ✅ 已修复 | `format_pct` 语义启发式不可靠 | `common/formatting.py:27-28` | `abs(v) > 1 → v/100` 在回撤值为 -1.5（比值 -1.5，即 -150%）时被迫归一化为 -0.015（显示 -1.50%），完全错误。整个代码库调用方混用比值和百分比值 | `d1589b9` |
+| BUG-04 | 🟡 高 | ✅ 已修复 | `_run_backtest` 零异常处理 | `vnpy_backtest_engine.py:298-372` | Walk-Forward 200 个窗口中任一 `engine.run_backtesting()` 崩溃，整个循环终止，已成功的窗口结果全部作废 | `d1589b9` |
+| BUG-05 | 🟡 中 | ✅ 已修复 | 买卖统计方向常值混淆 | `sql_reporter.py:68-73` | vnpy 返回 `direction='long'/'short'`（对应开多/开空），但 `MaStrategy` fill 记录使用 `action='buy'/'sell'`。DB 存储 vnpy 方向值，SQL 报告查询 `direction=='long' and offset=='open'` 依赖 vnpy 内部表示，脆弱 | `f889e16` |
+| BUG-06 | 🟡 中 | ✅ 已修复 | Walk-Forward 窗口数公式为近似值 | `data_loader.py:318` | `n/(1+(min_windows-1)*step_ratio)` 在浮点截断 + int 舍入下，实际窗口数可能少于 min_windows，且不警告 | `500312b` |
+| BUG-07 | 🟡 中 | ✅ 已修复 | `annual_return_abs` 命名与值不匹配 | `dataset_reporter.py:119-120` | `annual_return_abs` 命名暗示绝对金额，实际存储 `statistics.get('annual_return', 0)` 即 vnpy 返回的**比值**（如 0.15 = 15%）。comparison_reporter 按 `total_return_abs` 取值时类型预期混乱 | `fc4ca15` |
+| BUG-08 | 🟢 低 | ✅ 已修复 | `config_manager` 静默修改源配置字典 | `config_manager.py:76-79` | `_load` 返回 `self.config` 引用，`get_strategy_config` 对 `tc` 字典写入默认值 → 污染全局配置。后续获取同一 key 会得到默认值而非原始缺失 | `3d505cf` |
 
 ### 3.2 缺陷 — 质量/鲁棒性/工程实践
 
@@ -228,13 +228,13 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ### 4.1 当前已发现风险
 
-| 风险 | 可能性 | 影响 | 关联问题 | 缓解措施 |
-|------|--------|------|---------|---------|
-| tq-backtest 盈亏全错 | 每次触发 | 🔴 高 | **BUG-01, BUG-02** | 优先修复卡尔积 + 加手续费扣减 |
-| Walk-Forward 崩溃丢弃数据 | 数据异常时 | 🔴 高 | **BUG-04** | `_run_backtest` 加 try/except 逐窗口保护 |
-| format_pct 格式化错误 | 中 | 🟡 高 | **BUG-03** | 统一 DB 入库语义（全部存比值），消除启发式 |
+| 风险 | 可能性 | 影响 | 关联问题 | 状态 | 缓解措施 |
+|------|--------|------|---------|------|---------|
+| tq-backtest 盈亏全错 | 每次触发 | 🔴 高 | **BUG-01, BUG-02** | ✅ 已修复 | 已修复：卡尔积→FIFO (`3ea2d3e`)、手续费扣减 (`7ce71cb`) |
+| Walk-Forward 崩溃丢弃数据 | 数据异常时 | 🔴 高 | **BUG-04** | ✅ 已修复 | 已修复：`_run_backtest` 加 try/except 逐窗口保护 (`d1589b9`) |
+| format_pct 格式化错误 | 中 | 🟡 高 | **BUG-03** | ✅ 已修复 | 已修复：统一 DB 入库语义（全部存比值），消除启发式 (`d1589b9`) |
 | 实盘无风控裸奔 | 中 | 🔴 高 | DEF-S08 | S3-A15 风控熔断 |
-| 报告数值不可靠 | 高 | 🟡 中 | BUG-05~07, DEF-02, DEF-07 | 统一数值语义，修复三处归一化 |
+| 报告数值不可靠 | 高 | 🟡 中 | BUG-05~07, DEF-02, DEF-07 | ✅ 已修复 | BUG-05/06/07 已修复，方向常量+WF验证+命名修正 |
 | `_InjectedStrategy` 竞态 | 低 | 🟡 中 | ARC-01 | 当前单线程安全，重构时再处理 |
 
 ### 4.2 前瞻风险
