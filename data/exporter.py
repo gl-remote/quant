@@ -104,7 +104,7 @@ def _do_fetch(symbol: str, start_date: str, end_date: str,
 
 def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
                config_manager, output_path: Optional[str] = None,
-               force: bool = False):
+               force: bool = False, interval: str = '1m'):
     """导出 Qlib 格式 CSV
 
     Args:
@@ -115,6 +115,7 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
         config_manager: ConfigManager 实例
         output_path: 自定义输出路径，优先级最高
         force: 强制覆盖模式，跳过已有数据合并，直接覆盖 CSV 和元数据
+        interval: K线周期，用于文件名 (默认 '1m')
     """
     try:
         dc = config_manager.get_data_config()
@@ -122,7 +123,7 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
         Path(dc['export_dir']).mkdir(parents=True, exist_ok=True)
 
         if not output_path:
-            filename = ec['filename_template'].format(symbol=symbol)
+            filename = ec['filename_template'].format(symbol=symbol, interval=interval)
             output_path = str(Path(dc['export_dir']) / filename)
 
         account = config_manager.get_account_info()

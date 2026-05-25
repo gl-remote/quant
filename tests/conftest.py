@@ -51,7 +51,7 @@ def base_config_dict():
         },
         'export': {
             'default_dir': '.quant_shared_data/csv',
-            'filename_template': '{symbol}_qlib.csv',
+            'filename_template': '{symbol}.{interval}.csv',
         },
         'backtest': {
             'initial_capital': 100000.0,

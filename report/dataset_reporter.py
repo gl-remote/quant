@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -19,6 +19,7 @@ def generate_dataset_report(
     daily_results: list[dict] | None = None,
     dataset_name: str = "unknown",
     symbol: str = "",
+    backtest_id: Optional[int] = None,
     initial_capital: float = DEFAULT_INITIAL_CAPITAL,
     output_dir: str = ".quant_shared_data/reports",
     save_trades: bool = True,
@@ -41,6 +42,7 @@ def generate_dataset_report(
     """
     report = {
         'meta': {
+            'backtest_id': backtest_id,
             'dataset': dataset_name,
             'symbol': symbol,
             'generated_at': datetime.now().isoformat(),
@@ -54,20 +56,22 @@ def generate_dataset_report(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    file_prefix = f"bt_{backtest_id}_{symbol}_{dataset_name}" if backtest_id else f"{symbol}_{dataset_name}"
+
     # 保存JSON报告
-    report_file = output_path / f"{symbol}_{dataset_name}_report.json"
+    report_file = output_path / f"{file_prefix}_report.json"
     with open(report_file, 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=2, default=str)
     logger.info(f"报告已保存: {report_file}")
 
     # 保存交易记录
     if save_trades and daily_results:
-        trades_file = output_path / f"{symbol}_{dataset_name}_trades.json"
+        trades_file = output_path / f"{file_prefix}_trades.json"
         _save_trade_records(daily_results, trades_file)
 
     # 保存资金曲线
     if save_equity and daily_results:
-        equity_file = output_path / f"{symbol}_{dataset_name}_equity.json"
+        equity_file = output_path / f"{file_prefix}_equity.json"
         _save_equity_curve(daily_results, equity_file, initial_capital)
 
     return report

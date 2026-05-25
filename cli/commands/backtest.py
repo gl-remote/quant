@@ -266,7 +266,7 @@ def _run_vnpy_backtest(args, cm, dm):
         )
 
         bt_ids: List[int] = []
-        for r in all_results:
+        for i, r in enumerate(all_results):
             if r.get('success'):
                 st = r['result'].get('statistics', {})
                 dr = r['result'].get('daily_results', [])
@@ -283,9 +283,18 @@ def _run_vnpy_backtest(args, cm, dm):
                     data_end_date=r.get('data_end_date'),
                 )
                 bt_ids.append(bt_id)
+                
                 if dr:
                     trade_count = dm.insert_backtest_trades(bt_id, dr)
                     logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
+                
+                logger.info(f"\n>>> 生成回测报告 [{r['symbol']}]")
+                ctx = TradingContext.build(
+                    strategy, r['symbol'], cm,
+                    capital=bc.get('initial_capital', DEFAULT_INITIAL_CAPITAL)
+                )
+                engine = VnpyBacktestEngine(bc, context=ctx)
+                engine._format_and_save_report(r['result'], r['symbol'], 'full', bt_id)
             else:
                 dm.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),

@@ -43,7 +43,7 @@ vn.py 依赖较多，推荐使用 conda 环境：
 
 ### Q5: 文件命名规则？
 
-系统按以下优先级搜索数据文件：`{symbol}.csv` → `{symbol}_qlib.csv` → `{symbol}_*.csv`。推荐使用 `{symbol}_qlib.csv`（如 `DCE.m2509_qlib.csv`），这是导出命令的默认命名。
+系统按以下优先级搜索数据文件：`{symbol}.csv` → `{symbol}.{interval}.csv` → `{symbol}_*.csv`。推荐使用 `{symbol}.{interval}.csv`（如 `DCE.m2509.1m.csv`），这是导出命令的默认命名。
 
 ### Q6: 多次导出同一品种会重复吗？
 

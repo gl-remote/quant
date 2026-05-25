@@ -23,7 +23,7 @@ class KlineSchema(pa.DataFrameModel):
         close: 收盘价
         volume: 成交量
     """
-    datetime: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
+    datetime: Series[pd.Timestamp] = pa.Field(unique=True)
     open: Series[float] = pa.Field(ge=0.0)
     high: Series[float] = pa.Field(ge=0.0)
     low: Series[float] = pa.Field(ge=0.0)

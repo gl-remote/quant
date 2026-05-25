@@ -50,6 +50,12 @@ class TestScanCsvFiles:
         result = scan_csv_files(str(tmp_path))
         assert len(result) == 1
         assert result[0][0] == "DCE.m2509"
+    
+    def test_new_format_filename(self, tmp_path):
+        (tmp_path / "DCE.m2509.1m.csv").write_text("datetime,close\n2024-01-01,100")
+        result = scan_csv_files(str(tmp_path))
+        assert len(result) == 1
+        assert result[0][0] == "DCE.m2509"
 
     def test_multiple_files(self, tmp_path):
         (tmp_path / "DCE.m2509.csv").write_text("d")

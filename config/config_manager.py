@@ -152,7 +152,7 @@ class ConfigManager:
         ec = self.config.get('export', {})
         return {
             'default_dir': self._resolve(ec.get('default_dir', DEFAULT_EXPORT_DIR)),
-            'filename_template': ec.get('filename_template', '{symbol}_qlib.csv'),
+            'filename_template': ec.get('filename_template', '{symbol}.{interval}.csv'),
         }
 
     def get_backtest_config(self) -> Dict[str, Any]:

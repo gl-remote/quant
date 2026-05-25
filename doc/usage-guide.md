@@ -33,9 +33,9 @@ cp config/conf.example.yaml config/conf.local.yaml
 python main.py export --symbol DCE.m2509 --start 2025-01-01 --end 2026-01-01
 ```
 
-数据保存至 `.quant_shared_data/csv/DCE.m2509_qlib.csv`。该命令支持断点续传，重复执行会自动合并去重，不会产生重复数据。
+数据保存至 `.quant_shared_data/csv/DCE.m2509.1m.csv`。该命令支持断点续传，重复执行会自动合并去重，不会产生重复数据。
 
-也可以手动将 CSV 文件放入 `.quant_shared_data/csv/` 目录。CSV 必须包含以下列：`datetime`, `open`, `high`, `low`, `close`, `volume`。系统按 `{symbol}.csv` → `{symbol}_qlib.csv` → `{symbol}_*.csv` 优先级匹配文件。
+也可以手动将 CSV 文件放入 `.quant_shared_data/csv/` 目录。CSV 必须包含以下列：`datetime`, `open`, `high`, `low`, `close`, `volume`。系统按 `{symbol}.csv` → `{symbol}.{interval}.csv` → `{symbol}_*.csv` 优先级匹配文件。
 
 ## 命令行参考
 

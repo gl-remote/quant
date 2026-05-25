@@ -30,11 +30,6 @@ from .models import (
     SymbolInfo,
     DataSummary,
 )
-from common.constants import (
-    DEFAULT_EXPORT_DIR,
-    DEFAULT_KLINE_PERIOD,
-    KLINE_INTERVAL_1MIN,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +49,33 @@ class DataManager:
         self._config = config_manager
         self._store = None
         self._data_cache = {}
+        self._default_config = None
+    
+    def _get_config(self):
+        """获取配置管理器（延迟初始化默认配置）"""
+        if self._config:
+            return self._config
+        if self._default_config is None:
+            from config import ConfigManager
+            self._default_config = ConfigManager()
+        return self._default_config
+    
+    def _get_data_dir(self):
+        """获取数据目录配置"""
+        return self._get_config().get_backtest_config().get('data_dir', '.quant_shared_data/csv')
+    
+    def _get_filename_template(self):
+        """获取文件名模板配置"""
+        return self._get_config().get_export_config().get('filename_template', '{symbol}.{interval}.csv')
+    
+    def _get_default_interval(self):
+        """获取默认K线周期配置"""
+        return self._get_config().get_backtest_config().get('interval', '1m')
     
     def _init_store(self):
         """延迟初始化存储层"""
         if self._store is None:
-            if self._config:
-                db_path = self._config.get_data_config().get('db_path', 'data/quant.sqlite')
-            else:
-                db_path = 'data/quant.sqlite'
+            db_path = self._get_config().get_data_config().get('db_path', '.quant_shared_data/quant_shared.db')
             self._store = DataStore(db_path)
     
     @property
@@ -78,13 +92,43 @@ class DataManager:
         Returns:
             品种代码列表，按字母排序
         """
-        data_dir = DEFAULT_EXPORT_DIR
-        if self._config:
-            data_dir = self._config.get_backtest_config().get('data_dir', DEFAULT_EXPORT_DIR)
+        data_dir = self._get_data_dir()
+        filename_template = self._get_filename_template()
         
-        files = list(Path(data_dir).glob('*_1m.csv'))
-        symbols = [f.stem.replace('_1m', '') for f in files]
-        return sorted(symbols)
+        # 先扫描所有CSV文件
+        csv_dir = Path(data_dir)
+        if not csv_dir.exists():
+            return []
+        
+        files = list(csv_dir.glob('*.csv'))
+        
+        # 从文件名提取品种名
+        symbols = set()
+        for f in files:
+            name = f.stem
+            symbol = None
+            
+            # 先尝试新格式: {symbol}.{interval}
+            # 找到最后一个点号的位置，分隔出interval
+            last_dot = name.rfind('.')
+            if last_dot != -1:
+                suffix_part = name[last_dot + 1:]
+                # 检查后面的部分是否像常见的interval
+                common_intervals = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M', '3M', '6M', '1Y']
+                if suffix_part in common_intervals:
+                    symbol = name[:last_dot]
+            
+            # 如果新格式没匹配到，尝试旧格式或无后缀格式
+            if symbol is None:
+                if name.endswith('_qlib'):
+                    symbol = name[:-5]
+                else:
+                    # 直接用文件名作为symbol
+                    symbol = name
+            
+            symbols.add(symbol)
+        
+        return sorted(list(symbols))
     
     def search_symbols(self, pattern: str) -> List[str]:
         """按正则表达式搜索可用品种
@@ -109,21 +153,25 @@ class DataManager:
             SymbolInfo: 品种信息
         """
         meta = self.store.get_metadata(symbol)
+        
         if meta:
-            return SymbolInfo(
-                symbol=symbol,
-                available=True,
-                filepath=meta.get('filepath'),
-                start_date=meta.get('start_date'),
-                end_date=meta.get('end_date'),
-                total_rows=meta.get('total_rows'),
-            )
+            meta_filepath = meta.get('filepath')
+            if meta_filepath and Path(meta_filepath).exists():
+                return SymbolInfo(
+                    symbol=symbol,
+                    available=True,
+                    filepath=meta_filepath,
+                    start_date=meta.get('start_date'),
+                    end_date=meta.get('end_date'),
+                    total_rows=meta.get('total_rows'),
+                )
         
-        data_dir = DEFAULT_EXPORT_DIR
-        if self._config:
-            data_dir = self._config.get_backtest_config().get('data_dir', DEFAULT_EXPORT_DIR)
+        data_dir = self._get_data_dir()
+        filename_template = self._get_filename_template()
         
-        filepath = Path(data_dir) / f"{symbol}_1m.csv"
+        filename = filename_template.format(symbol=symbol, interval='1m')
+        filepath = Path(data_dir) / filename
+        
         if filepath.exists():
             df = self._load_csv_with_validation(filepath)
             if df is not None:
@@ -136,6 +184,7 @@ class DataManager:
                     total_rows=len(df),
                 )
         
+        logger.warning(f"品种 {symbol} 的数据文件不存在: {filepath}")
         return SymbolInfo(
             symbol=symbol,
             available=False,
@@ -170,28 +219,30 @@ class DataManager:
     
     @pa.check_output(KlineSchema)
     def load_kline(self, symbol: str, start_date=None, end_date=None, 
-                   interval: str = KLINE_INTERVAL_1MIN) -> DataFrame[KlineSchema]:
+                   interval: Optional[str] = None) -> DataFrame[KlineSchema]:
         """加载K线数据，直接返回经过 Pandera 验证的 DataFrame
         
         Args:
             symbol: 品种代码（如 'DCE.m2509'）
             start_date: 开始日期（可选，格式 'YYYY-MM-DD'）
             end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
-            interval: K线周期（默认1分钟）
+            interval: K线周期（默认从配置读取）
         
         Returns:
             DataFrame[KlineSchema]: 经过验证的K线数据
         """
+        if interval is None:
+            interval = self._get_default_interval()
+        
         cache_key = f"{symbol}_{interval}_{start_date}_{end_date}"
         if cache_key in self._data_cache:
             logger.debug(f"从缓存加载数据: {symbol}")
             return self._data_cache[cache_key]
         
-        data_dir = DEFAULT_EXPORT_DIR
-        if self._config:
-            data_dir = self._config.get_backtest_config().get('data_dir', DEFAULT_EXPORT_DIR)
+        data_dir = self._get_data_dir()
+        filename_template = self._get_filename_template()
         
-        filename = f"{symbol}_{interval}.csv"
+        filename = filename_template.format(symbol=symbol, interval=interval)
         filepath = Path(data_dir) / filename
         
         if not filepath.exists():
@@ -212,7 +263,7 @@ class DataManager:
         return df
     
     def load_kline_safe(self, symbol: str, start_date=None, end_date=None, 
-                        interval: str = KLINE_INTERVAL_1MIN) -> Optional[DataFrame[KlineSchema]]:
+                        interval: Optional[str] = None) -> Optional[DataFrame[KlineSchema]]:
         """加载K线数据，失败返回None（不抛异常）"""
         try:
             return self.load_kline(symbol, start_date, end_date, interval)

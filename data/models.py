@@ -161,34 +161,45 @@ class OperationLog(BaseModel):
 
 
 class Backtest(BaseModel):
-    """回测记录"""
+    """回测记录（与数据库表结构保持一致）"""
     symbol = CharField()
     strategy = CharField()
     status = CharField()
-    start_date = DateField(null=True)
-    end_date = DateField(null=True)
     error_message = TextField(null=True)
-    
-    total_return = FloatField(null=True)
-    max_drawdown = FloatField(null=True)
-    win_rate = FloatField(null=True)
-    profit_factor = FloatField(null=True)
-    sharpe_ratio = FloatField(null=True)
-    sortino_ratio = FloatField(null=True)
-    total_trades = IntegerField(null=True)
-    profit_trades = IntegerField(null=True)
-    loss_trades = IntegerField(null=True)
-    avg_profit = FloatField(null=True)
-    avg_loss = FloatField(null=True)
-    
-    engine_config = TextField(null=True)
+    data_start_date = CharField(null=True, max_length=10)
+    data_end_date = CharField(null=True, max_length=10)
+    start_date = CharField(null=True, max_length=10)
+    end_date = CharField(null=True, max_length=10)
+    total_days = IntegerField(null=True)
+    initial_capital = FloatField()
+    commission_rate = FloatField(null=True)
+    slippage = FloatField(null=True)
+    price_tick = FloatField(null=True)
+    contract_size = IntegerField(null=True)
+    kline_interval = CharField(null=True, max_length=8)
     params_json = TextField(null=True)
-    
+    end_balance = FloatField(null=True)
+    total_return = FloatField(null=True)
+    annual_return = FloatField(null=True)
+    total_trades = IntegerField(null=True)
+    win_trades = IntegerField(null=True)
+    loss_trades = IntegerField(null=True)
+    win_rate = FloatField(null=True)
+    max_consecutive_win = IntegerField(null=True)
+    max_consecutive_loss = IntegerField(null=True)
+    average_win = FloatField(null=True)
+    average_loss = FloatField(null=True)
+    win_loss_ratio = FloatField(null=True)
+    sharpe_ratio = FloatField(null=True)
+    max_drawdown = FloatField(null=True)
+    max_drawdown_duration = IntegerField(null=True)
+    daily_std = FloatField(null=True)
+    return_drawdown_ratio = FloatField(null=True)
     created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    updated_at = DateTimeField(null=True)
+    updated_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
     class Meta:
-        table_name = 'backtest'
+        table_name = 'backtests'
 
 
 class BacktestTrade(BaseModel):
@@ -206,7 +217,7 @@ class BacktestTrade(BaseModel):
     created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
     class Meta:
-        table_name = 'backtest_trade'
+        table_name = 'backtest_trades'
 
 
 def init_database(db_path: str):

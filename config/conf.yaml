@@ -54,7 +54,7 @@ data:
 # ============================================================
 export:
   default_dir: ".quant_shared_data/csv"
-  filename_template: "{symbol}_qlib.csv"  # Qlib 标准命名
+  filename_template: "{symbol}.{interval}.csv"  # 标准命名：标的名.数据周期.csv
 
 # ============================================================
 # 第三方服务配置

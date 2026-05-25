@@ -11,7 +11,7 @@ vn.py 批量回测引擎
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, List
 
 import numpy as np
 
@@ -22,8 +22,7 @@ from report.dataset_reporter import generate_dataset_report, format_console_repo
 from common.formatting import parse_percentage
 from common.constants import (
     DEFAULT_INITIAL_CAPITAL, DEFAULT_COMMISSION_RATE, DEFAULT_SLIPPAGE,
-    DEFAULT_PRICE_TICK, DEFAULT_CONTRACT_SIZE, DEFAULT_EXPORT_DIR,
-    DEFAULT_REPORT_OUTPUT_DIR, KLINE_INTERVAL_1MIN,
+    DEFAULT_PRICE_TICK, DEFAULT_CONTRACT_SIZE,
 )
 from common.formulas import profitable_ratio
 
@@ -64,8 +63,8 @@ class VnpyBacktestEngine:
             self.price_tick: float = float(config.get('price_tick', DEFAULT_PRICE_TICK))
             self.contract_size: int = int(config.get('contract_size', DEFAULT_CONTRACT_SIZE))
 
-        self.data_dir: str = config.get('data_dir', DEFAULT_EXPORT_DIR)
-        self.interval: str = config.get('interval', KLINE_INTERVAL_1MIN)
+        self.data_dir: str = config.get('data_dir', '.quant_shared_data/csv')
+        self.interval: str = config.get('interval', '1m')
 
         if self.initial_capital <= 0:
             raise ValueError(f"initial_capital 必须大于 0，当前: {self.initial_capital}")
@@ -79,7 +78,7 @@ class VnpyBacktestEngine:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
         report_cfg = config.get('report', {})
-        self.report_dir: str = report_cfg.get('output_dir', DEFAULT_REPORT_OUTPUT_DIR)
+        self.report_dir: str = report_cfg.get('output_dir', '.quant_shared_data/reports')
         self.save_trades: bool = report_cfg.get('save_trade_records', True)
         self.save_equity: bool = report_cfg.get('save_equity_curve', True)
 
@@ -151,15 +150,10 @@ class VnpyBacktestEngine:
             logger.error(f"全量回测失败 [{symbol}]: {result['error']}")
             return {'success': False, 'error': result['error'], 'symbol': symbol}
 
-        # ---- 步骤3: 生成报告 ----
-        logger.info("\n>>> 生成回测报告")
-        report = self._format_and_save_report(result, symbol, 'full')
-
         return {
             'success': True,
             'symbol': symbol,
             'result': result,
-            'report': report,
             'data_start_date': data_start,
             'data_end_date': data_end,
             'engine_config': {
@@ -401,6 +395,7 @@ class VnpyBacktestEngine:
         result: dict[str, Any],
         symbol: str,
         dataset_name: str,
+        backtest_id: Optional[int] = None,
     ) -> dict[str, Any]:
         """格式化并保存单个数据集报告"""
         report = generate_dataset_report(
@@ -408,6 +403,7 @@ class VnpyBacktestEngine:
             daily_results=result.get('daily_results', []),
             dataset_name=dataset_name,
             symbol=symbol,
+            backtest_id=backtest_id,
             initial_capital=self.initial_capital,
             output_dir=self.report_dir,
             save_trades=self.save_trades,

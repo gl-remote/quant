@@ -34,8 +34,8 @@ def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[s
 
     文件命名规则:
       - {symbol}.csv
-      - {symbol}_qlib.csv
-      - {symbol}_*.csv
+      - {symbol}.{interval}.csv
+      - {symbol}_*.csv (兼容旧格式)
 
     Args:
         data_dir: CSV文件存放目录
@@ -61,11 +61,29 @@ def scan_csv_files(data_dir: str, pattern: Optional[str] = None) -> List[Tuple[s
 
     for fp in files:
         name = fp.stem
-        symbol = name[:-5] if name.endswith('_qlib') else name
-
+        symbol = None
+        
+        # 先尝试新格式: {symbol}.{interval}
+        # 找到最后一个点号的位置，分隔出interval
+        last_dot = name.rfind('.')
+        if last_dot != -1:
+            suffix_part = name[last_dot + 1:]
+            # 检查后面的部分是否像常见的interval
+            common_intervals = ['1m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M', '3M', '6M', '1Y']
+            if suffix_part in common_intervals:
+                symbol = name[:last_dot]
+        
+        # 如果新格式没匹配到，尝试旧格式或无后缀格式
+        if symbol is None:
+            if name.endswith('_qlib'):
+                symbol = name[:-5]
+            else:
+                # 直接用文件名作为symbol
+                symbol = name
+        
         if regex and not regex.search(symbol):
             continue
-
+        
         if symbol not in seen:
             seen.add(symbol)
             result.append((symbol, fp))
@@ -82,8 +100,8 @@ def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
 
     支持的文件命名模式:
       - {symbol}.csv
-      - {symbol}_qlib.csv
-      - {symbol}_*.csv (匹配第一个)
+      - {symbol}.{interval}.csv (优先使用 1m)
+      - {symbol}_*.csv (兼容旧格式)
 
     Args:
         data_dir: CSV文件存放目录
@@ -97,10 +115,12 @@ def load_csv_data(data_dir: str, symbol: str) -> Optional[pd.DataFrame]:
         logger.error(f"数据目录不存在: {data_dir}")
         return None
 
+    # 优先查找新格式文件
     candidates = [
+        csv_dir / f"{symbol}.1m.csv",
         csv_dir / f"{symbol}.csv",
         csv_dir / f"{symbol}_qlib.csv",
-    ] + sorted(csv_dir.glob(f"{symbol}_*.csv"))
+    ] + sorted(csv_dir.glob(f"{symbol}.*.csv")) + sorted(csv_dir.glob(f"{symbol}_*.csv"))
 
     filepath = None
     for fp in candidates:

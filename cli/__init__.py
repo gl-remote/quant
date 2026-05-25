@@ -17,7 +17,6 @@ CLI 模块包
 工具函数已迁移到核心模块:
     - load_strategy, apply_strategy_config, TradingContext → strategies.core
     - calculate_fifo_profit → common.formulas
-    - setup_db_logging → data
 """
 
 # 兼容性导入转发（保留原有 API）
@@ -29,7 +28,6 @@ from strategies.core import (
     TradingContext,
 )
 from common.formulas import calculate_fifo_profit
-from data import setup_db_logging
 
 
 def build_context(strategy, symbol, config_manager, capital=100000.0):
@@ -43,6 +41,5 @@ __all__ = [
     'get_strategy_class_name',
     'build_context',
     'apply_strategy_config',
-    'setup_db_logging',
     'serialize_strategy_params',
 ]
