@@ -299,7 +299,7 @@ vol = capital * 0.1 / (price * 10)
 |------|------------|
 | `README.md` | CLI 变更、新增/删除功能 |
 | `CHANGELOG.md` | Bug 修复、新增模块/功能、架构调整、删除功能 |
-| `doc/*.md` | API 变更、配置参数增删、架构调整 |
+| `docs/*.md` | API 变更、配置参数增删、架构调整 |
 | `AI_BEHAVIOR_RULES.md` | 编码规范变更、新操作规则 |
 | `.memory_rules.md` | Knowledge Graph 实体/关系类型变更 |
 | `plan.md` | 行动项完成 → 重新规划；新问题发现；里程碑推进；风险评估变更 |

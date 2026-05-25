@@ -53,7 +53,7 @@ quant/
 │   ├── constants.py        #   全局常量字典
 │   ├── formulas.py         #   量化计算公式库
 │   └── metrics.py          #   绩效指标计算
-└── doc/                    # 文档
+└── docs/                   # 文档
 ```
 
 ## 快速开始
@@ -152,18 +152,18 @@ risk:
   position_ratio: 0.1            # 仓位 10%
 ```
 
-> 完整参数说明见 [配置文档](doc/configuration.md)。
+> 完整参数说明见 [配置文档](docs/configuration.md)。
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [系统概览](doc/overview.md) | 项目定位与核心能力 |
-| [架构设计](doc/architecture.md) | 模块划分、数据流、设计决策 |
-| [配置说明](doc/configuration.md) | 参数详解与配置示例 |
-| [使用指南](doc/usage-guide.md) | 环境准备、CLI 操作、编程调用 |
-| [API 文档](doc/api-reference.md) | 核心接口与数据结构 |
-| [常见问题](doc/faq.md) | 安装、数据、回测 FAQ |
+| [系统概览](docs/overview.md) | 项目定位与核心能力 |
+| [架构设计](docs/architecture.md) | 模块划分、数据流、设计决策 |
+| [配置说明](docs/configuration.md) | 参数详解与配置示例 |
+| [使用指南](docs/usage-guide.md) | 环境准备、CLI 操作、编程调用 |
+| [API 文档](docs/api-reference.md) | 核心接口与数据结构 |
+| [常见问题](docs/faq.md) | 安装、数据、回测 FAQ |
 | [AI_BEHAVIOR_RULES.md](AI_BEHAVIOR_RULES.md) | AI 开发行为规范 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 项目贡献指南 |
 

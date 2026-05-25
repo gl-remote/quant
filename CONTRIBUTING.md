@@ -67,7 +67,7 @@ quant/
 │   └── exporter.py            #   天勤→CSV 导出
 ├── config/                    # 配置管理
 ├── tests/                     # 测试
-├── doc/                       # 文档
+├── docs/                       # 文档
 ├── pyproject.toml             # 项目配置 (含 lint/test 工具)
 └── plan.md                    # 项目改进计划
 ```
@@ -262,4 +262,4 @@ tests/
 ## 联系方式
 
 - Issue: [GitHub Issues](<repo-url>/issues)
-- 文档: 参见 `doc/` 目录
+- 文档: 参见 `docs/` 目录

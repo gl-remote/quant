@@ -285,7 +285,7 @@ quant/
 │   ├── stats.py                  #   统计聚合
 │   └── formatting.py             #   安全格式化
 │
-├── doc/                          # 文档
+├── docs/                         # 文档
 │   ├── overview.md               #   项目概览
 │   ├── architecture.md           #   架构设计（本文）
 │   ├── configuration.md          #   配置说明

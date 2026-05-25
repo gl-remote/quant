@@ -81,7 +81,7 @@ source = ["."]
 omit = [
     "tests/*",
     ".plan/*",
-    "doc/*",
+    "docs/*",
     "*/__pycache__/*",
     ".vscode/*",
     "main.py",
