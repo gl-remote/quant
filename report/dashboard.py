@@ -62,7 +62,7 @@ def build_nav(output_dir: str) -> str:
     for d in entries:
         name = d.name
         rows_html += (
-            f'<tr><td>📁 <a href="{_escape(name)}/">{_escape(name)}</a></td>'
+            f'<tr><td>📁 <a href="{_escape(name)}/index.html">{_escape(name)}</a></td>'
             f"<td>{_escape(datetime.fromtimestamp(d.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'))}</td></tr>\n"
         )
 
