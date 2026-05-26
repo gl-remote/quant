@@ -5,8 +5,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-DB="$SCRIPT_DIR/.quant_shared_data/quant_shared.db"
-OUT_DIR="$SCRIPT_DIR/output"
+ROOT_DIR="$SCRIPT_DIR/.."
+DB="$ROOT_DIR/.quant_shared_data/quant_shared.db"
+OUT_DIR="$ROOT_DIR/output"
 
 echo "=========================================="
 echo "  清理回测 / Optuna 数据"
