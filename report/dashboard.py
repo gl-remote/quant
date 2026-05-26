@@ -182,15 +182,45 @@ def _render_backtest_tab(conn: sqlite3.Connection, study_name: str) -> str:
     if not t0 or not t1:
         return "<p>无 trial 数据</p>"
 
-    # 查该时间窗口内的回测记录
-    rows = conn.execute("""
+    # 找最优 trial 参数，只展示该 trial 的回测结果
+    best_params = conn.execute("""
+        SELECT tp.param_name, tp.param_value
+        FROM trial_params tp
+        JOIN trial_values tv ON tp.trial_id = tv.trial_id
+        JOIN trials t ON t.trial_id = tp.trial_id
+        WHERE t.study_id=? AND tv.value=(SELECT MIN(tv2.value)
+            FROM trial_values tv2 JOIN trials t2 ON tv2.trial_id=t2.trial_id WHERE t2.study_id=?)
+    """, (study_id, study_id)).fetchall()
+    best_params_dict = {p[0]: str(int(float(p[1]))) for p in best_params}
+
+    # 取所有回测记录，按品种 + 最优参数匹配
+    all_rows = conn.execute("""
         SELECT symbol, total_return, total_trades, win_rate, max_drawdown, sharpe_ratio,
-               end_balance, initial_capital
+               end_balance, initial_capital, id, params_json
         FROM backtests
         WHERE status='success'
           AND created_at BETWEEN ? AND datetime(?, '+30 seconds')
         ORDER BY symbol
     """, (t0[0], t1[0])).fetchall()
+
+    # 按品种分组，找最接近最优参数的那条
+    from collections import defaultdict
+    by_sym = defaultdict(list)
+    for r in all_rows:
+        sym = r[0]
+        pj = r[9] or "{}"
+        try:
+            p = json.loads(pj)
+            # 计算参数匹配度
+            match_score = sum(1 for k, v in best_params_dict.items() if str(p.get(k, "")) == v)
+            by_sym[sym].append((match_score, r))
+        except Exception:
+            by_sym[sym].append((-1, r))
+
+    rows = []
+    for sym in sorted(by_sym):
+        best = max(by_sym[sym], key=lambda x: x[0])
+        rows.append(best[1])
 
     if not rows:
         return "<p>无回测记录</p>"
