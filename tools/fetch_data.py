@@ -23,17 +23,22 @@ from data import DataManager, export_csv
 
 logger = logging.getLogger(__name__)
 
-# ── 推荐品种：主力连续合约，数据更全 ──────────────────────
-#  KQ 格式: KQ.{产品}@{交易所}  — tqsdk 主力连续，自动跟随换月
-#  start/end 为 None 时由合约代码自动推算（KQ 合约需显式指定日期）
+# ── 推荐品种：多合约覆盖不同时段 ──────────────────────────
+#  start/end 为 None 时由 parse_contract 自动推算默认日期范围
 TARGET_SYMBOLS: list[tuple[str, str | None, str | None, str]] = [
     # (symbol, start_date, end_date, 说明)
-    ("KQ.m@DCE",  "2024-01-01", "2026-05-01", "豆粕主力连续"),
-    ("KQ.c@DCE",  "2024-01-01", "2026-05-01", "玉米主力连续"),
-    ("KQ.i@DCE",  "2024-01-01", "2026-05-01", "铁矿主力连续"),
-    ("KQ.p@DCE",  "2024-01-01", "2026-05-01", "棕榈主力连续"),
-    ("KQ.rb@SHFE","2024-01-01", "2026-05-01", "螺纹主力连续"),
-    ("KQ.SR@CZCE","2024-01-01", "2026-05-01", "白糖主力连续"),
+    # 豆粕系列 — 不同月份覆盖不同行情阶段
+    ("DCE.m2505",  None, None, "豆粕 2505  已到期"),
+    ("DCE.m2507",  None, None, "豆粕 2507  已到期"),
+    ("DCE.m2509",  None, None, "豆粕 2509  近月"),
+    ("DCE.m2601",  None, None, "豆粕 2601  远月"),
+    # 同交易所高流动性品种
+    ("DCE.c2509",  None, None, "玉米 2509  低波动"),
+    ("DCE.i2509",  None, None, "铁矿 2509  高波动"),
+    ("DCE.p2509",  None, None, "棕榈 2509  高波动"),
+    # 跨交易所
+    ("SHFE.rb2509",None, None, "螺纹 2509"),
+    ("CZCE.SR509", None, None, "白糖 509"),
 ]
 
 
