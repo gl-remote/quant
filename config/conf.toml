@@ -30,12 +30,7 @@ take_profit_ratio = 0.05      # 止盈比例 (5%)
 position_ratio = 0.1          # 仓位比例 (10%)
 kline_period = 1              # K线周期 (分钟)
 
-  # grid 搜索空间 (与该策略绑定)
-  [strategies.param_grid]
-  sma_short = [5, 10, 20]
-  sma_long = [15, 30, 60]
-
-  # optuna 搜索空间 (与该策略绑定)
+  # 参数搜索空间 (同时支持 grid 和 bayesian 模式)
   [strategies.search_space.sma_short]
   type = "int"
   low = 5

@@ -221,52 +221,29 @@ result = engine.run_walk_forward(
 
 ## 优化器 API
 
-### GridOptimizer
-
-**模块路径**: `optimizer.grid_search.GridOptimizer`
-
-**功能**: 网格搜索优化器，穷举所有参数组合。
-
-```python
-from optimizer import GridOptimizer
-
-opt = GridOptimizer(
-    engine=engine,
-    datasets=datasets,
-    strategy_name="ma",
-    param_grid={
-        "sma_short": [5, 10, 15],
-        "sma_long": [30, 60, 120],
-    },
-    strategy_params={},
-    capital=100000.0,
-    contract_size=10,
-)
-result = opt.run()
-```
-
 ### OptunaOptimizer
 
 **模块路径**: `optimizer.optuna_search.OptunaOptimizer`
 
-**功能**: Optuna 贝叶斯优化器。
+**功能**: 统一参数优化器，支持网格搜索和贝叶斯优化两种模式。
 
 ```python
 from optimizer import OptunaOptimizer
 
+# 网格搜索模式
 opt = OptunaOptimizer(
     engine=engine,
     datasets=datasets,
     strategy_name="ma",
     search_space={
-        "sma_short": {"type": "int", "low": 5, "high": 30},
-        "sma_long": {"type": "int", "low": 30, "high": 200},
+        "sma_short": {"type": "int", "low": 5, "high": 30, "step": 5},
+        "sma_long": {"type": "int", "low": 30, "high": 200, "step": 10},
     },
     strategy_params={},
     capital=100000.0,
     contract_size=10,
     n_trials=50,
-    study_db_path="optuna_studies.db",
+    search_type="grid",  # "grid" 或 "bayesian"
 )
 result = opt.optimize()
 ```

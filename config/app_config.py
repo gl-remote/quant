@@ -79,9 +79,8 @@ class StrategyItemConfig(BaseModel):
     take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
     position_ratio: float = DEFAULT_POSITION_RATIO
     kline_period: int = DEFAULT_KLINE_PERIOD
-    # 策略专属的参数搜索空间
-    param_grid: dict[str, list[Any]] = Field(default_factory=dict)  # grid 搜索空间
-    search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)  # optuna 搜索空间
+    # 策略专属的参数搜索空间（同时支持 grid 和 bayesian 模式）
+    search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     @field_validator("stop_loss_ratio", "take_profit_ratio", "position_ratio")
     @classmethod
@@ -106,10 +105,12 @@ class StrategyItemConfig(BaseModel):
 class OptimizerConfig(BaseModel):
     """参数优化器配置。
 
-    engine: "grid" — 穷举网格搜索; "optuna" — 贝叶斯优化
-    param_grid: grid 引擎专用，{param: [v1, v2, ...]}
-    search_space: optuna 引擎专用，{param: {type, low, high, step}}
-    n_trials: optuna 最大试验次数
+    基于 Optuna 的统一优化框架，支持两种搜索模式：
+    - engine: "grid" — 使用 GridSampler 穷举搜索
+    - engine: "optuna" — 使用 TPESampler 贝叶斯优化
+
+    search_space: 搜索空间定义，{param: {type, low, high, step}}
+    n_trials: 最大试验次数
     table_prefix: Optuna 数据库表名前缀（如 "optuna_"）
     strategy_spaces: 按策略组织的搜索空间，{strategy_name: search_space}
     """
@@ -120,7 +121,6 @@ class OptimizerConfig(BaseModel):
     engine: str = "grid"  # grid | optuna
     n_trials: int = 50
     table_prefix: str = "optuna_"  # Optuna 表名前缀
-    param_grid: dict[str, list[Any]] = Field(default_factory=dict)
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
 

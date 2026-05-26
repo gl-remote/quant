@@ -34,8 +34,7 @@ main.py (19行转发器) → cli/
 │   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
 │   └── walk_forward.py          数据加载与时间窗口切分
 ├── optimizer/               参数优化
-│   ├── grid_search.py       网格搜索
-│   └── optuna_search.py     Optuna 贝叶斯优化
+│   └── optuna_search.py     Optuna 统一优化器（支持网格搜索和贝叶斯优化）
 ├── data/                    数据层
 │   ├── manager.py           DataManager 统一入口
 │   ├── models.py            Pydantic + peewee ORM 模型
@@ -214,33 +213,23 @@ class VnpyBacktestEngine:
 
 ### 4. Optimizer 层
 
-#### `optimizer/grid_search.py` — 网格搜索
-
-```python
-class GridOptimizer:
-    def __init__(self, engine, datasets, strategy_name, param_grid, ...)
-    def run(self) -> OptimizationResult
-```
-
-**工作流程**：
-1. 根据 `param_grid` 生成所有参数组合
-2. 为每个组合创建策略实例
-3. 调用 `engine.run()` 执行回测
-4. 返回最优参数和所有结果
-
-#### `optimizer/optuna_search.py` — Optuna 贝叶斯优化
+#### `optimizer/optuna_search.py` — Optuna 统一优化器
 
 ```python
 class OptunaOptimizer:
-    def __init__(self, engine, datasets, search_space, n_trials, ...)
-    def optimize(self) -> OptimizationResult
+    def __init__(self, engine, datasets, search_space, n_trials, search_type="bayesian", ...)
+    def optimize(self) -> OptunaResult
 ```
 
 **工作流程**：
-1. 创建 Optuna Study
-2. 定义目标函数（最大化夏普比率或自定义指标）
-3. 执行贝叶斯优化搜索
-4. 持久化所有 trial 结果到 SQLite
+1. 根据 `search_type` 选择搜索模式：
+   - `"grid"`: 使用 `GridSampler` 穷举所有参数组合
+   - `"bayesian"`: 使用 `TPESampler` 进行贝叶斯优化
+2. 创建 Optuna Study（可选持久化到 SQLite）
+3. 定义目标函数（最大化夏普比率）
+4. 每个 trial 创建策略实例并执行回测
+5. 聚合多品种得分作为目标值
+6. 返回最优参数、最优值和所有试验数据
 
 ---
 

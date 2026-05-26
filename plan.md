@@ -33,8 +33,7 @@ main.py (19 行转发器) → cli/ (命令行子包)
 │   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
 │   └── walk_forward.py          时间窗口切分
 ├── optimizer/           参数搜索 (S1·A11 ✅)
-│   ├── grid_search.py   GridOptimizer
-│   └── optuna_search.py OptunaOptimizer
+│   └── optuna_search.py OptunaOptimizer (统一优化器)
 ├── data/                数据层
 │   ├── store.py         SQLite + peewee ORM
 │   ├── models.py        Pydantic + ORM 模型
@@ -232,9 +231,8 @@ class BacktestEngine:
 ```
 backtest --mode search:
   CLI: dm.load_kline_safe(symbol) → list[(symbol, DataFrame)]
-  CLI: optimizer.generate(strategy_cls, param_grid) → list[Strategy]
-  CLI: pairs = itertools.product(datasets, strategies)
-  CLI: results = engine.run(pairs)
+  CLI: optimizer.optimize(strategy_cls, search_space) → OptunaResult
+  CLI: results = extract_results(result.trial_data)
   CLI: _persist_results(dm, results)
 
 backtest --mode walk-forward:

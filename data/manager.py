@@ -63,8 +63,8 @@ class DataManager:
         return self._default_config
 
     def _get_data_dir(self) -> str:
-        """获取数据目录配置"""
-        return self._get_config().get_backtest_config().data_dir or '.quant_shared_data/csv'
+        """获取数据目录"""
+        return '.quant_shared_data/csv'
 
     def _get_filename_template(self) -> str:
         """获取文件名模板配置"""

@@ -31,6 +31,8 @@ from typing import Any
 
 import pandas as pd
 
+import optuna
+
 from strategies.core import load_strategy
 from strategies.core import serialize_strategy_params
 
@@ -52,7 +54,7 @@ class OptunaResult:
     best_params: dict[str, Any] = field(default_factory=dict)
     best_value: float = 0.0
     trial_data: list[dict[str, Any]] = field(default_factory=list)
-    study: Any = None
+    study: optuna.Study | None = None
     backtest_ids: list[int] = field(default_factory=list)
 
 
@@ -80,6 +82,7 @@ class OptunaOptimizer:
         contract_size: int | None = None,
         n_trials: int = 50,
         study_db_path: str = "",
+        search_type: str = "bayesian",  # "bayesian" or "grid"
     ) -> None:
         """
         Args:
@@ -92,6 +95,7 @@ class OptunaOptimizer:
             contract_size: 合约乘数
             n_trials: 最大试验次数
             study_db_path: Optuna study SQLite 存储路径，为空则仅内存
+            search_type: 搜索类型："bayesian" (TPESampler) 或 "grid" (GridSampler)
         """
         self._engine = engine
         self._datasets = datasets
@@ -102,10 +106,32 @@ class OptunaOptimizer:
         self._contract_size = contract_size
         self._n_trials = n_trials
         self._study_db_path = study_db_path
+        self._search_type = search_type
 
         # 生成唯一 study 名
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._study_name = f"{strategy_name}_{ts}"
+
+    def _create_grid_space(self) -> dict[str, list[Any]]:
+        """将 search_space 转换为 GridSampler 格式"""
+        grid_space = {}
+        for param_name, config in self._search_space.items():
+            ptype = config.get("type", "int")
+            low = config.get("low", 0)
+            high = config.get("high", 10)
+            step = config.get("step", 1)
+            
+            if ptype == "categorical":
+                grid_space[param_name] = config.get("choices", [])
+            else:
+                # 生成数值序列
+                values = []
+                current = low
+                while current <= high:
+                    values.append(current)
+                    current += step
+                grid_space[param_name] = values
+        return grid_space
 
     def optimize(self) -> OptunaResult:
         """执行 Optuna 优化
@@ -113,12 +139,10 @@ class OptunaOptimizer:
         Returns:
             OptunaResult 包含最优参数、全部试验数据、study 实例
         """
-        import optuna  # pyright: ignore[reportMissingImports]
-
         result = OptunaResult()
         trial_index: list[dict[str, Any]] = []
 
-        def objective(trial: optuna.Trial) -> float:
+        def objective(trial: optuna.trial.Trial) -> float:
             params = self._suggest_params(trial)
             strategy = load_strategy(
                 self._strategy_name,
@@ -176,13 +200,25 @@ class OptunaOptimizer:
                 storage = f"sqlite:///{db_path}"
             logger.info("Optuna study 存储: %s (%s)", self._study_name, storage)
 
+        # 根据搜索类型选择 sampler
+        if self._search_type == "grid":
+            grid_space = self._create_grid_space()
+            sampler = optuna.samplers.GridSampler(grid_space)
+            # 网格搜索的 trial 数等于组合数
+            n_trials = min(self._n_trials, len(grid_space) > 0 and len(grid_space[next(iter(grid_space))]) or self._n_trials)
+            logger.info("Grid Search: 搜索空间=%s, 计划试验=%d", grid_space, n_trials)
+        else:
+            sampler = optuna.samplers.TPESampler()
+            n_trials = self._n_trials
+
         study = optuna.create_study(
             study_name=self._study_name,
             direction="maximize",
             storage=storage,
+            sampler=sampler,
             load_if_exists=True,
         )
-        study.optimize(objective, n_trials=self._n_trials, show_progress_bar=True)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0
@@ -201,7 +237,7 @@ class OptunaOptimizer:
 
     # ── 内部 ────────────────────────────────────────────────
 
-    def _suggest_params(self, trial: Any) -> dict[str, Any]:
+    def _suggest_params(self, trial: optuna.trial.Trial) -> dict[str, Any]:
         """从 search_space 配置生成 Optuna suggest 调用"""
         params: dict[str, Any] = {}
         for name, spec in self._search_space.items():

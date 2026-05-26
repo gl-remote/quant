@@ -49,7 +49,7 @@ from strategies.core import (
     get_strategy_class_name,
     serialize_strategy_params,
 )
-from optimizer import GridOptimizer, OptunaOptimizer
+from optimizer import OptunaOptimizer
 from common.formulas import calculate_fifo_profit
 
 logger = logging.getLogger(__name__)
@@ -354,10 +354,11 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             # CLI 参数优先，其次 TOML engine 字段
             opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
 
-            if opt_engine == "optuna":
-                # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
-                search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
-                if search_space:
+            # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
+            search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
+            
+            if search_space:
+                if opt_engine == "optuna":
                     _run_optuna_search(
                         engine=engine, datasets=datasets,
                         strategy_name=strategy_name,
@@ -369,19 +370,19 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         dm=dm, git_hash=git_hash,
                         table_prefix=optimizer_cfg.table_prefix,
                     )
-            else:
-                # 优先使用策略专属参数网格 (sc.param_grid)，其次使用 optimizer 配置
-                param_grid = sc.param_grid or optimizer_cfg.param_grid
-                _run_grid_search(
-                    engine=engine, datasets=datasets,
-                    strategy_name=strategy_name,
-                    param_grid=param_grid,
-                    strategy_params=strategy_params,
-                    capital=capital,
-                    contract_size=bc.contract_size,
-                    optimizer_enabled=optimizer_cfg.enabled,
-                    dm=dm, git_hash=git_hash,
-                )
+                else:
+                    # 使用 Optuna GridSampler 进行网格搜索
+                    _run_grid_search(
+                        engine=engine, datasets=datasets,
+                        strategy_name=strategy_name,
+                        param_grid={k: v.get("choices", list(range(v.get("low", 0), v.get("high", 10)+1, v.get("step", 1)))) 
+                                  for k, v in search_space.items()},
+                        strategy_params=strategy_params,
+                        capital=capital,
+                        contract_size=bc.contract_size,
+                        optimizer_enabled=optimizer_cfg.enabled,
+                        dm=dm, git_hash=git_hash,
+                    )
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
@@ -492,23 +493,37 @@ def _run_grid_search(
     dm: DataManager,
     git_hash: str | None,
 ) -> None:
-    """网格搜索：穷举 param_grid 全部组合，调 engine.run()"""
+    """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
     if optimizer_enabled and param_grid:
-        # 使用 GridOptimizer 调度
-        opt = GridOptimizer(
+        # 将 param_grid 转换为 search_space 格式
+        search_space = {}
+        for param_name, values in param_grid.items():
+            if values:
+                search_space[param_name] = {
+                    "type": "categorical",
+                    "choices": values
+                }
+        
+        # 使用 OptunaOptimizer + GridSampler
+        opt = OptunaOptimizer(
             engine=engine,
             datasets=datasets,
             strategy_name=strategy_name,
-            param_grid=param_grid,
+            search_space=search_space,
             strategy_params=strategy_params,
             capital=capital,
             contract_size=contract_size,
+            n_trials=100,
+            search_type="grid",
         )
-        grid_result = opt.run()
-        results = grid_result.engine_results
-        logger.info("Grid Search: %d 策略变体, %d 结果",
-                    len(grid_result.strategies), len(results))
+        result = opt.optimize()
+        # 从 trial_data 提取 engine_results
+        results = []
+        for trial in result.trial_data:
+            results.extend(trial.get('engine_results', []))
+        logger.info("Grid Search: %d 试验, %d 结果",
+                    len(result.trial_data), len(results))
     else:
         # 未启用或空 param_grid → 单策略回退
         s = load_strategy(strategy_name,

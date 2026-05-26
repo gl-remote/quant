@@ -1,19 +1,14 @@
 # -*- coding: utf-8 -*-
 """参数优化模块
 
-提供网格搜索和 Optuna 贝叶斯优化能力，产出策略变体或直接调度 engine 回测。
+基于 Optuna 的统一参数优化框架，支持两种搜索模式：
 
-  - GridOptimizer:    穷举 param_grid 的所有组合
-  - OptunaOptimizer:  贝叶斯优化，自动探索连续/离散搜索空间
+  - OptunaOptimizer:  统一优化器，支持网格搜索(bayesian)和贝叶斯优化(grid)
 """
 
-from .grid_search import GridOptimizer, GridResult, generate_param_combinations
 from .optuna_search import OptunaOptimizer, OptunaResult
 
 __all__ = [
-    "GridOptimizer",
-    "GridResult",
     "OptunaOptimizer",
     "OptunaResult",
-    "generate_param_combinations",
 ]

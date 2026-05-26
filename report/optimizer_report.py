@@ -17,6 +17,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import optuna
+from optuna.visualization import (
+    plot_optimization_history,
+    plot_param_importances,
+    plot_parallel_coordinate,
+    plot_contour,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -39,14 +47,6 @@ def build_optimizer_report(
     Returns:
         完整 HTML 字符串
     """
-    import optuna  # pyright: ignore[reportMissingImports]
-    from optuna.visualization import (  # pyright: ignore[reportMissingImports]
-        plot_optimization_history,
-        plot_param_importances,
-        plot_parallel_coordinate,
-        plot_contour,
-    )
-
     study = optuna.load_study(study_name=study_name, storage=study_db_url)
 
     figures: list[str] = []

@@ -185,9 +185,9 @@ A: 在配置文件中设置：
 enabled = true
 engine = "grid"  # 或 "optuna"
 
-[optimizer.param_grid]
-sma_short = [5, 10, 15]
-sma_long = [30, 60, 120]
+[optimizer.search_space]
+sma_short = { type = "int", low = 5, high = 15, step = 5 }
+sma_long = { type = "int", low = 30, high = 120, step = 30 }
 ```
 
 然后运行：

@@ -73,8 +73,3 @@ take_profit_ratio = { type = "float", low = 0.02, high = 0.1 }
 # rsi_period = { type = "int", low = 6, high = 20 }
 # overbought = { type = "int", low = 60, high = 90 }
 # oversold = { type = "int", low = 10, high = 40 }
-
-# 网格搜索参数（engine="grid" 时使用）
-# [optimizer.param_grid]
-# sma_short = [5, 10, 15]
-# sma_long = [30, 60, 120]

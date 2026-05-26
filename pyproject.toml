@@ -28,6 +28,7 @@ dependencies = [
     "plotly>=5.0",
     "peewee>=3.15",
     "typing-extensions>=4.0",
+    "optuna>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -40,8 +41,6 @@ dev = [
     "pandas-stubs>=2.0",
     "tomli-w>=1.0",
 ]
-optuna = ["optuna>=3.0"]
-all = ["optuna>=3.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

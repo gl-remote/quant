@@ -85,14 +85,9 @@ kline_period = 60              # K线周期（秒）
 [optimizer]
 enabled = false                # 是否启用参数优化
 engine = "grid"               # 优化引擎: grid / optuna
-n_trials = 50                  # Optuna 最大试验次数
+n_trials = 50                  # 最大试验次数
 
-# 网格搜索参数（grid 引擎专用）
-[optimizer.param_grid]
-sma_short = [5, 10, 15]
-sma_long = [30, 60, 120]
-
-# Optuna 搜索空间（optuna 引擎专用）
+# 参数搜索空间（同时支持 grid 和 optuna 引擎）
 [optimizer.search_space]
 sma_short = { type = "int", low = 5, high = 30, step = 5 }
 sma_long = { type = "int", low = 30, high = 200, step = 10 }
