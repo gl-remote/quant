@@ -11,17 +11,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-import pytest
-import logging
-from data import DataManager
-from data.store import DataStore
-from common.constants import (
-    MAX_OPERATION_LOG_ROWS,
-    PRUNE_CHECK_INTERVAL,
-    STATUS_SUCCESS,
-    STATUS_FAILED,
-)
-from conftest import insert_full_backtest
+from data import DataManager  # noqa: E402
+from data.store import DataStore  # noqa: E402
+from common.constants import STATUS_FAILED  # noqa: E402
+from conftest import insert_full_backtest  # noqa: E402
 
 
 # ═══════════════════════════════════════════════════════════

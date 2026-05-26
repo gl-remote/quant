@@ -9,7 +9,6 @@
 import pytest
 import os
 import tempfile
-from pathlib import Path
 
 import tomli_w
 from pydantic import ValidationError

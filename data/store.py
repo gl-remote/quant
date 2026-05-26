@@ -46,7 +46,7 @@ def _normalize_max_dd(raw_value: float | None) -> float:
 
 class DataStore:
     """数据存储层 - 管理数据库连接和CRUD操作"""
-    
+
     def __init__(self, db_path: str):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path: str = db_path
@@ -56,22 +56,22 @@ class DataStore:
         })
         self._insert_count: int = 0
         self._init_tables()
-    
+
     def _init_tables(self):
         """初始化数据库表"""
         database.create_tables(
             [ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily],
             safe=True,
         )
-    
+
     def close(self):
         """关闭数据库连接"""
         if not database.is_closed():
             database.close()
-    
+
     # ── 日志操作 ────────────────────────────────────────────────────
-    
-    def log(self, command: str, message: str, 
+
+    def log(self, command: str, message: str,
             symbol: str | None = None, status: str = "INFO") -> None:
         """写入操作日志"""
         OperationLog.create(
@@ -81,14 +81,14 @@ class DataStore:
             status=status,
             created_at=datetime.now(),
         )
-        
+
         self._insert_count += 1
         if self._insert_count % constants.PRUNE_CHECK_INTERVAL == 0:
             self._prune_old_logs()
         total = OperationLog.select().count()
         if total >= constants.MAX_OPERATION_LOG_ROWS:
             self._prune_old_logs()
-    
+
     def _prune_old_logs(self) -> int:
         """自动清理过旧日志，保留最近 MAX_OPERATION_LOG_ROWS 条"""
         try:
@@ -96,7 +96,7 @@ class DataStore:
             total = OperationLog.select().count()
             if total <= max_rows - 1:
                 return 0
-            
+
             cutoff_id = (
                 OperationLog
                 .select(OperationLog.id)
@@ -107,7 +107,7 @@ class DataStore:
             )
             if cutoff_id is None:
                 return 0
-            
+
             deleted = (
                 OperationLog
                 .delete()
@@ -120,7 +120,7 @@ class DataStore:
         except Exception as e:
             logger.warning(f"操作日志清理失败: {e}")
             return 0
-    
+
     def get_logs(self, limit: int = 100) -> list[dict[str, object]]:
         """查询操作日志"""
         rows = list(
@@ -135,9 +135,9 @@ class DataStore:
                 if row.get(field) is not None:
                     row[field] = str(row[field])
         return rows
-    
+
     # ── 元数据操作 ──────────────────────────────────────────────────
-    
+
     def get_metadata(self, symbol: str) -> dict[str, object] | None:
         """查询品种元数据"""
         row = (
@@ -154,7 +154,7 @@ class DataStore:
                 if result.get(field) is not None:
                     result[field] = str(result[field])
         return result
-    
+
     def upsert_metadata(self, symbol: str, filepath: str, start_date: str,
                         end_date: str, min_dt: str, max_dt: str,
                         total_rows: int) -> None:
@@ -189,7 +189,7 @@ class DataStore:
                 created_at=now,
                 updated_at=now,
             )
-    
+
     # ── 回测记录操作 ────────────────────────────────────────────────
 
     def insert_backtest_detailed(
@@ -208,13 +208,13 @@ class DataStore:
     ) -> int:
         """插入完整的回测记录"""
         now = datetime.now()
-        
+
         total_trades = statistics.get('total_trades', 0) or 0
         initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))
         end_balance = float(statistics.get('end_balance', initial_capital))
         total_return = calc_total_return(initial_capital, end_balance, total_trades=total_trades)
         win_rate_val = calc_win_rate(statistics.get('win_trades', 0), total_trades)
-        
+
         bt = Backtest.create(
             symbol=symbol,
             strategy=strategy,
@@ -252,12 +252,12 @@ class DataStore:
             updated_at=now,
         )
         return bt.id
-    
+
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
         now = datetime.now()
         rows = []
-        
+
         for trade in trades:
             rows.append({
                 'backtest_id': backtest_id,
@@ -272,14 +272,14 @@ class DataStore:
                 'commission': float(trade.get('commission', 0)),
                 'created_at': now,
             })
-        
+
         if not rows:
             return 0
-        
+
         with database.atomic():
             BacktestTrade.insert_many(rows).execute()
         return len(rows)
-    
+
     def query_backtests(
         self,
         symbol: str | None = None,
@@ -289,12 +289,12 @@ class DataStore:
     ) -> list[BacktestRecord]:
         """查询回测记录"""
         query = Backtest.select().where(Backtest.status == status)
-        
+
         if symbol:
             query = query.where(Backtest.symbol == symbol)
         if strategy:
             query = query.where(Backtest.strategy == strategy)
-        
+
         results_raw = (
             query
             .order_by(Backtest.created_at.desc())
@@ -302,13 +302,13 @@ class DataStore:
             .dicts()
         )
         results = list(results_raw)
-        
+
         records = []
         for row in results:
             row['created_at'] = str(row.get('created_at', ''))
             records.append(BacktestRecord(**row))
         return records
-    
+
     def get_backtest(self, backtest_id: int) -> BacktestRecord | None:
         """查询单条回测记录"""
         row = Backtest.select().where(Backtest.id == backtest_id).dicts()
@@ -317,7 +317,7 @@ class DataStore:
             result['created_at'] = str(result.get('created_at', ''))
             return BacktestRecord(**result)
         return None
-    
+
     def query_trades(self, backtest_id: int) -> list[TradeRecord]:
         """查询交易明细"""
         rows = list(
@@ -327,7 +327,7 @@ class DataStore:
             .order_by(BacktestTrade.datetime.asc())
             .dicts()
         )
-        
+
         records = []
         for row in rows:
             # ORM DateTimeField → str 转换，Pydantic TradeRecord 期望 str
@@ -337,12 +337,12 @@ class DataStore:
             row['backtest_id'] = row.pop('backtest_id') if 'backtest_id' in row else backtest_id
             records.append(TradeRecord(**row))
         return records
-    
+
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         now = datetime.now()
         rows = []
-        
+
         for daily in daily_results:
             # 提取日期
             dt = daily.get('datetime')
@@ -350,7 +350,7 @@ class DataStore:
                 continue
             # 格式化日期
             date_str = str(dt).split(' ')[0] if ' ' in str(dt) else str(dt).split('T')[0]
-            
+
             rows.append({
                 'backtest_id': backtest_id,
                 'date': date_str,
@@ -359,14 +359,14 @@ class DataStore:
                 'drawdown': float(daily.get('drawdown', 0)),
                 'created_at': now,
             })
-        
+
         if not rows:
             return 0
-        
+
         with database.atomic():
             BacktestDaily.insert_many(rows).execute()
         return len(rows)
-    
+
     def query_daily(self, backtest_id: int) -> list[dict[str, object]]:
         """查询每日资金曲线"""
         rows = list(
@@ -376,7 +376,7 @@ class DataStore:
             .order_by(BacktestDaily.date.asc())
             .dicts()
         )
-        
+
         results = []
         for row in rows:
             results.append({
@@ -386,13 +386,13 @@ class DataStore:
                 'drawdown': row.get('drawdown', 0),
             })
         return results
-   
+
     def delete_backtest(self, backtest_id: int) -> bool:
         """硬删除回测记录及其关联的交易明细和每日资金曲线
-        
+
         Args:
             backtest_id: 回测记录 ID
-        
+
         Returns:
             是否成功删除
         """

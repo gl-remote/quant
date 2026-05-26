@@ -179,9 +179,9 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
             start_date=start_date, end_date=end_date,
             min_dt=min_dt, max_dt=max_dt, total_rows=merged_rows)
         dm.store.log('export',
-                   f"完成: {symbol} {start_date}~{end_date} -> {output_path} "
-                   f"({merged_rows}行, {min_dt}~{max_dt})",
-                   symbol=symbol, status='SUCCESS')
+                     f"完成: {symbol} {start_date}~{end_date} -> {output_path} "
+                     f"({merged_rows}行, {min_dt}~{max_dt})",
+                     symbol=symbol, status='SUCCESS')
         logger.info(f"导出完成: {merged_rows}行, 时间区间 {min_dt} ~ {max_dt}")
         return True
     finally:

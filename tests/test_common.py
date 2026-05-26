@@ -7,7 +7,6 @@
     - common/formulas.py: 18 个量化公式
 """
 
-import math
 import pytest
 from common.metrics import calc_max_drawdown, calc_sharpe_ratio
 from common.stats import compute_summary_stats, rank_by_key

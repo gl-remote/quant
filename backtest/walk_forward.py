@@ -10,7 +10,6 @@
 
 import logging
 import pandas as pd
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

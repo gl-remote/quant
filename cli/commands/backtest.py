@@ -15,19 +15,23 @@
     - walk-forward: 单策略滚动验证，评估稳健性
 """
 
+from __future__ import annotations
+
 import argparse
-import itertools
 import logging
 import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import pandas as pd
 
 from config import ConfigManager
 from data import DataManager
+
+if TYPE_CHECKING:
+    from backtest import VnpyBacktestEngine
 from common.constants import (
     STATUS_SUCCESS,
     STATUS_FAILED,
@@ -140,8 +144,11 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             symbol, start_date_str, end_date_str, capital_val, strategy_cls, gui_flag,
         )
         dm.store.log('backtest',
-               "开始: %s %s~%s 资金=%s strategy=%s" % (symbol, start_date_str, end_date_str, capital_val, strategy_cls),
-               symbol=symbol, status=LOG_STATUS_INFO)
+                     "开始: %s %s~%s 资金=%s strategy=%s" % (
+                         symbol, start_date_str, end_date_str,
+                         capital_val, strategy_cls,
+                     ),
+                     symbol=symbol, status=LOG_STATUS_INFO)
 
         auth = TqAuth(account.api_key, account.api_secret) if account else None
         api = TqApi(
@@ -154,7 +161,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         klines = api.get_kline_serial(symbol, duration_seconds=sc.kline_period * 60)
 
         bridge.initialize(api)
-        bridge._watch_klines(api, klines, symbol)
+        bridge._watch_klines(api, klines, symbol)  # pyright: ignore[reportPrivateUsage]
 
     except BacktestFinished:
         fills = getattr(strategy_core, 'fills', [])  # pyright: ignore[reportPossiblyUnboundVariable]
@@ -278,8 +285,8 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
 
         mode_name = "参数搜索" if mode == "search" else "Walk-Forward"
         logger.info("%s回测: %d 个品种 strategy=%s mode=%s",
-                     "批量" if mode_label == MODE_BATCH else "单品种",
-                     len(symbol_list), strategy_name, mode_name)
+                    "批量" if mode_label == MODE_BATCH else "单品种",
+                    len(symbol_list), strategy_name, mode_name)
 
         datasets: list[tuple[str, pd.DataFrame]] = []
         for sym in symbol_list:
@@ -343,7 +350,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                              symbol=sym, status=LOG_STATUS_ERROR)
         else:
             # ── search 模式: optimizer 调度 engine ──
-            optimizer_cfg = cm._config.optimizer
+            optimizer_cfg = cm._config.optimizer  # pyright: ignore[reportPrivateUsage]
             # CLI 参数优先，其次 TOML engine 字段
             opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
 
@@ -468,7 +475,7 @@ def _persist_results(
 
 
 def _run_grid_search(
-    engine: "VnpyBacktestEngine",
+    engine: VnpyBacktestEngine,
     datasets: list[tuple[str, pd.DataFrame]],
     strategy_name: str,
     param_grid: dict[str, list[Any]],
@@ -480,8 +487,6 @@ def _run_grid_search(
     git_hash: str | None,
 ) -> None:
     """网格搜索：穷举 param_grid 全部组合，调 engine.run()"""
-
-    from backtest import VnpyBacktestEngine  # noqa: F811
 
     if optimizer_enabled and param_grid:
         # 使用 GridOptimizer 调度
@@ -497,7 +502,7 @@ def _run_grid_search(
         grid_result = opt.run()
         results = grid_result.engine_results
         logger.info("Grid Search: %d 策略变体, %d 结果",
-                     len(grid_result.strategies), len(results))
+                    len(grid_result.strategies), len(results))
     else:
         # 未启用或空 param_grid → 单策略回退
         s = load_strategy(strategy_name,
@@ -516,7 +521,7 @@ def _run_grid_search(
 
 
 def _run_optuna_search(
-    engine: "VnpyBacktestEngine",
+    engine: VnpyBacktestEngine,
     datasets: list[tuple[str, pd.DataFrame]],
     strategy_name: str,
     search_space: dict[str, dict[str, Any]],
@@ -530,7 +535,7 @@ def _run_optuna_search(
     """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
 
     # Optuna study 持久化路径（与主 DB 同目录）
-    main_db_dir = os.path.dirname(dm._store.db_path) or "."
+    main_db_dir = os.path.dirname(dm._store.db_path) or "."  # pyright: ignore[reportPrivateUsage, reportOptionalMemberAccess]
     study_db_path = os.path.join(main_db_dir, "optuna_studies.db")
 
     opt = OptunaOptimizer(
@@ -564,7 +569,7 @@ def _run_optuna_search(
                     status=STATUS_SUCCESS,
                     error_message=None,
                     statistics=engine_result.get('statistics', {}),
-                    engine_config=trial_cfg,
+                    engine_config=trial_cfg,  # pyright: ignore[reportArgumentType]
                     params_json=trial_entry.get('params_json', '{}'),
                     start_date=engine_result.get('start_date'),
                     end_date=engine_result.get('end_date'),
@@ -588,13 +593,13 @@ def _run_optuna_search(
     # ── 输出摘要 + 日志 ──
     logger.info("Optuna 优化完成: best_value=%.4f best_params=%s trials=%d",
                 result.best_value, result.best_params, len(result.trial_data))
-    print(f"\n============ Optuna 优化结果 ============")
+    print("\n============ Optuna 优化结果 ============")
     print(f"  最优得分:  {result.best_value:.4f}")
     print(f"  最优参数:  {result.best_params}")
     print(f"  总试验数:  {len(result.trial_data)}")
     print(f"  回测ID:    {all_ids[:10]}{'...' if len(all_ids) > 10 else ''}")
     print(f"  Study:     {opt.study_name}")
-    print(f"===========================================\n")
+    print("===========================================\n")
 
     # ── 生成优化报告 ──
     study_db_url = f"sqlite:///{os.path.abspath(study_db_path)}"

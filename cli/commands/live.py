@@ -70,7 +70,7 @@ def cmd_live(args: argparse.Namespace):
 
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
         dm.store.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
-               symbol=args.symbol, status=LOG_STATUS_INFO)
+                     symbol=args.symbol, status=LOG_STATUS_INFO)
 
         (bridge.run_with_gui if args.gui else bridge.run)(symbol=args.symbol, auth=auth)
 

@@ -7,8 +7,6 @@ Plotly 图表生成
 
 from __future__ import annotations
 
-from datetime import datetime
-
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 

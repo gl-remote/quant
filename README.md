@@ -28,7 +28,7 @@ quant/
 │   └── conf.example.toml   #   配置模板
 ├── strategies/             # 策略模块（核心算法 + 桥接器）
 │   ├── core/base.py        #   策略抽象接口 (Strategy ABC)
-│   ├── config/run_config.py #   运行配置 (RunConfig)
+│   ├── core/types.py       #   Bar/Signal/Fill/StrategyPosition
 │   ├── ma_strategy.py      #   均线交叉策略 (继承 Strategy)
 │   └── bridges/            #   vn.py / 天勤 桥接器
 ├── backtest/               # 回测引擎、数据加载、报告对比
@@ -49,10 +49,6 @@ quant/
 │       ├── backtest.py     #     统一回测命令
 │       ├── report.py       #     报告生成命令
 │       └── live.py         #     实盘交易命令
-├── common/                 # 公共工具（零依赖）
-│   ├── constants.py        #   全局常量字典
-│   ├── formulas.py         #   量化计算公式库
-│   └── metrics.py          #   绩效指标计算
 └── docs/                   # 文档
 ```
 
@@ -126,30 +122,27 @@ python main.py backtest  # 扫描全部品种
 
 回测参数通过 `config/conf.toml` 中的 `[backtest]` 段管理：
 
-```yaml
-backtest:
-  initial_capital: 100000.0      # 初始资金
-  commission_rate: 0.0003        # 手续费率
-  slippage: 1                    # 滑点（跳）
-  interval: "1m"                 # K线周期: 1m/5m/15m/30m/1h/d
-  split:
-    train_ratio: 0.6             # 训练集 60%
-    val_ratio: 0.2               # 验证集 20%
-    test_ratio: 0.2              # 测试集 20%
-    shuffle: false               # 时间序列建议 false
-```
+```toml
+[backtest]
+initial_capital = 100000.0      # 初始资金
+commission_rate = 0.0003        # 手续费率
+slippage = 1                     # 滑点（跳）
+interval = "1m"                  # K线周期: 1m/5m/15m/30m/1h/d
 
-策略参数：
+[backtest.split]
+train_ratio = 0.6                # 训练集 60%
+val_ratio = 0.2                 # 验证集 20%
+test_ratio = 0.2                # 测试集 20%
+shuffle = false                 # 时间序列建议 false
 
-```yaml
-strategy_params:
-  sma_short: 5                   # 短期均线周期
-  sma_long: 20                   # 长期均线周期
+[strategy]
+sma_short = 5                    # 短期均线周期
+sma_long = 20                   # 长期均线周期
 
-risk:
-  stop_loss_ratio: 0.03          # 止损 3%
-  take_profit_ratio: 0.05        # 止盈 5%
-  position_ratio: 0.1            # 仓位 10%
+[risk]
+stop_loss_ratio = 0.03           # 止损 3%
+take_profit_ratio = 0.05        # 止盈 5%
+position_ratio = 0.1            # 仓位 10%
 ```
 
 > 完整参数说明见 [配置文档](docs/configuration.md)。

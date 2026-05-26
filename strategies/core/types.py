@@ -52,6 +52,3 @@ class Fill:
     price: float = 0.0
     volume: int = 0
     reason: str = ""        # 触发原因
-
-
-

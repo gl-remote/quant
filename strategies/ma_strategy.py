@@ -181,11 +181,11 @@ class MaStrategyCore(Strategy):
 
     def _check_stop_loss(self, current_price: float) -> bool:
         return stop_loss_triggered(self._position.entry_price, current_price,
-                                    self._config.stop_loss_ratio)
+                                   self._config.stop_loss_ratio)
 
     def _check_take_profit(self, current_price: float) -> bool:
         return take_profit_triggered(self._position.entry_price, current_price,
-                                      self._config.take_profit_ratio)
+                                     self._config.take_profit_ratio)
 
     def _calc_position_size(self, price: float) -> int:
         return position_size(self._capital, self._config.position_ratio,

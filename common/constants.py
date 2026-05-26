@@ -28,11 +28,11 @@
 # 交易方向与动作 (Trade Direction & Action)
 # ============================================================================
 
-TRADE_ACTION_BUY  = 'buy'           # 买入动作
+TRADE_ACTION_BUY = 'buy'           # 买入动作
 TRADE_ACTION_SELL = 'sell'          # 卖出动作
-TRADE_DIRECTION_LONG  = 'long'      # 多头持仓方向
+TRADE_DIRECTION_LONG = 'long'      # 多头持仓方向
 TRADE_DIRECTION_SHORT = 'short'     # 空头持仓方向
-TRADE_OFFSET_OPEN  = 'open'         # 开仓
+TRADE_OFFSET_OPEN = 'open'         # 开仓
 TRADE_OFFSET_CLOSE = 'close'        # 平仓
 
 
@@ -40,10 +40,10 @@ TRADE_OFFSET_CLOSE = 'close'        # 平仓
 # 信号触发原因 (Signal Reasons)
 # ============================================================================
 
-SIGNAL_STOP_LOSS     = 'stop_loss'      # 止损触发
-SIGNAL_TAKE_PROFIT   = 'take_profit'    # 止盈触发
-SIGNAL_DEATH_CROSS   = 'death_cross'    # 死叉信号
-SIGNAL_GOLDEN_CROSS  = 'golden_cross'   # 金叉信号
+SIGNAL_STOP_LOSS = 'stop_loss'      # 止损触发
+SIGNAL_TAKE_PROFIT = 'take_profit'    # 止盈触发
+SIGNAL_DEATH_CROSS = 'death_cross'    # 死叉信号
+SIGNAL_GOLDEN_CROSS = 'golden_cross'   # 金叉信号
 
 
 # ============================================================================
@@ -52,23 +52,23 @@ SIGNAL_GOLDEN_CROSS  = 'golden_cross'   # 金叉信号
 
 # 回测 / DB 操作状态
 STATUS_SUCCESS = 'success'   # 成功
-STATUS_FAILED  = 'failed'    # 失败
+STATUS_FAILED = 'failed'    # 失败
 
 # 日志级别状态
-LOG_STATUS_INFO    = 'INFO'     # 信息
+LOG_STATUS_INFO = 'INFO'     # 信息
 LOG_STATUS_SUCCESS = 'SUCCESS'  # 操作成功
-LOG_STATUS_ERROR   = 'ERROR'    # 错误
+LOG_STATUS_ERROR = 'ERROR'    # 错误
 
 
 # ============================================================================
 # CLI 子命令名称 (Command Names)
 # ============================================================================
 
-CMD_EXPORT      = 'export'       # 数据导出
-CMD_BACKTEST    = 'backtest'     # vnpy 批量回测
-CMD_TEST        = 'test'         # 策略逻辑测试
-CMD_LIVE        = 'live'         # 实盘/模拟交易
-CMD_REPORT      = 'report'       # 回测报告查询
+CMD_EXPORT = 'export'       # 数据导出
+CMD_BACKTEST = 'backtest'     # vnpy 批量回测
+CMD_TEST = 'test'         # 策略逻辑测试
+CMD_LIVE = 'live'         # 实盘/模拟交易
+CMD_REPORT = 'report'       # 回测报告查询
 
 
 # ============================================================================
@@ -76,8 +76,8 @@ CMD_REPORT      = 'report'       # 回测报告查询
 # ============================================================================
 
 MODE_SINGLE = 'single'   # 单品种模式
-MODE_BATCH  = 'batch'    # 批量模式 (多品种)
-MODE_MULTI  = 'multi'    # 多品种标识 (日志/DB symbol 占位)
+MODE_BATCH = 'batch'    # 批量模式 (多品种)
+MODE_MULTI = 'multi'    # 多品种标识 (日志/DB symbol 占位)
 
 
 # ============================================================================
@@ -91,42 +91,42 @@ STRATEGY_MA = 'ma'       # 双均线交叉策略
 # 策略配置默认值 (Strategy Defaults)
 # ============================================================================
 
-DEFAULT_SMA_SHORT       = 5       # 短期均线周期 (K线)
-DEFAULT_SMA_LONG        = 20      # 长期均线周期 (K线)
-DEFAULT_STOP_LOSS_RATIO  = 0.03   # 止损比例 (3%)
+DEFAULT_SMA_SHORT = 5       # 短期均线周期 (K线)
+DEFAULT_SMA_LONG = 20      # 长期均线周期 (K线)
+DEFAULT_STOP_LOSS_RATIO = 0.03   # 止损比例 (3%)
 DEFAULT_TAKE_PROFIT_RATIO = 0.05  # 止盈比例 (5%)
-DEFAULT_POSITION_RATIO   = 0.1    # 仓位比例 (10%)
-DEFAULT_KLINE_PERIOD     = 5      # K线周期 (分钟)
+DEFAULT_POSITION_RATIO = 0.1    # 仓位比例 (10%)
+DEFAULT_KLINE_PERIOD = 5      # K线周期 (分钟)
 
 
 # ============================================================================
 # 回测引擎默认参数 (Backtest Engine Defaults)
 # ============================================================================
 
-DEFAULT_INITIAL_CAPITAL  = 100000.0   # 初始资金
-DEFAULT_COMMISSION_RATE  = 0.0003     # 手续费率 (0.03%)
-DEFAULT_SLIPPAGE         = 1.0        # 滑点 (最小变动价位)
-DEFAULT_PRICE_TICK       = 1.0        # 最小价格变动单位
-DEFAULT_CONTRACT_SIZE    = 10         # 合约乘数
+DEFAULT_INITIAL_CAPITAL = 100000.0   # 初始资金
+DEFAULT_COMMISSION_RATE = 0.0003     # 手续费率 (0.03%)
+DEFAULT_SLIPPAGE = 1.0        # 滑点 (最小变动价位)
+DEFAULT_PRICE_TICK = 1.0        # 最小价格变动单位
+DEFAULT_CONTRACT_SIZE = 10         # 合约乘数
 
 
 # ============================================================================
 # 数据切分配置默认值 (Data Split Defaults)
 # ============================================================================
 
-DEFAULT_TRAIN_RATIO  = 0.6     # 训练集占比 (60%)
-DEFAULT_VAL_RATIO    = 0.2     # 验证集占比 (20%)
-DEFAULT_TEST_RATIO   = 0.2     # 测试集占比 (20%)
-DEFAULT_RANDOM_SEED  = 42      # 随机种子
+DEFAULT_TRAIN_RATIO = 0.6     # 训练集占比 (60%)
+DEFAULT_VAL_RATIO = 0.2     # 验证集占比 (20%)
+DEFAULT_TEST_RATIO = 0.2     # 测试集占比 (20%)
+DEFAULT_RANDOM_SEED = 42      # 随机种子
 
 
 # ============================================================================
 # 数据存储默认路径 (Data Storage Defaults)
 # ============================================================================
 
-DEFAULT_DATA_BASE_DIR     = '.quant_shared_data'              # 共享数据根目录
-DEFAULT_EXPORT_DIR        = '.quant_shared_data/csv'          # CSV 导出目录
-DEFAULT_DB_PATH           = '.quant_shared_data/quant_shared.db'  # SQLite 数据库路径
+DEFAULT_DATA_BASE_DIR = '.quant_shared_data'              # 共享数据根目录
+DEFAULT_EXPORT_DIR = '.quant_shared_data/csv'          # CSV 导出目录
+DEFAULT_DB_PATH = '.quant_shared_data/quant_shared.db'  # SQLite 数据库路径
 
 
 # ============================================================================
@@ -146,7 +146,5 @@ COMMON_KLINE_INTERVALS = [
 # 操作日志自动清理 (Operation Log Pruning)
 # ============================================================================
 
-MAX_OPERATION_LOG_ROWS  = 50_000   # 最大日志行数，超出自动清理
-PRUNE_CHECK_INTERVAL    = 100      # 每 N 次 insert 检查一次是否需要清理
-
-
+MAX_OPERATION_LOG_ROWS = 50_000   # 最大日志行数，超出自动清理
+PRUNE_CHECK_INTERVAL = 100      # 每 N 次 insert 检查一次是否需要清理

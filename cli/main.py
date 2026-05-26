@@ -24,11 +24,11 @@ logging.basicConfig(
     format=log_cfg.format,
 )
 
-from cli.commands.export import cmd_export
-from cli.commands.test import cmd_test
-from cli.commands.backtest import cmd_backtest
-from cli.commands.live import cmd_live
-from cli.commands.report import cmd_report
+from cli.commands.export import cmd_export  # noqa: E402
+from cli.commands.test import cmd_test  # noqa: E402
+from cli.commands.backtest import cmd_backtest  # noqa: E402
+from cli.commands.live import cmd_live  # noqa: E402
+from cli.commands.report import cmd_report  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

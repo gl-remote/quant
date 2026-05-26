@@ -68,8 +68,8 @@ def _cmd_show(dm: DataManager, backtest_id: int) -> None:
 def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
     """硬删除回测记录"""
     print(f"\n⚠️  即将删除回测记录 id={backtest_id} 及其所有关联数据")
-    print(f"   此操作不可撤销！\n")
-    
+    print("   此操作不可撤销！\n")
+
     confirm = input("   确认删除？[y/N] ").strip().lower()
     if confirm not in ('y', 'yes'):
         print("   已取消。")

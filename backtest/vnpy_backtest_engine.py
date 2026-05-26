@@ -94,7 +94,7 @@ class VnpyBacktestEngine:
         logger.info(f"{'=' * 60}")
         logger.info(f"启动 vn.py 回测: {len(pairs)} 个配对")
         logger.info(f"资金={self.initial_capital:,.0f} "
-                     f"费率={self.commission_rate:.4%} 滑点={self.slippage}")
+                    f"费率={self.commission_rate:.4%} 滑点={self.slippage}")
         logger.info(f"{'=' * 60}")
 
         # 按 DataFrame 分组，同一份数据共用一个 vnpy engine
@@ -254,8 +254,11 @@ class VnpyBacktestEngine:
             'positive_window_ratio': profitable_ratio(
                 int(np.sum(arr_returns > 0)), len(arr_returns),
             ),
-            'stability_score': float(max(0.0, min(1.0,
-                1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9)
+            'stability_score': float(max(0.0, min(
+                1.0,
+                1.0 - float(np.std(arr_returns)) / max(
+                    abs(float(np.mean(arr_returns))), 1e-9
+                ),
             ))),
             'is_oos_return_gap': is_mean - oos_mean,
         }

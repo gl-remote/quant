@@ -2,8 +2,6 @@
 
 import pandas as pd
 import pytest
-from pathlib import Path
-from datetime import datetime, timedelta
 
 from backtest.walk_forward import (
     parse_symbol_exchange,

@@ -59,12 +59,12 @@ def calculate_fifo_profit(fills: list[object]) -> float:
 
     buy_entries: list[tuple[float, float]] = []
     sell_entries: list[tuple[float, float]] = []
-    
+
     for fill in fills:
         action = get_attr(fill, 'action')  # pyright: ignore[reportAny]
         price = float(get_attr(fill, 'price'))  # pyright: ignore[reportAny]
         volume = float(get_attr(fill, 'volume'))  # pyright: ignore[reportAny]
-        
+
         if action == 'buy':
             buy_entries.append((price, volume))
         elif action == 'sell':
@@ -340,7 +340,7 @@ def take_profit_triggered(entry_price: float, current_price: float,
 # ============================================================================
 
 def average_entry_price(old_position: int, old_price: float,
-                         new_quantity: int, new_price: float) -> float:
+                        new_quantity: int, new_price: float) -> float:
     """计算加仓后的加权平均持仓成本
 
     行业标准:

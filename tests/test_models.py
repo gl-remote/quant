@@ -1,7 +1,6 @@
 """测试 data/models.py — Pydantic 模型与 ORM 模型"""
 
 import pytest
-from datetime import datetime
 
 from data.models import (
     BacktestRecord,
@@ -51,15 +50,15 @@ class TestBacktestRecord:
         assert r.avg_loss == -30.0
 
     def test_to_dict_excludes_none(self):
-        """to_dict 排除 None 值"""
+        """model_dump 排除 None 值"""
         r = BacktestRecord(symbol='m2509', strategy='ma')
-        d = r.to_dict()
+        d = r.model_dump(exclude_none=True)
         assert 'symbol' in d
         assert 'sharpe_ratio' not in d  # None, 应被排除
 
     def test_to_dict_includes_explicit_values(self):
         r = BacktestRecord(symbol='m2509', strategy='ma', sharpe_ratio=1.5)
-        d = r.to_dict()
+        d = r.model_dump(exclude_none=True)
         assert d['sharpe_ratio'] == 1.5
 
     def test_from_dict(self):
@@ -69,7 +68,7 @@ class TestBacktestRecord:
             'total_return': 0.2,
             'total_trades': 50,
         }
-        r = BacktestRecord.from_dict(d)
+        r = BacktestRecord.model_validate(d)
         assert r.symbol == 'm2509'
         assert r.total_return == 0.2
         assert r.total_trades == 50
@@ -113,7 +112,7 @@ class TestBacktestRecord:
             'error_message': None,
             'created_at': '2024-06-01 10:00:00',
         }
-        r = BacktestRecord.from_dict(orm_data)
+        r = BacktestRecord.model_validate(orm_data)
 
         assert r.id == 1
         assert r.symbol == 'DCE.m2509'
@@ -221,7 +220,7 @@ class TestTradeRecord:
             close_price=3550.0,
             quantity=5,
         )
-        d = t.to_dict()
+        d = t.model_dump(exclude_none=True)
         assert d['symbol'] == 'm2509'
         assert d['quantity'] == 5
         assert 'pnl' in d
@@ -238,7 +237,7 @@ class TestTradeRecord:
             'quantity': 3,
             'pnl': 300.0,
         }
-        t = TradeRecord.from_dict(d)
+        t = TradeRecord.model_validate(d)
         assert t.symbol == 'rb2410'
         assert t.pnl == 300.0
         assert t.offset == 'open'  # default

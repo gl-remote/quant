@@ -47,7 +47,7 @@ all = ["optuna>=3.0"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage"
+addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage --typeguard-packages=quant"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "core: tests for strategy core module",
@@ -80,15 +80,25 @@ disable = [
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
-disallow_untyped_defs = false
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_return_any = true
+warn_unused_configs = true
 
 [tool.pyright]
-typeCheckingMode = "basic"
+typeCheckingMode = "strict"
 pythonVersion = "3.10"
 # 第三方库无类型存根产生大量噪音，关闭相关检查
 reportUnknownMemberType = false
 reportUnknownVariableType = false
 reportUnknownArgumentType = false
+# 启用严格检查选项
+reportOptionalMemberAccess = true
+reportCallInDefaultInitializer = true
+reportFunctionMemberAccess = true
+reportMissingImports = true
 reportMissingTypeStubs = false
 
 [tool.coverage.run]

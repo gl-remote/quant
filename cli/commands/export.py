@@ -44,7 +44,7 @@ def cmd_export(args: argparse.Namespace):
 
     logger.info(f"数据导出: {symbol} {start} ~ {end}")
     dm.store.log('export', f"开始: {symbol} {start}~{end}",
-           symbol=symbol, status='INFO')
+                 symbol=symbol, status='INFO')
 
     success = export_csv(
         symbol=symbol,

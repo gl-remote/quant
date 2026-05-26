@@ -5,12 +5,10 @@
     - MACrossParams / Bar / Signal / Fill 核心类型
 """
 
-import pytest
 import dataclasses
 
 from strategies.ma_strategy import MaStrategyCore, MACrossParams
-from strategies.core.types import Bar, Signal, Fill, StrategyPosition
-from config.app_config import StrategyItemConfig
+from strategies.core.types import Bar, Signal, Fill
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -161,8 +159,9 @@ class TestMaStrategySignals:
     def test_death_cross_sell_after_buy(self):
         """持仓后死叉平仓"""
         strat = MaStrategyCore()
-        strat.config = MACrossParams(sma_short=3, sma_long=10,
-                                      stop_loss_ratio=0.20)  # 止放宽
+        strat.config = MACrossParams(
+            sma_short=3, sma_long=10, stop_loss_ratio=0.20,
+        )  # 止损放宽
         # 先建仓
         for _ in range(25):
             strat.on_bar(_make_bar(100.0))

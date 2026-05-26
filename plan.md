@@ -1,105 +1,74 @@
 # 项目改进计划
 
-> 版本: 0.2.0-dev | 最后更新: 2026-05-25 | 主线: 稳定盈利策略研发
+> 版本: 0.2.0-dev | 最后更新: 2026-05-26 | 主线: 稳定盈利策略研发
 
 ---
 
 ## 一、项目现状
 
-### 1.1 基础数据
+### 1.1 核心指标
 
-| 指标 | 数值 |
-|------|------|
-| 生产代码 | 5,685 行 (38 个 .py 文件) |
-| 测试代码 | 2,722 行 (7 个 test 文件) |
-| 测试用例 | **297** 个全通过，0 失败 |
-| 覆盖率 | **61%** (1,889 stmts / 733 missed) |
-| 策略类型 | 1 (双均线 MA) |
-| CI | GitHub Actions (pytest + flake8) |
-| Python | 3.10+ |
+| 指标 | 当前值 | S1 目标 | S2 目标 |
+|------|--------|---------|---------|
+| 生产代码 | 5,685 行 (38 个 .py 文件) | — | — |
+| 测试代码 | 2,722 行 (7 个 test 文件) | — | — |
+| 测试用例 | **297** 个全通过 | 310+ | 330+ |
+| 覆盖率 | **61%** | ≥ 65% | ≥ 70% |
+| 策略类型 | 1 (双均线 MA) | 1 | 2+ |
+| CI | ✅ 通过 | 通过 | 通过 |
 
-> 代码精简 27%（7,819→5,685）通过合并冗余模块和删除死代码。测试从 162→297（+83%），覆盖率 51%→61%。核心策略 `ma_strategy.py` 覆盖率 100%。
+> 代码精简 27%（7,819→5,685），测试从 162→297（+83%），覆盖率 51%→61%。
 
-### 1.2 模块架构（唯一权威源）
-
-> 本节的模块架构图是项目结构的**唯一权威源**。其他文档（AI_BEHAVIOR_RULES.md、.memory_rules.md）不再维护独立的架构副本，引用此处。
+### 1.2 模块架构
 
 ```
 main.py (19 行转发器) → cli/ (命令行子包)
-├── cli/main.py          参数解析 + 命令分发 (149 行)
+├── cli/main.py          参数解析 + 命令分发
 │   └── commands/        5 个子命令 (export/test/backtest/report/live)
 ├── strategies/          策略核心 (框架无关)
 │   ├── core/            Strategy ABC + Bar/Signal/Fill/Position 类型
-│   ├── bridges/         vnpy 桥接 + 天勤桥接 (协议转换层)
-│   └── ma_strategy.py  双均线策略 (82 行, 100% 覆盖)
+│   ├── bridges/         vnpy 桥接 + 天勤桥接
+│   └── ma_strategy.py   双均线策略 (82 行, 100% 覆盖)
 ├── backtest/            回测引擎 (纯执行器)
 │   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
 │   └── walk_forward.py          时间窗口切分
 ├── optimizer/           参数搜索 (S1·A11 ✅)
-│   ├── grid_search.py           网格搜索 (GridOptimizer)
-│   └── optuna_search.py         Optuna 贝叶斯优化 (OptunaOptimizer)
+│   ├── grid_search.py   GridOptimizer
+│   └── optuna_search.py OptunaOptimizer
 ├── data/                数据层
-│   ├── store.py          SQLite + peewee ORM (155 行, 92% 覆盖)
-│   ├── models.py         Pydantic + ORM 模型 (178 行, 100% 覆盖)
-│   ├── manager.py        DataManager 统一入口 (153 行)
-│   └── exporter.py       天勤 → CSV 导出
-├── report/              报告 + 可视化 (原 visualizer 已合并)
-│   ├── reports.py        文字报告: 单次 + 汇总 (72 行, 97% 覆盖)
-│   ├── charts.py         Plotly 多子图图表 (78 行)
-│   ├── _html.py          HTML 模板渲染 (13 行)
-│   └── __init__.py       build_report() 统一入口
+│   ├── store.py         SQLite + peewee ORM
+│   ├── models.py        Pydantic + ORM 模型
+│   ├── manager.py       DataManager 统一入口
+│   └── exporter.py      天勤 → CSV 导出
+├── report/              报告 + 可视化
+│   ├── reports.py       文字报告
+│   ├── charts.py        Plotly 多子图
+│   ├── _html.py         HTML 模板
+│   └── __init__.py      build_report() 统一入口
 ├── common/              纯函数工具层 (零 I/O)
-│   ├── constants.py     全局常量字典 (60+ 常量)
-│   ├── formulas.py      统一量化计算公式库 (15+ 公式)
-│   ├── schemas.py        Pandera Schema 定义 (4 Schema)
-│   ├── metrics.py        max_drawdown / sharpe_ratio
-│   ├── stats.py          rank_by_key / summary_stats
-│   └── formatting.py     百分比/浮点数格式化
+│   ├── constants.py     全局常量字典
+│   ├── formulas.py      统一量化计算公式库
+│   ├── schemas.py       Pandera Schema 定义
+│   ├── metrics.py       max_drawdown / sharpe_ratio
+│   ├── stats.py         rank_by_key / summary_stats
+│   └── formatting.py    百分比/浮点数格式化
 └── config/              配置管理
-    └── config_manager.py YAML 分层合并 + 校验 (91% 覆盖)
+    └── app_config.py    Pydantic 配置模型 + 单例
 ```
 
-### 1.3 架构决策记录（唯一权威源）
-
-> 本节的 10 项 ADR 是项目架构决策的**唯一权威源**。`.memory_rules.md` 不再维护 ADR 副本。
+### 1.3 架构决策记录
 
 | 决策 | 说明 |
 |------|------|
-| **Strategy + Bridge 分离** | 策略核心不依赖任何框架，Bridge 做协议转换。同一份策略代码驱动 vnpy 回测和天勤实盘 |
-| **复用官方回测引擎** | vnpy BacktestingEngine 负责订单撮合/滑点/手续费/逐日盯市，外层仅做数据注入和批量编排 |
-| **绩效单一来源** | 盈亏/夏普/回撤统一从 vnpy calculate_statistics 获取，Strategy 不自算 (已移除 Performance 类) |
-| **fills 作为交易日志** | Strategy.fills 记录每笔成交的方向/价格/手数/原因，只读不计算 |
-| **全局常量字典** | 60+ 业务常量统一在 `common/constants.py`，消除全部魔术数字/字符串 |
-| **统一公式库** | 15+ 量化公式统一在 `common/formulas.py`，零重复实现、可独立测试 |
-| **Pandera Schema** | 4 个 DataFrame Schema 全局统一定义在 `common/schemas.py`，数据加载自动校验 |
-| **Pydantic + peewee ORM** | 单条记录 Pydantic 校验 + 持久层 peewee ORM，完整类型安全 |
-| **CLI 子包化** | `main.py` 为 19 行转发器，命令实现在 `cli/commands/`，每个命令独立模块 |
-| **common/ 零依赖** | 纯函数、零 I/O、零副作用，可被所有模块安全引用 |
-| **Engine 纯执行** | Engine 只调 vnpy，数据加载走 DataManager，策略创建走 optimizer/CLI，不耦合具体策略类或 CSV 文件系统 |
-
-### 1.4 近期变更 (2026-05-25)
-
-| 提交 | 变更 |
-|------|------|
-| `39f2ce4` | **refactor**: tests/ 重组，对齐源码模块结构。9→7 文件，297 测试全过 |
-| `8a37b6d` | **refactor**: report/ 合并 single+summary+_helpers → reports.py，目录 6→4 文件 |
-| `cd4943c` | **refactor**: visualizer/ 合并到 report/，统一报告+可视化入口 build_report() |
-| `2b0b18f` | **feat**: 添加回测可视化模块 (Plotly 多子图) + 数据库表结构对齐 |
-| `57c140a` | **chore**: 统一构建产物到 output/ 目录 |
-| `9b37007` | **refactor**: 清理技术债，统一字段命名，删除死代码和兼容层 (净减 2,134 行) |
-| `6dfaa23` | **refactor**: 清理死代码 |
-| `164d00d` | **refactor**: 数据模块配置管理：移除硬编码，统一通过 config 读取 |
-| `a342811` | **feat**: 全项目代码升级与清理 |
-| `6a13da1` | **feat**: 在 common/schemas.py 定义全局统一的 Pandera Schema |
-| `11ac75f` | **refactor**: 重构 data 模块，全面使用 Pandera + Pydantic 验证 |
-| `56ed973` | **refactor**: CLI 架构重构完成 + 文档同步更新 |
-| `f5fac35` | **fix**: vnpy_backtest_engine 全局常量替换 + 数据不足边界修复 |
-| `27e14b6` | **docs**: 常量字典+公式库规范写入 AI_BEHAVIOR_RULES + CONTRIBUTING |
-| `6041db1` | **refactor**: 全局常量标准化 + 公式库统一替换 |
-| `5f561bd` | **feat(common)**: 新增 constants.py 全局常量字典 + formulas.py 统一计算公式库 |
-| `43ac62a` | **docs**: .memory_rules.md 新增 Bug 修复记录表 |
-| `b271654` | **refactor**: 移除 Strategy.performance，绩效单一来源为 vnpy |
-| `a3af52a` | **docs**: 刷新 plan.md 项目状态和缺陷清单 |
+| **Strategy + Bridge 分离** | 策略核心不依赖任何框架，Bridge 做协议转换 |
+| **复用官方回测引擎** | vnpy BacktestingEngine 负责订单撮合/滑点/手续费/逐日盯市 |
+| **绩效单一来源** | 盈亏/夏普/回撤统一从 vnpy calculate_statistics 获取 |
+| **全局常量字典** | 60+ 业务常量统一在 `common/constants.py` |
+| **统一公式库** | 15+ 量化公式统一在 `common/formulas.py` |
+| **Pandera Schema** | 4 个 DataFrame Schema 全局统一定义 |
+| **Pydantic + peewee ORM** | 单条记录 Pydantic 校验 + 持久层 peewee ORM |
+| **common/ 零依赖** | 纯函数、零 I/O、零副作用 |
+| **Engine 纯执行** | Engine 只调 vnpy，数据加载走 DataManager |
 
 ---
 
@@ -120,23 +89,17 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | **S3** 生产加固 | 风控熔断 + 通知 | 未开始 |
 | **S4** 基础设施 | Docker + 多数据源 | 未开始 |
 
-> 当前 **S0 工程基础全部完成**，S1 可视化基础链路已通，下一步：参数优化模块。
-
 ### S1: 策略研发工具
-
-> 先有工具，再做策略。看不到回测曲线、不会调参就谈不上研发。
 
 | 编号 | 行动 | 优先级 | 状态 | 交付物 |
 |------|------|--------|------|--------|
-| A12 | 回测结果本地可视化 | **高** | 🟡 部分完成 | `report/charts.py` — Plotly 多子图 (资金曲线+回撤+交易标注) + `report/_html.py` HTML 模板，`build_report()` 已通。**待完善**: 参数对比图、多策略叠加、信号详细标注 |
-| A11 | 内置参数优化模块（网格搜索 + Optuna） | **高** | ✅ 已完成 | `optimizer/` — `GridOptimizer` 穷举搜索 + `OptunaOptimizer` 贝叶斯优化。CLI `--optimizer grid|optuna` 可选 |
-| S1-DOC | 策略开发指南 | 中 | ⬜ 未开始 | `docs/strategy-guide.md` — 如何新增策略、调优流程 |
+| A12 | 回测结果本地可视化 | **高** | 🟡 部分完成 | `report/charts.py` — Plotly 多子图 + HTML 模板 |
+| A11 | 内置参数优化模块 | **高** | ✅ 已完成 | `optimizer/` — GridOptimizer + OptunaOptimizer |
+| S1-DOC | 策略开发指南 | 中 | ⬜ 未开始 | `docs/strategy-guide.md` |
 
 **S1 验收**: 跑一次完整流程 — 网格搜索均线参数 → 可视化最优 vs 默认对比图
 
 ### S2: 策略研发（主线）
-
-> 在 S1 工具支撑下，迭代开发。目标是测试集上稳定盈利。
 
 | 编号 | 行动 | 优先级 | 交付物 |
 |------|------|--------|--------|
@@ -151,102 +114,64 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ### S3: 生产加固
 
-> 策略能盈利了，加上安全带。
-
 | 编号 | 行动 | 优先级 | 交付物 |
 |------|------|--------|--------|
-| A15 | 实盘风控熔断 | 中 | `risk/` — 日亏损限额、最大回撤硬止损、连续亏损暂停 |
+| A15 | 实盘风控熔断 | 中 | `risk/` — 日亏损限额、最大回撤硬止损 |
 | A17 | 异常通知机制 | 低 | `notify/` — 微信/邮件通知 |
 
-**S3 验收**: 实盘模式下，触发熔断条件后自动停止交易并通知
-
 ### S4: 基础设施补全
-
-> 有余力再做。
 
 | 编号 | 行动 | 优先级 | 交付物 |
 |------|------|--------|--------|
 | A16 | Docker 支持 | 低 | `Dockerfile` + `docker-compose.yml` |
-| A18 | 多数据源抽象 | 低 | `data/sources/` — 除天勤外的数据源接口 |
-| S4-DOC | 贡献指南 | 低 | `CONTRIBUTING.md` |
+| A18 | 多数据源抽象 | 低 | `data/sources/` — 多数据源接口 |
 
 ---
 
-## 三、代码审计：缺陷清单（唯一权威源）
+## 三、未解决缺陷清单
 
-> 本节的 Bug/缺陷/架构发现是项目问题追踪的**唯一权威源**。`.memory_rules.md` 不再维护独立缺陷详情，KG 实体通过 Issue ID 关联至此。
+> 审计日期: 2026-05-25 | 已修复的 Bug 请查看 [`CHANGELOG.md`](./CHANGELOG.md)
 
-> 审计日期: 2026-05-25 (第三次全量审计) | 基准: 量化交易系统行业惯例 | 覆盖: 36 个 .py 文件全部审阅
-
-### 3.1 已修复 Bug
-
-> 不再重复维护已修复 Bug 详情。本版本修复的 8 个逻辑/数值 Bug (BUG-01~08) 已归档至 [`CHANGELOG.md` §[0.2.0-dev] 修复段](./CHANGELOG.md#020-dev---2026-05-25)，含修复提交 hash。
-
-本版本无新增未修复 Bug。
-
-### 3.2 缺陷 — 质量/鲁棒性/工程实践
+### 3.1 待修复缺陷
 
 | 编号 | 严重度 | 问题 | 文件:行 | 说明 |
 |------|--------|------|---------|------|
-| DEF-01 | 🟡 高 | `_calc_position_size` 总是最少买 1 手 | `ma_strategy.py:153-156` | `max(1, int(vol))` 在资金不足时仍返回 1，下单会超资金限额被 vnpy 拒绝，但无前置检查 |
-| DEF-02 | 🟡 中 | `compute_summary_stats` 对 NaN 无防护 | `common/stats.py:46-57` | `np.mean/median/std` 对含 NaN 数组返回 NaN，调用方（comparison_reporter）直接格式化输出 |
-| DEF-03 | 🟡 中 | `calc_sharpe_ratio` 零权益无防护 | `common/metrics.py:48-49` | `returns = np.diff(curve) / curve[:-1]` 当 curve 含零时除零 → inf/nan。`std==0` 返回 999 或 0，但 inf mean 未处理 |
-| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作有竞态窗口 | `data/store.py` | SELECT → 判断存在 → UPDATE/CREATE 分两步，并发 exporter 可能产生重复记录 |
-| DEF-05 | 🟡 中 | `_InjectedStrategy` 闭包+临时属性时序脆弱 | `vnpy_backtest_engine.py:87-98` | 闭包捕获 `self._backtest_context`，该属性在 batch 模式下每品种覆写。虽然当前单线程安全，但属性语义是"最后的品种"而非"当前品种" |
-| DEF-06 | 🟡 中 | tqsdk 实盘硬编码日线 | `tqsdk_bridge.py:136` | `api.get_kline_serial(symbol, 86400)` 硬编码 86400 秒（日线），不通过配置传入 |
-| DEF-07 | 🟡 中 | max_drawdown 归一化三处重复且不一致 | `comparison_reporter.py:275`, `sql_reporter.py:386`, `formatting.py:27` | 同样 `abs(dd)>1 → /100` 逻辑分散三处，与 `format_pct` 的归一化逻辑不同，混用时结果不一致 |
-| DEF-08 | 🟡 中 | `get_strategy_config` 合并顺序无文档 | `config_manager.py:80` | `{**defaults, **sp, **risk, **tc}` 优先级隐式。tc (trading) 覆盖 risk 覆盖 strategy_params，同 key 从何处生效不可预测 |
-| DEF-09 | 🟡 中 | test 模式 — 测试用例只验证固定两行模拟数据 | `main.py:224-239` | 金叉/止损各一行测试，回测结果无任何数值断言；通过 ≠ 正确 |
-| DEF-10 | 🟢 低 | `np.std` 多处未统一 ddof | `vnpy_backtest_engine.py:265`, `common/stats.py:64` | WF 用 `ddof=1`(样本)，stats 用 `ddof=0`(总体)，不一致导致 Walk-Forward 对比 report 聚合结果偏差 |
-| DEF-11 | 🟢 低 | `DataFrame.iterrows()` 逐行构造 BarData 性能差 | `data_loader.py:174` | 数千行 K 线逐行 `BarData(...)` 创建，可用列表推导或矢量化 |
+| DEF-01 | 🟡 高 | `_calc_position_size` 总是最少买 1 手 | `ma_strategy.py:153-156` | 资金不足时仍返回 1，无前置检查 |
+| DEF-02 | 🟡 中 | `compute_summary_stats` 对 NaN 无防护 | `common/stats.py:46-57` | `np.mean/median/std` 返回 NaN |
+| DEF-03 | 🟡 中 | `calc_sharpe_ratio` 零权益无防护 | `common/metrics.py:48-49` | 除零 → inf/nan |
+| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作有竞态窗口 | `data/store.py` | 并发 exporter 可能产生重复记录 |
+| DEF-05 | 🟡 中 | `_InjectedStrategy` 闭包+临时属性时序脆弱 | `vnpy_backtest_engine.py:87-98` | 属性语义是"最后的品种"而非"当前品种" |
+| DEF-06 | 🟡 中 | tqsdk 实盘硬编码日线 | `tqsdk_bridge.py:136` | `api.get_kline_serial(symbol, 86400)` |
+| DEF-07 | 🟡 中 | max_drawdown 归一化三处重复且不一致 | 多处 | 同样逻辑分散三处，归一化不一致 |
+| DEF-08 | 🟡 中 | `get_strategy_config` 合并顺序无文档 | `config_manager.py:80` | 优先级隐式，同 key 生效位置不可预测 |
+| DEF-09 | 🟡 中 | test 模式只验证固定两行模拟数据 | `main.py:224-239` | 无数值断言，通过 ≠ 正确 |
+| DEF-10 | 🟢 低 | `np.std` 多处未统一 ddof | `vnpy_backtest_engine.py:265`, `common/stats.py:64` | WF 用 ddof=1，stats 用 ddof=0 |
+| DEF-11 | 🟢 低 | `DataFrame.iterrows()` 逐行构造 BarData 性能差 | `data_loader.py:174` | 可用列表推导或矢量化 |
 
-### 3.3 保留的存量缺陷 (12 项)
-
-以下为前次审计保留且本次重新审查确认仍然存在的缺陷：
+### 3.2 存量缺陷
 
 | 编号 | 分类 | 问题 | 文件 | 说明 |
 |------|------|------|------|------|
-| DEF-S01 | 测试 | 覆盖率排除核心文件 | `pyproject.toml` | main.py/bridges/exporter/vnpy_backtest_engine 被排除，66% 非真实值 |
-| DEF-S02 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | ~300 行关键桥接代码无测试 |
+| DEF-S01 | 测试 | 覆盖率排除核心文件 | `pyproject.toml` | main.py/bridges/exporter 被排除 |
+| DEF-S02 | 测试 | Bridge 层零测试覆盖 | `strategies/bridges/` | ~300 行关键代码无测试 |
 | DEF-S03 | 测试 | 无集成/端到端测试 | `tests/` | 缺少导出→回测→报告完整流程测试 |
-| DEF-S04 | 策略 | 止损/止盈使用固定比例 | `ma_strategy.py` | 不同品种波动率差异大，应用 ATR 动态调整 |
+| DEF-S04 | 策略 | 止损/止盈使用固定比例 | `ma_strategy.py` | 应使用 ATR 动态调整 |
 | DEF-S05 | 策略 | 信号优先级隐式 | `ma_strategy.py` | 止损>止盈>死叉由 if/elif 顺序隐式定义 |
-| DEF-S06 | 数据 | money 字段为近似值 | `exporter.py` | `close*volume` 不反映期货保证金的实际资金占用 |
+| DEF-S06 | 数据 | money 字段为近似值 | `exporter.py` | `close*volume` 不反映实际资金占用 |
 | DEF-S07 | 数据 | 缺少数据完整性校验 | `data_loader.py` | 未检查 K 线时间连续性、OHLC 一致性 |
 | DEF-S08 | 风控 | 无实盘风控模块 | — | 无日亏损限额/连续亏损暂停/最大回撤硬止损 |
 | DEF-S09 | 风控 | 无仓位风险检查 | — | 下单未考虑可用资金/保证金占用/持仓集中度 |
 | DEF-S10 | 运维 | 缺少行情数据源健康检查 | `tqsdk_bridge.py` | 实盘运行无断线自动检测与重连 |
-| DEF-S11 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `common/metrics.py` | 假设 rfr=0，对中国期货影响小但应文档化 |
+| DEF-S11 | 指标 | calc_sharpe_ratio 未扣除无风险利率 | `common/metrics.py` | 假设 rfr=0，应文档化 |
 | DEF-S12 | 指标 | 缺少 Sortino/Calmar/基准对比 | — | 缺下行风险指标、年化收益/回撤比 |
 
-### 3.4 架构层面发现 (5 项 — 与上次审计一致，无新增)
+### 3.3 架构层面发现
 
 | 编号 | 发现 | 严重度 | 说明 |
 |------|------|--------|------|
-| ~~ARC-01~~ | ~~`_InjectedStrategy` 闭包注入脆弱~~ ✅ 已修复 | 中 | `self._backtest_context` 实例属性 → 方法参数显式传入 (线程安全) |
 | ARC-02 | `data_loader.py` 覆盖率仅 37% | 中 | Walk-Forward 切分/CSV 扫描路径几乎无测试 |
-| ARC-03 | `vnpy_backtest_engine.py` 覆盖率 11% | 中 | 核心引擎依赖 vnpy 运行时，无法在 CI 环境 mock |
-| ARC-04 | ~~`main.py` 678 行单一入口~~ ✅ 已修复 | — | 已重构为 `cli/` 子包，`main.py` 仅 19 行转发 |
+| ARC-03 | `vnpy_backtest_engine.py` 覆盖率 11% | 中 | 核心引擎依赖 vnpy 运行时，无法在 CI mock |
 | ARC-05 | `sql_reporter.py` 覆盖率 19% | 低 | SQL 报告路径几乎未测试 |
-
-### 3.5 本次审计已确认安全 ✅
-
-| 项 | 结论 |
-|----|------|
-| peewee ORM 参数化查询 | 无 SQL 注入风险 |
-| DatabaseProxy 延迟绑定模式 | 实现正确（`__init__` 内完成绑定） |
-| TypedDict 与 ORM 模型字段一致性 | 逐字段核对一致 ✓ |
-| 配置中 API 密钥管理 | 环境变量优先 + placeholder 保护 ✓ |
-| `parse_percentage` / `ensure_float` | 边界安全，None/str 均有防护 |
-
-### 3.6 已修复项 ✅
-
-| 编号 | 说明 | 日期 |
-|------|------|------|
-| PERF-01 | Strategy.performance 双重绩效系统 | 2026-05-25 |
-| AGG-01 | backtest.aggregator 自定义 rank_by_key | 2026-05-25 |
-| BT16~21 | 第二轮审计修复 6 项 | 2026-05-24 |
-| BT1~9 | 第一轮审计修复 9 项 Bug | 2026-05-24 |
 
 ---
 
@@ -256,12 +181,8 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 | 风险 | 可能性 | 影响 | 关联问题 | 状态 | 缓解措施 |
 |------|--------|------|---------|------|---------|
-| tq-backtest 盈亏全错 | 每次触发 | 🔴 高 | **BUG-01, BUG-02** | ✅ 已修复 | 已修复：卡尔积→FIFO (`3ea2d3e`)、手续费扣减 (`7ce71cb`) |
-| Walk-Forward 崩溃丢弃数据 | 数据异常时 | 🔴 高 | **BUG-04** | ✅ 已修复 | 已修复：`_run_backtest` 加 try/except 逐窗口保护 (`d1589b9`) |
-| format_pct 格式化错误 | 中 | 🟡 高 | **BUG-03** | ✅ 已修复 | 已修复：统一 DB 入库语义（全部存比值），消除启发式 (`d1589b9`) |
 | 实盘无风控裸奔 | 中 | 🔴 高 | DEF-S08 | S3-A15 风控熔断 |
-| 报告数值不可靠 | 高 | 🟡 中 | BUG-05~07, DEF-02, DEF-07 | ✅ 已修复 | BUG-05/06/07 已修复，方向常量+WF验证+命名修正 |
-| ~~`_InjectedStrategy` 竞态~~ | 低 | 🟡 中 | ARC-01 | ✅ 已修复: context 显式传参，消除共享属性 (供 A11 并发参数搜索) |
+| 报告数值不可靠 | 高 | 🟡 中 | DEF-02, DEF-07 | 已有修复计划 |
 
 ### 4.2 前瞻风险
 
@@ -274,36 +195,11 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 
 ---
 
-## 五、衡量指标
+## 五、Engine 重构设计
 
-| 指标 | 当前 (2026-05-25) | S1 目标 | S2 目标 | S3 目标 |
-|------|-------------------|---------|---------|---------|
-| Bug 数 | **0** (全部已修复) | 0 | 0 | 0 |
-| 测试用例数 | **297** ✅ | 310+ | 330+ | 350+ |
-| 覆盖率 | **61%** | ≥ 65% | ≥ 70% | ≥ 75% |
-| 策略类型数 | 1 (MA) | 1 | 2+ | 2+ |
-| CI 状态 | ✅ 通过 | 通过 | 通过 | 通过 |
-| 生产代码行 | 5,685 | — | — | — |
+> 将当前 CLI/Engine 职责重叠（数据加载 + 策略创建）彻底分离，为 S1 参数搜索铺平道路。
 
----
-
-## 六、版本记录
-
-| 版本 | 日期 | 变更 |
-|------|------|------|
-| **0.2.0-dev** | **2026-05-25** | S0 工程基础全部完成。report 合并、visualizer 集成、tests 重组。297 测试 61% 覆盖 |
-| 0.2.0-dev | 2026-05-25 | 第四次全量审计：全局常量标准化 + 公式库统一 + Pandera 校验 + CLI 重构完成 |
-| 0.2.0-dev | 2026-05-25 | 第三次审计：移除双重绩效系统；symbols_data 扁平化；peewee ORM；lib→common；回测与报告解耦 |
-| 0.2.0-dev | 2026-05-24 | backtest 两轮审计修复 (15 项 Bug/缺陷)；DB 持久化 + cmd_report；S1-S4 四阶段规划 |
-| 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备 |
-
----
-
-## 七、Engine 重构设计 (2026-05-26)
-
-> 将当前 CLI/Engine 职责重叠（数据加载 + 策略创建）彻底分离，并为 S1 参数搜索铺平道路。
-
-### 7.1 目标架构
+### 5.1 目标架构
 
 ```
 data/              加载 K 线 + 元数据查询 + 持久化 (不变)
@@ -312,62 +208,38 @@ backtest/          纯执行器：调 vnpy，不管数据来源和策略创建
 CLI/               编排 data + optimizer + backtest，结果持久化
 ```
 
-### 7.2 Engine 接口
+### 5.2 Engine 接口
 
 ```python
 class BacktestEngine:
     def __init__(self, backtest_config: BacktestConfig, dm: DataManager)
-        # 不再需要 data_dir，数据加载走 dm
 
     def run(self, pairs: list[tuple[DataFrame, Strategy]]) -> list[dict]
-        # 多策略 × 多品种，外层按 DataFrame 分组
-        # 每个品种共用一个 vnpy engine，一次回放跑 N 个策略
-        # 返回 list[dict]，每个 dict = (strategy_name, symbol, statistics, daily_results)
 
     def run_walk_forward(
         self, data: DataFrame, strategy: Strategy,
         train_size=None, val_size=None, test_size=None, step=None,
     ) -> dict
-        # 内部切时间窗口，每窗口调 vnpy，聚合 OOS 结果
-        # 策略元信息从实例自取: type(s).__name__, getattr(s, 'VERSION')
 ```
 
 **关键约束**:
-- Engine 不再 import 任何具体策略类 (不再有 `from strategies.ma_strategy import MaStrategyCore`)
-- Engine 不再扫描 CSV 文件系统 (不再有 `_load_data` 方法)
+- Engine 不再 import 任何具体策略类
+- Engine 不再扫描 CSV 文件系统
 - 多策略共用一个 vnpy engine，一次回放拿到所有策略结果
 
-### 7.3 调用流程
+### 5.3 调用流程
 
 ```
-backtest --mode search (默认):
-
+backtest --mode search:
   CLI: dm.load_kline_safe(symbol) → list[(symbol, DataFrame)]
   CLI: optimizer.generate(strategy_cls, param_grid) → list[Strategy]
   CLI: pairs = itertools.product(datasets, strategies)
   CLI: results = engine.run(pairs)
   CLI: _persist_results(dm, results)
 
-
 backtest --mode walk-forward:
-
   CLI: dm.load_kline_safe(symbol) → DataFrame
   CLI: strategy = load_strategy(...) → Strategy × 1
   CLI: result = engine.run_walk_forward(data, strategy)
   CLI: _persist_results(dm, [result])
-
-
-单标 --symbol 无 --pattern:  走 TqSdk (不变)
 ```
-
-### 7.4 持久化
-
-- Engine 返回结构化 dict，不碰 DataManager
-- CLI 抽 `_persist_results(dm, results)` 统一处理: statistics / daily_results / trades / engine_config
-- 不新建中间 reporter 层，规模未到
-
-### 7.5 暂不处理
-
-- W-F 不叠加参数搜索
-- W-F 窗口参数沿用现有四个参数
-- optimizer 模块在 S1·A11 实现

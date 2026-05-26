@@ -23,6 +23,7 @@ from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUn
 # Pydantic 模型（对外暴露，用于单条记录验证）
 # ==============================================================================
 
+
 class BacktestRecord(BaseModel):
     """回测记录 — 字段与 ORM Backtest 表保持一致"""
     id: int | None = None
@@ -70,14 +71,14 @@ class TradeRecord(BaseModel):
     pnl: float = 0.0
     commission: float = 0.0
     created_at: str | None = None
-    
+
     @field_validator('quantity')
     @classmethod
     def validate_quantity(cls, v: int) -> int:
         if v <= 0:
             raise ValueError('quantity must be greater than 0')
         return v
-    
+
     @field_validator('commission')
     @classmethod
     def validate_commission(cls, v: float) -> float:
@@ -137,7 +138,7 @@ class ExportMetadata(OrmBaseModel):
     total_rows: IntegerField = IntegerField(default=0)
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     updated_at: DateTimeField = DateTimeField(null=True)
-    
+
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'export_metadata'
 
@@ -149,7 +150,7 @@ class OperationLog(OrmBaseModel):
     message: TextField = TextField()
     status: CharField = CharField()
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    
+
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'operation_logs'
 
@@ -191,7 +192,7 @@ class Backtest(OrmBaseModel):
     return_drawdown_ratio: FloatField = FloatField(null=True)
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     updated_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    
+
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'backtests'
 
@@ -209,7 +210,7 @@ class BacktestTrade(OrmBaseModel):
     pnl: FloatField = FloatField()
     commission: FloatField = FloatField()
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    
+
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'backtest_trades'
 
@@ -222,7 +223,7 @@ class BacktestDaily(OrmBaseModel):
     daily_return: FloatField = FloatField()  # 当日收益率
     drawdown: FloatField = FloatField()  # 当日回撤
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    
+
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'backtest_daily'
 
