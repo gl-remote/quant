@@ -1,132 +1,15 @@
-"""Walk-Forward 时间序列交叉验证与回测数据工具
+"""Walk-Forward 时间序列交叉验证工具
 
 提供:
-  - parse_symbol_exchange:      品种代码 → 交易所映射
-  - filter_dataframe_by_date:   日期范围过滤
-  - df_to_vnpy_datalines:       DataFrame → vnpy BarData
   - walk_forward_split:         WF 窗口划分 (按行数)
   - walk_forward_split_by_ratio: WF 窗口划分 (按比例)
 """
 
 import logging
+
 import pandas as pd
 
 logger = logging.getLogger(__name__)
-
-
-def parse_symbol_exchange(symbol: str) -> tuple[str, str]:
-    """解析品种代码中的交易所信息，统一返回字符串类型
-
-    Args:
-        symbol: 完整合约代码 (e.g. DCE.m2509)
-
-    Returns:
-        (pure_symbol, exchange_code) 均为字符串
-    """
-    if '.' in symbol:
-        parts = symbol.split('.')
-        pure_symbol = parts[-1]
-        exchange_code = parts[0]
-    else:
-        pure_symbol = symbol
-        exchange_code = 'CFFEX'
-
-    return pure_symbol, exchange_code
-
-
-# ── 日期过滤 ──────────────────────────────────────────────
-
-def filter_dataframe_by_date(
-    df: 'pd.DataFrame',
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> 'pd.DataFrame':
-    """按日期范围过滤 DataFrame，重置索引
-
-    纯函数，不修改原 DataFrame。
-
-    Args:
-        df: 含 'datetime' 列的 K 线 DataFrame
-        start_date: 可选起始日期 (闭区间)
-        end_date: 可选结束日期 (闭区间)
-
-    Returns:
-        过滤后的 DataFrame (copy, reindexed)
-    """
-    if start_date:
-        df = df[df['datetime'] >= start_date]
-    if end_date:
-        df = df[df['datetime'] <= end_date]
-    return df.reset_index(drop=True)
-
-
-# ── BarData 转换 ─────────────────────────────────────────
-
-def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval: object = None) -> list:
-    """将 DataFrame 转换为 vn.py 回测引擎可用的 BarData 列表
-
-    将 K 线 CSV (datetime, open, high, low, close, volume) 转换为
-    vnpy BarData 对象列表，可直接注入 BacktestingEngine.history_data
-
-    Args:
-        df: K 线数据
-        symbol: 合约代码 (vnpy 格式: 品种.交易所, e.g. m2509.DCE)
-        interval: vnpy Interval 枚举，None 时回退到 Interval.DAILY
-
-    Returns:
-        vnpy BarData 对象列表
-    """
-    required_cols = {'datetime', 'open', 'high', 'low', 'close', 'volume'}
-    missing = required_cols - set(df.columns)
-    if missing:
-        raise ValueError(f"数据缺少必要列: {missing}")
-
-    try:
-        from vnpy.trader.object import BarData
-        from vnpy.trader.constant import Exchange, Interval
-    except ImportError:
-        logger.warning("vnpy 未安装，返回字典格式数据")
-        bars = []
-        for _, row in df.iterrows():
-            dt = row['datetime']
-            if isinstance(dt, str):
-                dt = pd.to_datetime(dt)
-            bars.append({
-                'symbol': symbol,
-                'datetime': dt,
-                'open_price': float(row['open']),
-                'high_price': float(row['high']),
-                'low_price': float(row['low']),
-                'close_price': float(row['close']),
-                'volume': float(row['volume']),
-            })
-        return bars
-
-    pure_symbol, exchange_code = parse_symbol_exchange(symbol)
-    exchange = Exchange(exchange_code) if Exchange else exchange_code
-    bar_interval = interval if interval is not None else Interval.DAILY
-
-    bars = []
-    for _, row in df.iterrows():
-        dt = row['datetime']
-        if isinstance(dt, str):
-            dt = pd.to_datetime(dt)
-        bar = BarData(
-            symbol=pure_symbol,
-            exchange=exchange,
-            datetime=dt,
-            interval=bar_interval,
-            open_price=float(row['open']),
-            high_price=float(row['high']),
-            low_price=float(row['low']),
-            close_price=float(row['close']),
-            volume=float(row['volume']),
-            gateway_name="CSV",
-        )
-        bars.append(bar)
-
-    logger.info(f"转换完成: {len(bars)} 条 BarData")
-    return bars
 
 
 # ============================================================

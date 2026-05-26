@@ -13,11 +13,10 @@
 """
 
 from .vnpy_backtest_engine import VnpyBacktestEngine
-from .walk_forward import walk_forward_split, walk_forward_split_by_ratio, filter_dataframe_by_date
+from .walk_forward import walk_forward_split, walk_forward_split_by_ratio
 
 __all__ = [
     'VnpyBacktestEngine',
     'walk_forward_split',
     'walk_forward_split_by_ratio',
-    'filter_dataframe_by_date',
 ]

@@ -146,6 +146,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | DEF-09 | 🟡 中 | test 模式只验证固定两行模拟数据 | `main.py:224-239` | 无数值断言，通过 ≠ 正确 |
 | DEF-10 | 🟢 低 | `np.std` 多处未统一 ddof | `vnpy_backtest_engine.py:265`, `common/stats.py:64` | WF 用 ddof=1，stats 用 ddof=0 |
 | DEF-11 | 🟢 低 | `DataFrame.iterrows()` 逐行构造 BarData 性能差 | `data_loader.py:174` | 可用列表推导或矢量化 |
+| DEF-12 | 🟡 中 | 合约乘数硬编码 | 多处 | 当前通过命令行参数传入，未来应在数据库中配置各品种的合约乘数 |
 
 ### 3.2 存量缺陷
 

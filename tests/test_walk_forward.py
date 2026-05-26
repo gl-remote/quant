@@ -3,9 +3,8 @@
 import pandas as pd
 import pytest
 
+from backtest.vnpy_backtest_engine import parse_symbol_exchange
 from backtest.walk_forward import (
-    parse_symbol_exchange,
-    filter_dataframe_by_date,
     walk_forward_split,
     walk_forward_split_by_ratio,
 )
@@ -54,45 +53,6 @@ class TestParseSymbolExchange:
         pure, exchange = parse_symbol_exchange('DCE.m2509')
         assert pure == 'm2509'
         assert exchange == 'DCE'
-
-
-# ==============================================================================
-# filter_dataframe_by_date
-# ==============================================================================
-
-class TestFilterDataframeByDate:
-    def test_no_filter(self):
-        df = _make_kline_df(10)
-        result = filter_dataframe_by_date(df)
-        assert len(result) == 10
-
-    def test_start_date(self):
-        df = _make_kline_df(10, '2024-01-01')
-        result = filter_dataframe_by_date(df, start_date='2024-01-05')
-        assert len(result) == 6
-
-    def test_end_date(self):
-        df = _make_kline_df(10, '2024-01-01')
-        result = filter_dataframe_by_date(df, end_date='2024-01-05')
-        assert len(result) == 5
-
-    def test_both_dates(self):
-        df = _make_kline_df(10, '2024-01-01')
-        result = filter_dataframe_by_date(df,
-                                          start_date='2024-01-03',
-                                          end_date='2024-01-07')
-        assert len(result) == 5
-
-    def test_does_not_modify_original(self):
-        df = _make_kline_df(10)
-        original_len = len(df)
-        filter_dataframe_by_date(df, start_date='2024-01-05')
-        assert len(df) == original_len
-
-    def test_reset_index(self):
-        df = _make_kline_df(10)
-        result = filter_dataframe_by_date(df, start_date='2024-01-05')
-        assert result.index[0] == 0
 
 
 # ==============================================================================

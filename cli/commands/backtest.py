@@ -264,6 +264,8 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
     start_arg: str | None = args.start  # pyright: ignore[reportAny]
     end_arg: str | None = args.end  # pyright: ignore[reportAny]
     capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
+    contract_size_arg: int | None = args.contract_size  # pyright: ignore[reportAny]
+    trials_arg: int | None = args.trials  # pyright: ignore[reportAny]
     mode: str = args.mode  # pyright: ignore[reportAny]
     optimizer_arg: str | None = args.optimizer  # pyright: ignore[reportAny]
 
@@ -304,6 +306,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
         sc = cm.get_trading_config(strategy_name)
         strategy_params = sc.model_dump(exclude={"name", "enabled"})
         capital = capital_arg if capital_arg else bc.initial_capital
+        contract_size = contract_size_arg if contract_size_arg else bc.contract_size
 
         # ── 引擎执行 ──
         engine = VnpyBacktestEngine(bc, dm)
@@ -315,7 +318,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                 strategy_name,
                 strategy_params=strategy_params,
                 capital=capital,
-                contract_size=bc.contract_size,
+                contract_size=contract_size,
             )
             sym = datasets[0][0]
             df = datasets[0][1]
@@ -353,6 +356,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             optimizer_cfg = cm._config.optimizer  # pyright: ignore[reportPrivateUsage]
             # CLI 参数优先，其次 TOML engine 字段
             opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
+            n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
 
             # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
             search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
@@ -365,8 +369,8 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         search_space=search_space,
                         strategy_params=strategy_params,
                         capital=capital,
-                        contract_size=bc.contract_size,
-                        n_trials=optimizer_cfg.n_trials,
+                        contract_size=contract_size,
+                        n_trials=n_trials,
                         dm=dm, git_hash=git_hash,
                         table_prefix=optimizer_cfg.table_prefix,
                     )
@@ -379,9 +383,10 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                                   for k, v in search_space.items()},
                         strategy_params=strategy_params,
                         capital=capital,
-                        contract_size=bc.contract_size,
+                        contract_size=contract_size,
                         optimizer_enabled=optimizer_cfg.enabled,
                         dm=dm, git_hash=git_hash,
+                        n_trials=n_trials,
                     )
 
     except Exception as e:
@@ -492,6 +497,7 @@ def _run_grid_search(
     optimizer_enabled: bool,
     dm: DataManager,
     git_hash: str | None,
+    n_trials: int = 100,
 ) -> None:
     """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
@@ -514,7 +520,7 @@ def _run_grid_search(
             strategy_params=strategy_params,
             capital=capital,
             contract_size=contract_size,
-            n_trials=100,
+            n_trials=n_trials,
             search_type="grid",
         )
         result = opt.optimize()

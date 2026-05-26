@@ -14,7 +14,7 @@ vn.py 回测引擎 (纯执行器)
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -24,11 +24,90 @@ from strategies.core import serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
 
-from .walk_forward import df_to_vnpy_datalines, parse_symbol_exchange
 from common.formatting import parse_percentage
 from common.formulas import profitable_ratio
 
+if TYPE_CHECKING:
+    from vnpy.trader.object import BarData
+    from vnpy.trader.constant import Exchange, Interval
+
 logger = logging.getLogger(__name__)
+
+
+# ── 符号解析 & BarData 转换 ───────────────────────────────
+
+
+def parse_symbol_exchange(symbol: str) -> tuple[str, str]:
+    """解析品种代码中的交易所信息，统一返回字符串类型
+
+    Args:
+        symbol: 完整合约代码 (e.g. DCE.m2509)
+
+    Returns:
+        (pure_symbol, exchange_code) 均为字符串
+    """
+    if '.' in symbol:
+        parts = symbol.split('.')
+        return parts[-1], parts[0]
+
+    return symbol, 'CFFEX'
+
+
+def df_to_vnpy_datalines(
+    df: pd.DataFrame,
+    pure_symbol: str,
+    exchange_code: str,
+    interval: Interval | None = None,
+) -> list[BarData]:
+    """将 DataFrame 转换为 vn.py 回测引擎可用的 BarData 列表
+
+    将 K 线 CSV (datetime, open, high, low, close, volume) 转换为
+    vnpy BarData 对象列表，可直接注入 BacktestingEngine.history_data
+
+    Args:
+        df: K 线数据
+        pure_symbol: 纯品种代号 (e.g. m2509)
+        exchange_code: 交易所代码 (e.g. DCE)
+        interval: vnpy Interval 枚举，None 时回退到 Interval.DAILY
+
+    Returns:
+        vnpy BarData 对象列表
+    """
+    from vnpy.trader.object import BarData
+    from vnpy.trader.constant import Exchange, Interval
+
+    required_cols = {'datetime', 'open', 'high', 'low', 'close', 'volume'}
+    missing = required_cols - set(df.columns)
+    if missing:
+        raise ValueError(f"数据缺少必要列: {missing}")
+
+    # CSV 列名 `open/high/low/close` 直接映射到 BarData 的 `open_price/high_price/...`
+    # 无需 rename，避免丢失 KlineDataFrame 类型信息
+
+    exchange: Exchange = Exchange(exchange_code)
+    bar_interval: Interval = interval if interval is not None else Interval.DAILY
+
+    bars: list[BarData] = [
+        BarData(
+            symbol=pure_symbol,
+            exchange=exchange,
+            datetime=pd.Timestamp(row['datetime']).to_pydatetime(),  # pyright: ignore[reportArgumentType]  # KlineSchema 保证有效
+            interval=bar_interval,
+            open_price=row['open'],
+            high_price=row['high'],
+            low_price=row['low'],
+            close_price=row['close'],
+            volume=row['volume'],
+            gateway_name="CSV",
+        )
+        for row in df.to_dict(orient='records')
+    ]
+
+    logger.info(f"转换完成: {len(bars)} 条 BarData")
+    return bars
+
+
+# ── Engine ───────────────────────────────────────────────
 
 
 class VnpyBacktestEngine:
@@ -149,7 +228,7 @@ class VnpyBacktestEngine:
 
     def run_walk_forward(
         self,
-        data: pd.DataFrame,
+        data: pd.DataFrame | None,
         symbol: str,
         strategy: Strategy,
         train_size: int | None = None,
@@ -281,31 +360,27 @@ class VnpyBacktestEngine:
 
     # ── 内部方法 ──────────────────────────────────────────────
 
-    @staticmethod
     def _wrap_injected_strategy(
-        base_cls: type, strategy: Strategy, price_tick: float,
+        self, strategy: Strategy,
     ) -> type:
-        """创建注入了策略实例和 price_tick 的桥接器策略类
+        """创建注入了策略实例的桥接器策略类
 
         _InjectedStrategy 覆写 _load_default_core 为 no-op，
-        在 __init__ 返回后直接注入 _core 和 price_tick。
+        在 __init__ 返回后直接注入 _core。
+        price_tick 由 vnpy setting dict 传入 VnpyStrategyBridge.__init__。
         """
-        class _InjectedStrategy(base_cls):
+        from strategies.bridges import VnpyStrategyBridge
+
+        class _InjectedStrategy(VnpyStrategyBridge):  # pyright: ignore[reportUnknownVariableType]
+
             def _load_default_core(self, _setting: object | None = None) -> None:
                 pass
 
-            def __init__(
-                self, cta_engine: object, strategy_name: str,
-                vt_symbol: str, setting: object,
-            ) -> None:
-                super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-                self.price_tick = price_tick
+            def __init__(self, *args: Any, **kwargs: Any) -> None:
+                super().__init__(*args, **kwargs)
                 self._core = strategy
 
         return _InjectedStrategy
-
-    def _build_setting(self) -> dict[str, Any]:
-        return {'price_tick': self.price_tick}
 
     def _run_backtest(
         self,
@@ -329,11 +404,10 @@ class VnpyBacktestEngine:
               - error (如果失败)
         """
         from vnpy_ctastrategy.backtesting import BacktestingEngine
-        from vnpy.trader.constant import Interval
-        from strategies.bridges import VnpyStrategyBridge
+        from vnpy.trader.constant import Exchange, Interval
 
         pure_symbol, exchange_code = parse_symbol_exchange(symbol)
-        vt_symbol = f"{pure_symbol}.{exchange_code}"
+        vt_symbol = f"{pure_symbol}.{Exchange(exchange_code).value}"
 
         _interval_map = {
             '1m': getattr(Interval, 'MINUTE', Interval.MINUTE),
@@ -345,15 +419,12 @@ class VnpyBacktestEngine:
         }
         interval = _interval_map.get(self.interval, Interval.DAILY)
 
-        bars = df_to_vnpy_datalines(df, vt_symbol, interval)
-        setting = self._build_setting()
+        bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
 
         results: list[dict[str, Any]] = []
         for strategy in strategies:
             strategy.reset()
-            strategy_cls = self._wrap_injected_strategy(
-                VnpyStrategyBridge, strategy, self.price_tick,
-            )
+            strategy_cls = self._wrap_injected_strategy(strategy)
 
             engine = BacktestingEngine()
             engine.set_parameters(
@@ -367,7 +438,7 @@ class VnpyBacktestEngine:
                 pricetick=self.price_tick,
                 capital=int(self.initial_capital),
             )
-            engine.add_strategy(strategy_cls, setting)
+            engine.add_strategy(strategy_cls, {'price_tick': self.price_tick})
             engine.history_data = bars
 
             try:
@@ -390,7 +461,8 @@ class VnpyBacktestEngine:
                 'statistics': statistics,
                 'daily_results': (
                     daily_results.to_dict('records')
-                    if daily_results is not None else []
+                    if daily_results is not None  # pyright: ignore[reportUnnecessaryComparison]
+                    else []
                 ),
             })
 
