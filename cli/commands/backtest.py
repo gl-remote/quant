@@ -534,9 +534,7 @@ def _run_optuna_search(
 ) -> None:
     """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
 
-    # Optuna study 持久化路径（与主 DB 同目录）
-    main_db_dir = os.path.dirname(dm._store.db_path) or "."  # pyright: ignore[reportPrivateUsage, reportOptionalMemberAccess]
-    study_db_path = os.path.join(main_db_dir, "optuna_studies.db")
+    optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
 
     opt = OptunaOptimizer(
         engine=engine,
@@ -547,7 +545,7 @@ def _run_optuna_search(
         capital=capital,
         contract_size=contract_size,
         n_trials=n_trials,
-        study_db_path=study_db_path,
+        study_db_path=optuna_db_url,
     )
     result = opt.optimize()
 
@@ -556,7 +554,7 @@ def _run_optuna_search(
         'type': 'vnpy',
         'optimizer': 'optuna',
         'study_name': opt.study_name,
-        'study_db': study_db_path,
+        'study_db': dm._store.db_path,  # 共享主数据库
     }
     all_ids: list[int] = []
     for i, trial_entry in enumerate(result.trial_data):
@@ -602,7 +600,7 @@ def _run_optuna_search(
     print("===========================================\n")
 
     # ── 生成优化报告 ──
-    study_db_url = f"sqlite:///{os.path.abspath(study_db_path)}"
+    study_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
     _build_optimization_report(
         result, all_ids, study_db_url, dm
     )

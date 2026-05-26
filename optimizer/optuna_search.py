@@ -161,12 +161,19 @@ class OptunaOptimizer:
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
         # 创建 study（持久化 → SQLite，否则仅内存）
+        # 支持两种格式：
+        #   1. 文件路径: "optuna_studies.db" → 转换为 sqlite:///optuna_studies.db
+        #   2. SQLite URL: "sqlite:///path/to/db.db"
         storage: str | None = None
         if self._study_db_path:
-            db_dir = os.path.dirname(self._study_db_path)
-            if db_dir:
-                os.makedirs(db_dir, exist_ok=True)
-            storage = f"sqlite:///{self._study_db_path}"
+            if self._study_db_path.startswith('sqlite:///'):
+                storage = self._study_db_path
+            else:
+                db_path = os.path.abspath(self._study_db_path)
+                db_dir = os.path.dirname(db_path)
+                if db_dir:
+                    os.makedirs(db_dir, exist_ok=True)
+                storage = f"sqlite:///{db_path}"
             logger.info("Optuna study 存储: %s (%s)", self._study_name, storage)
 
         study = optuna.create_study(
