@@ -54,7 +54,7 @@ def build_nav(output_dir: str) -> str:
     out.mkdir(parents=True, exist_ok=True)
 
     entries = sorted(
-        [d for d in out.iterdir() if d.is_dir()],
+        [d for d in out.iterdir() if d.is_dir() and d.name != "assets"],
         reverse=True,
     )
 
