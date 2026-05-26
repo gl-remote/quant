@@ -1,8 +1,9 @@
 #!/bin/bash
-# 清理回测/optuna/导出数据 — 保留 CSV 和 db 结构
-# 用法: ./clean_data.sh [--csv]
-#   ./clean_data.sh         仅清理数据库
-#   ./clean_data.sh --csv   同时清理 CSV 文件
+# 清理回测/optuna 数据 — 保留 CSV / metadata / db 结构
+# 用法:
+#   ./clean_data.sh            清理回测 + optuna
+#   ./clean_data.sh --csv      同时清理 CSV 文件
+#   ./clean_data.sh --all      清理全部含 metadata + CSV
 
 set -euo pipefail
 
@@ -11,13 +12,18 @@ DB="$SCRIPT_DIR/.quant_shared_data/quant_shared.db"
 CSV_DIR="$SCRIPT_DIR/.quant_shared_data/csv"
 
 CLEAN_CSV=false
-if [ "${1:-}" = "--csv" ]; then
-    CLEAN_CSV=true
-fi
+CLEAN_ALL=false
+for a in "$@"; do
+    case "$a" in
+        --csv) CLEAN_CSV=true ;;
+        --all) CLEAN_CSV=true; CLEAN_ALL=true ;;
+    esac
+done
 
 echo "=========================================="
-echo "  清理回测 / Optuna / 导出数据"
+echo "  清理回测 / Optuna 数据"
 echo "  CSV: $([ "$CLEAN_CSV" = true ] && echo '一并清理' || echo '跳过')"
+echo "  metadata: $([ "$CLEAN_ALL" = true ] && echo '一并清理' || echo '保留')"
 echo "=========================================="
 
 # ── 1. 清理数据库 ──
@@ -25,7 +31,7 @@ if [ -f "$DB" ]; then
     echo ""
     echo "[1/3] 清理数据库..."
     
-    python3 -c "
+    CLEAN_ALL=$CLEAN_ALL python3 -c "
 import sqlite3, os
 db = '$DB'
 if not os.path.exists(db):
@@ -39,8 +45,12 @@ tables = {
     'backtests':       '回测记录',
     'backtest_trades': '交易明细',
     'backtest_daily':  '每日资金',
-    'export_metadata': '导出元数据',
     'operation_logs':  '操作日志',
+}
+if os.environ.get('CLEAN_ALL') == 'true':
+    tables['export_metadata'] = '导出元数据'
+
+tables.update({
     'studies':         'Optuna studies',
     'trials':          'Optuna trials',
     'trial_params':    'Optuna trial参数',
@@ -54,7 +64,7 @@ tables = {
     'study_user_attributes':     'Optuna 用户属性',
     'version_info':              'Optuna 版本',
     'alembic_version':           'Optuna alembic',
-}
+})
 
 for tbl, desc in tables.items():
     try:
@@ -65,9 +75,8 @@ for tbl, desc in tables.items():
     except Exception:
         pass
 
-# 重置自增 ID
 try:
-    cur.execute(\"DELETE FROM sqlite_sequence\")
+    cur.execute('DELETE FROM sqlite_sequence')
 except Exception:
     pass
 
