@@ -460,7 +460,7 @@ class VnpyBacktestEngine:
             results.append({
                 'statistics': statistics,
                 'daily_results': (
-                    daily_results.to_dict('records')
+                    daily_results.reset_index().to_dict('records')
                     if daily_results is not None  # pyright: ignore[reportUnnecessaryComparison]
                     else []
                 ),

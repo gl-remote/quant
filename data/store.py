@@ -209,11 +209,14 @@ class DataStore:
         """插入完整的回测记录"""
         now = datetime.now()
 
-        total_trades = statistics.get('total_trades', 0) or 0
+        total_trades = statistics.get('total_trade_count', statistics.get('total_trades', 0)) or 0
         initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))
         end_balance = float(statistics.get('end_balance', initial_capital))
         total_return = calc_total_return(initial_capital, end_balance, total_trades=total_trades)
-        win_rate_val = calc_win_rate(statistics.get('win_trades', 0), total_trades)
+        # vnpy 使用 profit_days/loss_days（日级别），测试 fixture 用 win_trades/loss_trades
+        win_trades_v = statistics.get('profit_days', statistics.get('win_trades', 0))
+        loss_trades_v = statistics.get('loss_days', statistics.get('loss_trades', 0))
+        win_rate_val = calc_win_rate(win_trades_v, total_trades)
 
         bt = Backtest.create(
             symbol=symbol,
@@ -235,8 +238,8 @@ class DataStore:
             total_return=total_return,
             annual_return=statistics.get('annual_return'),
             total_trades=total_trades,
-            win_trades=statistics.get('win_trades', 0),
-            loss_trades=statistics.get('loss_trades', 0),
+            win_trades=win_trades_v,
+            loss_trades=loss_trades_v,
             win_rate=win_rate_val,
             max_consecutive_win=statistics.get('max_consecutive_win'),
             max_consecutive_loss=statistics.get('max_consecutive_loss'),
@@ -245,8 +248,9 @@ class DataStore:
             win_loss_ratio=statistics.get('win_loss_ratio'),
             sharpe_ratio=statistics.get('sharpe_ratio'),
             max_drawdown=_normalize_max_dd(statistics.get('max_drawdown')),
-            max_drawdown_duration=statistics.get('max_ddpercent_duration'),
-            daily_std=statistics.get('daily_std'),
+            max_drawdown_duration=statistics.get('max_drawdown_duration',
+                                                 statistics.get('max_ddpercent_duration', 0)),
+            daily_std=statistics.get('return_std', statistics.get('daily_std')),
             return_drawdown_ratio=statistics.get('return_drawdown_ratio'),
             created_at=now,
             updated_at=now,
@@ -341,22 +345,28 @@ class DataStore:
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         now = datetime.now()
-        rows = []
+        rows: list[dict[str, object]] = []
+        peak: float = 0.0
 
         for daily in daily_results:
-            # 提取日期
-            dt = daily.get('datetime')
+            # vnpy 字段名是 `date`（非 `datetime`）；calculate_statistics 后含 `balance`
+            dt = daily.get('date', daily.get('datetime'))
             if not dt:
                 continue
-            # 格式化日期
             date_str = str(dt).split(' ')[0] if ' ' in str(dt) else str(dt).split('T')[0]
+
+            net_pnl = float(daily.get('net_pnl', daily.get('daily_return', 0)))
+            equity = float(daily.get('balance', daily.get('equity', 0)))
+            if equity > peak:
+                peak = equity
+            drawdown = equity - peak if peak != 0 else 0.0
 
             rows.append({
                 'backtest_id': backtest_id,
                 'date': date_str,
-                'equity': float(daily.get('balance', daily.get('equity', 0))),
-                'daily_return': float(daily.get('net_pnl', daily.get('daily_return', 0))),
-                'drawdown': float(daily.get('drawdown', 0)),
+                'equity': equity,
+                'daily_return': net_pnl,
+                'drawdown': drawdown,
                 'created_at': now,
             })
 
