@@ -10,7 +10,8 @@ Bridge 只需: 构造 Bar → 调用 on_bar() → 拿到 Signal → 执行下单
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
+from typing_extensions import override
 
 from .core.base import Strategy
 from .core.types import Bar, Signal, Fill, StrategyPosition
@@ -65,9 +66,9 @@ class MaStrategyCore(Strategy):
     name: str = STRATEGY_MA
     VERSION: str = "v1.0.0"
 
-    def __init__(self, strategy_params: Optional[Dict[str, Any]] = None,
-                 capital: Optional[float] = None,
-                 contract_size: Optional[int] = None):
+    def __init__(self, strategy_params: dict[str, Any] | None = None,
+                 capital: float | None = None,
+                 contract_size: int | None = None):
         if strategy_params is not None:
             self._config = MACrossParams(
                 sma_short=strategy_params.get('sma_short', DEFAULT_SMA_SHORT),
@@ -82,14 +83,15 @@ class MaStrategyCore(Strategy):
         self._contract_size = int(contract_size) if contract_size is not None else int(DEFAULT_CONTRACT_SIZE)
 
         self._position = StrategyPosition()
-        self._fills: List[Fill] = []
-        self._close_history: List[float] = []
+        self._fills: list[Fill] = []
+        self._close_history: list[float] = []
         self._prev_sma_short: float = 0.0
         self._prev_sma_long: float = 0.0
 
     # ---- Strategy 接口 ----
 
     @property
+    @override
     def config(self) -> MACrossParams:
         return self._config
 
@@ -98,14 +100,16 @@ class MaStrategyCore(Strategy):
         self._config = value
 
     @property
+    @override
     def position(self) -> StrategyPosition:
         return self._position
 
     @property
-    def fills(self) -> List[Fill]:
+    def fills(self) -> list[Fill]:
         """交易成交记录 (只读副本)"""
         return list(self._fills)
 
+    @override
     def reset(self) -> None:
         self._position = StrategyPosition()
         self._fills.clear()
@@ -113,6 +117,7 @@ class MaStrategyCore(Strategy):
         self._prev_sma_short = 0.0
         self._prev_sma_long = 0.0
 
+    @override
     def on_bar(self, bar: Bar) -> Signal:
         """处理一根K线 — 策略决策中枢
 
@@ -148,6 +153,7 @@ class MaStrategyCore(Strategy):
         self._prev_sma_long = cur_long
         return signal
 
+    @override
     def on_fill(self, fill: Fill) -> None:
         """成交回执 — Bridge 在下单成交后调用"""
         if fill.action == TRADE_ACTION_BUY:

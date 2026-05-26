@@ -8,7 +8,7 @@ version = "0.2.0-dev"
 description = "天勤量化交易系统 - 均线交叉策略回测与实盘"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
@@ -27,6 +27,7 @@ dependencies = [
     "matplotlib>=3.7",
     "plotly>=5.0",
     "peewee>=3.15",
+    "typing-extensions>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +37,7 @@ dev = [
     "flake8>=6.1",
     "pylint>=2.17",
     "mypy>=1.5",
+    "pandas-stubs>=2.0",
     "tomli-w>=1.0",
 ]
 
@@ -77,6 +79,15 @@ disable = [
 python_version = "3.10"
 ignore_missing_imports = true
 disallow_untyped_defs = false
+
+[tool.pyright]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+# 第三方库无类型存根产生大量噪音，关闭相关检查
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportMissingTypeStubs = false
 
 [tool.coverage.run]
 source = ["."]

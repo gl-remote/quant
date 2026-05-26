@@ -1,16 +1,22 @@
 """数据导出模块 - 从天勤获取K线数据导出为 Qlib 格式 CSV，支持智能去重合并"""
 
+from __future__ import annotations
+
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
+# pyright: reportUnknownArgumentType=false, reportUnusedCallResult=false
+# 注：以上规则抑制的原因是 pandas/tqsdk 第三方库类型存根不完整
+
 import logging
 import time
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from .manager import DataManager
 
 if TYPE_CHECKING:
-    from config.app_config import AccountInfo
+    from config.app_config import AccountInfo, ConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +28,7 @@ _RETRY_BACKOFF_BASE = 1.0
 
 def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
                       kline_period: int = 1,
-                      account: Optional["AccountInfo"] = None) -> pd.DataFrame:
+                      account: AccountInfo | None = None) -> pd.DataFrame:
     """从天勤 SDK 拉取 K 线数据，带自动重试
 
     Args:
@@ -38,14 +44,12 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
     Raises:
         RuntimeError: 重试耗尽后仍失败时抛出
     """
-    last_error = None
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
             return _do_fetch(symbol, start_date, end_date, kline_period, account)
         except Exception as e:
-            last_error = e
             if attempt < _MAX_RETRIES:
-                backoff = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+                backoff: float = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
                 logger.warning(
                     f"天勤数据拉取失败 (第 {attempt}/{_MAX_RETRIES} 次): {e}，"
                     f"{backoff:.0f}s 后重试..."
@@ -59,7 +63,7 @@ def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
 
 
 def _do_fetch(symbol: str, start_date: str, end_date: str,
-              kline_period: int, account: Optional["AccountInfo"]) -> pd.DataFrame:
+              kline_period: int, account: AccountInfo | None) -> pd.DataFrame:
     """执行单次天勤 API 拉取"""
     from tqsdk import TqApi, TqAuth, TqBacktest
     from tqsdk.exceptions import BacktestFinished
@@ -106,8 +110,8 @@ def _do_fetch(symbol: str, start_date: str, end_date: str,
 
 
 def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
-               config_manager, output_path: Optional[str] = None,
-               force: bool = False, interval: str = '1m'):
+               config_manager: ConfigManager, output_path: str | None = None,
+               force: bool = False, interval: str = '1m') -> bool:
     """导出 Qlib 格式 CSV
 
     Args:
@@ -145,11 +149,12 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
         merged_rows = len(new_df)
         if force:
             logger.info("强制覆盖模式：跳过已有数据合并")
-        elif meta and Path(meta['filepath']).exists():
-            logger.info(f"发现已有数据: {meta['filepath']} ({meta['total_rows']}条, "
+        elif meta and Path(str(meta['filepath'])).exists():
+            filepath = str(meta['filepath'])
+            logger.info(f"发现已有数据: {filepath} ({meta['total_rows']}条, "
                         f"{meta['min_dt']}~{meta['max_dt']})")
             try:
-                old_df = pd.read_csv(meta['filepath'])
+                old_df = pd.read_csv(filepath)
                 before = len(old_df)
                 combined = pd.concat([old_df, new_df], ignore_index=True)
                 combined = combined.drop_duplicates(subset='datetime', keep='last')
@@ -167,8 +172,8 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
         new_df.to_csv(output_path, index=False)
         logger.info(f"已写入: {output_path} ({len(new_df)}行)")
 
-        min_dt = new_df['datetime'].min()
-        max_dt = new_df['datetime'].max()
+        min_dt = str(new_df['datetime'].min())
+        max_dt = str(new_df['datetime'].max())
         dm.store.upsert_metadata(
             symbol=symbol, filepath=output_path,
             start_date=start_date, end_date=end_date,

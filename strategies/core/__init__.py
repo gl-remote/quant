@@ -17,7 +17,6 @@ import dataclasses
 import importlib
 import json
 from pathlib import Path
-from typing import Optional
 
 from .base import Strategy
 from .types import Bar, Signal, Fill, StrategyPosition
@@ -35,7 +34,7 @@ __all__ = [
 # ============================================================
 # 策略动态加载
 # ============================================================
-def load_strategy(strategy_name: Optional[str] = None,
+def load_strategy(strategy_name: str | None = None,
                   **strategy_kwargs) -> Strategy:
     """根据名称动态加载策略实例
 

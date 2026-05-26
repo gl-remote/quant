@@ -33,7 +33,7 @@ from cli.commands.report import cmd_report
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
     """CLI 主入口函数
 
     解析命令行参数并分发到对应的命令处理函数。

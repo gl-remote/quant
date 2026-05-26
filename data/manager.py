@@ -11,9 +11,11 @@
     4. 支持正则匹配查询可用品种
 """
 
+from __future__ import annotations
+
 import logging
 import re
-from typing import Optional, List, Dict
+
 
 from common.constants import COMMON_KLINE_INTERVALS
 import pandas as pd
@@ -41,7 +43,7 @@ class DataManager:
     所有 DataFrame 数据都经过 Pandera Schema 验证。
     """
     
-    def __init__(self, config_manager=None):
+    def __init__(self, config_manager: object | None = None):
         """
         Args:
             config_manager: ConfigManager实例（可选）
@@ -51,7 +53,7 @@ class DataManager:
         self._data_cache = {}
         self._default_config = None
     
-    def _get_config(self):
+    def _get_config(self) -> object:
         """获取配置管理器（延迟初始化默认配置）"""
         if self._config:
             return self._config
@@ -60,33 +62,33 @@ class DataManager:
             self._default_config = ConfigManager()
         return self._default_config
     
-    def _get_data_dir(self):
+    def _get_data_dir(self) -> str:
         """获取数据目录配置"""
         return self._get_config().get_backtest_config().data_dir or '.quant_shared_data/csv'
     
-    def _get_filename_template(self):
+    def _get_filename_template(self) -> str:
         """获取文件名模板配置"""
         return self._get_config().get_export_config().filename_template
     
-    def _get_default_interval(self):
+    def _get_default_interval(self) -> str:
         """获取默认K线周期配置"""
         return self._get_config().get_backtest_config().interval
     
-    def _init_store(self):
+    def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
             db_path = self._get_config().get_data_config().db_path or '.quant_shared_data/quant_shared.db'
             self._store = DataStore(db_path)
     
     @property
-    def store(self) -> "DataStore":
+    def store(self) -> DataStore:
         """获取存储层实例（延迟初始化）"""
         self._init_store()
         return self._store
     
     # ── 元数据查询 ─────────────────────────────────────────
     
-    def get_all_symbols(self) -> List[str]:
+    def get_all_symbols(self) -> list[str]:
         """获取所有可用的品种代码列表
         
         Returns:
@@ -126,7 +128,7 @@ class DataManager:
         
         return sorted(list(symbols))
     
-    def search_symbols(self, pattern: str) -> List[str]:
+    def search_symbols(self, pattern: str) -> list[str]:
         """按正则表达式搜索可用品种
         
         Args:
@@ -199,7 +201,7 @@ class DataManager:
     
     # ── 数据加载（使用 Pandera 验证）────────────────────────
     
-    def _load_csv_with_validation(self, filepath: Path) -> Optional[DataFrame[KlineSchema]]:
+    def _load_csv_with_validation(self, filepath: Path) -> DataFrame[KlineSchema] | None:
         """加载CSV文件并通过 Pandera 验证"""
         try:
             df = pd.read_csv(filepath)
@@ -214,8 +216,8 @@ class DataManager:
             return None
     
     @pa.check_output(KlineSchema)
-    def load_kline(self, symbol: str, start_date=None, end_date=None, 
-                   interval: Optional[str] = None) -> DataFrame[KlineSchema]:
+    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None, 
+                   interval: str | None = None) -> DataFrame[KlineSchema]:
         """加载K线数据，直接返回经过 Pandera 验证的 DataFrame
         
         Args:
@@ -258,8 +260,8 @@ class DataManager:
         
         return df
     
-    def load_kline_safe(self, symbol: str, start_date=None, end_date=None, 
-                        interval: Optional[str] = None) -> Optional[DataFrame[KlineSchema]]:
+    def load_kline_safe(self, symbol: str, start_date: str | None = None, end_date: str | None = None, 
+                        interval: str | None = None) -> DataFrame[KlineSchema] | None:
         """加载K线数据，失败返回None（不抛异常）"""
         try:
             return self.load_kline(symbol, start_date, end_date, interval)
@@ -270,11 +272,11 @@ class DataManager:
     # ── 回测记录 ────────────────────────────────────────────
 
     def insert_backtest(self, symbol: str, strategy: str, status: str,
-                        error_message: Optional[str], statistics: dict,
-                        engine_config: dict, params_json: Optional[str],
-                        start_date: Optional[str], end_date: Optional[str],
-                        strategy_version: Optional[str] = None,
-                        git_hash: Optional[str] = None) -> int:
+                        error_message: str | None, statistics: dict[str, object],
+                        engine_config: dict[str, object], params_json: str | None,
+                        start_date: str | None, end_date: str | None,
+                        strategy_version: str | None = None,
+                        git_hash: str | None = None) -> int:
         """插入完整的回测记录"""
         return self.store.insert_backtest_detailed(
             symbol=symbol,
@@ -290,33 +292,33 @@ class DataManager:
             git_hash=git_hash,
         )
     
-    def insert_backtest_trades(self, backtest_id: int, trades: List[Dict]) -> int:
+    def insert_backtest_trades(self, backtest_id: int, trades: list[dict]) -> int:
         """批量插入交易明细"""
         return self.store.insert_backtest_trades(backtest_id, trades)
     
     def query_backtests(
         self,
-        symbol: Optional[str] = None,
-        strategy: Optional[str] = None,
+        symbol: str | None = None,
+        strategy: str | None = None,
         status: str = 'success',
         limit: int = 50,
-    ) -> List[BacktestRecord]:
+    ) -> list[BacktestRecord]:
         """查询回测记录列表"""
         return self.store.query_backtests(symbol, strategy, status, limit)
     
-    def get_backtest(self, backtest_id: int) -> Optional[BacktestRecord]:
+    def get_backtest(self, backtest_id: int) -> BacktestRecord | None:
         """查询单条回测记录"""
         return self.store.get_backtest(backtest_id)
     
-    def query_trades(self, backtest_id: int) -> List[TradeRecord]:
+    def query_trades(self, backtest_id: int) -> list[TradeRecord]:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
     
-    def insert_backtest_daily(self, backtest_id: int, daily_results: List[Dict]) -> int:
+    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
     
-    def query_daily(self, backtest_id: int) -> List[Dict]:
+    def query_daily(self, backtest_id: int) -> list[dict]:
         """查询每日资金曲线"""
         return self.store.query_daily(backtest_id)
     
@@ -334,19 +336,19 @@ class DataManager:
    
     # ── 资源管理 ────────────────────────────────────────────
    
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """清除数据缓存"""
         self._data_cache.clear()
         logger.info("数据缓存已清除")
     
-    def close(self):
+    def close(self) -> None:
         """关闭数据库连接"""
         if self._store:
             self._store.close()
             logger.info("数据库连接已关闭")
     
-    def __enter__(self):
+    def __enter__(self) -> "DataManager":
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
         self.close()

@@ -11,7 +11,6 @@
 import logging
 import pandas as pd
 from pathlib import Path
-from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ def filter_dataframe_by_date(
 
 # ── BarData 转换 ─────────────────────────────────────────
 
-def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval=None) -> list:
+def df_to_vnpy_datalines(df: pd.DataFrame, symbol: str, interval: object = None) -> list:
     """将 DataFrame 转换为 vn.py 回测引擎可用的 BarData 列表
 
     将 K 线 CSV (datetime, open, high, low, close, volume) 转换为
@@ -193,7 +192,7 @@ def walk_forward_split_by_ratio(
     test_ratio: float = 0.2,
     step_ratio: float = 0.1,
     min_windows: int = 3,
-) -> List[Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
+) -> list[tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]]:
     """Walk-Forward 时间序列交叉验证 — 基于比例参数
 
     将 walk_forward_split 的行数参数转换为比例参数，
@@ -221,7 +220,7 @@ def walk_forward_split_by_ratio(
     if n < 1:
         raise ValueError("数据量为 0，无法划分窗口")
 
-    def _calc_sizes(ratio: float) -> tuple:
+    def _calc_sizes(ratio: float) -> tuple[int, int, int, int]:
         window_total = int(n / (1 + (min_windows - 1) * ratio))
         if window_total < 1:
             return 0, 0, 0, 0

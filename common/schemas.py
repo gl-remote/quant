@@ -3,7 +3,17 @@
 
 集中管理所有 DataFrame 验证规则，供整个项目复用。
 所有 Schema 都继承自 pandera.DataFrameModel，提供运行时验证能力。
+
+注意：以下 pyright ignore 是针对 pandera 库的类型系统限制：
+  - pandera 的 Series/Field 声明使用复杂的泛型叠加，静态分析器无法准确推断
+  - 这是 pandera 的类型存根缺失导致的已知问题，非代码逻辑缺陷
 """
+
+# pyright: reportAny=false
+# pyright: reportUnknownMemberType=false
+# pyright: reportUnknownArgumentType=false
+# pyright: reportMissingTypeStubs=false
+# pyright: reportIncompatibleVariableOverride=false
 
 import pandas as pd
 import pandera.pandas as pa
@@ -33,17 +43,20 @@ class KlineSchema(pa.DataFrameModel):
     @pa.dataframe_check
     def check_high_greater_than_open_close(cls, df: pd.DataFrame) -> bool:
         """验证最高价 >= 开盘价和收盘价"""
-        return (df['high'] >= df[['open', 'close']].max(axis=1)).all()
+        result: bool = bool((df['high'] >= df[['open', 'close']].max(axis=1)).all())
+        return result
     
     @pa.dataframe_check
     def check_low_less_than_open_close(cls, df: pd.DataFrame) -> bool:
         """验证最低价 <= 开盘价和收盘价"""
-        return (df['low'] <= df[['open', 'close']].min(axis=1)).all()
+        result: bool = bool((df['low'] <= df[['open', 'close']].min(axis=1)).all())
+        return result
     
     @pa.dataframe_check
     def check_price_range_valid(cls, df: pd.DataFrame) -> bool:
         """验证价格区间有效性：low <= close <= high"""
-        return (df['low'] <= df['close']).all() & (df['close'] <= df['high']).all()
+        result: bool = bool((df['low'] <= df['close']).all() & (df['close'] <= df['high']).all())
+        return result
     
     class Config:
         coerce = True

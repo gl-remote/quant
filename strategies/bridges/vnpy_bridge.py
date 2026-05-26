@@ -13,7 +13,7 @@ vn.py 为强制依赖。
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from vnpy_ctastrategy import CtaTemplate
 
@@ -35,7 +35,7 @@ class VnpyStrategyBridge(CtaTemplate):
 
     def __init__(self, cta_engine, strategy_name: str, vt_symbol: str, setting: dict):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-        self._core: Optional[Any] = None
+        self._core: Any | None = None
         self.price_tick = setting.get('price_tick', 1.0)
         self.entry_price: float = 0.0
         self._strategy_name = strategy_name

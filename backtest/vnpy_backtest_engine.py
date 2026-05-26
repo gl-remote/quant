@@ -9,9 +9,10 @@ vn.py 批量回测引擎
   - VnpyBacktestEngine: 批量回测流水线 (vn.py)
 """
 
+from __future__ import annotations
+
 import logging
-import os
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -66,8 +67,8 @@ class VnpyBacktestEngine:
 
     @staticmethod
     def _load_data(
-        data_dir: str, symbol: str, default_interval: str = '1m',
-    ) -> Optional['pd.DataFrame']:
+        data_dir: str, symbol: str,
+    ) -> pd.DataFrame | None:
         """从本地 CSV 加载历史 K 线数据
 
         支持的文件命名: {symbol}.csv, {symbol}.{interval}.csv, {symbol}_*.csv
@@ -75,13 +76,11 @@ class VnpyBacktestEngine:
         Args:
             data_dir: CSV 文件存放目录
             symbol: 品种代码 (e.g. DCE.m2509)
-            default_interval: 默认 K 线周期
 
         Returns:
             DataFrame (datetime, open, high, low, close, volume)，失败返回 None
         """
         from pathlib import Path
-        from common.constants import COMMON_KLINE_INTERVALS
 
         csv_dir = Path(data_dir)
         if not csv_dir.exists():
@@ -127,22 +126,22 @@ class VnpyBacktestEngine:
         在 __init__ 返回后直接注入 _core 和 price_tick。
         """
         class _InjectedStrategy(base_cls):
-            def _load_default_core(inner_self, setting):
+            def _load_default_core(self, _setting: object | None = None) -> None:
                 pass
 
-            def __init__(inner_self, cta_engine, strategy_name, vt_symbol, setting):
+            def __init__(self, cta_engine: object, strategy_name: str, vt_symbol: str, setting: object) -> None:
                 super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-                inner_self.price_tick = price_tick
-                inner_self._core = strategy
+                self.price_tick = price_tick
+                self._core = strategy
 
         return _InjectedStrategy
 
     def run_full_pipeline(
         self,
         symbol: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        strategy: Optional[Strategy] = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        strategy: Strategy | None = None,
     ) -> dict[str, Any]:
         """执行完整的回测流水线
 
@@ -206,12 +205,12 @@ class VnpyBacktestEngine:
     def run_walk_forward(
         self,
         symbol: str,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        train_size: Optional[int] = None,
-        val_size: Optional[int] = None,
-        test_size: Optional[int] = None,
-        step: Optional[int] = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        train_size: int | None = None,
+        val_size: int | None = None,
+        test_size: int | None = None,
+        step: int | None = None,
     ) -> dict[str, Any]:
         """执行 Walk-Forward 时间序列验证回测 (固定参数, 无优化)
 
@@ -340,10 +339,10 @@ class VnpyBacktestEngine:
 
     def _run_backtest(
         self,
-        df: 'pd.DataFrame',
+        df: pd.DataFrame,
         symbol: str,
         dataset_name: str,
-        strategy: Optional[Strategy] = None,
+        strategy: Strategy | None = None,
     ) -> dict[str, Any]:
         """在单个数据集上执行 vnpy 回测
 

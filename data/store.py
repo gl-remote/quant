@@ -5,10 +5,18 @@
 外部模块不应直接使用此模块。
 """
 
+from __future__ import annotations
+
+# pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
+# pyright: reportUnknownArgumentType=false, reportArgumentType=false
+# pyright: reportAttributeAccessIssue=false, reportUnusedCallResult=false
+# 注：以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
+# 字段描述符访问、`dict[str, object]` 查询返回值都会产生误报。
+
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Dict
+
 
 from .models import (
     database,
@@ -41,13 +49,12 @@ class DataStore:
     
     def __init__(self, db_path: str):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
-        
+        self.db_path: str = db_path
         database.init(db_path, pragmas={
             'journal_mode': 'wal',
             'foreign_keys': 1,
         })
-        self._insert_count = 0
+        self._insert_count: int = 0
         self._init_tables()
     
     def _init_tables(self):
@@ -65,7 +72,7 @@ class DataStore:
     # ── 日志操作 ────────────────────────────────────────────────────
     
     def log(self, command: str, message: str, 
-            symbol: Optional[str] = None, status: str = "INFO") -> None:
+            symbol: str | None = None, status: str = "INFO") -> None:
         """写入操作日志"""
         OperationLog.create(
             command=command,
@@ -114,7 +121,7 @@ class DataStore:
             logger.warning(f"操作日志清理失败: {e}")
             return 0
     
-    def get_logs(self, limit: int = 100) -> List[Dict]:
+    def get_logs(self, limit: int = 100) -> list[dict[str, object]]:
         """查询操作日志"""
         rows = list(
             OperationLog
@@ -131,7 +138,7 @@ class DataStore:
     
     # ── 元数据操作 ──────────────────────────────────────────────────
     
-    def get_metadata(self, symbol: str) -> Optional[Dict]:
+    def get_metadata(self, symbol: str) -> dict[str, object] | None:
         """查询品种元数据"""
         row = (
             ExportMetadata
@@ -190,14 +197,14 @@ class DataStore:
         symbol: str,
         strategy: str,
         status: str,
-        error_message: Optional[str],
-        statistics: dict,
-        engine_config: dict,
-        params_json: Optional[str],
-        start_date: Optional[str],
-        end_date: Optional[str],
-        strategy_version: Optional[str] = None,
-        git_hash: Optional[str] = None,
+        error_message: str | None,
+        statistics: dict[str, object],
+        engine_config: dict[str, object],
+        params_json: str | None,
+        start_date: str | None,
+        end_date: str | None,
+        strategy_version: str | None = None,
+        git_hash: str | None = None,
     ) -> int:
         """插入完整的回测记录"""
         now = datetime.now()
@@ -246,7 +253,7 @@ class DataStore:
         )
         return bt.id
     
-    def insert_backtest_trades(self, backtest_id: int, trades: List[Dict]) -> int:
+    def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
         now = datetime.now()
         rows = []
@@ -275,11 +282,11 @@ class DataStore:
     
     def query_backtests(
         self,
-        symbol: Optional[str] = None,
-        strategy: Optional[str] = None,
+        symbol: str | None = None,
+        strategy: str | None = None,
         status: str = 'success',
         limit: int = 50,
-    ) -> List[BacktestRecord]:
+    ) -> list[BacktestRecord]:
         """查询回测记录"""
         query = Backtest.select().where(Backtest.status == status)
         
@@ -288,29 +295,30 @@ class DataStore:
         if strategy:
             query = query.where(Backtest.strategy == strategy)
         
-        results = list(
+        results_raw = (
             query
             .order_by(Backtest.created_at.desc())
             .limit(limit)
             .dicts()
         )
+        results = list(results_raw)
         
         records = []
         for row in results:
             row['created_at'] = str(row.get('created_at', ''))
-            records.append(BacktestRecord.from_dict(row))
+            records.append(BacktestRecord(**row))
         return records
     
-    def get_backtest(self, backtest_id: int) -> Optional[BacktestRecord]:
+    def get_backtest(self, backtest_id: int) -> BacktestRecord | None:
         """查询单条回测记录"""
         row = Backtest.select().where(Backtest.id == backtest_id).dicts()
         result = next(iter(row), None)
         if result:
             result['created_at'] = str(result.get('created_at', ''))
-            return BacktestRecord.from_dict(result)
+            return BacktestRecord(**result)
         return None
     
-    def query_trades(self, backtest_id: int) -> List[TradeRecord]:
+    def query_trades(self, backtest_id: int) -> list[TradeRecord]:
         """查询交易明细"""
         rows = list(
             BacktestTrade
@@ -327,10 +335,10 @@ class DataStore:
                 if row.get(dt_field) is not None:
                     row[dt_field] = str(row[dt_field])
             row['backtest_id'] = row.pop('backtest_id') if 'backtest_id' in row else backtest_id
-            records.append(TradeRecord.from_dict(row))
+            records.append(TradeRecord(**row))
         return records
     
-    def insert_backtest_daily(self, backtest_id: int, daily_results: List[Dict]) -> int:
+    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         now = datetime.now()
         rows = []
@@ -359,7 +367,7 @@ class DataStore:
             BacktestDaily.insert_many(rows).execute()
         return len(rows)
     
-    def query_daily(self, backtest_id: int) -> List[Dict]:
+    def query_daily(self, backtest_id: int) -> list[dict[str, object]]:
         """查询每日资金曲线"""
         rows = list(
             BacktestDaily

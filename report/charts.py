@@ -7,7 +7,6 @@ Plotly 图表生成
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
 from datetime import datetime
 
 import plotly.graph_objects as go
@@ -24,8 +23,8 @@ from data.models import BacktestRecord
 
 def create_figure(
     bt: BacktestRecord,
-    daily: List[Dict],
-    trades: List,
+    daily: list[dict],
+    trades: list,
 ) -> go.Figure:
     """生成回测可视化图表
 
@@ -45,10 +44,10 @@ def create_figure(
     if bt.status == STATUS_FAILED or not daily:
         return _empty_figure(bt)
 
-    dates: List[str] = [d.get('date', '') for d in daily]
-    equities: List[float] = [d.get('equity', 0) for d in daily]
-    drawdowns: List[float] = [d.get('drawdown', 0) for d in daily]
-    daily_returns: List[float] = [d.get('daily_return', 0) for d in daily]
+    dates: list[str] = [d.get('date', '') for d in daily]
+    equities: list[float] = [d.get('equity', 0) for d in daily]
+    drawdowns: list[float] = [d.get('drawdown', 0) for d in daily]
+    daily_returns: list[float] = [d.get('daily_return', 0) for d in daily]
 
     fig = make_subplots(
         rows=3, cols=1,
@@ -137,9 +136,9 @@ def create_figure(
 
 def _add_trade_markers(
     fig: go.Figure,
-    trades: List,
-    dates: List[str],
-    equities: List[float],
+    trades: list,
+    dates: list[str],
+    equities: list[float],
     row: int,
     col: int,
 ) -> None:
@@ -148,7 +147,7 @@ def _add_trade_markers(
         return
 
     # 建立日期 → 权益的索引
-    date_to_equity: Dict[str, float] = {}
+    date_to_equity: dict[str, float] = {}
     for i, d in enumerate(dates):
         if i < len(equities):
             date_to_equity[d] = equities[i]
@@ -225,12 +224,12 @@ def _empty_figure(bt: BacktestRecord) -> go.Figure:
     return fig
 
 
-def _get_str(obj, attr: str, default: str = '') -> str:
+def _get_str(obj: object, attr: str, default: str = '') -> str:
     val = getattr(obj, attr, default)
     return str(val) if val is not None else default
 
 
-def _get_float(obj, attr: str, default: float = 0.0) -> float:
+def _get_float(obj: object, attr: str, default: float = 0.0) -> float:
     val = getattr(obj, attr, default)
     try:
         return float(val)

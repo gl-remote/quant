@@ -7,8 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
+from datetime import datetime
 from data import DataManager
 from common.formatting import format_pct, format_float, ensure_float
 from common.constants import (
@@ -24,12 +23,12 @@ from common.constants import (
 # ── 内部工具 ──────────────────────────────────────────────────
 
 
-def _na_str(v) -> str:
+def _na_str(v: object | None) -> str:
     """将可能为 None 的值转为展示字符串"""
     return 'N/A' if v is None else str(v)
 
 
-def _get_attr(obj, key, default=None):
+def _get_attr(obj: object, key: str, default: object = None) -> object:
     """获取对象属性值（兼容 dict 和 ORM model）"""
     if hasattr(obj, key):
         return getattr(obj, key, default)
@@ -170,8 +169,8 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
 
 def format_summary_report(
     dm: DataManager,
-    symbol: Optional[str] = None,
-    strategy: Optional[str] = None,
+    symbol: str | None = None,
+    strategy: str | None = None,
     limit: int = 20,
 ) -> str:
     """生成最近回测的汇总列表

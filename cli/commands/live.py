@@ -10,6 +10,7 @@
     - 完整的交易日志记录
 """
 
+import argparse
 import sys
 import logging
 
@@ -29,7 +30,7 @@ from common.constants import (
 logger = logging.getLogger(__name__)
 
 
-def cmd_live(args):
+def cmd_live(args: argparse.Namespace):
     """执行实盘/模拟交易命令
 
     使用天勤 SDK 连接实盘或模拟账户进行交易。

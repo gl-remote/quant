@@ -10,6 +10,7 @@
     - 输出交易记录和绩效统计
 """
 
+import argparse
 import logging
 
 from config import ConfigManager
@@ -30,7 +31,7 @@ from common.constants import (
 logger = logging.getLogger(__name__)
 
 
-def cmd_test(args):
+def cmd_test(args: argparse.Namespace):
     """执行策略测试命令
 
     在本地模拟环境中测试策略逻辑，验证信号生成和交易处理流程。

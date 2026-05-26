@@ -9,7 +9,7 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from .types import Bar, Signal, Fill, StrategyPosition
 

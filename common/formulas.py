@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 # 每交易日交易秒数 (4 小时日盘，不含夜盘)
 # 注意: 国内期货实际交易时段因夜盘而异（部分品种夜盘至 23:00，上期所品种至次日 2:30），
 # 此常量取日盘 4 小时作为保守近似。convert_annual_factor 以此为基准计算年化因子，
@@ -30,7 +32,7 @@ _SECONDS_PER_TRADING_DAY = 14400
 # FIFO 盈亏计算 (FIFO PnL Calculation)
 # ============================================================================
 
-def calculate_fifo_profit(fills: list) -> float:
+def calculate_fifo_profit(fills: list[object]) -> float:
     """按 FIFO 顺序计算已平仓交易的盈亏总额
 
     与笛卡尔积不同，此函数按先入先出规则将每笔买入与卖出匹配，
@@ -48,36 +50,36 @@ def calculate_fifo_profit(fills: list) -> float:
     Returns:
         FIFO 盈亏总额 (未扣除手续费/滑点)
     """
-    def get_attr(obj, attr):
+    def get_attr(obj: object, attr: str) -> Any:  # pyright: ignore[reportExplicitAny, reportAny]
         if hasattr(obj, attr):
-            return getattr(obj, attr)
+            return getattr(obj, attr)  # pyright: ignore[reportAny]
         if isinstance(obj, dict):
-            return obj.get(attr)
+            return obj.get(attr)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
         return None
 
-    buy_entries = []
-    sell_entries = []
+    buy_entries: list[tuple[float, float]] = []
+    sell_entries: list[tuple[float, float]] = []
     
     for fill in fills:
-        action = get_attr(fill, 'action')
-        price = get_attr(fill, 'price')
-        volume = get_attr(fill, 'volume')
+        action = get_attr(fill, 'action')  # pyright: ignore[reportAny]
+        price = float(get_attr(fill, 'price'))  # pyright: ignore[reportAny]
+        volume = float(get_attr(fill, 'volume'))  # pyright: ignore[reportAny]
         
         if action == 'buy':
             buy_entries.append((price, volume))
         elif action == 'sell':
             sell_entries.append((price, volume))
 
-    total_profit = 0.0
-    bi = 0          # 当前待匹配买入的索引
-    bv = 0          # 当前买入剩余的未匹配量
+    total_profit: float = 0.0
+    bi: int = 0          # 当前待匹配买入的索引
+    bv: float = 0.0          # 当前买入剩余的未匹配量
 
     for sell_price, sell_vol in sell_entries:
-        remaining = sell_vol
+        remaining: float = sell_vol
         while remaining > 0 and bi < len(buy_entries):
             if bv == 0:
                 _, bv = buy_entries[bi]
-            matched = min(remaining, bv)
+            matched: float = min(remaining, bv)
             total_profit += (sell_price - buy_entries[bi][0]) * matched
             remaining -= matched
             bv -= matched
@@ -129,7 +131,7 @@ def annualized_return(total_ret: float, days: int,
     """
     if days <= 0 or total_ret <= -1:
         return total_ret if days <= 0 else -1.0
-    return (1 + total_ret) ** (annual_factor / days) - 1
+    return float((1 + total_ret) ** (annual_factor / days) - 1)  # pyright: ignore[reportAny]
 
 
 # ============================================================================

@@ -11,7 +11,6 @@
 """
 
 from pathlib import Path
-from typing import Optional
 
 from data import DataManager
 from .reports import format_single_report, format_summary_report
@@ -23,7 +22,7 @@ def build_report(
     dm: DataManager,
     backtest_id: int,
     output_dir: str = "output",
-) -> Optional[str]:
+) -> str | None:
     """生成回测可视化 HTML 报告
 
     Args:

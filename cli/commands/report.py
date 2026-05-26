@@ -10,6 +10,7 @@
     --clean <id>: 硬删除指定回测记录及关联数据
 """
 
+import argparse
 import sys
 import logging
 
@@ -20,7 +21,7 @@ from report import format_single_report, format_summary_report, build_report
 logger = logging.getLogger(__name__)
 
 
-def cmd_report(args):
+def cmd_report(args: argparse.Namespace):
     """回测数据管理入口
 
     Args:
@@ -47,13 +48,13 @@ def cmd_report(args):
         sys.exit(1)
 
 
-def _cmd_list(dm, symbol=None, strategy=None, limit=20):
+def _cmd_list(dm: DataManager, symbol: str | None = None, strategy: str | None = None, limit: int = 20) -> None:
     """列出回测记录"""
     report = format_summary_report(dm, symbol=symbol, strategy=strategy, limit=limit)
     print(report)
 
 
-def _cmd_show(dm, backtest_id):
+def _cmd_show(dm: DataManager, backtest_id: int) -> None:
     """展示单条回测详细报告 + 生成可视化 HTML"""
     report = format_single_report(dm, backtest_id)
     print(report)
@@ -64,7 +65,7 @@ def _cmd_show(dm, backtest_id):
         print(f"\n📊 可视化报告: file://{html_path}")
 
 
-def _cmd_clean(dm, backtest_id):
+def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
     """硬删除回测记录"""
     print(f"\n⚠️  即将删除回测记录 id={backtest_id} 及其所有关联数据")
     print(f"   此操作不可撤销！\n")

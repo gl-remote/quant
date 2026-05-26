@@ -84,7 +84,9 @@ def cmd_backtest(args: argparse.Namespace) -> None:
     cm = ConfigManager()
     dm = DataManager(cm)
 
-    is_single_mode = args.symbol and not args.pattern  # pyright: ignore[reportAny]
+    symbol_arg: str | None = args.symbol  # pyright: ignore[reportAny]
+    pattern_arg: str | None = args.pattern  # pyright: ignore[reportAny]
+    is_single_mode = symbol_arg and not pattern_arg
     if is_single_mode:
         _run_tq_backtest(args, cm, dm)
     else:
@@ -102,6 +104,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
     start_date_str: str = args.start  # pyright: ignore[reportAny]
     end_date_str: str = args.end  # pyright: ignore[reportAny]
     gui_flag: bool = args.gui  # pyright: ignore[reportAny]
+    capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
 
     api: TqApi | None = None
     strategy_cls = ""
@@ -110,7 +113,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         account = cm.get_account_info()
         bc = cm.get_backtest_config()
         strategy_params = sc.model_dump(exclude={"name", "enabled"})
-        capital = args.capital if args.capital else bc.initial_capital  # pyright: ignore[reportAny]
+        capital = capital_arg if capital_arg else bc.initial_capital
         strategy_core = load_strategy(
             strategy,
             strategy_params=strategy_params,
@@ -121,7 +124,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
 
         bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=symbol)
 
-        capital_val = args.capital  # pyright: ignore[reportAny]
+        capital_val = capital_arg
         logger.info(
             "回测: %s %s~%s 资金=%s strategy=%s GUI=%s",
             symbol, start_date_str, end_date_str, capital_val, strategy_cls, gui_flag,
@@ -156,7 +159,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             f"策略: {strategy_cls}\n"
             f"品种: {symbol}\n"
             f"区间: {start_date_str} ~ {end_date_str}\n"
-            f"初始资金: {args.capital:,.2f}\n\n"  # pyright: ignore[reportAny]
+            f"初始资金: {capital_arg:,.2f}\n\n"
             f"交易统计:\n"
             f"  总交易次数: {total_trades}\n"
             f"  总盈亏: {total_profit:,.2f}\n"
@@ -210,7 +213,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
         dm.store.log('backtest', f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
-        dm.insert_backtest(
+        _ = dm.insert_backtest(
             symbol=symbol,
             strategy=strategy_cls or 'unknown',
             status=STATUS_FAILED,
@@ -341,7 +344,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                 trades_count = st.get('total_trades', 0)
                 print(f"\n  [{r['symbol']}] 收益率={total_return:.2%}  夏普={sharpe:.2f}  交易={trades_count}次")
             else:
-                dm.insert_backtest(
+                _ = dm.insert_backtest(
                     symbol=r.get('symbol', 'unknown'),
                     strategy=strat_cls_name,
                     status=STATUS_FAILED,

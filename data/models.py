@@ -8,11 +8,16 @@
 """
 
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict
-from peewee import *
+
+from peewee import (
+    Model, SqliteDatabase,
+    CharField, DateField, IntegerField, FloatField, TextField, DateTimeField,
+    ForeignKeyField, SQL,
+)
 
 # 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
-from common.schemas import KlineSchema
+# 注：此 import 作为 re-export 供上层模块使用
+from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）
@@ -20,49 +25,40 @@ from common.schemas import KlineSchema
 
 class BacktestRecord(BaseModel):
     """回测记录 — 字段与 ORM Backtest 表保持一致"""
-    id: Optional[int] = None
+    id: int | None = None
     symbol: str
     strategy: str
-    strategy_version: Optional[str] = None
-    git_hash: Optional[str] = None
+    strategy_version: str | None = None
+    git_hash: str | None = None
     status: str = "success"
-    error_message: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    total_days: Optional[int] = None
+    error_message: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    total_days: int | None = None
     initial_capital: float = 0.0
-    end_balance: Optional[float] = None
+    end_balance: float | None = None
     total_return: float = 0.0
-    annual_return: Optional[float] = None
+    annual_return: float | None = None
     total_trades: int = 0
-    win_trades: Optional[int] = None
-    loss_trades: Optional[int] = None
+    win_trades: int | None = None
+    loss_trades: int | None = None
     win_rate: float = 0.0
-    max_consecutive_win: Optional[int] = None
-    max_consecutive_loss: Optional[int] = None
-    avg_win: Optional[float] = None
-    avg_loss: Optional[float] = None
-    win_loss_ratio: Optional[float] = None
-    sharpe_ratio: Optional[float] = None
+    max_consecutive_win: int | None = None
+    max_consecutive_loss: int | None = None
+    avg_win: float | None = None
+    avg_loss: float | None = None
+    win_loss_ratio: float | None = None
+    sharpe_ratio: float | None = None
     max_drawdown: float = 0.0
-    max_drawdown_duration: Optional[int] = None
-    daily_std: Optional[float] = None
-    return_drawdown_ratio: Optional[float] = None
-    created_at: Optional[str] = None
-
-    def to_dict(self) -> Dict:
-        """转换为字典"""
-        return self.model_dump(exclude_none=True)
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> "BacktestRecord":
-        """从字典创建"""
-        return cls(**data)
+    max_drawdown_duration: int | None = None
+    daily_std: float | None = None
+    return_drawdown_ratio: float | None = None
+    created_at: str | None = None
 
 
 class TradeRecord(BaseModel):
     """交易记录"""
-    id: Optional[int] = None
+    id: int | None = None
     backtest_id: int
     datetime: str
     symbol: str
@@ -73,7 +69,7 @@ class TradeRecord(BaseModel):
     quantity: int
     pnl: float = 0.0
     commission: float = 0.0
-    created_at: Optional[str] = None
+    created_at: str | None = None
     
     @field_validator('quantity')
     @classmethod
@@ -88,40 +84,31 @@ class TradeRecord(BaseModel):
         if v < 0:
             raise ValueError('commission must be >= 0')
         return v
-    
-    def to_dict(self) -> Dict:
-        """转换为字典"""
-        return self.model_dump(exclude_none=True)
-    
-    @classmethod
-    def from_dict(cls, data: Dict) -> "TradeRecord":
-        """从字典创建"""
-        return cls(**data)
 
 
 class SymbolInfo(BaseModel):
     """品种信息"""
     symbol: str
     available: bool
-    filepath: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    total_rows: Optional[int] = None
-    error: Optional[str] = None
+    filepath: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    total_rows: int | None = None
+    error: str | None = None
 
 
 class DataSummary(BaseModel):
     """数据汇总"""
     total_symbols: int
-    symbols: List[SymbolInfo]
+    symbols: list[SymbolInfo]
 
 
 class DataLoadResult(BaseModel):
     """数据加载结果"""
     success: bool
     symbol: str
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: str | None = None
+    end_date: str | None = None
     row_count: int = 0
     message: str
 
@@ -133,120 +120,120 @@ class DataLoadResult(BaseModel):
 database = SqliteDatabase(None)
 
 
-class BaseModel(Model):
+class OrmBaseModel(Model):
     """基础模型"""
     class Meta:
-        database = database
+        database: SqliteDatabase = database
 
 
-class ExportMetadata(BaseModel):
+class ExportMetadata(OrmBaseModel):
     """导出元数据"""
-    symbol = CharField(unique=True)
-    filepath = CharField()
-    start_date = DateField(null=True)
-    end_date = DateField(null=True)
-    min_dt = DateField(null=True)
-    max_dt = DateField(null=True)
-    total_rows = IntegerField(default=0)
-    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    updated_at = DateTimeField(null=True)
+    symbol: CharField = CharField(unique=True)
+    filepath: CharField = CharField()
+    start_date: DateField = DateField(null=True)
+    end_date: DateField = DateField(null=True)
+    min_dt: DateField = DateField(null=True)
+    max_dt: DateField = DateField(null=True)
+    total_rows: IntegerField = IntegerField(default=0)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    updated_at: DateTimeField = DateTimeField(null=True)
     
-    class Meta:
-        table_name = 'export_metadata'
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'export_metadata'
 
 
-class OperationLog(BaseModel):
+class OperationLog(OrmBaseModel):
     """操作日志"""
-    command = CharField()
-    symbol = CharField(null=True)
-    message = TextField()
-    status = CharField()
-    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    command: CharField = CharField()
+    symbol: CharField = CharField(null=True)
+    message: TextField = TextField()
+    status: CharField = CharField()
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
-    class Meta:
-        table_name = 'operation_logs'
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'operation_logs'
 
 
-class Backtest(BaseModel):
+class Backtest(OrmBaseModel):
     """回测记录（与数据库表结构保持一致）"""
-    symbol = CharField()
-    strategy = CharField()
-    strategy_version = CharField(null=True)  # 策略版本号
-    git_hash = CharField(null=True)          # 回测时的 Git 提交哈希
-    status = CharField()
-    error_message = TextField(null=True)
-    start_date = CharField(null=True, max_length=10)
-    end_date = CharField(null=True, max_length=10)
-    total_days = IntegerField(null=True)
-    initial_capital = FloatField()
-    commission_rate = FloatField(null=True)
-    slippage = FloatField(null=True)
-    price_tick = FloatField(null=True)
-    contract_size = IntegerField(null=True)
-    kline_interval = CharField(null=True, max_length=8)
-    params_json = TextField(null=True)
-    end_balance = FloatField(null=True)
-    total_return = FloatField(null=True)
-    annual_return = FloatField(null=True)
-    total_trades = IntegerField(null=True)
-    win_trades = IntegerField(null=True)
-    loss_trades = IntegerField(null=True)
-    win_rate = FloatField(null=True)
-    max_consecutive_win = IntegerField(null=True)
-    max_consecutive_loss = IntegerField(null=True)
-    avg_win = FloatField(null=True)
-    avg_loss = FloatField(null=True)
-    win_loss_ratio = FloatField(null=True)
-    sharpe_ratio = FloatField(null=True)
-    max_drawdown = FloatField(null=True)
-    max_drawdown_duration = IntegerField(null=True)
-    daily_std = FloatField(null=True)
-    return_drawdown_ratio = FloatField(null=True)
-    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
-    updated_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    symbol: CharField = CharField()
+    strategy: CharField = CharField()
+    strategy_version: CharField = CharField(null=True)  # 策略版本号
+    git_hash: CharField = CharField(null=True)          # 回测时的 Git 提交哈希
+    status: CharField = CharField()
+    error_message: TextField = TextField(null=True)
+    start_date: CharField = CharField(null=True, max_length=10)
+    end_date: CharField = CharField(null=True, max_length=10)
+    total_days: IntegerField = IntegerField(null=True)
+    initial_capital: FloatField = FloatField()
+    commission_rate: FloatField = FloatField(null=True)
+    slippage: FloatField = FloatField(null=True)
+    price_tick: FloatField = FloatField(null=True)
+    contract_size: IntegerField = IntegerField(null=True)
+    kline_interval: CharField = CharField(null=True, max_length=8)
+    params_json: TextField = TextField(null=True)
+    end_balance: FloatField = FloatField(null=True)
+    total_return: FloatField = FloatField(null=True)
+    annual_return: FloatField = FloatField(null=True)
+    total_trades: IntegerField = IntegerField(null=True)
+    win_trades: IntegerField = IntegerField(null=True)
+    loss_trades: IntegerField = IntegerField(null=True)
+    win_rate: FloatField = FloatField(null=True)
+    max_consecutive_win: IntegerField = IntegerField(null=True)
+    max_consecutive_loss: IntegerField = IntegerField(null=True)
+    avg_win: FloatField = FloatField(null=True)
+    avg_loss: FloatField = FloatField(null=True)
+    win_loss_ratio: FloatField = FloatField(null=True)
+    sharpe_ratio: FloatField = FloatField(null=True)
+    max_drawdown: FloatField = FloatField(null=True)
+    max_drawdown_duration: IntegerField = IntegerField(null=True)
+    daily_std: FloatField = FloatField(null=True)
+    return_drawdown_ratio: FloatField = FloatField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    updated_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
-    class Meta:
-        table_name = 'backtests'
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'backtests'
 
 
-class BacktestTrade(BaseModel):
+class BacktestTrade(OrmBaseModel):
     """回测交易明细"""
-    backtest = ForeignKeyField(Backtest, backref='trades', on_delete='CASCADE')
-    datetime = DateTimeField()
-    symbol = CharField()
-    direction = CharField()
-    offset = CharField()
-    open_price = FloatField()
-    close_price = FloatField()
-    quantity = IntegerField()
-    pnl = FloatField()
-    commission = FloatField()
-    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='trades', on_delete='CASCADE')
+    datetime: DateTimeField = DateTimeField()
+    symbol: CharField = CharField()
+    direction: CharField = CharField()
+    offset: CharField = CharField()
+    open_price: FloatField = FloatField()
+    close_price: FloatField = FloatField()
+    quantity: IntegerField = IntegerField()
+    pnl: FloatField = FloatField()
+    commission: FloatField = FloatField()
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
-    class Meta:
-        table_name = 'backtest_trades'
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'backtest_trades'
 
 
-class BacktestDaily(BaseModel):
+class BacktestDaily(OrmBaseModel):
     """回测每日资金曲线"""
-    backtest = ForeignKeyField(Backtest, backref='daily', on_delete='CASCADE')
-    date = DateField()
-    equity = FloatField()  # 当日资金净值
-    daily_return = FloatField()  # 当日收益率
-    drawdown = FloatField()  # 当日回撤
-    created_at = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='daily', on_delete='CASCADE')
+    date: DateField = DateField()
+    equity: FloatField = FloatField()  # 当日资金净值
+    daily_return: FloatField = FloatField()  # 当日收益率
+    drawdown: FloatField = FloatField()  # 当日回撤
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     
-    class Meta:
-        table_name = 'backtest_daily'
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'backtest_daily'
 
 
 def init_database(db_path: str):
     """初始化数据库连接"""
-    database.init(db_path)
-    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)
+    database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
+    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
 
 
 def close_database():
     """关闭数据库连接"""
     if not database.is_closed():
-        database.close()
+        _ = database.close()

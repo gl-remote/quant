@@ -12,7 +12,7 @@
 
 import logging
 from datetime import datetime
-from typing import Optional, Any
+from typing import Any
 
 from ..core.base import Strategy
 from ..core.types import Bar, Signal, Fill
@@ -65,7 +65,7 @@ class TqsdkStrategyBridge:
     def strategy(self) -> Strategy:
         return self._strategy
 
-    def initialize(self, api: Optional[Any] = None):
+    def initialize(self, api: Any | None = None):
         self.api = api
         if api:
             self.account = api.get_account()
@@ -111,7 +111,7 @@ class TqsdkStrategyBridge:
 
     # ---- 实盘/模拟运行 ----
 
-    def _ensure_auth(self, auth: Optional[Any], symbol: str) -> Any:
+    def _ensure_auth(self, auth: Any | None, symbol: str) -> Any:
         """统一认证和符号设置"""
         self.symbol = symbol or self.symbol or ""
         if not auth and self.account is None:
@@ -180,10 +180,10 @@ class TqsdkStrategyBridge:
                 f"策略停止: fills={fills_count} sells={sells}"
             )
 
-    def run(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
+    def run(self, symbol: str | None = None, auth: Any | None = None):
         auth = self._ensure_auth(auth, symbol or "")
         self._run_loop(symbol or self.symbol, auth, web_gui=False)
 
-    def run_with_gui(self, symbol: Optional[str] = None, auth: Optional[Any] = None):
+    def run_with_gui(self, symbol: str | None = None, auth: Any | None = None):
         auth = self._ensure_auth(auth, symbol or "")
         self._run_loop(symbol or self.symbol, auth, web_gui=True)
