@@ -437,11 +437,12 @@ def _persist_results(
             bt_ids.append(bt_id)
 
             if dr:
-                # 1. 保存交易明细
+                # 1. 保存交易明细 (vnpy TradeData dataclass → dict)
                 trades = []
                 for daily in dr:
                     if 'trades' in daily:
-                        trades.extend(daily.get('trades', []))
+                        trades.extend(vars(t) if hasattr(t, '__dataclass_fields__') else t
+                                      for t in daily.get('trades', []))
                 if trades:
                     dm.insert_backtest_trades(bt_id, trades)
 
@@ -610,7 +611,8 @@ def _run_optuna_search(
                     trades: list[dict[str, Any]] = []
                     for daily in dr:
                         if 'trades' in daily:
-                            trades.extend(daily.get('trades', []))  # pyright: ignore[reportUnknownArgumentType]
+                            trades.extend(vars(t) if hasattr(t, '__dataclass_fields__') else t
+                                          for t in daily.get('trades', []))  # pyright: ignore[reportUnknownArgumentType]
                     if trades:
                         dm.insert_backtest_trades(bt_id, trades)  # pyright: ignore[reportUnknownArgumentType]
                     dm.insert_backtest_daily(bt_id, dr)  # pyright: ignore[reportUnknownArgumentType]
