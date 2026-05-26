@@ -68,13 +68,11 @@ fi
 echo ""
 echo "[2/2] 清理 output..."
 if [ -d "$OUT_DIR" ]; then
-    count=$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')
-    if [ "$count" -gt 0 ]; then
-        rm -rf "$OUT_DIR"/*
-        echo "  删除 $count 个文件"
-    else
-        echo "  无文件"
-    fi
+    # 保留根目录 index.html 导航页
+    find "$OUT_DIR" -mindepth 1 -not -name index.html -exec rm -rf {} + 2>/dev/null || true
+    # 删除子目录中的文件
+    find "$OUT_DIR" -mindepth 2 -name 'index.html' -exec rm -f {} + 2>/dev/null || true
+    echo "  已清理 (保留 output/index.html)"
 fi
 
 echo ""
