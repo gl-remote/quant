@@ -275,7 +275,7 @@ def _render_backtest_tab(conn: sqlite3.Connection, study_name: str) -> str:
         parts.append('{')
         parts.append(f'x:{json.dumps(dates)},y:{json.dumps(dd_arr)},type:"scatter",name:"回撤%",')
         parts.append('yaxis:"y2",line:{color:"#dc2626",dash:"dot"}}],')
-        parts.append('{margin:{t:10},yaxis:{title:"权益"},yaxis2:{title:"回撤%",overlaying:"y",side:"right"},')
+        parts.append('{margin:{t:10,b:50,l:60,r:60},yaxis:{title:"权益"},yaxis2:{title:"回撤%",overlaying:"y",side:"right"},')
         parts.append('legend:{x:0,y:1}});</script>')
 
     return "\n".join(parts)
@@ -337,7 +337,7 @@ def _render_optuna_tab(conn: sqlite3.Connection, study_name: str) -> str:
         parts.append('<script>Plotly.newPlot("chart-converge",[{')
         parts.append(f'x:{json.dumps(nums)},y:{json.dumps(values)},type:"scatter",mode:"lines+markers",')
         parts.append('line:{color:"#2563eb"},marker:{size:6}}],')
-        parts.append('{margin:{t:10},xaxis:{title:"Trial"},yaxis:{title:"Score"}});</script>')
+        parts.append('{margin:{t:10,b:50,l:55},xaxis:{title:"Trial"},yaxis:{title:"Score"}});</script>')
 
     # 参数空间散点图
     if params_rows:
@@ -369,7 +369,7 @@ def _render_optuna_tab(conn: sqlite3.Connection, study_name: str) -> str:
             parts.append(json.dumps(z_vals))
             parts.append(',colorscale:"RdYlGn",showscale:true,colorbar:{title:"Score"}},')
             parts.append(f'hovertemplate:"{_escape(p1)}: %{{x}}<br>{_escape(p2)}: %{{y}}<br>Score: %{{marker.color:.2f}}<extra></extra>"}}]')
-            parts.append(',{margin:{t:10},xaxis:{title:')
+            parts.append(',{margin:{t:10,b:50,l:55},xaxis:{title:')
             parts.append(json.dumps(p1))
             parts.append('},yaxis:{title:')
             parts.append(json.dumps(p2))
