@@ -7,7 +7,6 @@
     ├── strategies:      list[StrategyItemConfig]
     ├── data:            DataConfig (包含数据源、存储、导出配置)
     ├── backtest:        BacktestConfig
-    │   └── split:       SplitConfig
     ├── system:          SystemConfig
     │   └── logging:     LoggingConfig
     ├── third_party:     ThirdPartyConfig
@@ -52,10 +51,6 @@ from common.constants import (
     DEFAULT_PRICE_TICK,
     DEFAULT_CONTRACT_SIZE,
     DEFAULT_KLINE_PERIOD,
-    DEFAULT_TRAIN_RATIO,
-    DEFAULT_VAL_RATIO,
-    DEFAULT_TEST_RATIO,
-    DEFAULT_RANDOM_SEED,
     KLINE_INTERVAL_1MIN,
     STRATEGY_MA,
     DEFAULT_STOP_LOSS_RATIO,
@@ -128,39 +123,17 @@ class OptimizerConfig(BaseModel):
 
 
 # ============================================================
-# 数据切分
-# ============================================================
-
-
-class SplitConfig(BaseModel):
-    train_ratio: float = DEFAULT_TRAIN_RATIO
-    val_ratio: float = DEFAULT_VAL_RATIO
-    test_ratio: float = DEFAULT_TEST_RATIO
-    random_seed: int = DEFAULT_RANDOM_SEED
-    shuffle: bool = False
-
-    @model_validator(mode="after")
-    def _ratios_sum_to_one(self) -> "SplitConfig":
-        s = self.train_ratio + self.val_ratio + self.test_ratio
-        if abs(s - 1.0) > 1e-9:
-            raise ValueError(f"train+val+test ratios must sum to 1.0, got {s}")
-        return self
-
-
-# ============================================================
 # 回测配置
 # ============================================================
 
 
 class BacktestConfig(BaseModel):
-    data_dir: str = ""
     initial_capital: float = DEFAULT_INITIAL_CAPITAL
     commission_rate: float = DEFAULT_COMMISSION_RATE
     slippage: float = DEFAULT_SLIPPAGE
     price_tick: float = DEFAULT_PRICE_TICK
     contract_size: int = DEFAULT_CONTRACT_SIZE
     interval: str = KLINE_INTERVAL_1MIN
-    split: SplitConfig = Field(default_factory=SplitConfig)
 
     @field_validator("initial_capital")
     @classmethod
