@@ -387,6 +387,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         optimizer_enabled=optimizer_cfg.enabled,
                         dm=dm, git_hash=git_hash,
                         n_trials=n_trials,
+                        table_prefix=optimizer_cfg.table_prefix,
                     )
 
     except Exception as e:
@@ -499,6 +500,7 @@ def _run_grid_search(
     dm: DataManager,
     git_hash: str | None,
     n_trials: int = 100,
+    table_prefix: str = "optuna_",
 ) -> None:
     """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
@@ -523,6 +525,10 @@ def _run_grid_search(
             contract_size=contract_size,
             n_trials=n_trials,
             search_type="grid",
+            study_db_path=(
+                f"sqlite:///{os.path.abspath(dm.store.db_path)}"
+                f"?table_prefix={table_prefix}"
+            ),
         )
         result = opt.optimize()
         # 从 trial_data 提取 engine_results
