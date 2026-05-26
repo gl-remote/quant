@@ -111,7 +111,6 @@ class OptimizerConfig(BaseModel):
 
     search_space: 搜索空间定义，{param: {type, low, high, step}}
     n_trials: 最大试验次数
-    table_prefix: Optuna 数据库表名前缀（如 "optuna_"）
     strategy_spaces: 按策略组织的搜索空间，{strategy_name: search_space}
     """
 
@@ -120,7 +119,6 @@ class OptimizerConfig(BaseModel):
     enabled: bool = False
     engine: str = "grid"  # grid | optuna
     n_trials: int = 50
-    table_prefix: str = "optuna_"  # Optuna 表名前缀
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
 

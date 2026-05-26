@@ -119,4 +119,3 @@ format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 enabled = true
 engine = "grid"                 # grid: 穷举搜索 | optuna: 贝叶斯优化
 n_trials = 50                   # optuna 最大试验次数
-table_prefix = "optuna_"        # Optuna 数据库表名前缀

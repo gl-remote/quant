@@ -372,7 +372,6 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         contract_size=contract_size,
                         n_trials=n_trials,
                         dm=dm, git_hash=git_hash,
-                        table_prefix=optimizer_cfg.table_prefix,
                     )
                 else:
                     # 使用 Optuna GridSampler 进行网格搜索
@@ -387,7 +386,6 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         optimizer_enabled=optimizer_cfg.enabled,
                         dm=dm, git_hash=git_hash,
                         n_trials=n_trials,
-                        table_prefix=optimizer_cfg.table_prefix,
                     )
 
     except Exception as e:
@@ -500,7 +498,6 @@ def _run_grid_search(
     dm: DataManager,
     git_hash: str | None,
     n_trials: int = 100,
-    table_prefix: str = "optuna_",
 ) -> None:
     """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
@@ -525,10 +522,7 @@ def _run_grid_search(
             contract_size=contract_size,
             n_trials=n_trials,
             search_type="grid",
-            study_db_path=(
-                f"sqlite:///{os.path.abspath(dm.store.db_path)}"
-                f"?table_prefix={table_prefix}"
-            ),
+            study_db_path=f"sqlite:///{os.path.abspath(dm.store.db_path)}",
         )
         result = opt.optimize()
         # 从 trial_data 提取 engine_results
@@ -565,12 +559,10 @@ def _run_optuna_search(
     n_trials: int,
     dm: DataManager,
     git_hash: str | None,
-    table_prefix: str = "optuna_",
 ) -> None:
     """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
 
-    # 构建带表名前缀的数据库 URL
-    optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}?table_prefix={table_prefix}"
+    optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
 
     opt = OptunaOptimizer(
         engine=engine,
