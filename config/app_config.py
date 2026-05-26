@@ -137,6 +137,7 @@ class BacktestConfig(BaseModel):
     price_tick: float = DEFAULT_PRICE_TICK
     contract_size: int = DEFAULT_CONTRACT_SIZE
     interval: str = KLINE_INTERVAL_1MIN
+    provider: str = ""  # 回测优先数据源，空字符串 = 自动遍历所有
 
     @field_validator("initial_capital")
     @classmethod

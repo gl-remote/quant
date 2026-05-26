@@ -75,8 +75,8 @@ class DataManager:
         return self._get_config().get_data_config().filename_template
 
     def _get_default_provider(self) -> str:
-        """获取默认数据源"""
-        return self._get_config().get_data_config().provider
+        """获取回测优先数据源"""
+        return self._get_config().get_backtest_config().provider
 
     def _get_default_interval(self) -> str:
         """获取默认K线周期配置"""
@@ -245,10 +245,15 @@ class DataManager:
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
-        # 尝试找到数据文件：先按指定/默认 provider，找不到就遍历所有已注册 provider
-        candidates = ([provider] if provider else
-                      [self._get_default_provider()] + [p for p in list_sources()
-                      if p != self._get_default_provider()])
+        # 尝试找到数据文件：指定 provider > 回测配置 provider > 遍历所有
+        if provider:
+            candidates = [provider]
+        else:
+            bt_provider = self._get_default_provider()
+            if bt_provider:
+                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
+            else:
+                candidates = list_sources()
         filepath = None
         matched_provider = None
         for p in candidates:

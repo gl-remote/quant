@@ -58,7 +58,7 @@ kline_period = 1              # K线周期 (分钟)
 # 数据配置 (数据源 + 存储 + 导出)
 # ============================================================
 [data]
-provider = "akshare"                        # 数据源提供商
+provider = "akshare"                        # export 默认数据源
 cache_enabled = false                        # 是否启用缓存
 base_dir = ".quant_shared_data"              # 数据基础目录
 export_dir = ".quant_shared_data/csv"        # CSV 导出目录
@@ -98,6 +98,7 @@ slippage = 1                    # 滑点 (跳)
 price_tick = 1                  # 最小价格变动
 contract_size = 10              # 合约乘数
 interval = "1m"                 # K线周期: 1m/5m/15m/30m/1h/d
+provider = ""                   # 回测优先数据源 (空=自动遍历所有)
 
 # ============================================================
 # 系统配置
