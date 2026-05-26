@@ -40,7 +40,7 @@ fi
 
 # ── 获取最新回测 ID ──
 LATEST_ID=$(sqlite3 ".quant_shared_data/quant_shared.db" \
-    "SELECT id FROM backtest ORDER BY created_at DESC LIMIT 1;")
+    "SELECT id FROM backtests ORDER BY created_at DESC LIMIT 1;")
 if [ -z "$LATEST_ID" ] || ! [[ "$LATEST_ID" =~ ^[0-9]+$ ]]; then
     echo -e "${RED}✗ 未找到有效的回测记录 (LATEST_ID='$LATEST_ID')${NC}"
     exit 1
