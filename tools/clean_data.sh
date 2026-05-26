@@ -27,35 +27,31 @@ if not os.path.exists(db):
 conn = sqlite3.connect(db)
 cur = conn.cursor()
 
-tables = {
-    'backtests':       '回测记录',
-    'backtest_trades': '交易明细',
-    'backtest_daily':  '每日资金',
-    'operation_logs':  '操作日志',
-    'studies':         'Optuna studies',
-    'trials':          'Optuna trials',
-    'trial_params':    'Optuna trial参数',
-    'trial_values':    'Optuna trial值',
-    'trial_intermediate_values': 'Optuna 中间值',
-    'trial_heartbeats':          'Optuna 心跳',
-    'trial_system_attributes':   'Optuna 系统属性',
-    'trial_user_attributes':     'Optuna 用户属性',
-    'study_directions':          'Optuna 方向',
-    'study_system_attributes':   'Optuna 系统属性',
-    'study_user_attributes':     'Optuna 用户属性',
-    'version_info':              'Optuna 版本',
-    'alembic_version':           'Optuna alembic',
-}
-
-for tbl, desc in tables.items():
+# 固定业务表（不动 export_metadata）
+biz_tables = ['backtests', 'backtest_trades', 'backtest_daily', 'operation_logs']
+for tbl in biz_tables:
     try:
         cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
         n = cur.fetchone()[0]
         if n > 0:
             cur.execute(f'DELETE FROM \"{tbl}\"')
-            print(f'  {desc:<20} 删除 {n} 条')
+            print(f'  {tbl:<24} 删除 {n} 条')
     except Exception:
         pass
+
+# Optuna 相关表（含可能的前缀 optuna_、无前缀、alembic/version）
+optuna_patterns = ('study', 'trial', 'optuna_study', 'optuna_trial', 'alembic', 'version_info')
+all_tables = [r[0] for r in cur.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]
+for tbl in all_tables:
+    if any(tbl.startswith(p) for p in optuna_patterns):
+        try:
+            cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
+            n = cur.fetchone()[0]
+            if n > 0:
+                cur.execute(f'DELETE FROM \"{tbl}\"')
+                print(f'  {tbl:<24} 删除 {n} 条')
+        except Exception:
+            pass
 
 try:
     cur.execute('DELETE FROM sqlite_sequence')
