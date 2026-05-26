@@ -50,7 +50,20 @@ fi
 # ── 步骤 2: 生成报告 ──
 echo ""
 echo "[步骤 2/2] 生成回测报告 (id=$LATEST_ID)..."
+
+# 找最新 study 目录
+STUDY_DIR=$(ls -dt "$ROOT_DIR/output"/ma_* 2>/dev/null | head -1)
+if [ -z "$STUDY_DIR" ]; then
+    echo -e "${RED}✗ 未找到 study 目录${NC}"
+    exit 1
+fi
+
 if "$PYTHON_PATH" "$ROOT_DIR/main.py" report --id "$LATEST_ID"; then
+    # 把报告移入 study 目录
+    if [ -f "$ROOT_DIR/output/backtest_${LATEST_ID}.html" ]; then
+        mv "$ROOT_DIR/output/backtest_${LATEST_ID}.html" "$STUDY_DIR/"
+        echo "  报告已移至 $STUDY_DIR"
+    fi
     echo -e "${GREEN}✓ 报告生成成功${NC}"
 else
     echo -e "${RED}✗ 报告生成失败 (exit=$?)${NC}"
