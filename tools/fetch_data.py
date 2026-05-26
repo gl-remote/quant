@@ -20,6 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import ConfigManager
 from data import DataManager, export_csv
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -45,19 +46,20 @@ TARGET_SYMBOLS: list[tuple[str, str | None, str | None, str]] = [
 def fetch_all(
     source: str = "tqsdk",
     interval: str = "1m",
-    force: bool = True,
+    force: bool = False,
 ) -> dict[str, dict]:
     """批量导出数据
 
     Args:
         source: 数据源 (tqsdk / akshare)
         interval: K 线周期
-        force: 是否覆盖已有文件
+        force: 强制重新拉取（默认跳过已有文件）
 
     Returns:
         {symbol: {success, rows, path, date_range, elapsed}}
     """
     cm = ConfigManager()
+    dc = cm.get_data_config()
     results: dict[str, dict] = {}
 
     print(f"\n{'='*65}")
@@ -67,6 +69,16 @@ def fetch_all(
     for i, (symbol, start, end, desc) in enumerate(TARGET_SYMBOLS, 1):
         t0 = time.time()
         print(f"[{i:2d}/{len(TARGET_SYMBOLS)}] {symbol:<16s} {desc}")
+
+        # 检查是否已有数据，跳过
+        expected_file = Path(dc.export_dir) / dc.filename_template.format(
+            symbol=symbol, provider=source, interval=interval
+        )
+        if expected_file.exists() and not force:
+            elapsed = time.time() - t0
+            results[symbol] = {"success": True, "elapsed": elapsed, "skipped": True}
+            print(f"       ⏭ 跳过 (已存在 {expected_file.name})")
+            continue
         
         dm = DataManager(cm)
         try:
@@ -97,12 +109,16 @@ def fetch_all(
 
     # 汇总
     print(f"\n{'='*65}")
-    ok = sum(1 for r in results.values() if r["success"])
-    fail = len(results) - ok
+    ok = sum(1 for r in results.values() if r.get("success"))
+    skipped = sum(1 for r in results.values() if r.get("skipped"))
+    new_ok = ok - skipped
+    fail = sum(1 for r in results.values() if not r.get("success"))
     total_time = sum(r["elapsed"] for r in results.values())
-    print(f"  完成: {ok}/{len(results)} 成功  |  耗时 {total_time:.0f}s")
-    if fail:
-        print(f"  失败: {fail} 个")
+    parts = []
+    if new_ok: parts.append(f"新拉取 {new_ok}")
+    if skipped: parts.append(f"跳过 {skipped}")
+    parts.append(f"失败 {fail}")
+    print(f"  完成: {' / '.join(parts)}  |  耗时 {total_time:.0f}s")
     print(f"{'='*65}\n")
 
     return results
@@ -119,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--source", default="tqsdk", choices=["tqsdk", "akshare"],
                         help="数据源 (默认 tqsdk)")
     parser.add_argument("--interval", default="1m", help="K线周期 (默认 1m)")
-    parser.add_argument("--no-force", action="store_true", help="不覆盖已有文件")
+    parser.add_argument("--force", action="store_true", help="强制重新拉取")
     args = parser.parse_args()
 
-    fetch_all(source=args.source, interval=args.interval, force=not args.no_force)
+    fetch_all(source=args.source, interval=args.interval, force=args.force)
