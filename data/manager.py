@@ -302,7 +302,8 @@ class DataManager:
                         engine_config: dict[str, object], params_json: str | None,
                         start_date: str | None, end_date: str | None,
                         strategy_version: str | None = None,
-                        git_hash: str | None = None) -> int:
+                        git_hash: str | None = None,
+                        run_id: int | None = None) -> int:
         """插入完整的回测记录"""
         return self.store.insert_backtest_detailed(
             symbol=symbol,
@@ -316,6 +317,7 @@ class DataManager:
             end_date=end_date,
             strategy_version=strategy_version,
             git_hash=git_hash,
+            run_id=run_id,
         )
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:

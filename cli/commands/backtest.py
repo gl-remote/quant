@@ -313,6 +313,14 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
         engine = VnpyBacktestEngine(bc, dm)
         git_hash = get_git_hash()
 
+        # 创建运行记录
+        run_engine = optimizer_arg or cm._config.optimizer.engine or "grid"
+        run_id = dm.store.create_run(
+            strategy=strategy_name,
+            engine=run_engine if mode == "search" else "walk-forward",
+            symbols=len(datasets),
+        )
+
         if mode == "walk-forward":
             # W-F: 单策略 × 单品种，内部切窗口
             strategy = load_strategy(
@@ -355,15 +363,13 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
         else:
             # ── search 模式: optimizer 调度 engine ──
             optimizer_cfg = cm._config.optimizer  # pyright: ignore[reportPrivateUsage]
-            # CLI 参数优先，其次 TOML engine 字段
-            opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
             n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
 
             # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
             search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
             
             if search_space:
-                if opt_engine == "optuna":
+                if run_engine == "optuna":
                     _run_optuna_search(
                         engine=engine, datasets=datasets,
                         strategy_name=strategy_name,
@@ -373,6 +379,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         contract_size=contract_size,
                         n_trials=n_trials,
                         dm=dm, git_hash=git_hash,
+                        run_id=run_id,
                     )
                 else:
                     # 使用 Optuna GridSampler 进行网格搜索
@@ -387,12 +394,15 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         optimizer_enabled=optimizer_cfg.enabled,
                         dm=dm, git_hash=git_hash,
                         n_trials=n_trials,
+                        run_id=run_id,
                     )
 
                 # 自动生成回测看板
+                dm.store.finish_run(run_id)
                 build_dashboard(
                     db_path=dm.store.db_path,
                     output_dir="output",
+                    run_id=run_id,
                 )
 
     except Exception as e:
@@ -406,6 +416,7 @@ def _persist_results(
     dm: DataManager,
     results: list[dict[str, Any]],
     git_hash: str | None,
+    run_id: int | None = None,
 ) -> list[int]:
     """将引擎返回的结构化回测结果持久化到数据库
 
@@ -439,6 +450,7 @@ def _persist_results(
                 end_date=r.get('end_date'),
                 strategy_version=r.get('strategy_version'),
                 git_hash=git_hash,
+                run_id=run_id,
             )
             bt_ids.append(bt_id)
 
@@ -474,6 +486,7 @@ def _persist_results(
                 params_json=r.get('strategy_params_json', '{}'),
                 start_date=None,
                 end_date=None,
+                run_id=run_id,
             )
 
     persisted = len(bt_ids)
@@ -505,6 +518,7 @@ def _run_grid_search(
     dm: DataManager,
     git_hash: str | None,
     n_trials: int = 100,
+    run_id: int | None = None,
 ) -> None:
     """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
@@ -519,6 +533,8 @@ def _run_grid_search(
                 }
         
         # 使用 OptunaOptimizer + GridSampler
+        study_name = f"{strategy_name}_grid_r{run_id}"
+        dm.store.link_study(run_id, study_name)
         opt = OptunaOptimizer(
             engine=engine,
             datasets=datasets,
@@ -530,6 +546,7 @@ def _run_grid_search(
             n_trials=n_trials,
             search_type="grid",
             study_db_path=f"sqlite:///{os.path.abspath(dm.store.db_path)}",
+            study_name=study_name,
         )
         result = opt.optimize()
         # 从 trial_data 提取 engine_results
@@ -546,7 +563,7 @@ def _run_grid_search(
         pairs = [(sym, df, s) for sym, df in datasets]
         results = engine.run(pairs)
 
-    _persist_results(dm, results, git_hash)
+    _persist_results(dm, results, git_hash, run_id=run_id)
 
     succeeded = [r for r in results if r['success']]
     if succeeded:
@@ -566,10 +583,14 @@ def _run_optuna_search(
     n_trials: int,
     dm: DataManager,
     git_hash: str | None,
+    run_id: int | None = None,
 ) -> None:
     """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
 
     optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
+    study_name = f"{strategy_name}_optuna_r{run_id}"
+    if run_id:
+        dm.store.link_study(run_id, study_name)
 
     opt = OptunaOptimizer(
         engine=engine,
@@ -581,6 +602,7 @@ def _run_optuna_search(
         contract_size=contract_size,
         n_trials=n_trials,
         study_db_path=optuna_db_url,
+        study_name=study_name,
     )
     result = opt.optimize()
 

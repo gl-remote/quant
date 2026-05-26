@@ -160,12 +160,34 @@ class OperationLog(OrmBaseModel):
         table_name: str = 'operation_logs'
 
 
+class Run(OrmBaseModel):
+    """批量回测运行记录 — 每次跑回测一条"""
+    strategy: CharField = CharField()
+    engine: CharField = CharField(default="grid")
+    symbols: IntegerField = IntegerField(default=0)
+    status: CharField = CharField(default="running")
+    created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'runs'
+
+
+class RunStudy(OrmBaseModel):
+    """关联 runs 与 Optuna studies"""
+    run: ForeignKeyField = ForeignKeyField(Run, backref='studies', on_delete='CASCADE')
+    study_name: CharField = CharField(unique=True)
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'run_studies'
+
+
 class Backtest(OrmBaseModel):
     """回测记录（与数据库表结构保持一致）"""
+    run: ForeignKeyField = ForeignKeyField(Run, backref='backtests', null=True, on_delete='SET NULL')
     symbol: CharField = CharField()
     strategy: CharField = CharField()
-    strategy_version: CharField = CharField(null=True)  # 策略版本号
-    git_hash: CharField = CharField(null=True)          # 回测时的 Git 提交哈希
+    strategy_version: CharField = CharField(null=True)
+    git_hash: CharField = CharField(null=True)
     status: CharField = CharField()
     error_message: TextField = TextField(null=True)
     start_date: CharField = CharField(null=True, max_length=10)
@@ -236,7 +258,7 @@ class BacktestDaily(OrmBaseModel):
 def init_database(db_path: str):
     """初始化数据库连接"""
     database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
-    database.create_tables([ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
+    database.create_tables([Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
 
 
 def close_database():

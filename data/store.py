@@ -20,6 +20,8 @@ from datetime import datetime
 
 from .models import (
     database,
+    Run,
+    RunStudy,
     ExportMetadata,
     OperationLog,
     Backtest,
@@ -60,7 +62,7 @@ class DataStore:
     def _init_tables(self):
         """初始化数据库表"""
         database.create_tables(
-            [ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily],
+            [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily],
             safe=True,
         )
 
@@ -206,6 +208,21 @@ class DataStore:
                 updated_at=now,
             )
 
+    # ── 运行记录 ────────────────────────────────────────────────────
+
+    def create_run(self, strategy: str, engine: str, symbols: int) -> int:
+        """创建一次批量回测运行记录，返回 run_id"""
+        r = Run.create(strategy=strategy, engine=engine, symbols=symbols)
+        return r.id
+
+    def finish_run(self, run_id: int, status: str = "success") -> None:
+        """标记运行完成"""
+        Run.update(status=status).where(Run.id == run_id).execute()
+
+    def link_study(self, run_id: int, study_name: str) -> None:
+        """关联 run 与 Optuna study"""
+        RunStudy.get_or_create(run_id=run_id, study_name=study_name)
+
     # ── 回测记录操作 ────────────────────────────────────────────────
 
     def insert_backtest_detailed(
@@ -221,6 +238,7 @@ class DataStore:
         end_date: str | None,
         strategy_version: str | None = None,
         git_hash: str | None = None,
+        run_id: int | None = None,
     ) -> int:
         """插入完整的回测记录"""
         now = datetime.now()
@@ -235,6 +253,7 @@ class DataStore:
         win_rate_val = calc_win_rate(win_trades_v, total_trades)
 
         bt = Backtest.create(
+            run=run_id,
             symbol=symbol,
             strategy=strategy,
             strategy_version=strategy_version,

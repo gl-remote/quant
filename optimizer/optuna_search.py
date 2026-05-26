@@ -82,7 +82,8 @@ class OptunaOptimizer:
         contract_size: int | None = None,
         n_trials: int = 50,
         study_db_path: str = "",
-        search_type: str = "bayesian",  # "bayesian" or "grid"
+        search_type: str = "bayesian",
+        study_name: str = "",
     ) -> None:
         """
         Args:
@@ -96,6 +97,7 @@ class OptunaOptimizer:
             n_trials: 最大试验次数
             study_db_path: Optuna study SQLite 存储路径，为空则仅内存
             search_type: 搜索类型："bayesian" (TPESampler) 或 "grid" (GridSampler)
+            study_name: 自定义 study 名称，为空则自动生成
         """
         self._engine = engine
         self._datasets = datasets
@@ -108,9 +110,12 @@ class OptunaOptimizer:
         self._study_db_path = study_db_path
         self._search_type = search_type
 
-        # 生成唯一 study 名
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self._study_name = f"{strategy_name}_{ts}"
+        # study 名：自定义 > 自动生成
+        if study_name:
+            self._study_name = study_name
+        else:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self._study_name = f"{strategy_name}_{ts}"
 
     def _create_grid_space(self) -> dict[str, list[Any]]:
         """将 search_space 转换为 GridSampler 格式"""
