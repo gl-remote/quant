@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-vn.py 批量回测引擎
+vn.py 回测引擎 (纯执行器)
 
-基于 vnpy_ctastrategy.backtesting.BacktestingEngine 的回测流水线，
-封装数据加载 → 全量回测 → 报告生成。
+基于 vnpy_ctastrategy.backtesting.BacktestingEngine，接收 DataFrame + Strategy，
+返回结构化回测结果。不负责数据加载和策略创建。
 
 职责明确：
-  - VnpyBacktestEngine: 批量回测流水线 (vn.py)
+  - data 层负责数据加载
+  - optimizer 层负责策略创建/参数搜索
+  - backtest 层仅调用 vnpy 执行回测
 """
 
 from __future__ import annotations
@@ -18,9 +20,11 @@ import numpy as np
 import pandas as pd
 
 from strategies.core.base import Strategy
+from strategies.core import serialize_strategy_params
 from config.app_config import BacktestConfig
+from data.manager import DataManager
 
-from .walk_forward import df_to_vnpy_datalines, parse_symbol_exchange, filter_dataframe_by_date
+from .walk_forward import df_to_vnpy_datalines, parse_symbol_exchange
 from common.formatting import parse_percentage
 from common.formulas import profitable_ratio
 
@@ -28,30 +32,31 @@ logger = logging.getLogger(__name__)
 
 
 class VnpyBacktestEngine:
-    """vn.py 批量回测引擎
+    """vn.py 回测引擎 (纯执行器)
 
-    基于 vnpy_ctastrategy.backtesting.BacktestingEngine 的回测流水线，
-    封装数据加载 → 全量单次回测 → 报告生成。
-    Walk-Forward 作为稳健性分析独立提供。
+    接收 DataFrame + Strategy 列表，调用 vnpy BacktestingEngine 执行回测，
+    返回结构化结果字典。不关心数据从哪来、策略怎么创建。
 
     使用方式:
-        engine = VnpyBacktestEngine(backtest_config)
-        result = engine.run_full_pipeline(symbol, strategy=strategy)  # 单次全量回测
-        wf_result = engine.run_walk_forward(symbol)                  # Walk-Forward 验证
+        engine = VnpyBacktestEngine(backtest_config, data_manager)
+        results = engine.run(pairs)             # 多策略 × 多品种
+        wf_result = engine.run_walk_forward(    # 单策略 Walk-Forward
+            data, strategy, ...
+        )
     """
 
-    def __init__(self, backtest_config: BacktestConfig):
+    def __init__(self, backtest_config: BacktestConfig, dm: DataManager):
         """
         Args:
             backtest_config: 回测配置（含 capital/commission/slippage 等交易环境参数）
+            dm: 数据管理器，提供数据加载能力
         """
+        self._dm = dm
         self.initial_capital: float = float(backtest_config.initial_capital)
         self.commission_rate: float = float(backtest_config.commission_rate)
         self.slippage: float = float(backtest_config.slippage)
         self.price_tick: float = float(backtest_config.price_tick)
         self.contract_size: int = int(backtest_config.contract_size)
-
-        self.data_dir: str = backtest_config.data_dir
         self.interval: str = backtest_config.interval
 
         if self.initial_capital <= 0:
@@ -65,187 +70,119 @@ class VnpyBacktestEngine:
         if self.contract_size <= 0:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
 
-    @staticmethod
-    def _load_data(
-        data_dir: str, symbol: str,
-    ) -> pd.DataFrame | None:
-        """从本地 CSV 加载历史 K 线数据
+    # ── 公开接口 ──────────────────────────────────────────────
 
-        支持的文件命名: {symbol}.csv, {symbol}.{interval}.csv, {symbol}_*.csv
-
-        Args:
-            data_dir: CSV 文件存放目录
-            symbol: 品种代码 (e.g. DCE.m2509)
-
-        Returns:
-            DataFrame (datetime, open, high, low, close, volume)，失败返回 None
-        """
-        from pathlib import Path
-
-        csv_dir = Path(data_dir)
-        if not csv_dir.exists():
-            logger.error(f"数据目录不存在: {data_dir}")
-            return None
-
-        candidates = [
-            csv_dir / f"{symbol}.1m.csv",
-            csv_dir / f"{symbol}.csv",
-        ] + sorted(csv_dir.glob(f"{symbol}.*.csv")) + sorted(csv_dir.glob(f"{symbol}_*.csv"))
-
-        filepath = None
-        for fp in candidates:
-            if fp.exists():
-                filepath = fp
-                break
-
-        if filepath is None:
-            logger.error(f"未找到 {symbol} 的数据文件于 {data_dir}")
-            return None
-
-        logger.info(f"加载数据: {filepath}")
-        df = pd.read_csv(filepath)
-
-        if 'datetime' not in df.columns:
-            logger.error(f"CSV 缺少 datetime 列，实际列: {list(df.columns)}")
-            return None
-
-        df['datetime'] = pd.to_datetime(df['datetime'])
-        df = df.sort_values('datetime').reset_index(drop=True)
-
-        logger.info(
-            f"加载完成: {len(df)} 条 K 线, "
-            f"时间范围 {df['datetime'].min().strftime('%Y-%m-%d')} ~ {df['datetime'].max().strftime('%Y-%m-%d')}"
-        )
-        return df
-
-    @staticmethod
-    def _wrap_injected_strategy(base_cls, strategy: Strategy, price_tick: float):
-        """创建注入策略和 price_tick 的桥接器策略类
-
-        _InjectedStrategy 覆写 _load_default_core 为 no-op，
-        在 __init__ 返回后直接注入 _core 和 price_tick。
-        """
-        class _InjectedStrategy(base_cls):
-            def _load_default_core(self, _setting: object | None = None) -> None:
-                pass
-
-            def __init__(self, cta_engine: object, strategy_name: str, vt_symbol: str, setting: object) -> None:
-                super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-                self.price_tick = price_tick
-                self._core = strategy
-
-        return _InjectedStrategy
-
-    def run_full_pipeline(
+    def run(
         self,
-        symbol: str,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        strategy: Strategy | None = None,
-    ) -> dict[str, Any]:
-        """执行完整的回测流水线
+        pairs: list[tuple[str, pd.DataFrame, Strategy]],
+    ) -> list[dict[str, Any]]:
+        """执行多策略 × 多品种回测
 
-        流水线步骤:
-          1. 加载CSV数据
-          2. 全量单次回测
-          3. 生成报告
+        每个品种创建一个 vnpy engine，注册该品种的所有策略，一次回放拿到多组结果。
 
         Args:
-            symbol: 合约代码 (e.g. DCE.m2509)
-            start_date: 数据起始日期 (可选过滤)
-            end_date: 数据结束日期 (可选过滤)
-            strategy: 策略实例 (可选)。参数搜索场景传入独立 strategy，
-                     每个参数组合持有独立实例，互不干扰。
-                     为 None 时使用默认 MaStrategyCore。
+            pairs: [(symbol, DataFrame, Strategy), ...] 数据与策略的配对
 
         Returns:
-            回测结果字典
+            list[dict]，每个 dict:
+              - symbol, strategy_name, strategy_version
+              - statistics, daily_results
+              - start_date, end_date
+              - engine_config
+              - success, error (如果失败)
         """
         logger.info(f"{'=' * 60}")
-        logger.info(f"启动 vn.py 回测: {symbol}")
+        logger.info(f"启动 vn.py 回测: {len(pairs)} 个配对")
         logger.info(f"资金={self.initial_capital:,.0f} "
                      f"费率={self.commission_rate:.4%} 滑点={self.slippage}")
         logger.info(f"{'=' * 60}")
 
-        # ---- 步骤1: 加载数据 ----
-        df = self._load_data(self.data_dir, symbol)
-        if df is None or df.empty:
-            logger.error("数据加载失败，终止回测")
-            return {'success': False, 'error': '数据加载失败'}
+        # 按 DataFrame 分组，同一份数据共用一个 vnpy engine
+        from collections import defaultdict
+        groups: dict[int, list[tuple[str, Strategy]]] = defaultdict(list)
+        df_map: dict[int, pd.DataFrame] = {}
+        for sym, df, strategy in pairs:
+            df_id = id(df)
+            groups[df_id].append((sym, strategy))
+            df_map[df_id] = df
 
-        df = filter_dataframe_by_date(df, start_date, end_date)
-        data_start = str(df['datetime'].iloc[0])[:10]
-        data_end = str(df['datetime'].iloc[-1])[:10]
-        logger.info(f"数据加载完成: {len(df)} 条, "
-                     f"{df['datetime'].iloc[0]} ~ {df['datetime'].iloc[-1]}")
+        results: list[dict[str, Any]] = []
+        for df_id, items in groups.items():
+            df = df_map[df_id]
+            symbols = [sym for sym, _ in items]
+            strategies = [s for _, s in items]
+            symbol = symbols[0]  # 用第一个 symbol 作为主标识
 
-        # ---- 步骤2: 全量回测 ----
-        logger.info("\n>>> 执行全量回测")
-        result = self._run_backtest(df, symbol, 'full', strategy=strategy)
-        if 'error' in result:
-            logger.error(f"全量回测失败 [{symbol}]: {result['error']}")
-            return {'success': False, 'error': result['error'], 'symbol': symbol}
+            logger.info(f"\n>>> 品种: {symbol} ({len(strategies)} 个策略)")
 
-        return {
-            'success': True,
-            'symbol': symbol,
-            'result': result,
-            'start_date': data_start,
-            'end_date': data_end,
-            'engine_config': {
-                'initial_capital': self.initial_capital,
-                'commission_rate': self.commission_rate,
-                'slippage': self.slippage,
-                'price_tick': self.price_tick,
-                'contract_size': self.contract_size,
-                'kline_interval': self.interval,
-            },
-        }
+            data_start = str(df['datetime'].iloc[0])[:10]
+            data_end = str(df['datetime'].iloc[-1])[:10]
+            logger.info(f"数据: {len(df)} 条, {data_start} ~ {data_end}")
+
+            batch_results = self._run_backtest(df, symbol, strategies)
+            for i, r in enumerate(batch_results):
+                strategy = strategies[i]
+                results.append({
+                    'success': 'error' not in r,
+                    'symbol': symbols[i] if i < len(symbols) else symbol,
+                    'strategy_name': type(strategy).__name__,
+                    'strategy_version': getattr(strategy, 'VERSION', None),
+                    'strategy_params_json': serialize_strategy_params(strategy),
+                    'statistics': r.get('statistics', {}),
+                    'daily_results': r.get('daily_results', []),
+                    'start_date': data_start,
+                    'end_date': data_end,
+                    'engine_config': {
+                        'initial_capital': self.initial_capital,
+                        'commission_rate': self.commission_rate,
+                        'slippage': self.slippage,
+                        'price_tick': self.price_tick,
+                        'contract_size': self.contract_size,
+                        'kline_interval': self.interval,
+                    },
+                    'error': r.get('error'),
+                })
+
+        succeeded = sum(1 for r in results if r['success'])
+        logger.info(f"\n回测完成: {succeeded}/{len(results)} 成功")
+        return results
 
     def run_walk_forward(
         self,
+        data: pd.DataFrame,
         symbol: str,
-        start_date: str | None = None,
-        end_date: str | None = None,
+        strategy: Strategy,
         train_size: int | None = None,
         val_size: int | None = None,
         test_size: int | None = None,
         step: int | None = None,
     ) -> dict[str, Any]:
-        """执行 Walk-Forward 时间序列验证回测 (固定参数, 无优化)
+        """执行 Walk-Forward 时间序列验证回测
 
         对数据滚动产生多个窗口，每个窗口在训练集(in-sample)和测试集
-        (out-of-sample)上分别回测，最后汇总 OOS 平均表现。相比单次全量
-        回测，Walk-Forward 能:
-          - 模拟策略在时间推进中的实际表现
-          - 评估策略稳健性（各窗口指标的标准差）
-          - 对比 IS-OOS 差距识别过拟合风险
+        (out-of-sample)上分别回测，最后汇总 OOS 平均表现。
 
         Args:
+            data: K 线数据 (已由调用方加载和日期过滤)
             symbol: 合约代码
-            start_date/end_date: 数据过滤
+            strategy: 策略实例
             train_size/val_size/test_size/step: 窗口参数，
                 为 None 时按比例自动计算 (60%/20%/20%, step=10%)
 
         Returns:
             walk_forward 结果字典:
-              - windows: 窗口数
-              - window_results: 各窗口 IS/OOS 指标列表
-              - aggregate: OOS 聚合统计 + IS-OOS 差距
+              - windows, window_results, aggregate
         """
         from .walk_forward import walk_forward_split_by_ratio, walk_forward_split
 
-        df = self._load_data(self.data_dir, symbol)
-        if df is None or df.empty:
-            return {'success': False, 'error': '数据加载失败', 'windows': 0}
-
-        df = filter_dataframe_by_date(df, start_date, end_date)
+        if data is None or data.empty:
+            return {'success': False, 'error': '数据为空', 'windows': 0}
 
         if train_size is not None and val_size is not None and test_size is not None:
             step_val = step or max(1, test_size // 2)
-            windows = walk_forward_split(df, train_size, val_size, test_size, step_val)
+            windows = walk_forward_split(data, train_size, val_size, test_size, step_val)
         else:
-            windows = walk_forward_split_by_ratio(df)
+            windows = walk_forward_split_by_ratio(data)
 
         if not windows:
             return {'success': False, 'error': '无法生成窗口', 'windows': 0}
@@ -255,8 +192,11 @@ class VnpyBacktestEngine:
         window_results = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
             logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
-            train_result = self._run_backtest(train_df, symbol, f'wf_{wi}_train')
-            test_result = self._run_backtest(test_df, symbol, f'wf_{wi}_test')
+            train_results = self._run_backtest(train_df, symbol, [strategy])
+            test_results = self._run_backtest(test_df, symbol, [strategy])
+
+            train_result = train_results[0] if train_results else {}
+            test_result = test_results[0] if test_results else {}
 
             if 'error' in train_result or 'error' in test_result:
                 logger.warning(
@@ -311,7 +251,9 @@ class VnpyBacktestEngine:
             'max_drawdown_worst': float(np.max(drawdowns)),
             'win_rate_mean': float(np.mean(win_rates)),
             'win_rate_std': float(np.std(win_rates)),
-            'positive_window_ratio': profitable_ratio(int(np.sum(arr_returns > 0)), len(arr_returns)),
+            'positive_window_ratio': profitable_ratio(
+                int(np.sum(arr_returns > 0)), len(arr_returns),
+            ),
             'stability_score': float(max(0.0, min(1.0,
                 1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9)
             ))),
@@ -334,6 +276,31 @@ class VnpyBacktestEngine:
             'aggregate': aggregate,
         }
 
+    # ── 内部方法 ──────────────────────────────────────────────
+
+    @staticmethod
+    def _wrap_injected_strategy(
+        base_cls: type, strategy: Strategy, price_tick: float,
+    ) -> type:
+        """创建注入了策略实例和 price_tick 的桥接器策略类
+
+        _InjectedStrategy 覆写 _load_default_core 为 no-op，
+        在 __init__ 返回后直接注入 _core 和 price_tick。
+        """
+        class _InjectedStrategy(base_cls):
+            def _load_default_core(self, _setting: object | None = None) -> None:
+                pass
+
+            def __init__(
+                self, cta_engine: object, strategy_name: str,
+                vt_symbol: str, setting: object,
+            ) -> None:
+                super().__init__(cta_engine, strategy_name, vt_symbol, setting)
+                self.price_tick = price_tick
+                self._core = strategy
+
+        return _InjectedStrategy
+
     def _build_setting(self) -> dict[str, Any]:
         return {'price_tick': self.price_tick}
 
@@ -341,27 +308,30 @@ class VnpyBacktestEngine:
         self,
         df: pd.DataFrame,
         symbol: str,
-        dataset_name: str,
-        strategy: Strategy | None = None,
-    ) -> dict[str, Any]:
+        strategies: list[Strategy],
+    ) -> list[dict[str, Any]]:
         """在单个数据集上执行 vnpy 回测
+
+        创建一个 vnpy BacktestingEngine，注册所有策略，一次回放拿到所有结果。
+        每个策略运行前自动 reset()。
 
         Args:
             df: K 线数据
             symbol: 品种代码
-            dataset_name: 数据集标识 (用于日志)
-            strategy: 策略实例 (可选)。参数搜索时传入独立 strategy，
-                     为 None 时创建默认 MaStrategyCore。
+            strategies: 策略实例列表
+
+        Returns:
+            list[dict]，每个 dict:
+              - statistics, daily_results
+              - error (如果失败)
         """
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Interval
         from strategies.bridges import VnpyStrategyBridge
-        from strategies.ma_strategy import MaStrategyCore
 
         pure_symbol, exchange_code = parse_symbol_exchange(symbol)
         vt_symbol = f"{pure_symbol}.{exchange_code}"
 
-        # 优先使用 vnpy 细分 Interval (MINUTE_5/MINUTE_15 等)，不存在则回退到 MINUTE
         _interval_map = {
             '1m': getattr(Interval, 'MINUTE', Interval.MINUTE),
             '5m': getattr(Interval, 'MINUTE_5', Interval.MINUTE),
@@ -372,49 +342,53 @@ class VnpyBacktestEngine:
         }
         interval = _interval_map.get(self.interval, Interval.DAILY)
 
-        engine = BacktestingEngine()
-        engine.set_parameters(
-            vt_symbol=vt_symbol,
-            interval=interval,
-            start=df['datetime'].iloc[0].to_pydatetime(),
-            end=df['datetime'].iloc[-1].to_pydatetime(),
-            rate=self.commission_rate,
-            slippage=self.slippage,
-            size=self.contract_size,
-            pricetick=self.price_tick,
-            capital=int(self.initial_capital),
-        )
-
+        bars = df_to_vnpy_datalines(df, vt_symbol, interval)
         setting = self._build_setting()
 
-        if strategy is None:
-            strategy = MaStrategyCore()
+        results: list[dict[str, Any]] = []
+        for strategy in strategies:
+            strategy.reset()
+            strategy_cls = self._wrap_injected_strategy(
+                VnpyStrategyBridge, strategy, self.price_tick,
+            )
 
-        strategy.reset()
+            engine = BacktestingEngine()
+            engine.set_parameters(
+                vt_symbol=vt_symbol,
+                interval=interval,
+                start=df['datetime'].iloc[0].to_pydatetime(),
+                end=df['datetime'].iloc[-1].to_pydatetime(),
+                rate=self.commission_rate,
+                slippage=self.slippage,
+                size=self.contract_size,
+                pricetick=self.price_tick,
+                capital=int(self.initial_capital),
+            )
+            engine.add_strategy(strategy_cls, setting)
+            engine.history_data = bars
 
-        strategy_cls = self._wrap_injected_strategy(
-            VnpyStrategyBridge, strategy, self.price_tick,
-        )
-        engine.add_strategy(strategy_cls, setting)
+            try:
+                engine.run_backtesting()
+                daily_results = engine.calculate_result()
+                statistics = engine.calculate_statistics()
+            except Exception as e:
+                logger.error(
+                    f"回测执行异常 [{symbol}][{type(strategy).__name__}]: {e}",
+                    exc_info=True,
+                )
+                results.append({
+                    'statistics': {},
+                    'daily_results': [],
+                    'error': str(e),
+                })
+                continue
 
-        bars = df_to_vnpy_datalines(df, vt_symbol, interval)
-        engine.history_data = bars
+            results.append({
+                'statistics': statistics,
+                'daily_results': (
+                    daily_results.to_dict('records')
+                    if daily_results is not None else []
+                ),
+            })
 
-        try:
-            engine.run_backtesting()
-            daily_results = engine.calculate_result()
-            statistics = engine.calculate_statistics()
-        except Exception as e:
-            logger.error(f"回测执行异常 [{symbol}][{dataset_name}]: {e}", exc_info=True)
-            return {
-                'dataset_name': dataset_name,
-                'statistics': {},
-                'daily_results': [],
-                'error': str(e),
-            }
-
-        return {
-            'dataset_name': dataset_name,
-            'statistics': statistics,
-            'daily_results': daily_results.to_dict('records') if daily_results is not None else [],
-        }
+        return results

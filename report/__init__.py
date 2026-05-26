@@ -4,10 +4,11 @@
 
 从数据库读取回测数据，生成文字报告和交互式 HTML 可视化。
 
-  - single.py:  单次回测文字报告 (format_single_report)
-  - summary.py: 回测记录汇总 (format_summary_report)
-  - charts.py:  plotly 图表生成
-  - _html.py:   HTML 模板渲染
+  - single.py:          单次回测文字报告 (format_single_report)
+  - summary.py:         回测记录汇总 (format_summary_report)
+  - charts.py:          plotly 图表生成
+  - _html.py:           HTML 模板渲染
+  - optimizer_report.py: Optuna 优化看板 (build_optimizer_report)
 """
 
 from pathlib import Path
@@ -16,6 +17,7 @@ from data import DataManager
 from .reports import format_single_report, format_summary_report
 from .charts import create_figure
 from ._html import render_html
+from .optimizer_report import build_optimizer_report
 
 
 def build_report(
@@ -57,4 +59,5 @@ __all__ = [
     'format_single_report',
     'format_summary_report',
     'build_report',
+    'build_optimizer_report',
 ]

@@ -113,3 +113,31 @@ modules = []               # 未来可扩展：
 [system.logging]
 level = "INFO"
 format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# ============================================================
+# 参数优化器配置
+# ============================================================
+[optimizer]
+enabled = true
+engine = "grid"                 # grid: 穷举搜索 | optuna: 贝叶斯优化
+n_trials = 50                   # optuna 最大试验次数
+
+# grid 搜索空间
+[optimizer.param_grid]
+sma_short = [5, 10, 20]
+sma_long = [15, 30, 60]
+
+# optuna 搜索空间 (当 engine="optuna" 时生效)
+# type: int/float/categorical
+# int/float 需提供 low/high/step
+[optimizer.search_space.sma_short]
+type = "int"
+low = 5
+high = 50
+step = 5
+
+[optimizer.search_space.sma_long]
+type = "int"
+low = 10
+high = 100
+step = 5

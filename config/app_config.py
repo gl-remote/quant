@@ -102,6 +102,29 @@ class StrategyItemConfig(BaseModel):
 
 
 # ============================================================
+# 参数优化
+# ============================================================
+
+
+class OptimizerConfig(BaseModel):
+    """参数优化器配置。
+
+    engine: "grid" — 穷举网格搜索; "optuna" — 贝叶斯优化
+    param_grid: grid 引擎专用，{param: [v1, v2, ...]}
+    search_space: optuna 引擎专用，{param: {type, low, high, step}}
+    n_trials: optuna 最大试验次数
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    engine: str = "grid"  # grid | optuna
+    n_trials: int = 50
+    param_grid: dict[str, list[Any]] = Field(default_factory=dict)
+    search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+# ============================================================
 # 数据切分
 # ============================================================
 
@@ -264,6 +287,7 @@ class ProjectConfig(BaseModel):
     data: DataConfig = Field(default_factory=DataConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
+    optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
     third_party: ThirdPartyConfig = Field(default_factory=ThirdPartyConfig)
     account: AccountInfo | None = None

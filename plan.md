@@ -32,9 +32,12 @@ main.py (19 行转发器) → cli/ (命令行子包)
 │   ├── core/            Strategy ABC + Bar/Signal/Fill/Position 类型
 │   ├── bridges/         vnpy 桥接 + 天勤桥接 (协议转换层)
 │   └── ma_strategy.py  双均线策略 (82 行, 100% 覆盖)
-├── backtest/            回测引擎
+├── backtest/            回测引擎 (纯执行器)
 │   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
-│   └── data_loader.py           CSV 加载 / 窗口切分
+│   └── walk_forward.py          时间窗口切分
+├── optimizer/           参数搜索 (S1·A11 ✅)
+│   ├── grid_search.py           网格搜索 (GridOptimizer)
+│   └── optuna_search.py         Optuna 贝叶斯优化 (OptunaOptimizer)
 ├── data/                数据层
 │   ├── store.py          SQLite + peewee ORM (155 行, 92% 覆盖)
 │   ├── models.py         Pydantic + ORM 模型 (178 行, 100% 覆盖)
@@ -72,6 +75,7 @@ main.py (19 行转发器) → cli/ (命令行子包)
 | **Pydantic + peewee ORM** | 单条记录 Pydantic 校验 + 持久层 peewee ORM，完整类型安全 |
 | **CLI 子包化** | `main.py` 为 19 行转发器，命令实现在 `cli/commands/`，每个命令独立模块 |
 | **common/ 零依赖** | 纯函数、零 I/O、零副作用，可被所有模块安全引用 |
+| **Engine 纯执行** | Engine 只调 vnpy，数据加载走 DataManager，策略创建走 optimizer/CLI，不耦合具体策略类或 CSV 文件系统 |
 
 ### 1.4 近期变更 (2026-05-25)
 
@@ -125,7 +129,7 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 编号 | 行动 | 优先级 | 状态 | 交付物 |
 |------|------|--------|------|--------|
 | A12 | 回测结果本地可视化 | **高** | 🟡 部分完成 | `report/charts.py` — Plotly 多子图 (资金曲线+回撤+交易标注) + `report/_html.py` HTML 模板，`build_report()` 已通。**待完善**: 参数对比图、多策略叠加、信号详细标注 |
-| A11 | 内置参数优化模块（网格搜索） | **高** | ⬜ 未开始 | `optimizer/` — 参数网格定义、并发评估、最优参数输出 |
+| A11 | 内置参数优化模块（网格搜索 + Optuna） | **高** | ✅ 已完成 | `optimizer/` — `GridOptimizer` 穷举搜索 + `OptunaOptimizer` 贝叶斯优化。CLI `--optimizer grid|optuna` 可选 |
 | S1-DOC | 策略开发指南 | 中 | ⬜ 未开始 | `docs/strategy-guide.md` — 如何新增策略、调优流程 |
 
 **S1 验收**: 跑一次完整流程 — 网格搜索均线参数 → 可视化最优 vs 默认对比图
@@ -292,3 +296,78 @@ A11/A12      A14+迭代     A15/A17      A16/A18
 | 0.2.0-dev | 2026-05-25 | 第三次审计：移除双重绩效系统；symbols_data 扁平化；peewee ORM；lib→common；回测与报告解耦 |
 | 0.2.0-dev | 2026-05-24 | backtest 两轮审计修复 (15 项 Bug/缺陷)；DB 持久化 + cmd_report；S1-S4 四阶段规划 |
 | 0.1.0 | 2026-05-24 | Beta 里程碑：策略/回测/数据/实盘完备 |
+
+---
+
+## 七、Engine 重构设计 (2026-05-26)
+
+> 将当前 CLI/Engine 职责重叠（数据加载 + 策略创建）彻底分离，并为 S1 参数搜索铺平道路。
+
+### 7.1 目标架构
+
+```
+data/              加载 K 线 + 元数据查询 + 持久化 (不变)
+optimizer/         参数搜索，产出 N 个 Strategy 变体 (新建)
+backtest/          纯执行器：调 vnpy，不管数据来源和策略创建
+CLI/               编排 data + optimizer + backtest，结果持久化
+```
+
+### 7.2 Engine 接口
+
+```python
+class BacktestEngine:
+    def __init__(self, backtest_config: BacktestConfig, dm: DataManager)
+        # 不再需要 data_dir，数据加载走 dm
+
+    def run(self, pairs: list[tuple[DataFrame, Strategy]]) -> list[dict]
+        # 多策略 × 多品种，外层按 DataFrame 分组
+        # 每个品种共用一个 vnpy engine，一次回放跑 N 个策略
+        # 返回 list[dict]，每个 dict = (strategy_name, symbol, statistics, daily_results)
+
+    def run_walk_forward(
+        self, data: DataFrame, strategy: Strategy,
+        train_size=None, val_size=None, test_size=None, step=None,
+    ) -> dict
+        # 内部切时间窗口，每窗口调 vnpy，聚合 OOS 结果
+        # 策略元信息从实例自取: type(s).__name__, getattr(s, 'VERSION')
+```
+
+**关键约束**:
+- Engine 不再 import 任何具体策略类 (不再有 `from strategies.ma_strategy import MaStrategyCore`)
+- Engine 不再扫描 CSV 文件系统 (不再有 `_load_data` 方法)
+- 多策略共用一个 vnpy engine，一次回放拿到所有策略结果
+
+### 7.3 调用流程
+
+```
+backtest --mode search (默认):
+
+  CLI: dm.load_kline_safe(symbol) → list[(symbol, DataFrame)]
+  CLI: optimizer.generate(strategy_cls, param_grid) → list[Strategy]
+  CLI: pairs = itertools.product(datasets, strategies)
+  CLI: results = engine.run(pairs)
+  CLI: _persist_results(dm, results)
+
+
+backtest --mode walk-forward:
+
+  CLI: dm.load_kline_safe(symbol) → DataFrame
+  CLI: strategy = load_strategy(...) → Strategy × 1
+  CLI: result = engine.run_walk_forward(data, strategy)
+  CLI: _persist_results(dm, [result])
+
+
+单标 --symbol 无 --pattern:  走 TqSdk (不变)
+```
+
+### 7.4 持久化
+
+- Engine 返回结构化 dict，不碰 DataManager
+- CLI 抽 `_persist_results(dm, results)` 统一处理: statistics / daily_results / trades / engine_config
+- 不新建中间 reporter 层，规模未到
+
+### 7.5 暂不处理
+
+- W-F 不叠加参数搜索
+- W-F 窗口参数沿用现有四个参数
+- optimizer 模块在 S1·A11 实现

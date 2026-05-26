@@ -9,14 +9,22 @@
     - 批量模式: 使用 vn.py 进行批量回测，生成文字报告并落地数据
     - 无缝切换: 根据标的数量自动选择合适的回测引擎
     - 数据落地: 回测结果统一持久化到数据库
+
+模式:
+    - search (默认): 参数搜索回测，optimizer 产多策略 × 多品种
+    - walk-forward: 单策略滚动验证，评估稳健性
 """
 
 import argparse
+import itertools
 import logging
+import os
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 from config import ConfigManager
 from data import DataManager
@@ -37,6 +45,7 @@ from strategies.core import (
     get_strategy_class_name,
     serialize_strategy_params,
 )
+from optimizer import GridOptimizer, OptunaOptimizer
 from common.formulas import calculate_fifo_profit
 
 logger = logging.getLogger(__name__)
@@ -44,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 def get_git_hash() -> str | None:
     """获取当前 Git 提交的短哈希值（7位）
-    
+
     Returns:
         Git 提交哈希，如果不在 git 仓库中则返回 None
     """
@@ -80,6 +89,7 @@ def cmd_backtest(args: argparse.Namespace) -> None:
             strategy: 策略名称（必填）
             capital: 初始资金（默认从配置文件读取）
             gui: 是否启用图形界面（仅单标的模式生效）
+            mode: 回测模式 search|walk-forward (默认 search)
     """
     cm = ConfigManager()
     dm = DataManager(cm)
@@ -231,7 +241,14 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
 
 
 def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManager") -> None:
-    """使用 vn.py 执行批量回测"""
+    """使用 vn.py 执行批量回测
+
+    编排 data → optimizer → backtest 三层，结果持久化到数据库。
+
+    模式:
+      - search:  参数搜索，多策略 × 多品种
+      - walk-forward: 单策略滚动验证
+    """
     from backtest import VnpyBacktestEngine
 
     strategy_name: str = args.strategy  # pyright: ignore[reportAny]
@@ -240,146 +257,386 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
     start_arg: str | None = args.start  # pyright: ignore[reportAny]
     end_arg: str | None = args.end  # pyright: ignore[reportAny]
     capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
+    mode: str = args.mode  # pyright: ignore[reportAny]
+    optimizer_arg: str | None = args.optimizer  # pyright: ignore[reportAny]
 
     try:
         bc = cm.get_backtest_config()
 
+        # ── 数据加载 ──
         if symbol_arg and not pattern_arg:
-            symbols = [(symbol_arg, None)]
-            mode = MODE_SINGLE
+            symbol_list = [symbol_arg]
+            mode_label = MODE_SINGLE
         else:
-            symbols = [(sym, None) for sym in dm.search_symbols(pattern_arg or "")]
-            if not symbols:
+            symbol_list = dm.search_symbols(pattern_arg or "")
+            if not symbol_list:
                 logger.error("未找到匹配的品种数据")
-                dm.store.log('backtest', "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
+                dm.store.log('backtest', "未找到匹配的品种数据",
+                             symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
                 return
-            mode = MODE_BATCH
+            mode_label = MODE_BATCH
 
-        mode_label = "单品种" if mode == MODE_SINGLE else "批量"
-        logger.info("%s回测: %d 个品种 strategy=%s", mode_label, len(symbols), strategy_name)
+        mode_name = "参数搜索" if mode == "search" else "Walk-Forward"
+        logger.info("%s回测: %d 个品种 strategy=%s mode=%s",
+                     "批量" if mode_label == MODE_BATCH else "单品种",
+                     len(symbol_list), strategy_name, mode_name)
 
-        all_results: list[dict[str, Any]] = []  # pyright: ignore[reportExplicitAny]
-        failed: list[str] = []
-        params_json = "{}"
-        strat_cls_name = strategy_name
-        strategy_version: str | None = None
-        for sym, _ in symbols:
-            sc = cm.get_trading_config(strategy_name)
-            strategy_params = sc.model_dump(exclude={"name", "enabled"})
-            capital = capital_arg if capital_arg else bc.initial_capital
+        datasets: list[tuple[str, pd.DataFrame]] = []
+        for sym in symbol_list:
+            df = dm.load_kline_safe(sym, start_arg, end_arg, bc.interval)
+            if df is None or df.empty:
+                logger.warning(f"跳过 {sym}: 数据加载失败")
+                continue
+            datasets.append((sym, df))
+
+        if not datasets:
+            logger.error("所有品种数据加载失败")
+            return
+
+        # ── 策略配置 ──
+        sc = cm.get_trading_config(strategy_name)
+        strategy_params = sc.model_dump(exclude={"name", "enabled"})
+        capital = capital_arg if capital_arg else bc.initial_capital
+
+        # ── 引擎执行 ──
+        engine = VnpyBacktestEngine(bc, dm)
+        git_hash = get_git_hash()
+
+        if mode == "walk-forward":
+            # W-F: 单策略 × 单品种，内部切窗口
             strategy = load_strategy(
                 strategy_name,
                 strategy_params=strategy_params,
                 capital=capital,
                 contract_size=bc.contract_size,
             )
-            params_json = serialize_strategy_params(strategy)
-            strat_cls_name = get_strategy_class_name(strategy)
-            strategy_version = getattr(strategy, 'VERSION', None)
+            sym = datasets[0][0]
+            df = datasets[0][1]
+            wf_result = engine.run_walk_forward(data=df, symbol=sym, strategy=strategy)
 
-            engine = VnpyBacktestEngine(bc)
-            try:
-                result = engine.run_full_pipeline(
-                    symbol=sym,
-                    start_date=start_arg or None,
-                    end_date=end_arg or None,
-                    strategy=strategy,
-                )
-                all_results.append(result)
-                if not result.get('success'):
-                    failed.append(sym)
-            except Exception as e:
-                logger.error(f"{sym} 回测异常: {e}", exc_info=True)
-                all_results.append({'success': False, 'symbol': sym, 'error': str(e)})
-                failed.append(sym)
-
-        succeeded = [r for r in all_results if r.get('success')]
-        logger.info(
-            f"回测完成: {len(succeeded)}/{len(all_results)} 成功"
-            + (f", 失败: {failed}" if failed else "")
-        )
-
-        bt_ids: list[int] = []
-        git_hash = get_git_hash()
-        for r in all_results:
-            if r.get('success'):
-                st = r['result'].get('statistics', {})
-                dr = r['result'].get('daily_results', [])
-                ec = r.get('engine_config', {})
+            if wf_result.get('success'):
+                # 将 W-F 聚合结果作为一条回测记录落地
                 bt_id = dm.insert_backtest(
-                    symbol=r['symbol'],
-                    strategy=strat_cls_name,
+                    symbol=sym,
+                    strategy=get_strategy_class_name(strategy),
                     status=STATUS_SUCCESS,
                     error_message=None,
-                    statistics=st,
-                    engine_config=ec,
-                    params_json=params_json,
-                    start_date=r.get('start_date'),
-                    end_date=r.get('end_date'),
-                    strategy_version=strategy_version,
+                    statistics=wf_result.get('aggregate', {}),
+                    engine_config={'type': 'vnpy', 'mode': 'walk-forward',
+                                   'windows': wf_result.get('windows', 0)},
+                    params_json=serialize_strategy_params(strategy),
+                    start_date=start_arg,
+                    end_date=end_arg,
+                    strategy_version=getattr(strategy, 'VERSION', None),
                     git_hash=git_hash,
                 )
-                bt_ids.append(bt_id)
-                
-                if dr:
-                    # 1. 保存交易明细（从 daily_results 中提取 trades）
-                    trades = []
-                    for daily in dr:
-                        if 'trades' in daily:
-                            trades.extend(daily.get('trades', []))
-                    if trades:
-                        trade_count = dm.insert_backtest_trades(bt_id, trades)
-                        logger.debug(f"  {r['symbol']}: 写入 {trade_count} 条交易明细")
-                    
-                    # 2. 保存每日资金曲线
-                    daily_count = dm.insert_backtest_daily(bt_id, dr)
-                    logger.debug(f"  {r['symbol']}: 写入 {daily_count} 条每日资金曲线")
-                
-                logger.info(f"\n>>> [{r['symbol']}] 回测完成 id={bt_id}")
-
-                # 输出回测摘要
-                st = r['result'].get('statistics', {})
-                total_return = st.get('total_return', 0)
-                sharpe = st.get('sharpe_ratio', 0)
-                trades_count = st.get('total_trades', 0)
-                print(f"\n  [{r['symbol']}] 收益率={total_return:.2%}  夏普={sharpe:.2f}  交易={trades_count}次")
+                logger.info(f"Walk-Forward 完成: id={bt_id}, "
+                            f"窗口={wf_result.get('windows', 0)}")
+                print(f"\n💡 查看报告: python main.py report --id {bt_id}")
+                dm.store.log('backtest',
+                             f"Walk-Forward 完成: {sym} {wf_result.get('windows', 0)} 窗口",
+                             symbol=sym, status=LOG_STATUS_SUCCESS)
             else:
-                _ = dm.insert_backtest(
-                    symbol=r.get('symbol', 'unknown'),
-                    strategy=strat_cls_name,
-                    status=STATUS_FAILED,
-                    error_message=r.get('error'),
-                    statistics={},
-                    engine_config={},
-                    params_json=params_json,
-                    start_date=None,
-                    end_date=None,
-                )
-
-        persisted = len(bt_ids)
-        if persisted > 0:
-            logger.info(f"回测结果已写入数据库: {persisted} 条成功")
-            if mode == MODE_BATCH:
-                ids_str = ', '.join(str(i) for i in bt_ids)
-                print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
-            else:
-                print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
-
-        if succeeded:
-            msg = (
-                f"{'批量' if mode == MODE_BATCH else ''}回测完成: "
-                + f"{len(succeeded)}/{len(all_results)}, "
-                + f"已写入 {persisted} 条 DB 记录"
-            )
-            dm.store.log('backtest', msg,
-                   symbol=MODE_MULTI if mode == MODE_BATCH else symbol_arg,
-                   status=LOG_STATUS_SUCCESS)
+                logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
+                dm.store.log('backtest',
+                             f"Walk-Forward 失败: {wf_result.get('error')}",
+                             symbol=sym, status=LOG_STATUS_ERROR)
         else:
-            dm.store.log('backtest', f"回测全部失败",
-                   symbol=MODE_MULTI if mode == MODE_BATCH else symbol_arg,
-                   status=LOG_STATUS_ERROR)
+            # ── search 模式: optimizer 调度 engine ──
+            optimizer_cfg = cm._config.optimizer
+            # CLI 参数优先，其次 TOML engine 字段
+            opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
+
+            if opt_engine == "optuna" and optimizer_cfg.search_space:
+                _run_optuna_search(
+                    engine=engine, datasets=datasets,
+                    strategy_name=strategy_name,
+                    search_space=optimizer_cfg.search_space,
+                    strategy_params=strategy_params,
+                    capital=capital,
+                    contract_size=bc.contract_size,
+                    n_trials=optimizer_cfg.n_trials,
+                    dm=dm, git_hash=git_hash,
+                )
+            else:
+                _run_grid_search(
+                    engine=engine, datasets=datasets,
+                    strategy_name=strategy_name,
+                    param_grid=optimizer_cfg.param_grid,
+                    strategy_params=strategy_params,
+                    capital=capital,
+                    contract_size=bc.contract_size,
+                    optimizer_enabled=optimizer_cfg.enabled,
+                    dm=dm, git_hash=git_hash,
+                )
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
-        dm.store.log('backtest', f"失败: {e}", symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
+        dm.store.log('backtest', f"失败: {e}",
+                     symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
+
+
+def _persist_results(
+    dm: DataManager,
+    results: list[dict[str, Any]],
+    git_hash: str | None,
+) -> list[int]:
+    """将引擎返回的结构化回测结果持久化到数据库
+
+    每个 result dict 自包含 strategy_name / strategy_params_json /
+    strategy_version，不再需要外部统一传入。
+
+    Args:
+        dm: 数据管理器
+        results: engine.run() 返回的结果列表
+        git_hash: Git 提交哈希
+
+    Returns:
+        成功写入的 backtest ID 列表
+    """
+    bt_ids: list[int] = []
+    for r in results:
+        if r.get('success'):
+            st = r.get('statistics', {})
+            dr = r.get('daily_results', [])
+            ec = r.get('engine_config', {})
+
+            bt_id = dm.insert_backtest(
+                symbol=r['symbol'],
+                strategy=r.get('strategy_name', ''),
+                status=STATUS_SUCCESS,
+                error_message=None,
+                statistics=st,
+                engine_config=ec,
+                params_json=r.get('strategy_params_json', '{}'),
+                start_date=r.get('start_date'),
+                end_date=r.get('end_date'),
+                strategy_version=r.get('strategy_version'),
+                git_hash=git_hash,
+            )
+            bt_ids.append(bt_id)
+
+            if dr:
+                # 1. 保存交易明细
+                trades = []
+                for daily in dr:
+                    if 'trades' in daily:
+                        trades.extend(daily.get('trades', []))
+                if trades:
+                    dm.insert_backtest_trades(bt_id, trades)
+
+                # 2. 保存每日资金曲线
+                dm.insert_backtest_daily(bt_id, dr)
+
+            logger.info(f"[{r['symbol']}] 回测完成 id={bt_id}")
+
+            # 输出回测摘要
+            total_return = st.get('total_return', 0)
+            sharpe = st.get('sharpe_ratio', 0)
+            trades_count = st.get('total_trades', 0)
+            print(f"  [{r['symbol']}] {r.get('strategy_name', '')} "
+                  f"收益率={total_return:.2%}  夏普={sharpe:.2f}  交易={trades_count}次")
+        else:
+            _ = dm.insert_backtest(
+                symbol=r.get('symbol', 'unknown'),
+                strategy=r.get('strategy_name', ''),
+                status=STATUS_FAILED,
+                error_message=r.get('error'),
+                statistics={},
+                engine_config={},
+                params_json=r.get('strategy_params_json', '{}'),
+                start_date=None,
+                end_date=None,
+            )
+
+    persisted = len(bt_ids)
+    if persisted > 0:
+        logger.info(f"回测结果已写入数据库: {persisted} 条成功")
+        if persisted == 1:
+            print(f"\n💡 查看详细报告: python main.py report --id {bt_ids[0]}")
+        else:
+            ids_str = ', '.join(str(i) for i in bt_ids)
+            print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
+
+    return bt_ids
+
+
+# ──────────────────────────────────────────────────────────────
+# search 模式辅助函数
+# ──────────────────────────────────────────────────────────────
+
+
+def _run_grid_search(
+    engine: "VnpyBacktestEngine",
+    datasets: list[tuple[str, pd.DataFrame]],
+    strategy_name: str,
+    param_grid: dict[str, list[Any]],
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    optimizer_enabled: bool,
+    dm: DataManager,
+    git_hash: str | None,
+) -> None:
+    """网格搜索：穷举 param_grid 全部组合，调 engine.run()"""
+
+    from backtest import VnpyBacktestEngine  # noqa: F811
+
+    if optimizer_enabled and param_grid:
+        # 使用 GridOptimizer 调度
+        opt = GridOptimizer(
+            engine=engine,
+            datasets=datasets,
+            strategy_name=strategy_name,
+            param_grid=param_grid,
+            strategy_params=strategy_params,
+            capital=capital,
+            contract_size=contract_size,
+        )
+        grid_result = opt.run()
+        results = grid_result.engine_results
+        logger.info("Grid Search: %d 策略变体, %d 结果",
+                     len(grid_result.strategies), len(results))
+    else:
+        # 未启用或空 param_grid → 单策略回退
+        s = load_strategy(strategy_name,
+                          strategy_params=strategy_params,
+                          capital=capital, contract_size=contract_size)
+        pairs = [(sym, df, s) for sym, df in datasets]
+        results = engine.run(pairs)
+
+    _persist_results(dm, results, git_hash)
+
+    succeeded = [r for r in results if r['success']]
+    if succeeded:
+        dm.store.log('backtest',
+                     f"回测完成: {len(succeeded)}/{len(results)}",
+                     symbol='_batch_', status=LOG_STATUS_SUCCESS)
+
+
+def _run_optuna_search(
+    engine: "VnpyBacktestEngine",
+    datasets: list[tuple[str, pd.DataFrame]],
+    strategy_name: str,
+    search_space: dict[str, dict[str, Any]],
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    n_trials: int,
+    dm: DataManager,
+    git_hash: str | None,
+) -> None:
+    """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
+
+    # Optuna study 持久化路径（与主 DB 同目录）
+    main_db_dir = os.path.dirname(dm._store.db_path) or "."
+    study_db_path = os.path.join(main_db_dir, "optuna_studies.db")
+
+    opt = OptunaOptimizer(
+        engine=engine,
+        datasets=datasets,
+        strategy_name=strategy_name,
+        search_space=search_space,
+        strategy_params=strategy_params,
+        capital=capital,
+        contract_size=contract_size,
+        n_trials=n_trials,
+        study_db_path=study_db_path,
+    )
+    result = opt.optimize()
+
+    # ── 持久化全部 trial ──
+    engine_cfg = {
+        'type': 'vnpy',
+        'optimizer': 'optuna',
+        'study_name': opt.study_name,
+        'study_db': study_db_path,
+    }
+    all_ids: list[int] = []
+    for i, trial_entry in enumerate(result.trial_data):
+        trial_cfg = {**engine_cfg, 'trial_index': i}
+        for engine_result in trial_entry['engine_results']:
+            if engine_result.get('success'):
+                bt_id = dm.insert_backtest(
+                    symbol=engine_result['symbol'],
+                    strategy=engine_result.get('strategy_name', strategy_name),
+                    status=STATUS_SUCCESS,
+                    error_message=None,
+                    statistics=engine_result.get('statistics', {}),
+                    engine_config=trial_cfg,
+                    params_json=trial_entry.get('params_json', '{}'),
+                    start_date=engine_result.get('start_date'),
+                    end_date=engine_result.get('end_date'),
+                    strategy_version=engine_result.get('strategy_version'),
+                    git_hash=git_hash,
+                )
+                all_ids.append(bt_id)
+
+                dr = engine_result.get('daily_results', [])
+                if dr:
+                    trades: list[dict[str, Any]] = []
+                    for daily in dr:
+                        if 'trades' in daily:
+                            trades.extend(daily.get('trades', []))  # pyright: ignore[reportUnknownArgumentType]
+                    if trades:
+                        dm.insert_backtest_trades(bt_id, trades)  # pyright: ignore[reportUnknownArgumentType]
+                    dm.insert_backtest_daily(bt_id, dr)  # pyright: ignore[reportUnknownArgumentType]
+
+    result.backtest_ids = all_ids
+
+    # ── 输出摘要 + 日志 ──
+    logger.info("Optuna 优化完成: best_value=%.4f best_params=%s trials=%d",
+                result.best_value, result.best_params, len(result.trial_data))
+    print(f"\n============ Optuna 优化结果 ============")
+    print(f"  最优得分:  {result.best_value:.4f}")
+    print(f"  最优参数:  {result.best_params}")
+    print(f"  总试验数:  {len(result.trial_data)}")
+    print(f"  回测ID:    {all_ids[:10]}{'...' if len(all_ids) > 10 else ''}")
+    print(f"  Study:     {opt.study_name}")
+    print(f"===========================================\n")
+
+    # ── 生成优化报告 ──
+    study_db_url = f"sqlite:///{os.path.abspath(study_db_path)}"
+    _build_optimization_report(
+        result, all_ids, study_db_url, dm
+    )
+
+    dm.store.log('backtest',
+                 f"Optuna 优化完成: best={result.best_value:.4f} "
+                 f"params={result.best_params} trials={len(result.trial_data)}",
+                 symbol='_optuna_', status=LOG_STATUS_SUCCESS)
+
+
+def _build_optimization_report(
+    result: Any,
+    backtest_ids: list[int],
+    study_db_url: str,
+    dm: DataManager,
+) -> None:
+    """生成 Optuna 优化报告 HTML 文件"""
+    # 忽略 dm 参数（预留给后续扩展）
+    _ = dm
+
+    from pathlib import Path
+    from report import build_optimizer_report
+
+    output_dir = "output"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    try:
+        html = build_optimizer_report(
+            study_db_url=study_db_url,
+            study_name=result.study.study_name,
+            best_params=result.best_params,
+            best_value=result.best_value,
+            backtest_ids=backtest_ids,
+        )
+        report_path = os.path.join(
+            output_dir, f"optimization_{result.study.study_name}.html"
+        )
+        Path(report_path).write_text(html, encoding='utf-8')
+        logger.info(f"优化报告已生成: {report_path}")
+        print(f"\n💡 Optuna 优化报告: {report_path}")
+    except Exception as e:
+        logger.warning(f"优化报告生成失败: {e}", exc_info=True)
