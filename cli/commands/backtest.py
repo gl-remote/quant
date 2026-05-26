@@ -50,6 +50,7 @@ from strategies.core import (
     serialize_strategy_params,
 )
 from optimizer import OptunaOptimizer
+from report.dashboard import build_all as build_dashboard
 from common.formulas import calculate_fifo_profit
 
 logger = logging.getLogger(__name__)
@@ -387,6 +388,12 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         dm=dm, git_hash=git_hash,
                         n_trials=n_trials,
                     )
+
+                # 自动生成回测看板
+                build_dashboard(
+                    db_path=dm.store.db_path,
+                    output_dir="output",
+                )
 
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
