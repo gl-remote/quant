@@ -105,7 +105,7 @@ _PAGE_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>{study_name}</title>
-<script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
 body{{font-family:-apple-system,sans-serif;margin:0;padding:0;color:#333}}
 .tabs{{display:flex;border-bottom:2px solid #e5e7eb;background:#f9fafb;position:sticky;top:0;z-index:10}}
