@@ -5,8 +5,7 @@
     ├── app:             AppConfig
     ├── environment:     EnvironmentConfig
     ├── strategies:      list[StrategyItemConfig]
-    ├── data:            DataConfig
-    ├── export:          ExportConfig
+    ├── data:            DataConfig (包含数据源、存储、导出配置)
     ├── backtest:        BacktestConfig
     │   └── split:       SplitConfig
     ├── system:          SystemConfig
@@ -206,10 +205,6 @@ class DataConfig(BaseModel):
     filename_template: str = "{symbol}.{interval}.csv"  # 文件名模板：标的名.数据周期.csv
 
 
-class ExportConfig(BaseModel):
-    default_dir: str = ""
-
-
 # ============================================================
 # 系统配置
 # ============================================================
@@ -289,7 +284,6 @@ class ProjectConfig(BaseModel):
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     strategies: list[StrategyItemConfig] = Field(default_factory=list)
     data: DataConfig = Field(default_factory=DataConfig)
-    export: ExportConfig = Field(default_factory=ExportConfig)
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
@@ -348,7 +342,6 @@ class ProjectConfig(BaseModel):
         # 解析相对路径 → 绝对路径
         cls._resolve_data_paths(raw, project_root)
         cls._resolve_backtest_paths(raw, project_root)
-        cls._resolve_export_paths(raw, project_root)
         # 解析账户凭证
         raw = cls._resolve_account(raw)
         # 设置 app/environment 默认值（如果 TOML 中未配置）
@@ -394,13 +387,6 @@ class ProjectConfig(BaseModel):
         data_dir = bc.get("data_dir", "")
         if data_dir and not Path(data_dir).is_absolute():
             bc["data_dir"] = str(root / data_dir)
-
-    @staticmethod
-    def _resolve_export_paths(raw: dict[str, Any], root: Path) -> None:  # pyright: ignore[reportExplicitAny]
-        ec = raw.setdefault("export", {})
-        default_dir = ec.get("default_dir", "")
-        if default_dir and not Path(default_dir).is_absolute():
-            ec["default_dir"] = str(root / default_dir)
 
     @staticmethod
     def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:  # pyright: ignore[reportExplicitAny]
@@ -529,9 +515,6 @@ class ConfigManager:
 
     def get_data_config(self) -> DataConfig:
         return self._config.data
-
-    def get_export_config(self) -> ExportConfig:
-        return self._config.export
 
     # --------------------------------------------------
     # 系统

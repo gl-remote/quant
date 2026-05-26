@@ -143,9 +143,6 @@ def base_config_dict():
             'export_dir': '.quant_shared_data/csv',
             'filename_template': '{symbol}.{interval}.csv',
         },
-        'export': {
-            'default_dir': '.quant_shared_data/csv',
-        },
         'backtest': {
             'initial_capital': 100000.0,
             'commission_rate': 0.0003,

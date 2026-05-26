@@ -194,11 +194,6 @@ class TestDataConfig:
         # 默认值无路径 → base_dir 为空字符串
         assert isinstance(dc.base_dir, str)
 
-    def test_get_export_config_defaults(self):
-        cm = ConfigManager(config_file='/nonexistent/path.toml')
-        ec = cm.get_export_config()
-        assert ec.default_dir == ''
-
     def test_get_data_config_filename_template(self):
         cm = ConfigManager(config_file='/nonexistent/path.toml')
         dc = cm.get_data_config()
