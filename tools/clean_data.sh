@@ -68,11 +68,11 @@ fi
 echo ""
 echo "[2/2] 清理 output..."
 if [ -d "$OUT_DIR" ]; then
-    # 保留根目录 index.html 导航页
-    find "$OUT_DIR" -mindepth 1 -not -name index.html -exec rm -rf {} + 2>/dev/null || true
-    # 删除子目录中的文件
+    # 保留根目录 index.html 导航页 + assets/
+    find "$OUT_DIR" -mindepth 1 -not -name index.html -not -name assets -exec rm -rf {} + 2>/dev/null || true
+    # 删除子目录中的 index.html
     find "$OUT_DIR" -mindepth 2 -name 'index.html' -exec rm -f {} + 2>/dev/null || true
-    echo "  已清理 (保留 output/index.html)"
+    echo "  已清理 (保留 output/index.html + assets/)"
 fi
 
 echo ""
