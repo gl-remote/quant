@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-
+from typing import TYPE_CHECKING
 
 from common.constants import COMMON_KLINE_INTERVALS
 import pandas as pd
@@ -33,6 +33,9 @@ from .models import (
     DataSummary,
 )
 
+if TYPE_CHECKING:
+    from config import ConfigManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,17 +46,17 @@ class DataManager:
     所有 DataFrame 数据都经过 Pandera Schema 验证。
     """
 
-    def __init__(self, config_manager: object | None = None):
+    def __init__(self, config_manager: ConfigManager | None = None):
         """
         Args:
             config_manager: ConfigManager实例（可选）
         """
-        self._config = config_manager
-        self._store = None
-        self._data_cache = {}
-        self._default_config = None
+        self._config: ConfigManager | None = config_manager
+        self._store: DataStore | None = None
+        self._data_cache: dict[str, pd.DataFrame] = {}
+        self._default_config: ConfigManager | None = None
 
-    def _get_config(self) -> object:
+    def _get_config(self) -> ConfigManager:
         """获取配置管理器（延迟初始化默认配置）"""
         if self._config:
             return self._config
@@ -84,6 +87,7 @@ class DataManager:
     def store(self) -> DataStore:
         """获取存储层实例（延迟初始化）"""
         self._init_store()
+        assert self._store is not None
         return self._store
 
     # ── 元数据查询 ─────────────────────────────────────────
@@ -152,15 +156,15 @@ class DataManager:
         meta = self.store.get_metadata(symbol)
 
         if meta:
-            meta_filepath = meta.get('filepath')
+            meta_filepath = str(meta.get('filepath', ''))
             if meta_filepath and Path(meta_filepath).exists():
                 return SymbolInfo(
                     symbol=symbol,
                     available=True,
                     filepath=meta_filepath,
-                    start_date=meta.get('start_date'),
-                    end_date=meta.get('end_date'),
-                    total_rows=meta.get('total_rows'),
+                    start_date=str(meta.get('start_date', '')),
+                    end_date=str(meta.get('end_date', '')),
+                    total_rows=int(meta.get('total_rows', 0)),  # pyright: ignore[reportArgumentType]  # SQLite dict
                 )
 
         data_dir = self._get_data_dir()
@@ -216,7 +220,7 @@ class DataManager:
 
     @pa.check_output(KlineSchema)
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None) -> DataFrame[KlineSchema]:
+                   interval: str | None = None) -> pd.DataFrame:
         """加载K线数据，直接返回经过 Pandera 验证的 DataFrame
 
         Args:
@@ -226,7 +230,7 @@ class DataManager:
             interval: K线周期（默认从配置读取）
 
         Returns:
-            DataFrame[KlineSchema]: 经过验证的K线数据
+            经过 Pandera KlineSchema 验证的 K 线数据
         """
         if interval is None:
             interval = self._get_default_interval()
@@ -254,13 +258,13 @@ class DataManager:
         if end_date:
             df = df[df['datetime'] <= pd.Timestamp(end_date)]
 
-        self._data_cache[cache_key] = df
+        self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
         logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
 
-        return df
+        return df  # pyright: ignore[reportReturnType]
 
     def load_kline_safe(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                        interval: str | None = None) -> DataFrame[KlineSchema] | None:
+                        interval: str | None = None) -> pd.DataFrame | None:
         """加载K线数据，失败返回None（不抛异常）"""
         try:
             return self.load_kline(symbol, start_date, end_date, interval)
@@ -291,7 +295,7 @@ class DataManager:
             git_hash=git_hash,
         )
 
-    def insert_backtest_trades(self, backtest_id: int, trades: list[dict]) -> int:
+    def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
         return self.store.insert_backtest_trades(backtest_id, trades)
 
@@ -313,11 +317,11 @@ class DataManager:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
 
-    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict]) -> int:
+    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
 
-    def query_daily(self, backtest_id: int) -> list[dict]:
+    def query_daily(self, backtest_id: int) -> list[dict[str, object]]:
         """查询每日资金曲线"""
         return self.store.query_daily(backtest_id)
 
@@ -331,6 +335,7 @@ class DataManager:
             是否成功删除
         """
         self._init_store()
+        assert self._store is not None
         return self._store.delete_backtest(backtest_id)
 
     # ── 资源管理 ────────────────────────────────────────────
