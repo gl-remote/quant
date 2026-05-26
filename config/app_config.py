@@ -79,6 +79,9 @@ class StrategyItemConfig(BaseModel):
     take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
     position_ratio: float = DEFAULT_POSITION_RATIO
     kline_period: int = DEFAULT_KLINE_PERIOD
+    # 策略专属的参数搜索空间
+    param_grid: dict[str, list[Any]] = Field(default_factory=dict)  # grid 搜索空间
+    search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)  # optuna 搜索空间
 
     @field_validator("stop_loss_ratio", "take_profit_ratio", "position_ratio")
     @classmethod

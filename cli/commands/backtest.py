@@ -355,8 +355,8 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
 
             if opt_engine == "optuna":
-                # 优先使用策略专属搜索空间，其次使用全局搜索空间
-                search_space = optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
+                # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
+                search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
                 if search_space:
                     _run_optuna_search(
                         engine=engine, datasets=datasets,
@@ -370,10 +370,12 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                         table_prefix=optimizer_cfg.table_prefix,
                     )
             else:
+                # 优先使用策略专属参数网格 (sc.param_grid)，其次使用 optimizer 配置
+                param_grid = sc.param_grid or optimizer_cfg.param_grid
                 _run_grid_search(
                     engine=engine, datasets=datasets,
                     strategy_name=strategy_name,
-                    param_grid=optimizer_cfg.param_grid,
+                    param_grid=param_grid,
                     strategy_params=strategy_params,
                     capital=capital,
                     contract_size=bc.contract_size,
