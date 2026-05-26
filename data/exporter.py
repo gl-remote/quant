@@ -126,11 +126,10 @@ def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
     """
     try:
         dc = config_manager.get_data_config()
-        ec = config_manager.get_export_config()
         Path(dc.export_dir).mkdir(parents=True, exist_ok=True)
 
         if not output_path:
-            filename = ec.filename_template.format(symbol=symbol, interval=interval)
+            filename = dc.filename_template.format(symbol=symbol, interval=interval)
             output_path = str(Path(dc.export_dir) / filename)
 
         account = config_manager.get_account_info()

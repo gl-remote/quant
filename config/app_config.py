@@ -203,11 +203,11 @@ class DataConfig(BaseModel):
     base_dir: str = ""
     export_dir: str = ""
     db_path: str = ""
+    filename_template: str = "{symbol}.{interval}.csv"  # 文件名模板：标的名.数据周期.csv
 
 
 class ExportConfig(BaseModel):
     default_dir: str = ""
-    filename_template: str = "{symbol}.{interval}.csv"
 
 
 # ============================================================

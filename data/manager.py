@@ -68,7 +68,7 @@ class DataManager:
 
     def _get_filename_template(self) -> str:
         """获取文件名模板配置"""
-        return self._get_config().get_export_config().filename_template
+        return self._get_config().get_data_config().filename_template
 
     def _get_default_interval(self) -> str:
         """获取默认K线周期配置"""

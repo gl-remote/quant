@@ -140,10 +140,11 @@ def base_config_dict():
         'data': {
             'base_dir': '.quant_shared_data',
             'db_path': '.quant_shared_data/quant_shared.db',
+            'export_dir': '.quant_shared_data/csv',
+            'filename_template': '{symbol}.{interval}.csv',
         },
         'export': {
             'default_dir': '.quant_shared_data/csv',
-            'filename_template': '{symbol}.{interval}.csv',
         },
         'backtest': {
             'initial_capital': 100000.0,

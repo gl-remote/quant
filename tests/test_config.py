@@ -197,7 +197,12 @@ class TestDataConfig:
     def test_get_export_config_defaults(self):
         cm = ConfigManager(config_file='/nonexistent/path.toml')
         ec = cm.get_export_config()
-        assert '{symbol}' in ec.filename_template
+        assert ec.default_dir == ''
+
+    def test_get_data_config_filename_template(self):
+        cm = ConfigManager(config_file='/nonexistent/path.toml')
+        dc = cm.get_data_config()
+        assert '{symbol}' in dc.filename_template
 
 
 class TestLoggingConfig:
