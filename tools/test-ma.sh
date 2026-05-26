@@ -39,39 +39,8 @@ else
     exit 1
 fi
 
-# ── 获取最新回测 ID ──
-LATEST_ID=$(sqlite3 "$ROOT_DIR/.quant_shared_data/quant_shared.db" \
-    "SELECT id FROM backtests ORDER BY created_at DESC LIMIT 1;")
-if [ -z "$LATEST_ID" ] || ! [[ "$LATEST_ID" =~ ^[0-9]+$ ]]; then
-    echo -e "${RED}✗ 未找到有效的回测记录 (LATEST_ID='$LATEST_ID')${NC}"
-    exit 1
-fi
-
-# ── 步骤 2: 生成报告 ──
-echo ""
-echo "[步骤 2/2] 生成回测报告 (id=$LATEST_ID)..."
-
-# 找最新 study 目录
-STUDY_DIR=$(ls -dt "$ROOT_DIR/output"/ma_* 2>/dev/null | head -1)
-if [ -z "$STUDY_DIR" ]; then
-    echo -e "${RED}✗ 未找到 study 目录${NC}"
-    exit 1
-fi
-
-if "$PYTHON_PATH" "$ROOT_DIR/main.py" report --id "$LATEST_ID"; then
-    # 把报告移入 study 目录
-    if [ -f "$ROOT_DIR/output/backtest_${LATEST_ID}.html" ]; then
-        mv "$ROOT_DIR/output/backtest_${LATEST_ID}.html" "$STUDY_DIR/"
-        echo "  报告已移至 $STUDY_DIR"
-    fi
-    echo -e "${GREEN}✓ 报告生成成功${NC}"
-else
-    echo -e "${RED}✗ 报告生成失败 (exit=$?)${NC}"
-    exit 1
-fi
-
 echo ""
 echo "=========================================="
 echo -e "${GREEN}测试完成!${NC}"
-echo "回测 ID: $LATEST_ID"
+echo "报告: output/index.html"
 echo "=========================================="

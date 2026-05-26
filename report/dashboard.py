@@ -18,6 +18,38 @@ from typing import Any
 def _escape(s: Any) -> str:
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+def _build_single_report(db_path: str, study_name: str, output_dir: str) -> None:
+    """附带生成单回测 HTML 到 study 目录"""
+    try:
+        from report import build_report
+        from data import DataManager
+        dm = DataManager()
+        conn = sqlite3.connect(db_path)
+        r = conn.execute(
+            "SELECT study_id FROM studies WHERE study_name=? LIMIT 1", (study_name,)
+        ).fetchone()
+        if not r:
+            conn.close(); return
+        t0 = conn.execute(
+            "SELECT datetime_start FROM trials WHERE study_id=? ORDER BY trial_id LIMIT 1",
+            (r[0],),
+        ).fetchone()
+        conn.close()
+        if not t0:
+            return
+        bt = sqlite3.connect(db_path).execute(
+            "SELECT id FROM backtests WHERE created_at>=? ORDER BY id DESC LIMIT 1",
+            (t0[0],)
+        ).fetchone()
+        if bt:
+            study_dir = Path(output_dir) / study_name
+            build_report(dm, bt[0], output_dir=str(study_dir))
+    except Exception:
+        pass
+
+def _escape(s: Any) -> str:
+    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 
 def build_all(db_path: str, output_dir: str) -> None:
     """回测完成后统一入口：扫最新 study → 建看板 → 刷新导航"""
@@ -30,6 +62,8 @@ def build_all(db_path: str, output_dir: str) -> None:
         return
     study_name = row[0]
     build_dashboard(db_path, study_name, output_dir)
+    # 附带生成单回测报告到 study 目录
+    _build_single_report(db_path, study_name, output_dir)
     build_nav(output_dir)
 
 
