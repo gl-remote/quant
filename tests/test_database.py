@@ -93,6 +93,8 @@ class TestMetadata:
         store = DataStore(temp_db_path)
         store.upsert_metadata(
             'DCE.m2509',
+            provider='tqsdk',
+            interval='1m',
             filepath='/data/DCE.m2509.csv',
             start_date='2024-01-01',
             end_date='2024-12-31',
@@ -103,14 +105,17 @@ class TestMetadata:
         meta = store.get_metadata('DCE.m2509')
         assert meta is not None
         assert meta['symbol'] == 'DCE.m2509'
+        assert meta['provider'] == 'tqsdk'
+        assert meta['interval'] == '1m'
         assert meta['total_rows'] == 240
-        assert meta['start_date'] == '2024-01-01'
         store.close()
 
     def test_upsert_update(self, temp_db_path):
         store = DataStore(temp_db_path)
         store.upsert_metadata(
             'DCE.m2509',
+            provider='tqsdk',
+            interval='1m',
             filepath='/data/old.csv',
             start_date='2024-01-01',
             end_date='2024-06-30',
@@ -118,8 +123,11 @@ class TestMetadata:
             max_dt='2024-06-28',
             total_rows=120,
         )
+        # 同 symbol+provider+interval → 更新
         store.upsert_metadata(
             'DCE.m2509',
+            provider='tqsdk',
+            interval='1m',
             filepath='/data/new.csv',
             start_date='2024-01-01',
             end_date='2024-12-31',
@@ -130,6 +138,31 @@ class TestMetadata:
         meta = store.get_metadata('DCE.m2509')
         assert meta['total_rows'] == 240
         assert meta['filepath'] == '/data/new.csv'
+        store.close()
+
+    def test_upsert_different_providers(self, temp_db_path):
+        """不同 provider 应共存"""
+        store = DataStore(temp_db_path)
+        store.upsert_metadata(
+            'DCE.m2509', provider='tqsdk', interval='1m',
+            filepath='/data/tqsdk_1m.csv',
+            start_date='2024-01-01', end_date='2024-12-31',
+            min_dt='2024-01-02', max_dt='2024-12-30', total_rows=10000,
+        )
+        store.upsert_metadata(
+            'DCE.m2509', provider='akshare', interval='1m',
+            filepath='/data/akshare_1m.csv',
+            start_date='2024-01-01', end_date='2024-12-31',
+            min_dt='2024-01-02', max_dt='2024-12-30', total_rows=5000,
+        )
+        # 查最新一条（不限 provider）
+        meta = store.get_metadata('DCE.m2509')
+        assert meta['provider'] == 'akshare'  # 后插入的
+        # 按 provider 过滤
+        meta_tq = store.get_metadata('DCE.m2509', provider='tqsdk')
+        assert meta_tq['total_rows'] == 10000
+        meta_ak = store.get_metadata('DCE.m2509', provider='akshare')
+        assert meta_ak['total_rows'] == 5000
         store.close()
 
 

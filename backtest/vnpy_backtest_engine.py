@@ -26,6 +26,7 @@ from data.manager import DataManager
 
 from common.formatting import parse_percentage
 from common.formulas import profitable_ratio
+from common.symbol_utils import parse_contract
 
 if TYPE_CHECKING:
     from vnpy.trader.object import BarData
@@ -35,22 +36,6 @@ logger = logging.getLogger(__name__)
 
 
 # ── 符号解析 & BarData 转换 ───────────────────────────────
-
-
-def parse_symbol_exchange(symbol: str) -> tuple[str, str]:
-    """解析品种代码中的交易所信息，统一返回字符串类型
-
-    Args:
-        symbol: 完整合约代码 (e.g. DCE.m2509)
-
-    Returns:
-        (pure_symbol, exchange_code) 均为字符串
-    """
-    if '.' in symbol:
-        parts = symbol.split('.')
-        return parts[-1], parts[0]
-
-    return symbol, 'CFFEX'
 
 
 def df_to_vnpy_datalines(
@@ -406,7 +391,11 @@ class VnpyBacktestEngine:
         from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Exchange, Interval
 
-        pure_symbol, exchange_code = parse_symbol_exchange(symbol)
+        c = parse_contract(symbol)
+        if c is None:
+            raise ValueError(f"无法解析合约代码: {symbol!r}")
+        pure_symbol = c.contract_code
+        exchange_code = c.exchange
         vt_symbol = f"{pure_symbol}.{Exchange(exchange_code).value}"
 
         _interval_map = {

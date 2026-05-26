@@ -1,186 +1,184 @@
-"""数据导出模块 - 从天勤获取K线数据导出为 Qlib 格式 CSV，支持智能去重合并"""
+"""数据导出模块 — 从可切换的数据源获取 K 线并导出为 Qlib 格式 CSV
+
+支持的数据源通过 data/datasource/ 统一抽象，默认读取配置文件中的 provider。
+统一默认 interval=1m，各数据源内部自行处理兼容性。
+未指定日期时，自动从合约代码推算：交割月前 4 个月 ~ 交割月。
+"""
 
 from __future__ import annotations
 
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false
-# pyright: reportUnknownArgumentType=false, reportUnusedCallResult=false
-# 注：以上规则抑制的原因是 pandas/tqsdk 第三方库类型存根不完整
-
 import logging
-import time
 import pandas as pd
 from pathlib import Path
-from datetime import datetime
 from typing import TYPE_CHECKING
 
+from common.symbol_utils import resolve_date_range
 from .manager import DataManager
+from .datasource import get_data_source
 
 if TYPE_CHECKING:
-    from config.app_config import AccountInfo, ConfigManager
+    from config.app_config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
-Qlib_COLUMNS = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'money']
 
-_MAX_RETRIES = 3
-_RETRY_BACKOFF_BASE = 1.0
-
-
-def _fetch_from_tqsdk(symbol: str, start_date: str, end_date: str,
-                      kline_period: int = 1,
-                      account: AccountInfo | None = None) -> pd.DataFrame:
-    """从天勤 SDK 拉取 K 线数据，带自动重试
-
-    Args:
-        symbol: 品种代码
-        start_date: 开始日期 YYYY-MM-DD
-        end_date: 结束日期 YYYY-MM-DD
-        kline_period: K 线周期 (分钟)
-        account: 天勤认证信息
-
-    Returns:
-        DataFrame，拉取失败时返回空 DataFrame
-
-    Raises:
-        RuntimeError: 重试耗尽后仍失败时抛出
-    """
-    for attempt in range(1, _MAX_RETRIES + 1):
-        try:
-            return _do_fetch(symbol, start_date, end_date, kline_period, account)
-        except Exception as e:
-            if attempt < _MAX_RETRIES:
-                backoff: float = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
-                logger.warning(
-                    f"天勤数据拉取失败 (第 {attempt}/{_MAX_RETRIES} 次): {e}，"
-                    f"{backoff:.0f}s 后重试..."
-                )
-                time.sleep(backoff)
-            else:
-                logger.error(f"天勤数据拉取失败，已重试 {_MAX_RETRIES} 次: {e}")
-
-    logger.error(f"拉取 {symbol} 数据失败，已耗尽 {_MAX_RETRIES} 次重试")
-    return pd.DataFrame(columns=Qlib_COLUMNS)
+def _build_output_path(
+    symbol: str,
+    provider: str,
+    interval: str,
+    export_dir: str,
+    filename_template: str,
+) -> str:
+    """根据 symbol + provider + interval 构建标准输出路径"""
+    filename = filename_template.format(symbol=symbol, provider=provider, interval=interval)
+    return str(Path(export_dir) / filename)
 
 
-def _do_fetch(symbol: str, start_date: str, end_date: str,
-              kline_period: int, account: AccountInfo | None) -> pd.DataFrame:
-    """执行单次天勤 API 拉取"""
-    from tqsdk import TqApi, TqAuth, TqBacktest
-    from tqsdk.exceptions import BacktestFinished
-
-    start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-    end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-    auth = TqAuth(account.api_key, account.api_secret) if account else None
-
-    api = TqApi(backtest=TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth)
-    klines = api.get_kline_serial(symbol, duration_seconds=kline_period * 60)
-
-    rows = []
-    prev_len = 0
-    try:
-        while True:
-            api.wait_update()
-            if api.is_changing(klines):
-                current_len = len(klines)
-                for i in range(prev_len, current_len):
-                    ts = datetime.fromtimestamp(klines['datetime'].iloc[i] / 10 ** 9)
-                    row = {
-                        'datetime': ts.strftime('%Y-%m-%d %H:%M:%S'),
-                        'open': float(klines['open'].iloc[i]),
-                        'high': float(klines['high'].iloc[i]),
-                        'low': float(klines['low'].iloc[i]),
-                        'close': float(klines['close'].iloc[i]),
-                        'volume': int(klines['volume'].iloc[i]),
-                        'money': float(klines['close'].iloc[i]) * int(klines['volume'].iloc[i]),
-                    }
-                    rows.append(row)
-                prev_len = current_len
-    except BacktestFinished:
-        pass
-    except Exception:
-        api.close()
-        raise
-    finally:
-        api.close()
-
-    df = pd.DataFrame(rows, columns=Qlib_COLUMNS)
-    if not df.empty:
-        df = df.sort_values('datetime').drop_duplicates(subset='datetime', keep='last')
-    return df
+def _should_merge(meta: dict[str, object] | None, output_path: str) -> bool:
+    """检查已有数据是否应合并：仅当文件路径一致时合并"""
+    if meta is None:
+        return False
+    existing_path = str(meta.get("filepath", ""))
+    if not existing_path or not Path(existing_path).exists():
+        return False
+    if Path(existing_path).resolve() != Path(output_path).resolve():
+        logger.info(
+            f"已有数据文件路径不匹配 ({Path(existing_path).name} ≠ "
+            f"{Path(output_path).name})，跳过合并"
+        )
+        return False
+    return True
 
 
-def export_csv(symbol: str, start_date: str, end_date: str, dm: DataManager,
-               config_manager: ConfigManager, output_path: str | None = None,
-               force: bool = False, interval: str = '1m') -> bool:
+def export_csv(
+    symbol: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    dm: DataManager | None = None,
+    config_manager: ConfigManager | None = None,
+    output_path: str | None = None,
+    force: bool = False,
+    interval: str = "1m",
+    source: str | None = None,
+) -> bool:
     """导出 Qlib 格式 CSV
+
+    所有数据源统一默认 interval=1m。日期未指定时由合约代码自动推算。
 
     Args:
         symbol: 品种代码 (e.g. DCE.m2509)
-        start_date: 开始日期 YYYY-MM-DD
-        end_date: 结束日期 YYYY-MM-DD
-        dm: DataManager 实例
-        config_manager: ConfigManager 实例
-        output_path: 自定义输出路径，优先级最高
-        force: 强制覆盖模式，跳过已有数据合并，直接覆盖 CSV 和元数据
-        interval: K线周期，用于文件名 (默认 '1m')
+        start_date: 开始日期 YYYY-MM-DD，None 时自动推算
+        end_date: 结束日期 YYYY-MM-DD，None 时自动推算
+        dm: DataManager 实例，None 时自动创建
+        config_manager: ConfigManager 实例，None 时自动创建
+        output_path: 自定义输出路径
+        force: 强制覆盖模式
+        interval: K线周期 (默认 '1m')
+        source: 数据源名称，None 时从配置读取
     """
+    if config_manager is None:
+        from config import ConfigManager
+        config_manager = ConfigManager()
+
+    if dm is None:
+        dm = DataManager(config_manager)
+
     try:
         dc = config_manager.get_data_config()
         Path(dc.export_dir).mkdir(parents=True, exist_ok=True)
 
+        # 日期范围：用户指定 > 合约自动推算
+        resolved_start, resolved_end = resolve_date_range(
+            symbol, start_date, end_date
+        )
+
+        # 获取数据源（需在 output_path 之前，因为文件名含 provider）
+        ds = get_data_source(provider=source, config_manager=config_manager)
+
+        # 确定输出路径
         if not output_path:
-            filename = dc.filename_template.format(symbol=symbol, interval=interval)
-            output_path = str(Path(dc.export_dir) / filename)
+            output_path = _build_output_path(
+                symbol, ds.name, interval, dc.export_dir, dc.filename_template
+            )
 
-        account = config_manager.get_account_info()
-        logger.info(f"开始导出 {symbol}: {start_date} ~ {end_date}")
+        logger.info(
+            f"导出 {symbol}: {resolved_start} ~ {resolved_end} "
+            f"[数据源: {ds.name}, interval: {interval}]"
+        )
 
-        new_df = _fetch_from_tqsdk(symbol, start_date, end_date, account=account)
+        # 构建额外参数
+        fetch_kwargs: dict[str, object] = {}
+        if ds.name == "tqsdk":
+            fetch_kwargs["account"] = config_manager.get_account_info()
+
+        new_df = ds.fetch_kline(
+            symbol=symbol,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            interval=interval,
+            **fetch_kwargs,
+        )
         if new_df.empty:
-            msg = "未获取到任何数据"
+            msg = f"未获取到任何数据 [{ds.name}]"
             logger.warning(msg)
-            dm.store.log('export', msg, symbol=symbol, status='WARNING')
+            dm.store.log("export", msg, symbol=symbol, status="WARNING")
             return False
 
-        logger.info(f"从天勤获取 {len(new_df)} 条K线")
+        logger.info(f"从 {ds.name} 获取 {len(new_df)} 条K线")
 
+        # 合并已有数据
         meta = dm.store.get_metadata(symbol)
         merged_rows = len(new_df)
         if force:
             logger.info("强制覆盖模式：跳过已有数据合并")
-        elif meta and Path(str(meta['filepath'])).exists():
-            filepath = str(meta['filepath'])
-            logger.info(f"发现已有数据: {filepath} ({meta['total_rows']}条, "
-                        f"{meta['min_dt']}~{meta['max_dt']})")
+        elif _should_merge(meta, output_path):
+            assert meta is not None  # pyright 类型收窄
+            filepath = str(meta["filepath"])
+            logger.info(
+                f"发现已有数据: {filepath} ({meta['total_rows']}条, "
+                f"{meta['min_dt']}~{meta['max_dt']})"
+            )
             try:
                 old_df = pd.read_csv(filepath)
                 before = len(old_df)
                 combined = pd.concat([old_df, new_df], ignore_index=True)
-                combined = combined.drop_duplicates(subset='datetime', keep='last')
-                combined = combined.sort_values('datetime').reset_index(drop=True)
+                combined = combined.drop_duplicates(subset="datetime", keep="last")
+                combined = combined.sort_values("datetime").reset_index(drop=True)
                 after = len(combined)
-                logger.info(f"合并: 已有{before}条 + 新增{len(new_df)}条 -> 去重后{after}条 "
-                            f"(删除{before + len(new_df) - after}条重复)")
+                logger.info(
+                    f"合并: 已有{before}条 + 新增{len(new_df)}条 → 去重后{after}条 "
+                    f"(删除{before + len(new_df) - after}条重复)"
+                )
                 new_df = combined
                 merged_rows = after
             except Exception as e:
                 logger.error(f"读取已有CSV失败: {e}，将覆盖写入")
         else:
-            logger.info("未发现已有数据，新建导出")
+            logger.info("未发现已有数据或文件不匹配，新建导出")
 
         new_df.to_csv(output_path, index=False)
         logger.info(f"已写入: {output_path} ({len(new_df)}行)")
 
-        min_dt = str(new_df['datetime'].min())
-        max_dt = str(new_df['datetime'].max())
+        min_dt = str(new_df["datetime"].min())
+        max_dt = str(new_df["datetime"].max())
         dm.store.upsert_metadata(
-            symbol=symbol, filepath=output_path,
-            start_date=start_date, end_date=end_date,
-            min_dt=min_dt, max_dt=max_dt, total_rows=merged_rows)
-        dm.store.log('export',
-                     f"完成: {symbol} {start_date}~{end_date} -> {output_path} "
-                     f"({merged_rows}行, {min_dt}~{max_dt})",
-                     symbol=symbol, status='SUCCESS')
+            symbol=symbol,
+            provider=ds.name,
+            interval=interval,
+            filepath=output_path,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            min_dt=min_dt,
+            max_dt=max_dt,
+            total_rows=merged_rows,
+        )
+        dm.store.log(
+            "export",
+            f"完成: {symbol} {resolved_start}~{resolved_end} [{ds.name}] → "
+            f"{output_path} ({merged_rows}行, {min_dt}~{max_dt})",
+            symbol=symbol,
+            status="SUCCESS",
+        )
         logger.info(f"导出完成: {merged_rows}行, 时间区间 {min_dt} ~ {max_dt}")
         return True
     finally:

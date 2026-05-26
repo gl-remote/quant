@@ -29,6 +29,7 @@ dependencies = [
     "peewee>=3.15",
     "typing-extensions>=4.0",
     "optuna>=3.0",
+    "akshare>=1.16",
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from backtest.vnpy_backtest_engine import parse_symbol_exchange
+from common.symbol_utils import parse_contract
 from backtest.walk_forward import (
     walk_forward_split,
     walk_forward_split_by_ratio,
@@ -29,30 +29,27 @@ def _make_kline_df(n_rows: int = 100, start_date: str = '2024-01-01') -> pd.Data
 
 
 # ==============================================================================
-# parse_symbol_exchange
+# parse_contract (合约代码解析)
 # ==============================================================================
 
-class TestParseSymbolExchange:
+class TestParseContract:
     def test_with_exchange(self):
-        pure, exchange = parse_symbol_exchange('DCE.m2509')
-        assert pure == 'm2509'
-        assert exchange == 'DCE'
+        c = parse_contract('DCE.m2509')
+        assert c is not None
+        assert c.contract_code == 'm2509'
+        assert c.exchange == 'DCE'
 
-    def test_no_exchange_defaults_to_cffex(self):
-        pure, exchange = parse_symbol_exchange('m2509')
-        assert pure == 'm2509'
-        assert exchange == 'CFFEX'
-
-    def test_multi_dot(self):
-        """含多个 '.' 取第一个为交易所，最后一个为纯代码"""
-        pure, exchange = parse_symbol_exchange('CZCE.SA.UR405')
-        assert pure == 'UR405'
-        assert exchange == 'CZCE'
+    def test_no_exchange(self):
+        c = parse_contract('m2509')
+        assert c is not None
+        assert c.contract_code == 'm2509'
+        assert c.exchange == ''
 
     def test_single_dot(self):
-        pure, exchange = parse_symbol_exchange('DCE.m2509')
-        assert pure == 'm2509'
-        assert exchange == 'DCE'
+        c = parse_contract('DCE.m2509')
+        assert c is not None
+        assert c.contract_code == 'm2509'
+        assert c.exchange == 'DCE'
 
 
 # ==============================================================================

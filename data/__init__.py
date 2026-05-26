@@ -12,6 +12,8 @@ data — 统一数据访问模块
   - SymbolInfo:       品种信息模型（Pydantic）
   - DataSummary:      数据汇总模型（Pydantic）
   - export_csv:       数据导出函数
+  - get_data_source:  数据源工厂函数
+  - list_sources:     列出可用数据源
 
 设计原则：
   1. 隐藏数据库概念，外部仅通过 DataManager 交互
@@ -28,6 +30,7 @@ from .models import (
     DataSummary,
 )
 from .exporter import export_csv
+from .datasource import get_data_source, list_sources
 
 # 从 common.schemas 导入全局统一的 Pandera Schema
 from common.schemas import (
@@ -53,4 +56,7 @@ __all__ = [
     'DataSummary',
     # 导出函数
     'export_csv',
+    # 数据源工厂
+    'get_data_source',
+    'list_sources',
 ]

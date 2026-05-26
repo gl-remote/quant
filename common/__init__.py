@@ -6,11 +6,12 @@ common — 通用纯函数工具层
 供 backtest、report、live、optimize 等所有上层模块共用。
 
 子模块:
-  - formulas:   量化计算公式 (total_return, win_rate, FIFO PnL)
-  - metrics:    绩效指标计算 (max_drawdown, sharpe_ratio)
-  - stats:      统计聚合工具 (compute_summary_stats, rank_by_key)
-  - formatting: 安全格式化 (format_pct, format_float, ensure_float)
-  - schemas:    Pandera Schema 定义 (KlineSchema, DailyReturnSchema)
+  - formulas:      量化计算公式 (total_return, win_rate, FIFO PnL)
+  - metrics:       绩效指标计算 (max_drawdown, sharpe_ratio)
+  - stats:         统计聚合工具 (compute_summary_stats, rank_by_key)
+  - formatting:    安全格式化 (format_pct, format_float, ensure_float)
+  - schemas:       Pandera Schema 定义 (KlineSchema, DailyReturnSchema)
+  - symbol_utils:  合约代码解析 & 默认日期范围推算
 """
 
 from .formulas import calculate_fifo_profit
@@ -23,6 +24,7 @@ from .schemas import (
     KlineDataFrame,
     DailyReturnDataFrame,
 )
+from .symbol_utils import parse_contract, resolve_date_range
 
 __all__ = [
     'calculate_fifo_profit',
@@ -39,4 +41,7 @@ __all__ = [
     # DataFrame 类型别名
     'KlineDataFrame',
     'DailyReturnDataFrame',
+    # 合约工具
+    'parse_contract',
+    'resolve_date_range',
 ]

@@ -138,33 +138,47 @@ class DataStore:
 
     # ── 元数据操作 ──────────────────────────────────────────────────
 
-    def get_metadata(self, symbol: str) -> dict[str, object] | None:
-        """查询品种元数据"""
-        row = (
-            ExportMetadata
-            .select()
-            .where(ExportMetadata.symbol == symbol)
-            .order_by(ExportMetadata.id.desc())
-            .limit(1)
-            .dicts()
-        )
+    def get_metadata(
+        self,
+        symbol: str,
+        provider: str | None = None,
+        interval: str | None = None,
+    ) -> dict[str, object] | None:
+        """查询品种元数据
+
+        Args:
+            symbol: 品种代码
+            provider: 数据源过滤（可选），不传则返回最新一条
+            interval: 周期过滤（可选）
+        """
+        query = ExportMetadata.select().where(ExportMetadata.symbol == symbol)
+        if provider:
+            query = query.where(ExportMetadata.provider == provider)
+        if interval:
+            query = query.where(ExportMetadata.interval == interval)
+        row = query.order_by(ExportMetadata.id.desc()).limit(1).dicts()
         result = next(iter(row), None)
         if result:
-            for field in ['start_date', 'end_date', 'min_dt', 'max_dt', 'created_at', 'updated_at']:
+            for field in ['start_date', 'end_date', 'min_dt', 'max_dt',
+                          'created_at', 'updated_at']:
                 if result.get(field) is not None:
                     result[field] = str(result[field])
         return result
 
-    def upsert_metadata(self, symbol: str, filepath: str, start_date: str,
+    def upsert_metadata(self, symbol: str, provider: str, interval: str,
+                        filepath: str, start_date: str,
                         end_date: str, min_dt: str, max_dt: str,
                         total_rows: int) -> None:
-        """插入或更新元数据"""
+        """插入或更新元数据（按 symbol+provider+interval 匹配）"""
         now = datetime.now()
         existing = (
             ExportMetadata
             .select()
-            .where(ExportMetadata.symbol == symbol)
-            .order_by(ExportMetadata.id.desc())
+            .where(
+                (ExportMetadata.symbol == symbol) &
+                (ExportMetadata.provider == provider) &
+                (ExportMetadata.interval == interval)
+            )
             .first()
         )
         if existing:
@@ -180,6 +194,8 @@ class DataStore:
         else:
             ExportMetadata.create(
                 symbol=symbol,
+                provider=provider,
+                interval=interval,
                 filepath=filepath,
                 start_date=start_date,
                 end_date=end_date,

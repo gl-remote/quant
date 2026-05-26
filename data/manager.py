@@ -25,6 +25,7 @@ import pandera.pandas as pa
 from pandera.typing import DataFrame
 
 from .store import DataStore
+from .datasource import list_sources
 from .models import (
     KlineSchema,
     BacktestRecord,
@@ -73,6 +74,10 @@ class DataManager:
         """获取文件名模板配置"""
         return self._get_config().get_data_config().filename_template
 
+    def _get_default_provider(self) -> str:
+        """获取默认数据源"""
+        return self._get_config().get_data_config().provider
+
     def _get_default_interval(self) -> str:
         """获取默认K线周期配置"""
         return self._get_config().get_backtest_config().interval
@@ -100,7 +105,6 @@ class DataManager:
         """
         data_dir = self._get_data_dir()
 
-        # 先扫描所有CSV文件
         csv_dir = Path(data_dir)
         if not csv_dir.exists():
             return []
@@ -108,28 +112,29 @@ class DataManager:
         files = list(csv_dir.glob('*.csv'))
 
         # 从文件名提取品种名
-        symbols = set()
+        # 新格式: {symbol}.{provider}.{interval}.csv
+        # 旧格式: {symbol}.{interval}.csv
+        symbols: set[str] = set()
+        common_intervals = COMMON_KLINE_INTERVALS
+        known_providers = set(list_sources())
         for f in files:
             name = f.stem
-            symbol = None
+            # 新格式: name.rsplit('.', 2) → [symbol, provider, interval]
+            parts3 = name.rsplit('.', 2)
+            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
+                symbols.add(parts3[0])
+                continue
 
-            # 先尝试新格式: {symbol}.{interval}
-            # 找到最后一个点号的位置，分隔出interval
-            last_dot = name.rfind('.')
-            if last_dot != -1:
-                suffix_part = name[last_dot + 1:]
-                # 检查后面的部分是否像常见的interval
-                common_intervals = COMMON_KLINE_INTERVALS
-                if suffix_part in common_intervals:
-                    symbol = name[:last_dot]
+            # 旧格式: name.rsplit('.', 1) → [symbol, interval]
+            parts2 = name.rsplit('.', 1)
+            if len(parts2) == 2 and parts2[-1] in common_intervals:
+                symbols.add(parts2[0])
+                continue
 
-            # 如果新格式没匹配到，直接用文件名作为symbol
-            if symbol is None:
-                symbol = name
+            # 无法解析，直接用文件名
+            symbols.add(name)
 
-            symbols.add(symbol)
-
-        return sorted(list(symbols))
+        return sorted(symbols)
 
     def search_symbols(self, pattern: str) -> list[str]:
         """按正则表达式搜索可用品种
@@ -170,7 +175,8 @@ class DataManager:
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
-        filename = filename_template.format(symbol=symbol, interval='1m')
+        provider = self._get_default_provider()
+        filename = filename_template.format(symbol=symbol, provider=provider, interval='1m')
         filepath = Path(data_dir) / filename
 
         if filepath.exists():
@@ -220,7 +226,7 @@ class DataManager:
 
     @pa.check_output(KlineSchema)
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None) -> pd.DataFrame:
+                   interval: str | None = None, provider: str | None = None) -> pd.DataFrame:
         """加载K线数据，直接返回经过 Pandera 验证的 DataFrame
 
         Args:
@@ -228,14 +234,17 @@ class DataManager:
             start_date: 开始日期（可选，格式 'YYYY-MM-DD'）
             end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
             interval: K线周期（默认从配置读取）
+            provider: 数据源（默认从配置读取）
 
         Returns:
             经过 Pandera KlineSchema 验证的 K 线数据
         """
         if interval is None:
             interval = self._get_default_interval()
+        if provider is None:
+            provider = self._get_default_provider()
 
-        cache_key = f"{symbol}_{interval}_{start_date}_{end_date}"
+        cache_key = f"{symbol}_{provider}_{interval}_{start_date}_{end_date}"
         if cache_key in self._data_cache:
             logger.debug(f"从缓存加载数据: {symbol}")
             return self._data_cache[cache_key]
@@ -243,7 +252,7 @@ class DataManager:
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
-        filename = filename_template.format(symbol=symbol, interval=interval)
+        filename = filename_template.format(symbol=symbol, provider=provider, interval=interval)
         filepath = Path(data_dir) / filename
 
         if not filepath.exists():
@@ -264,10 +273,10 @@ class DataManager:
         return df  # pyright: ignore[reportReturnType]
 
     def load_kline_safe(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                        interval: str | None = None) -> pd.DataFrame | None:
+                        interval: str | None = None, provider: str | None = None) -> pd.DataFrame | None:
         """加载K线数据，失败返回None（不抛异常）"""
         try:
-            return self.load_kline(symbol, start_date, end_date, interval)
+            return self.load_kline(symbol, start_date, end_date, interval, provider)
         except Exception as e:
             logger.error(f"加载K线数据失败: {e}")
             return None

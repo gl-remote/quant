@@ -128,8 +128,10 @@ class OrmBaseModel(Model):
 
 
 class ExportMetadata(OrmBaseModel):
-    """导出元数据"""
-    symbol: CharField = CharField(unique=True)
+    """导出元数据 — 联合唯一键 (symbol, provider, interval)"""
+    symbol: CharField = CharField()
+    provider: CharField = CharField()        # 数据源: tqsdk / akshare
+    interval: CharField = CharField()        # K线周期: 1m / 5m / 1d / ...
     filepath: CharField = CharField()
     start_date: DateField = DateField(null=True)
     end_date: DateField = DateField(null=True)
@@ -141,6 +143,9 @@ class ExportMetadata(OrmBaseModel):
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'export_metadata'
+        indexes = (
+            (('symbol', 'provider', 'interval'), True),  # 联合唯一约束
+        )
 
 
 class OperationLog(OrmBaseModel):
