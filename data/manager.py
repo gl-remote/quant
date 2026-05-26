@@ -241,23 +241,32 @@ class DataManager:
         """
         if interval is None:
             interval = self._get_default_interval()
-        if provider is None:
-            provider = self._get_default_provider()
-
-        cache_key = f"{symbol}_{provider}_{interval}_{start_date}_{end_date}"
-        if cache_key in self._data_cache:
-            logger.debug(f"从缓存加载数据: {symbol}")
-            return self._data_cache[cache_key]
 
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
-        filename = filename_template.format(symbol=symbol, provider=provider, interval=interval)
-        filepath = Path(data_dir) / filename
+        # 尝试找到数据文件：先按指定/默认 provider，找不到就遍历所有已注册 provider
+        candidates = ([provider] if provider else
+                      [self._get_default_provider()] + [p for p in list_sources()
+                      if p != self._get_default_provider()])
+        filepath = None
+        matched_provider = None
+        for p in candidates:
+            fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
+            if fp.exists():
+                filepath = fp
+                matched_provider = p
+                break
 
-        if not filepath.exists():
-            logger.error(f"数据文件不存在: {filepath}")
-            raise FileNotFoundError(f"数据文件不存在: {filepath}")
+        if filepath is None:
+            raise FileNotFoundError(
+                f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
+            )
+
+        cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
+        if cache_key in self._data_cache:
+            logger.debug(f"从缓存加载数据: {symbol}")
+            return self._data_cache[cache_key]
 
         df = pd.read_csv(filepath)
         df['datetime'] = pd.to_datetime(df['datetime'])

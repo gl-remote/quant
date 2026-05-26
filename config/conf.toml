@@ -58,7 +58,7 @@ kline_period = 1              # K线周期 (分钟)
 # 数据配置 (数据源 + 存储 + 导出)
 # ============================================================
 [data]
-provider = "tqsdk"                         # 数据源提供商
+provider = "akshare"                        # 数据源提供商
 cache_enabled = false                        # 是否启用缓存
 base_dir = ".quant_shared_data"              # 数据基础目录
 export_dir = ".quant_shared_data/csv"        # CSV 导出目录
