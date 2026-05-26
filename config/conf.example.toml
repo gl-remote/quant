@@ -47,3 +47,34 @@ debug = true                      # 是否启用调试模式
 # enabled = false
 # api_key = ""
 # api_secret = ""
+
+# ============================================================
+# 可选：参数优化配置
+# ============================================================
+[optimizer]
+enabled = true                    # 是否启用参数优化
+engine = "optuna"                 # 优化引擎: "grid" 或 "optuna"
+n_trials = 50                     # Optuna 最大试验次数
+table_prefix = "optuna_"          # Optuna 表名前缀
+
+# 全局搜索空间（适用于所有策略）
+# [optimizer.search_space]
+# sma_short = { type = "int", low = 5, high = 30, step = 5 }
+# sma_long = { type = "int", low = 30, high = 200, step = 10 }
+
+# 策略专属搜索空间（优先于全局搜索空间）
+[optimizer.strategy_spaces.ma]
+sma_short = { type = "int", low = 5, high = 30, step = 5 }
+sma_long = { type = "int", low = 30, high = 200, step = 10 }
+stop_loss_ratio = { type = "float", low = 0.01, high = 0.05 }
+take_profit_ratio = { type = "float", low = 0.02, high = 0.1 }
+
+# [optimizer.strategy_spaces.rsi]
+# rsi_period = { type = "int", low = 6, high = 20 }
+# overbought = { type = "int", low = 60, high = 90 }
+# oversold = { type = "int", low = 10, high = 40 }
+
+# 网格搜索参数（engine="grid" 时使用）
+# [optimizer.param_grid]
+# sma_short = [5, 10, 15]
+# sma_long = [30, 60, 120]

@@ -354,17 +354,21 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             # CLI 参数优先，其次 TOML engine 字段
             opt_engine = optimizer_arg or optimizer_cfg.engine or "grid"
 
-            if opt_engine == "optuna" and optimizer_cfg.search_space:
-                _run_optuna_search(
-                    engine=engine, datasets=datasets,
-                    strategy_name=strategy_name,
-                    search_space=optimizer_cfg.search_space,
-                    strategy_params=strategy_params,
-                    capital=capital,
-                    contract_size=bc.contract_size,
-                    n_trials=optimizer_cfg.n_trials,
-                    dm=dm, git_hash=git_hash,
-                )
+            if opt_engine == "optuna":
+                # 优先使用策略专属搜索空间，其次使用全局搜索空间
+                search_space = optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
+                if search_space:
+                    _run_optuna_search(
+                        engine=engine, datasets=datasets,
+                        strategy_name=strategy_name,
+                        search_space=search_space,
+                        strategy_params=strategy_params,
+                        capital=capital,
+                        contract_size=bc.contract_size,
+                        n_trials=optimizer_cfg.n_trials,
+                        dm=dm, git_hash=git_hash,
+                        table_prefix=optimizer_cfg.table_prefix,
+                    )
             else:
                 _run_grid_search(
                     engine=engine, datasets=datasets,
@@ -531,10 +535,12 @@ def _run_optuna_search(
     n_trials: int,
     dm: DataManager,
     git_hash: str | None,
+    table_prefix: str = "optuna_",
 ) -> None:
     """Optuna 贝叶斯优化：optimizer 调度 engine，持久化全部 trial 结果"""
 
-    optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
+    # 构建带表名前缀的数据库 URL
+    optuna_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}?table_prefix={table_prefix}"
 
     opt = OptunaOptimizer(
         engine=engine,
