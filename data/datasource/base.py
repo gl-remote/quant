@@ -71,6 +71,13 @@ class BaseDataSource(ABC):
 
         # 排序去重
         df = df.sort_values("datetime").drop_duplicates(subset="datetime", keep="last")
+
+        # 过滤无效数据：timestamp=0 导致的 1970 年脏数据、全 NaN 行
+        df["_dt"] = pd.to_datetime(df["datetime"])
+        df = df[df["_dt"].dt.year >= 2000]
+        df = df.dropna(subset=["open", "high", "low", "close"], how="all")
+        df = df.drop(columns=["_dt"])
+
         df = df.reset_index(drop=True)
 
         return df[Qlib_COLUMNS]
