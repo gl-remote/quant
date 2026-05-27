@@ -9,7 +9,7 @@ export default function NavPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchJson<NavItem[]>("data/nav.json")
+    fetchJson<NavItem[]>("nav.json")
       .then((data) => {
         setRuns(data);
         setLoading(false);
