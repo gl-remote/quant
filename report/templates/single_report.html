@@ -42,11 +42,11 @@ td { padding:8px 12px; border-bottom:1px solid #f3f4f6; font-size:13px; }
     <div class="header"><h1>[BT-REPORT] {{ title }}</h1></div>
     <div class="metrics">
         <h2 style="grid-column:1/-1;margin:0;font-size:14px;color:#888">[BT-METRICS] 指标</h2>
-        {% for c in cards %}{{ c }}{% endfor %}
+        {% for c in cards %}{{ c | safe }}{% endfor %}
     </div>
     <div class="chart">
         <h2 style="margin:0 0 12px 0;font-size:14px;color:#888">[BT-EQ] 资金曲线</h2>
-        {{ plotly_div }}
+        {{ plotly_div | safe }}
     </div>
     {% if trades %}
     <h2>[BT-TRADES] 📋 交易明细</h2>
