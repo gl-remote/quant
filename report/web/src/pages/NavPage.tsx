@@ -1,13 +1,31 @@
+/**
+ * @file NavPage.tsx
+ * @description 回测导航页面组件
+ * 显示所有回测记录列表，包括回测基本信息、状态和统计数据
+ * 支持数据加载状态、错误状态和空状态的展示
+ */
+
 import { Link } from "react-router-dom";
 import { fetchJson } from "@/data/loader";
 import type { NavItem } from "@/types";
 import { useState, useEffect } from "react";
 
+/**
+ * NavPage组件
+ * 回测导航主页，展示所有回测记录的列表
+ * 
+ * @component
+ * @returns {JSX.Element} 渲染后的导航页面组件
+ */
 export default function NavPage() {
   const [runs, setRuns] = useState<NavItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * 组件挂载时获取回测导航数据
+   * 从nav.json文件加载所有回测记录信息
+   */
   useEffect(() => {
     fetchJson<NavItem[]>("nav.json")
       .then((data) => {
@@ -20,6 +38,7 @@ export default function NavPage() {
       });
   }, []);
 
+  // 加载状态
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
@@ -29,6 +48,7 @@ export default function NavPage() {
     );
   }
 
+  // 错误状态
   if (error) {
     return (
       <div style={styles.errorContainer}>
@@ -38,6 +58,7 @@ export default function NavPage() {
     );
   }
 
+  // 空状态
   if (!runs || runs.length === 0) {
     return (
       <div style={styles.emptyContainer}>
@@ -48,6 +69,7 @@ export default function NavPage() {
     );
   }
 
+  // 正常显示回测列表
   return (
     <div style={styles.container} data-ql-id="NAV-PG-CONTAINER">
       <div style={styles.headerSection} data-ql-id="NAV-PG-HERO">
@@ -127,6 +149,10 @@ export default function NavPage() {
   );
 }
 
+/**
+ * 样式对象
+ * 定义了NavPage组件中所有元素的样式
+ */
 const styles: Record<string, React.CSSProperties> = {
   container: {
     maxWidth: "1200px",

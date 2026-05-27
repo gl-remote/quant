@@ -1,11 +1,32 @@
+/**
+ * @file EquityChart.tsx
+ * @description 权益曲线图组件
+ * 使用ECharts绘制权益曲线和回撤曲线，展示回测的资金变化情况
+ * 包含累计收益、最大回撤、最终权益三个指标卡片
+ */
+
 import type { EquityData, EChartsOption } from "@/types";
 import EChartsChart from "@/components/EChartsChart";
 
+/**
+ * EquityChart组件属性接口
+ * @interface EquityChartProps
+ * @property {EquityData | null} data - 权益数据
+ */
 interface EquityChartProps {
   data: EquityData | null;
 }
 
+/**
+ * EquityChart组件
+ * 权益曲线展示组件
+ * 
+ * @component
+ * @param {EquityChartProps} props - 组件属性
+ * @returns {JSX.Element} 渲染后的权益图组件
+ */
 export default function EquityChart({ data }: EquityChartProps) {
+  // 无数据状态
   if (!data || !data.dates?.length) {
     return (
       <div
@@ -26,6 +47,7 @@ export default function EquityChart({ data }: EquityChartProps) {
     );
   }
 
+  // 计算关键指标
   const startEq = data.equity[0];
   const totalReturn = startEq
     ? ((data.equity[data.equity.length - 1] / startEq - 1) * 100).toFixed(2)
@@ -35,6 +57,7 @@ export default function EquityChart({ data }: EquityChartProps) {
     : "0";
   const endEq = data.equity[data.equity.length - 1]?.toFixed(2) || "0";
 
+  // ECharts配置
   const option: EChartsOption = {
     tooltip: { trigger: "axis" },
     legend: {
@@ -144,6 +167,9 @@ export default function EquityChart({ data }: EquityChartProps) {
   );
 }
 
+/**
+ * 指标卡片样式
+ */
 const metricStyle: React.CSSProperties = {
   background: "#f8f9fa",
   borderRadius: 6,
@@ -152,12 +178,18 @@ const metricStyle: React.CSSProperties = {
   border: "1px solid #e8e8e8",
 };
 
+/**
+ * 指标标签样式
+ */
 const metricLabelStyle: React.CSSProperties = {
   fontSize: 12,
   color: "#888",
   marginBottom: 4,
 };
 
+/**
+ * 指标值样式
+ */
 const metricValueStyle: React.CSSProperties = {
   fontSize: 20,
   fontWeight: 700,

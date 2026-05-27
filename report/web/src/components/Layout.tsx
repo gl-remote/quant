@@ -1,9 +1,29 @@
+/**
+ * @file Layout.tsx
+ * @description 应用程序主布局组件
+ * 提供统一的页面结构，包括顶部导航栏、面包屑导航（在非首页时显示）、主内容区域和页脚
+ * 实现响应式设计，适配不同屏幕尺寸
+ */
+
 import { Link, useLocation } from "react-router-dom";
 
+/**
+ * Layout组件属性接口
+ * @interface LayoutProps
+ * @property {React.ReactNode} children - 子组件，将被渲染在主内容区域
+ */
 interface LayoutProps {
   children: React.ReactNode;
 }
 
+/**
+ * Layout组件
+ * 应用程序的根布局组件，提供一致的页面框架
+ * 
+ * @component
+ * @param {LayoutProps} props - 组件属性
+ * @returns {JSX.Element} 渲染后的布局组件
+ */
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const isHome = location.hash === "#/" || location.hash === "";
@@ -46,6 +66,10 @@ export default function Layout({ children }: LayoutProps) {
   );
 }
 
+/**
+ * 样式对象
+ * 定义了Layout组件中所有元素的样式
+ */
 const styles: Record<string, React.CSSProperties> = {
   body: {
     fontFamily:

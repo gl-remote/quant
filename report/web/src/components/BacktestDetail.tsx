@@ -1,27 +1,57 @@
+/**
+ * @file BacktestDetail.tsx
+ * @description 回测详情组件
+ * 展示选中品种的详细回测指标和策略参数
+ * 包括收益率、胜率、最大回撤、夏普比率、交易次数等关键指标
+ */
+
 import type { BacktestRecord } from "@/types";
 
+/**
+ * BacktestDetail组件属性接口
+ * @interface Props
+ * @property {BacktestRecord[] | null} backtests - 回测记录数组
+ * @property {string} selectedSymbol - 选中的品种代码
+ */
 interface Props {
   backtests: BacktestRecord[] | null;
   selectedSymbol: string;
 }
 
+/**
+ * 格式化百分比
+ * @param {number} v - 数值
+ * @param {number} [digits=2] - 小数位数
+ * @returns {string} 格式化后的百分比字符串
+ */
 function formatPct(v: number, digits = 2): string {
   return `${(v).toFixed(digits)}%`;
 }
 
+/**
+ * BacktestDetail组件
+ * 回测详情展示组件
+ * 
+ * @component
+ * @param {Props} props - 组件属性
+ * @returns {JSX.Element} 渲染后的回测详情组件
+ */
 export default function BacktestDetail({
   backtests,
   selectedSymbol,
 }: Props) {
+  // 无回测数据时返回空
   if (!backtests || backtests.length === 0) {
     return <div data-ql-id="RUN-BT-EMPTY" />;
   }
 
+  // 查找选中品种的回测记录
   const bt = backtests.find((b) => b.symbol === selectedSymbol);
   if (!bt) {
     return <div data-ql-id="RUN-BT-EMPTY" />;
   }
 
+  // 构建指标数组
   const metrics = [
     ["收益率", formatPct(bt.total_return * 100)],
     ["胜率", formatPct(bt.win_rate, 1)],
@@ -47,6 +77,7 @@ export default function BacktestDetail({
         ))}
       </div>
 
+      {/* 显示策略参数（如果有） */}
       {bt.params && bt.params.length > 0 && (
         <div data-ql-id="RUN-BT-PARAMS">
           <h3 style={styles.subtitle}>策略参数</h3>
@@ -64,6 +95,10 @@ export default function BacktestDetail({
   );
 }
 
+/**
+ * 样式对象
+ * 定义了BacktestDetail组件中所有元素的样式
+ */
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     background: "#fff",

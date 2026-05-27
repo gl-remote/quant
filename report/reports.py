@@ -1,4 +1,5 @@
-"""文字报告格式化
+"""
+文字报告格式化模块
 
 提供两种文本报告:
   - format_single_report:  单次回测完整详情
@@ -7,6 +8,7 @@
 
 from __future__ import annotations
 
+# 导入数据管理和格式化工具
 from data import DataManager
 from common.formatting import format_pct, format_float, ensure_float
 from common.constants import (
@@ -19,16 +21,34 @@ from common.constants import (
 )
 
 
-# ── 内部工具 ──────────────────────────────────────────────────
+# ── 内部工具函数 ──────────────────────────────────────────────────
 
 
 def _na_str(v: object | None) -> str:
-    """将可能为 None 的值转为展示字符串"""
+    """
+    将可能为 None 的值转为展示字符串
+    
+    Args:
+        v: 可能为 None 的值
+        
+    Returns:
+        转换后的字符串，None 返回 'N/A'
+    """
     return 'N/A' if v is None else str(v)
 
 
 def _get_attr(obj: object, key: str, default: object = None) -> object:
-    """获取对象属性值（兼容 dict 和 ORM model）"""
+    """
+    获取对象属性值（兼容 dict 和 ORM model）
+    
+    Args:
+        obj: 目标对象
+        key: 属性名
+        default: 默认值
+        
+    Returns:
+        属性值或默认值
+    """
     if hasattr(obj, key):
         return getattr(obj, key, default)
     return obj.get(key, default) if isinstance(obj, dict) else default
@@ -38,26 +58,32 @@ def _get_attr(obj: object, key: str, default: object = None) -> object:
 
 
 def format_single_report(dm: DataManager, backtest_id: int) -> str:
-    """生成单次回测的完整文本报告
+    """
+    生成单次回测的完整文本报告
 
     Args:
-        dm: DataManager 实例
+        dm: DataManager 实例，用于查询回测数据
         backtest_id: 回测记录 ID
 
     Returns:
         格式化的控制台报告字符串
     """
+    # 获取回测记录
     bt = dm.get_backtest(backtest_id)
 
+    # 检查回测记录是否存在
     if not bt:
         return f"错误: 未找到回测记录 id={backtest_id}"
 
+    # 查询交易记录和每日数据
     trades = dm.query_trades(backtest_id)
     daily = dm.query_daily(backtest_id)
 
+    # 统计交易天数（去重）
     trade_days: list[str] = sorted(set(
         str(_get_attr(t, 'datetime'))[:10] for t in trades if _get_attr(t, 'datetime')
     ))
+    # 统计开多和平空次数
     buy_count: int = sum(
         1 for t in trades
         if _get_attr(t, 'direction') == TRADE_DIRECTION_LONG and _get_attr(t, 'offset') == TRADE_OFFSET_OPEN
@@ -67,12 +93,14 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         if _get_attr(t, 'direction') == TRADE_DIRECTION_SHORT and _get_attr(t, 'offset') == TRADE_OFFSET_CLOSE
     )
 
+    # 提取基本信息
     symbol = bt.symbol
     strategy = bt.strategy
     status = bt.status
     strategy_version = _get_attr(bt, 'strategy_version')
     git_hash = _get_attr(bt, 'git_hash')
 
+    # 构建报告头部
     lines: list[str] = [
         f"{'=' * 70}",
         f"  回测报告 #{backtest_id}",
@@ -87,15 +115,18 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         f"  运行时间:   {_get_attr(bt, 'created_at')}",
     ]
 
+    # 如果回测失败，显示错误信息
     if status == STATUS_FAILED:
         error_msg = _get_attr(bt, 'error_message') or 'N/A'
         lines.append(f"  错误信息:   {error_msg}")
         lines.append(f"{'=' * 70}")
         return '\n'.join(lines)
 
+    # 提取数据范围
     date_start = bt.start_date
     date_end = bt.end_date
 
+    # 添加更多报告内容
     lines += [
         "",
         "【数据范围】",
@@ -110,7 +141,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "",
         "【交易统计】",
         f"  总交易次数: {bt.total_trades or 0}",
-        f"  盈利交易:   {_get_attr(bt, 'win_trades', 0) or 0}  ({format_pct(bt.win_rate)})",
+        f"  盈利交易:   {_get_attr(bt, 'win_trades', 0) or 0} ({format_pct(bt.win_rate)})",
         f"  亏损交易:   {_get_attr(bt, 'loss_trades', 0) or 0}",
         f"  平均盈利:   {format_float(bt.avg_win, ',.0f')}",
         f"  平均亏损:   {format_float(bt.avg_loss, ',.0f')}",
@@ -125,6 +156,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         f"  交易日期:   {len(trade_days)} 天",
     ]
 
+    # 如果有每日数据，显示最近10天的资金曲线
     if daily:
         lines += [
             "",
@@ -143,6 +175,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
                 f"{drawdown:>8.2%}"
             )
 
+    # 如果有交易记录，显示最近20笔交易
     if trades:
         lines += [
             "",
@@ -162,6 +195,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
                 f"{qty:>4}"
             )
 
+    # 添加报告结尾
     lines.append(f"{'=' * 70}")
     return '\n'.join(lines)
 
@@ -172,17 +206,19 @@ def format_summary_report(
     strategy: str | None = None,
     limit: int = 20,
 ) -> str:
-    """生成最近回测的汇总列表
+    """
+    生成最近回测的汇总列表
 
     Args:
         dm: DataManager 实例
-        symbol: 品种过滤
-        strategy: 策略过滤
-        limit: 最大条数
+        symbol: 品种过滤（可选）
+        strategy: 策略过滤（可选）
+        limit: 最大显示条数
 
     Returns:
         格式化的汇总表格字符串
     """
+    # 查询符合条件的回测记录
     records = dm.query_backtests(
         symbol=symbol,
         strategy=strategy,
@@ -190,6 +226,7 @@ def format_summary_report(
         limit=limit,
     )
 
+    # 检查是否有记录
     if not records:
         filters: list[str] = []
         if symbol:
@@ -199,6 +236,7 @@ def format_summary_report(
         fstr: str = ', '.join(filters) if filters else '全部'
         return f"未找到符合条件的回测记录 ({fstr})"
 
+    # 构建汇总表格头部
     lines: list[str] = [
         f"{'=' * 110}",
         f"  回测汇总 ({len(records)} 条)",
@@ -208,6 +246,7 @@ def format_summary_report(
         f"  {'-' * 100}",
     ]
 
+    # 遍历回测记录添加到表格
     for bt in records:
         sym: str = bt.symbol or 'N/A'
         strat: str = bt.strategy or 'N/A'
@@ -228,6 +267,7 @@ def format_summary_report(
             f"{created:<16}"
         )
 
+    # 添加表格结尾和提示
     lines.append(f"{'=' * 110}")
     lines.append("  使用 'python main.py report --id <ID>' 查看完整报告")
     return '\n'.join(lines)

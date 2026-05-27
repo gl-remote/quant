@@ -1,3 +1,10 @@
+/**
+ * @file KlineChart.tsx
+ * @description K线图组件
+ * 使用lightweight-charts库绘制K线图，支持日线和分钟线切换，支持SMA均线显示/隐藏
+ * 包含蜡烛图、成交量柱状图和SMA移动平均线
+ */
+
 import { useEffect, useRef, useState } from "react";
 import {
   createChart,
@@ -12,13 +19,27 @@ import {
 } from "lightweight-charts";
 import type { KlineData, KlinePoint } from "@/types";
 
+/**
+ * 视图模式类型
+ */
 type ViewMode = "daily" | "raw";
 
+/**
+ * KlineChart组件属性接口
+ * @interface Props
+ * @property {KlineData | null} data - K线数据
+ * @property {boolean} [loading] - 加载状态
+ */
 interface Props {
   data: KlineData | null;
   loading?: boolean;
 }
 
+/**
+ * 将K线数据转换为蜡烛图数据格式
+ * @param {KlinePoint[]} data - K线数据数组
+ * @returns {CandlestickData<Time>[]} 转换后的蜡烛图数据
+ */
 function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
   return data.map((d) => ({
     time: d.datetime as Time,
@@ -29,6 +50,12 @@ function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
   }));
 }
 
+/**
+ * 计算SMA简单移动平均线
+ * @param {KlinePoint[]} data - K线数据数组
+ * @param {number} period - 周期
+ * @returns {number[]} SMA值数组
+ */
 function calculateSMA(data: KlinePoint[], period: number): number[] {
   const result: number[] = [];
   for (let i = 0; i < data.length; i++) {
@@ -45,6 +72,14 @@ function calculateSMA(data: KlinePoint[], period: number): number[] {
   return result;
 }
 
+/**
+ * KlineChart组件
+ * K线图展示组件
+ * 
+ * @component
+ * @param {Props} props - 组件属性
+ * @returns {JSX.Element} 渲染后的K线图组件
+ */
 export default function KlineChart({ data, loading }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -54,11 +89,16 @@ export default function KlineChart({ data, loading }: Props) {
   const [mode, setMode] = useState<ViewMode>("daily");
   const [indicators, setIndicators] = useState<{ sma: boolean }>({ sma: true });
 
+  // 根据模式选择K线数据
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
 
+  /**
+   * 初始化图表
+   */
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // 创建图表实例
     const chart = createChart(containerRef.current, {
       layout: {
         background: { color: "#ffffff" },
@@ -83,6 +123,7 @@ export default function KlineChart({ data, loading }: Props) {
       },
     });
 
+    // 添加蜡烛图序列
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#26A69A",
       downColor: "#EF5350",
@@ -92,6 +133,7 @@ export default function KlineChart({ data, loading }: Props) {
       wickDownColor: "#EF5350",
     });
 
+    // 添加成交量序列
     const volumeSeries = chart.addSeries(HistogramSeries, {
       color: "#26A69A",
       priceFormat: {
@@ -100,16 +142,19 @@ export default function KlineChart({ data, loading }: Props) {
       priceScaleId: "",
     });
 
+    // 添加短期SMA均线
     const smaShortSeries = chart.addSeries(LineSeries, {
       color: "#FF6B6B",
       lineWidth: 2,
     });
 
+    // 添加长期SMA均线
     const smaLongSeries = chart.addSeries(LineSeries, {
       color: "#4ECDC4",
       lineWidth: 2,
     });
 
+    // 配置成交量价格标尺
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
         top: 0.85,
@@ -117,11 +162,13 @@ export default function KlineChart({ data, loading }: Props) {
       },
     });
 
+    // 保存序列引用
     candlestickSeriesRef.current = candlestickSeries;
     volumeSeriesRef.current = volumeSeries;
     smaShortSeriesRef.current = smaShortSeries;
     smaLongSeriesRef.current = smaLongSeries;
 
+    // 处理窗口大小变化
     const handleResize = () => {
       if (containerRef.current) {
         chart.applyOptions({
@@ -132,19 +179,25 @@ export default function KlineChart({ data, loading }: Props) {
 
     window.addEventListener("resize", handleResize);
 
+    // 清理函数
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
   }, []);
 
+  /**
+   * 更新图表数据
+   */
   useEffect(() => {
     if (!candlestickSeriesRef.current || !volumeSeriesRef.current || !klineData)
       return;
 
+    // 更新蜡烛图数据
     const candleData = convertToCandleData(klineData);
     candlestickSeriesRef.current.setData(candleData);
 
+    // 更新成交量数据
     const volumeData: HistogramData<Time>[] = klineData.map((d, i) => ({
       time: d.datetime as Time,
       value: d.volume,
@@ -152,6 +205,7 @@ export default function KlineChart({ data, loading }: Props) {
     }));
     volumeSeriesRef.current.setData(volumeData);
 
+    // 更新SMA均线数据
     if (indicators.sma && smaShortSeriesRef.current && smaLongSeriesRef.current) {
       const smaShort = calculateSMA(klineData, 5);
       const smaLong = calculateSMA(klineData, 60);
@@ -171,6 +225,9 @@ export default function KlineChart({ data, loading }: Props) {
     }
   }, [klineData, indicators]);
 
+  /**
+   * 更新SMA均线显示状态
+   */
   useEffect(() => {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
       smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
@@ -178,6 +235,7 @@ export default function KlineChart({ data, loading }: Props) {
     }
   }, [indicators.sma]);
 
+  // 加载状态
   if (loading) {
     return (
       <>
@@ -190,6 +248,7 @@ export default function KlineChart({ data, loading }: Props) {
     );
   }
 
+  // 无数据状态
   if (!data) {
     return (
       <div style={styles.empty} data-ql-id="RUN-KLINE-EMPTY">
@@ -198,6 +257,7 @@ export default function KlineChart({ data, loading }: Props) {
     );
   }
 
+  // 无当前模式数据状态
   if (!klineData || klineData.length === 0) {
     return (
       <div style={styles.empty} data-ql-id="RUN-KLINE-EMPTY">
@@ -275,6 +335,10 @@ export default function KlineChart({ data, loading }: Props) {
   );
 }
 
+/**
+ * 样式对象
+ * 定义了KlineChart组件中所有元素的样式
+ */
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
     background: "#ffffff",

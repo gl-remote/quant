@@ -1,3 +1,10 @@
+/**
+ * @file RunPage.tsx
+ * @description 回测详情页面组件
+ * 展示单个回测的详细信息，包括回测指标、K线图、资金曲线、品种汇总表、回测详情等
+ * 支持在回测结果和参数优化结果之间切换
+ */
+
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { useFetchJson } from "@/hooks/useFetchJson";
@@ -16,42 +23,60 @@ import EquityChart from "@/components/EquityChart";
 import BacktestDetail from "@/components/BacktestDetail";
 import OptunaCharts from "@/components/OptunaCharts";
 
+/**
+ * RunPage组件
+ * 回测详情主页，展示单个回测的完整信息
+ * 
+ * @component
+ * @returns {JSX.Element} 渲染后的回测详情页面组件
+ */
 export default function RunPage() {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
   const runId = Number(id);
   const showOptuna = location.pathname.includes("/optuna");
 
+  // 获取回测基本信息
   const { data: run, loading: runLoading } = useFetchJson<RunInfo>(
     "run.json",
     runId
   );
+  // 获取回测汇总数据
   const { data: summary, loading: summaryLoading } =
     useFetchJson<SummaryItem[]>("summary.json", runId);
+  // 获取回测记录数据
   const { data: backtests, loading: btLoading } =
     useFetchJson<BacktestRecord[]>("backtests.json", runId);
+  // 获取资金曲线数据
   const { data: equity } = useFetchJson<Record<string, EquityData>>(
     "equity.json",
     runId
   );
+  // 获取Optuna优化数据
   const { data: optuna } = useFetchJson<OptunaData | null>(
     "optuna.json",
     runId
   );
 
+  // 当前选中的品种
   const [selectedSymbol, setSelectedSymbol] = useState<string>("");
 
+  /**
+   * 当summary数据加载完成时，自动选中第一个品种
+   */
   useEffect(() => {
     if (summary && summary.length > 0 && !selectedSymbol) {
       setSelectedSymbol(summary[0].symbol);
     }
   }, [summary, selectedSymbol]);
 
+  // 获取选中品种的K线数据
   const { data: kline, loading: klineLoading } = useFetchJson<KlineData>(
     `kline_${selectedSymbol}.json`,
     runId
   );
 
+  // 检查是否还有数据在加载中
   const loading = runLoading || summaryLoading || btLoading;
   if (loading) {
     return (
@@ -62,6 +87,7 @@ export default function RunPage() {
     );
   }
 
+  // 检查是否有Optuna优化数据
   const hasOptuna = optuna && optuna.study_name;
 
   return (
@@ -116,6 +142,7 @@ export default function RunPage() {
         )}
       </div>
 
+      {/* 根据路由显示Optuna优化结果或回测结果 */}
       {showOptuna && optuna ? (
         <OptunaCharts data={optuna} />
       ) : (
@@ -146,6 +173,10 @@ export default function RunPage() {
   );
 }
 
+/**
+ * 样式对象
+ * 定义了RunPage组件中所有元素的样式
+ */
 const styles: Record<string, React.CSSProperties> = {
   header: {
     display: "flex",
