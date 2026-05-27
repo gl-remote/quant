@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import glob
 import json
 import sqlite3
 import os
@@ -18,8 +19,8 @@ def _escape(s: Any) -> str:
 
 def build_all(db_path: str, output_dir: str, run_id: int) -> None:
     """回测完成后统一入口"""
-    build_dashboard(db_path, run_id, output_dir)
     _build_single_report(db_path, run_id, output_dir)
+    build_dashboard(db_path, run_id, output_dir)
     build_nav(db_path, output_dir)
 
 
@@ -27,7 +28,7 @@ def build_dashboard(db_path: str, run_id: int, output_dir: str) -> str:
     conn = sqlite3.connect(db_path)
     study_dir = Path(output_dir) / f"r{run_id}"
     study_dir.mkdir(parents=True, exist_ok=True)
-    html = _render_page(conn, run_id)
+    html = _render_page(conn, run_id, output_dir)
     filepath = study_dir / "index.html"
     filepath.write_text(html, encoding="utf-8")
     conn.close()
@@ -73,8 +74,7 @@ def _build_single_report(db_path: str, run_id: int, output_dir: str) -> None:
         ).fetchone()
         conn.close()
         if bt:
-            study_dir = Path(output_dir) / f"r{run_id}"
-            build_report(dm, bt[0], output_dir=str(study_dir))
+            build_report(dm, bt[0], output_dir=output_dir)
     except Exception:
         pass
 
@@ -152,15 +152,15 @@ function showTab(name,btn){{
 
 # ── 渲染函数 ──────────────────────────────────────────────────
 
-def _render_page(conn: sqlite3.Connection, run_id: int) -> str:
+def _render_page(conn: sqlite3.Connection, run_id: int, output_dir: str = "output") -> str:
     return _PAGE_TEMPLATE.format(
         run_id=run_id,
-        backtest_tab=_render_backtest_tab(conn, run_id),
+        backtest_tab=_render_backtest_tab(conn, run_id, output_dir),
         optuna_tab=_render_optuna_tab(conn, run_id),
     )
 
 
-def _render_backtest_tab(conn: sqlite3.Connection, run_id: int) -> str:
+def _render_backtest_tab(conn: sqlite3.Connection, run_id: int, output_dir: str = "output") -> str:
     rows = conn.execute("""
         SELECT symbol, total_return, total_trades, win_rate, max_drawdown, sharpe_ratio,
                end_balance
@@ -226,6 +226,21 @@ def _render_backtest_tab(conn: sqlite3.Connection, run_id: int) -> str:
             parts.append(f'x:{json.dumps(dates)},y:{json.dumps(dd_arr)},type:"scatter",name:"回撤%",')
             parts.append('yaxis:"y2",line:{color:"#dc2626",dash:"dot"}}],')
             parts.append('{margin:{t:10,b:50,l:60,r:60},yaxis:{title:"权益"},yaxis2:{title:"回撤%",overlaying:"y",side:"right"},legend:{x:0,y:1}});</script>')
+
+    # 列出该 run 下的所有详细报告
+    study_dir = Path(output_dir) / f"r{run_id}"
+    reports = sorted(glob.glob(str(study_dir / "backtest_*.html")))
+    if reports:
+        parts.append('<h2>📄 详细报告</h2>')
+        parts.append('<ul>')
+        for rp in reports:
+            fn = os.path.basename(rp)
+            # 从文件名提取 backtest_id
+            bid = fn.replace("backtest_", "").replace(".html", "")
+            symbol = conn.execute("SELECT symbol FROM backtests WHERE id=?", (bid,)).fetchone()
+            sym_text = f" ({_escape(symbol[0])})" if symbol else ""
+            parts.append(f'<li><a href="{_escape(fn)}">{_escape(fn)}{sym_text}</a></li>')
+        parts.append('</ul>')
 
     return "\n".join(parts)
 
