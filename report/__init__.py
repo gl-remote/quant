@@ -48,7 +48,7 @@ def build_report(
     fig = create_figure(bt, daily, trades)
     plotly_div = fig.to_html(full_html=False, include_plotlyjs='cdn')
 
-    html = render_html(bt, plotly_div)
+    html = render_html(bt, plotly_div, trades)
 
     # 如果有 run，归入 output/r{run}/
     if bt.run:
