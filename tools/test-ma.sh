@@ -15,7 +15,11 @@ NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
-PYTHON_PATH="${CONDA_PREFIX:-/usr/local/Caskroom/miniconda/base}/envs/quant_trading/bin/python"
+if [[ "${CONDA_PREFIX:-}" == *quant_trading* ]]; then
+    PYTHON_PATH="${CONDA_PREFIX}/bin/python"
+else
+    PYTHON_PATH="/usr/local/Caskroom/miniconda/base/envs/quant_trading/bin/python"
+fi
 
 echo "=========================================="
 echo "MA 策略全链路测试"
