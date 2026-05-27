@@ -61,7 +61,7 @@ class TestFormatSingleReport:
         bt_id = dm._store.insert_backtest_detailed(
             symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
             error_message='数据不足无法回测', statistics={},
-            engine_config={}, params_json='{}',
+            engine_config={}, params={},
             start_date=None, end_date=None,
         )
         text = format_single_report(dm, bt_id)
@@ -86,7 +86,7 @@ class TestFormatSingleReport:
             error_message=None,
             statistics={'total_trades': 3, 'end_balance': 101000.0},
             engine_config={'initial_capital': 100000.0},
-            params_json='{}',
+            params={},
             start_date='2024-01-01', end_date='2024-03-31',
         )
         text = format_single_report(dm, bt_id)

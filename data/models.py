@@ -200,7 +200,6 @@ class Backtest(OrmBaseModel):
     price_tick: FloatField = FloatField(null=True)
     contract_size: IntegerField = IntegerField(null=True)
     kline_interval: CharField = CharField(null=True, max_length=8)
-    params_json: TextField = TextField(null=True)
     end_balance: FloatField = FloatField(null=True)
     total_return: FloatField = FloatField(null=True)
     annual_return: FloatField = FloatField(null=True)
@@ -223,6 +222,16 @@ class Backtest(OrmBaseModel):
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'backtests'
+
+
+class BacktestParam(OrmBaseModel):
+    """回测参数 — 每个参数一行，与 backtest_id 关联"""
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='params', on_delete='CASCADE')
+    param_name: CharField = CharField()
+    param_value: FloatField = FloatField()
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = 'backtest_params'
 
 
 class BacktestTrade(OrmBaseModel):
@@ -259,7 +268,7 @@ class BacktestDaily(OrmBaseModel):
 def init_database(db_path: str):
     """初始化数据库连接"""
     database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
-    database.create_tables([Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
+    database.create_tables([Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
 
 
 def close_database():

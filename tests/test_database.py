@@ -293,7 +293,7 @@ class TestInsertAndQuery:
         store.insert_backtest_detailed(
             symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
             error_message='test error', statistics={}, engine_config={},
-            params_json='{}', start_date=None, end_date=None,
+            params={}, start_date=None, end_date=None,
         )
         results = store.query_backtests(status='success')
         assert len(results) == 1

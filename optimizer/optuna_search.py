@@ -174,7 +174,7 @@ class OptunaOptimizer:
                 'params': params,
                 'value': score,
                 'engine_results': engine_results,
-                'params_json': serialize_strategy_params(strategy),
+                'params': serialize_strategy_params(strategy),
                 'strategy_name': type(strategy).__name__,
                 'strategy_version': getattr(strategy, 'VERSION', None),
             })

@@ -191,7 +191,7 @@ class VnpyBacktestEngine:
                     'symbol': symbols[i] if i < len(symbols) else symbol,
                     'strategy_name': type(strategy).__name__,
                     'strategy_version': getattr(strategy, 'VERSION', None),
-                    'strategy_params_json': serialize_strategy_params(strategy),
+                    'strategy_params': serialize_strategy_params(strategy),
                     'statistics': r.get('statistics', {}),
                     'daily_results': r.get('daily_results', []),
                     'start_date': data_start,

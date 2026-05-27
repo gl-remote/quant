@@ -76,7 +76,7 @@ def insert_full_backtest(store, **overrides):
         error_message=None,
         statistics=VNPTY_STATS,
         engine_config=ec,
-        params_json='{"sma_short":5,"sma_long":20}',
+        params={'sma_short':5,'sma_long':20},
         start_date='2024-01-01',
         end_date='2024-12-31',
         strategy_version='1.0',

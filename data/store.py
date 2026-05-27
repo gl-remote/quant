@@ -25,6 +25,7 @@ from .models import (
     ExportMetadata,
     OperationLog,
     Backtest,
+    BacktestParam,
     BacktestTrade,
     BacktestDaily,
     BacktestRecord,
@@ -62,7 +63,7 @@ class DataStore:
     def _init_tables(self):
         """初始化数据库表"""
         database.create_tables(
-            [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestTrade, BacktestDaily],
+            [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily],
             safe=True,
         )
 
@@ -233,7 +234,7 @@ class DataStore:
         error_message: str | None,
         statistics: dict[str, object],
         engine_config: dict[str, object],
-        params_json: str | None,
+        params: dict[str, float] | None,
         start_date: str | None,
         end_date: str | None,
         strategy_version: str | None = None,
@@ -268,7 +269,6 @@ class DataStore:
             price_tick=engine_config.get('price_tick'),
             contract_size=engine_config.get('contract_size'),
             kline_interval=engine_config.get('kline_interval'),
-            params_json=params_json,
             end_balance=end_balance,
             total_return=total_return,
             annual_return=statistics.get('annual_return'),
@@ -290,6 +290,10 @@ class DataStore:
             created_at=now,
             updated_at=now,
         )
+        # 写入参数
+        if params:
+            for name, value in params.items():
+                BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
         return bt.id
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:

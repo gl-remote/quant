@@ -195,7 +195,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
                 'total_profit': total_profit,
             },
             engine_config={'type': 'tqsdk', 'gui': gui_flag},
-            params_json=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
+            params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
             start_date=start_date_str,
             end_date=end_date_str,
         )
@@ -238,7 +238,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             error_message=str(e),
             statistics={},
             engine_config={'type': 'tqsdk'},
-            params_json='{}',
+            params={},
             start_date=None,
             end_date=None,
         )
@@ -343,7 +343,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                     statistics=wf_result.get('aggregate', {}),
                     engine_config={'type': 'vnpy', 'mode': 'walk-forward',
                                    'windows': wf_result.get('windows', 0)},
-                    params_json=serialize_strategy_params(strategy),
+                    params=serialize_strategy_params(strategy),
                     start_date=start_arg,
                     end_date=end_arg,
                     strategy_version=getattr(strategy, 'VERSION', None),
@@ -420,7 +420,7 @@ def _persist_results(
 ) -> list[int]:
     """将引擎返回的结构化回测结果持久化到数据库
 
-    每个 result dict 自包含 strategy_name / strategy_params_json /
+    每个 result dict 自包含 strategy_name / strategy_params /
     strategy_version，不再需要外部统一传入。
 
     Args:
@@ -445,7 +445,7 @@ def _persist_results(
                 error_message=None,
                 statistics=st,
                 engine_config=ec,
-                params_json=r.get('strategy_params_json', '{}'),
+                params=r.get('strategy_params', {}),
                 start_date=r.get('start_date'),
                 end_date=r.get('end_date'),
                 strategy_version=r.get('strategy_version'),
@@ -483,7 +483,7 @@ def _persist_results(
                 error_message=r.get('error'),
                 statistics={},
                 engine_config={},
-                params_json=r.get('strategy_params_json', '{}'),
+                params=r.get('strategy_params', {}),
                 start_date=None,
                 end_date=None,
                 run_id=run_id,
@@ -625,7 +625,7 @@ def _run_optuna_search(
                     error_message=None,
                     statistics=engine_result.get('statistics', {}),
                     engine_config=trial_cfg,  # pyright: ignore[reportArgumentType]
-                    params_json=trial_entry.get('params_json', '{}'),
+                    params=trial_entry.get('params', {}),
                     start_date=engine_result.get('start_date'),
                     end_date=engine_result.get('end_date'),
                     strategy_version=engine_result.get('strategy_version'),

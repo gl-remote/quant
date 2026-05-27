@@ -126,19 +126,19 @@ def apply_strategy_config(strategy: Strategy, config_manager):
             )
 
 
-def serialize_strategy_params(strategy: Strategy) -> str:
-    """将策略配置序列化为 JSON 字符串，用于写入 backtests.params_json
+def serialize_strategy_params(strategy: Strategy) -> dict[str, float]:
+    """将策略配置序列化为参数字典，用于写入 backtest_params 表
 
     Args:
         strategy: 策略实例
 
     Returns:
-        JSON 字符串表示的策略参数
+        参数字典 {'sma_short': 20, 'sma_long': 70}
     """
     try:
         cfg = strategy.config
         valid_keys = {f.name for f in dataclasses.fields(cfg)}
-        params = {k: getattr(cfg, k) for k in valid_keys}
-        return json.dumps(params, ensure_ascii=False, default=str)
+        return {k: float(getattr(cfg, k)) for k in valid_keys}
     except Exception:
-        return '{}'
+        return {}
+

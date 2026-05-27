@@ -299,7 +299,7 @@ class DataManager:
 
     def insert_backtest(self, symbol: str, strategy: str, status: str,
                         error_message: str | None, statistics: dict[str, object],
-                        engine_config: dict[str, object], params_json: str | None,
+                        engine_config: dict[str, object], params: dict[str, float] | None,
                         start_date: str | None, end_date: str | None,
                         strategy_version: str | None = None,
                         git_hash: str | None = None,
@@ -312,7 +312,7 @@ class DataManager:
             error_message=error_message,
             statistics=statistics,
             engine_config=engine_config,
-            params_json=params_json,
+            params=params,
             start_date=start_date,
             end_date=end_date,
             strategy_version=strategy_version,

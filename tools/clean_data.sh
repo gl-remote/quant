@@ -28,7 +28,7 @@ conn = sqlite3.connect(db)
 cur = conn.cursor()
 
 # 固定业务表（不动 export_metadata）
-biz_tables = ['runs', 'run_studies', 'backtests', 'backtest_trades', 'backtest_daily', 'operation_logs']
+biz_tables = ['runs', 'run_studies', 'backtests', 'backtest_params', 'backtest_trades', 'backtest_daily', 'operation_logs']
 for tbl in biz_tables:
     try:
         cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
