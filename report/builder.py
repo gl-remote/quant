@@ -341,6 +341,8 @@ def write_entry_html(output_dir: str) -> None:
 
     # 读取 JS 文件内容（内联到 HTML）
     js_content = (assets_dir / js_file).read_text(encoding="utf-8")
+    # 转义 </script> 为 <\/script>，避免 HTML 提前闭合
+    js_content = js_content.replace("</script>", "<\\/script>")
     js_size = len(js_content.encode("utf-8")) / (1024 * 1024)
 
     # 读取 CSS 文件内容（如果存在）
@@ -353,6 +355,8 @@ def write_entry_html(output_dir: str) -> None:
     plotly_content = ""
     if plotly_path.exists():
         plotly_content = plotly_path.read_text(encoding="utf-8")
+        # 转义 </script> 为 <\/script>，避免 HTML 提前闭合
+        plotly_content = plotly_content.replace("</script>", "<\\/script>")
         plotly_size = len(plotly_content.encode("utf-8")) / (1024 * 1024)
         logger.info("Plotly 库大小: %.1f MiB", plotly_size)
 
@@ -432,6 +436,8 @@ def _build_preload_script(output_dir: str) -> str:
         return "<script>window.__DATA__ = {};</script>"
 
     json_str = json.dumps(data_map, ensure_ascii=False, default=str)
+    # 转义 </script> 为 <\/script>，避免 HTML 提前闭合
+    json_str = json_str.replace("</script>", "<\\/script>")
     mib = len(json_str.encode("utf-8")) / (1024 * 1024)
     logger.info("预加载 %d 个数据文件 (%.1f MiB)", len(data_map), mib)
 
