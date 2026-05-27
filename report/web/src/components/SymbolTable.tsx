@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { SummaryItem } from "@/types";
 
 interface Props {
@@ -6,33 +7,115 @@ interface Props {
   selectedSymbol: string;
 }
 
+type SortKey = keyof SummaryItem;
+type SortOrder = "asc" | "desc";
+
 function formatPct(v: number, digits = 2): string {
-  return `${(v).toFixed(digits)}%`;
+  return `${v.toFixed(digits)}%`;
 }
 
+function formatNumber(v: number): string {
+  return v.toLocaleString("zh-CN");
+}
+
+const columns: { key: SortKey; label: string; format: (v: number) => string }[] = [
+  { key: "symbol", label: "品种", format: (v) => String(v) },
+  { key: "total_return", label: "收益率", format: (v) => formatPct(v * 100) },
+  { key: "total_trades", label: "交易次数", format: formatNumber },
+  { key: "win_rate", label: "胜率", format: (v) => formatPct(v, 1) },
+  { key: "max_drawdown", label: "最大回撤", format: (v) => formatPct(v) },
+  { key: "sharpe", label: "夏普比率", format: (v) => v.toFixed(2) },
+  { key: "end_balance", label: "最终权益", format: formatNumber },
+];
+
 export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
+  const [sortKey, setSortKey] = useState<SortKey>("total_return");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
   if (!data || data.length === 0) {
-    return <p style={{ color: "#999" }}>无回测记录</p>;
+    return (
+      <div style={styles.empty}>
+        <div style={styles.emptyIcon}>📭</div>
+        <p>暂无回测记录</p>
+      </div>
+    );
   }
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortOrder("desc");
+    }
+  };
+
+  const sortedData = [...data].sort((a, b) => {
+    const aVal = a[sortKey] as number;
+    const bVal = b[sortKey] as number;
+    if (sortOrder === "asc") {
+      return aVal - bVal;
+    }
+    return bVal - aVal;
+  });
+
+  const totalStats = {
+    avgReturn: data.reduce((sum, item) => sum + item.total_return, 0) / data.length,
+    avgSharpe: data.reduce((sum, item) => sum + item.sharpe, 0) / data.length,
+    totalTrades: data.reduce((sum, item) => sum + item.total_trades, 0),
+  };
 
   return (
     <div style={styles.wrapper}>
-      <h2 style={styles.title}>品种汇总</h2>
+      <div style={styles.header}>
+        <h2 style={styles.title}>
+          <span style={styles.titleIcon}>📈</span>
+          品种汇总
+        </h2>
+        <div style={styles.summaryStats}>
+          <div style={styles.summaryItem}>
+            <span style={styles.summaryLabel}>平均收益</span>
+            <span style={{ ...styles.summaryValue, color: totalStats.avgReturn >= 0 ? "#059669" : "#dc2626" }}>
+              {formatPct(totalStats.avgReturn * 100)}
+            </span>
+          </div>
+          <div style={styles.summaryItem}>
+            <span style={styles.summaryLabel}>平均夏普</span>
+            <span style={{ ...styles.summaryValue, color: totalStats.avgSharpe >= 0 ? "#059669" : "#dc2626" }}>
+              {totalStats.avgSharpe.toFixed(2)}
+            </span>
+          </div>
+          <div style={styles.summaryItem}>
+            <span style={styles.summaryLabel}>总交易次数</span>
+            <span style={styles.summaryValue}>{formatNumber(totalStats.totalTrades)}</span>
+          </div>
+        </div>
+      </div>
+
       <div style={styles.tableWrap}>
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th}>品种</th>
-              <th style={styles.th}>收益率</th>
-              <th style={styles.th}>交易次数</th>
-              <th style={styles.th}>胜率</th>
-              <th style={styles.th}>最大回撤</th>
-              <th style={styles.th}>夏普</th>
-              <th style={styles.th}>最终权益</th>
+              {columns.map((col) => (
+                <th
+                  key={String(col.key)}
+                  style={styles.th}
+                  onClick={() => handleSort(col.key)}
+                >
+                  <div style={styles.thContent}>
+                    <span>{col.label}</span>
+                    {sortKey === col.key && (
+                      <span style={styles.sortIcon}>
+                        {sortOrder === "asc" ? "↑" : "↓"}
+                      </span>
+                    )}
+                  </div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {data.map((item) => {
+            {sortedData.map((item) => {
               const isSelected = item.symbol === selectedSymbol;
               return (
                 <tr
@@ -43,16 +126,17 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                     ...(isSelected ? styles.selectedRow : {}),
                   }}
                 >
-                  <td style={styles.td}>{item.symbol}</td>
+                  <td style={{ ...styles.td, fontWeight: 600 }}>{item.symbol}</td>
                   <td
                     style={{
                       ...styles.td,
                       color: item.total_return >= 0 ? "#059669" : "#dc2626",
+                      fontWeight: 600,
                     }}
                   >
                     {formatPct(item.total_return * 100)}
                   </td>
-                  <td style={styles.td}>{item.total_trades}</td>
+                  <td style={styles.td}>{formatNumber(item.total_trades)}</td>
                   <td style={styles.td}>{formatPct(item.win_rate, 1)}</td>
                   <td style={{ ...styles.td, color: "#dc2626" }}>
                     {formatPct(item.max_drawdown)}
@@ -65,9 +149,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                   >
                     {item.sharpe.toFixed(2)}
                   </td>
-                  <td style={styles.td}>
-                    {item.end_balance.toLocaleString()}
-                  </td>
+                  <td style={styles.td}>{formatNumber(item.end_balance)}</td>
                 </tr>
               );
             })}
@@ -80,21 +162,54 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
-    background: "#fff",
-    borderRadius: "8px",
-    padding: "16px",
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "20px",
+    marginBottom: "20px",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+  },
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: "16px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    paddingBottom: "12px",
+    borderBottom: "1px solid #f0f0f0",
   },
   title: {
     fontSize: "16px",
     fontWeight: 600,
-    margin: "0 0 12px 0",
-    color: "#555",
+    margin: 0,
+    color: "#1a1a1a",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+  titleIcon: {
+    fontSize: "18px",
+  },
+  summaryStats: {
+    display: "flex",
+    gap: "24px",
+  },
+  summaryItem: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "right",
+  },
+  summaryLabel: {
+    fontSize: "11px",
+    color: "#9ca3af",
+    marginBottom: "2px",
+  },
+  summaryValue: {
+    fontSize: "14px",
+    fontWeight: 600,
+    color: "#374151",
   },
   tableWrap: {
     overflowX: "auto",
-    maxHeight: "400px",
+    maxHeight: "450px",
     overflowY: "auto",
   },
   table: {
@@ -104,21 +219,46 @@ const styles: Record<string, React.CSSProperties> = {
   },
   th: {
     textAlign: "left" as const,
-    padding: "8px 12px",
+    padding: "10px 14px",
     background: "#f9fafb",
     borderBottom: "2px solid #e5e7eb",
-    color: "#666",
+    color: "#6b7280",
     position: "sticky" as const,
     top: 0,
+    cursor: "pointer",
+    whiteSpace: "nowrap" as const,
+  },
+  thContent: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+  },
+  sortIcon: {
+    fontSize: "10px",
+    color: "#9ca3af",
   },
   td: {
-    padding: "6px 12px",
+    padding: "10px 14px",
     borderBottom: "1px solid #f3f4f6",
+    color: "#374151",
+    whiteSpace: "nowrap" as const,
   },
   row: {
     cursor: "pointer",
+    transition: "background-color 0.15s",
   },
   selectedRow: {
     background: "#eff6ff",
+  },
+  empty: {
+    background: "#fafafa",
+    borderRadius: "8px",
+    padding: "48px",
+    textAlign: "center",
+    color: "#9ca3af",
+  },
+  emptyIcon: {
+    fontSize: "48px",
+    marginBottom: "12px",
   },
 };

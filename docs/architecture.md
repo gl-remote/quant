@@ -1,12 +1,12 @@
 # 系统架构设计
 
-> 版本: 0.2.0-dev | 更新日期: 2026-05-26
+> 版本: 0.2.0-dev | 更新日期: 2026-05-27
 
 ---
 
 ## 架构总览
 
-系统采用**策略核心 + 桥接器**的架构模式，实现业务逻辑与执行框架的完全分离。
+系统采用**策略核心 + 桥接器**的架构模式，实现业务逻辑与执行框架的完全分离。报告模块采用 **Python 数据导出 + React 前端渲染** 的方式，支持 `file://` 协议直接打开。
 
 ### 核心设计原则
 
@@ -16,11 +16,12 @@
 | **框架可替换** | 更换交易框架只需新增桥接器，核心代码零改动 |
 | **单一职责** | 每个模块职责明确，避免职责重叠 |
 | **零依赖层** | `common/` 纯函数库，无 I/O、无副作用 |
+| **数据预加载** | 报告数据嵌入 HTML，支持 `file://` 协议 |
 
 ### 模块架构图
 
 ```
-main.py (19行转发器) → cli/
+main.py → cli/
     ├── cli/main.py          参数解析 + 命令分发
     └── commands/            5个子命令 (export/test/backtest/report/live)
 ├── strategies/              策略核心
@@ -34,17 +35,21 @@ main.py (19行转发器) → cli/
 │   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
 │   └── walk_forward.py          数据加载与时间窗口切分
 ├── optimizer/               参数优化
-│   └── optuna_search.py     Optuna 统一优化器（支持网格搜索和贝叶斯优化）
+│   └── optuna_search.py     Optuna 统一优化器
 ├── data/                    数据层
 │   ├── manager.py           DataManager 统一入口
 │   ├── models.py            Pydantic + peewee ORM 模型
 │   ├── store.py             SQLite 持久化
 │   └── exporter.py          天勤→CSV 导出
 ├── report/                  报告生成
-│   ├── reports.py           文字报告
-│   ├── charts.py            Plotly 可视化
+│   ├── builder.py           JSON 导出 + 前端构建触发
+│   ├── charts.py            Plotly JSON spec 生成
 │   ├── optimizer_report.py  Optuna 优化报告
-│   └── _html.py             HTML 模板
+│   ├── kline_cache.py       K线缓存机制
+│   └── web/                 React 前端工程
+│       ├── src/components/  KlineChart/EquityChart/SymbolTable
+│       ├── src/pages/       NavPage/RunPage/OptunaPage
+│       └── src/data/loader.ts 数据预加载读取
 ├── common/                  通用工具 (零依赖)
 │   ├── constants.py         全局常量字典
 │   ├── formulas.py          量化计算公式库
@@ -60,7 +65,7 @@ main.py (19行转发器) → cli/
 
 ## 核心架构模式：核心 + 桥接器
 
-这是系统最重要的设计决策。策略核心算法完全独立于任何交易框架，桥接器负责协议转换。
+策略核心算法完全独立于任何交易框架，桥接器负责协议转换。
 
 ### 调用流程
 
@@ -79,6 +84,74 @@ Bridge 调用流程:
 | 用途 | vn.py 批量回测 | 天勤实盘/模拟/回测 |
 | 订单执行 | `self.buy/sell` | 手动交易记录 |
 | 行情格式 | vnpy BarData | tqsdk kline_serial |
+
+---
+
+## 报告模块架构
+
+报告模块采用前后端分离设计，Python 负责数据导出，React 负责可视化渲染。
+
+### 数据流
+
+```
+finish_run(run_id)
+    ↓
+build_all(db_path, output_dir, run_id)
+    ├─ export_run_json()
+    ├─ export_summary_json()
+    ├─ export_backtests_json()
+    ├─ export_equity_json()
+    ├─ export_kline_json()          # 带缓存机制
+    ├─ export_optuna_json()
+    └─ write_entry_html()           # 数据预加载嵌入
+```
+
+### 输出结构
+
+```
+output/
+├── index.html                      # 单页应用入口
+├── data/
+│   └── nav.json                    # 全局导航数据
+├── rN/
+│   └── data/
+│       ├── run.json                # run 元信息
+│       ├── summary.json            # 品种汇总
+│       ├── backtests.json          # 回测列表
+│       ├── kline_*.json            # K线数据
+│       └── optuna.json             # 优化数据（如有）
+└── assets/
+    ├── index-[hash].js             # React bundle
+    └── vendor/plotly.min.js        # Plotly 库
+```
+
+### 数据预加载机制
+
+为支持 `file://` 协议，所有数据通过 `window.__DATA__` 预加载：
+
+```python
+# builder.py - write_entry_html()
+# 遍历所有 JSON 文件，嵌入到 HTML 中
+<script>
+window.__DATA__ = {
+    "data/nav.json": [...],
+    "r1/data/run.json": {...},
+    "r1/data/kline_DCE.m2509.json": [...]
+}
+</script>
+```
+
+---
+
+## K线缓存机制
+
+`report/kline_cache.py` 实现 K线数据的增量缓存：
+
+| 场景 | 行为 |
+|------|------|
+| 首次构建 | CSV → JSON，写入 `output/.kline_cache/{md5}.json` |
+| 二次构建同品种 | 缓存命中，O(1) 复制 |
+| CSV 文件更新 | 基于文件 mtime 自动失效 |
 
 ---
 
@@ -109,32 +182,11 @@ class Strategy(ABC):
 | `Fill` | 成交回执 | `timestamp, action, price, volume, pnl` |
 | `StrategyPosition` | 持仓状态 | `direction, entry_price, volume` |
 
-#### `strategies/ma_strategy.py` — 均线交叉策略核心
-
-**决策逻辑流程**：
-1. 更新收盘价缓存
-2. 计算双均线（SMA短/长周期）
-3. 交叉检测（金叉买入/死叉卖出）
-4. 风控检查（止损/止盈）
-
-**关键方法**：
-| 方法 | 功能 |
-|------|------|
-| `on_bar()` | 策略决策中枢，返回 Signal |
-| `on_fill()` | 成交回调，更新持仓和交易记录 |
-| `_is_golden_cross()` | 金叉检测 |
-| `_is_death_cross()` | 死叉检测 |
-| `_check_stop_loss()` | 止损检查 |
-| `_check_take_profit()` | 止盈检查 |
-| `_calc_position_size()` | 计算仓位大小 |
-
 ---
 
 ### 2. Backtest 层
 
 #### `backtest/vnpy_backtest_engine.py` — vn.py 回测引擎
-
-**设计原则**：纯执行器，不负责数据加载和策略创建。
 
 **核心接口**：
 
@@ -145,31 +197,11 @@ class VnpyBacktestEngine:
     def run_walk_forward(self, data, symbol, strategy, ...) -> dict
 ```
 
-**run() 方法**：
-- 接收 `(symbol, DataFrame, Strategy)` 配对列表
-- 同一份 DataFrame 共用一个 vnpy engine，一次回放跑多个策略
-- 返回结构化结果：`statistics`, `daily_results`, `strategy_name` 等
-
-**run_walk_forward() 方法**：
-- 滚动时间窗口验证
-- 自动切分 train/val/test 窗口
-- 返回窗口结果列表和聚合指标
-
-#### `backtest/walk_forward.py` — 时间窗口切分
-
-| 函数 | 功能 |
-|------|------|
-| `walk_forward_split()` | 按固定行数切分窗口 |
-| `walk_forward_split_by_ratio()` | 按比例切分窗口（60%/20%/20%） |
-| `df_to_vnpy_datalines()` | DataFrame → vnpy BarData 转换 |
-
 ---
 
 ### 3. Data 层
 
 #### `data/manager.py` — DataManager 统一入口
-
-**设计原则**：对外隐藏数据库概念，仅暴露数据类型约定。
 
 **核心接口**：
 
@@ -177,172 +209,51 @@ class VnpyBacktestEngine:
 |------|------|--------|
 | `get_all_symbols()` | 获取所有可用品种 | `list[str]` |
 | `search_symbols(pattern)` | 正则搜索品种 | `list[str]` |
-| `get_symbol_info(symbol)` | 获取品种元数据 | `SymbolInfo` |
 | `load_kline(symbol, start, end, interval)` | 加载 K 线数据 | `DataFrame[KlineSchema]` |
 | `insert_backtest(...)` | 插入回测记录 | `int` (backtest_id) |
 | `query_backtests(...)` | 查询回测记录 | `list[BacktestRecord]` |
-| `insert_backtest_trades()` | 批量插入交易明细 | `int` |
-| `insert_backtest_daily()` | 批量插入每日资金曲线 | `int` |
-
-**数据验证**：所有 DataFrame 通过 Pandera `KlineSchema` 验证。
-
-#### `data/store.py` — SQLite 持久化层
-
-**数据库表结构**：
-
-| 表名 | 用途 |
-|------|------|
-| `backtest` | 回测主记录 |
-| `backtest_trade` | 交易明细 |
-| `backtest_daily` | 每日资金曲线 |
-| `export_metadata` | 数据导出元数据 |
-| `operation_log` | 操作日志 |
-
-#### `data/models.py` — 数据模型
-
-| 模型类型 | 用途 |
-|----------|------|
-| `BacktestRecord` | Pydantic 模型，回测记录 |
-| `TradeRecord` | Pydantic 模型，交易记录 |
-| `Backtest` | peewee ORM 模型 |
-| `BacktestTrade` | peewee ORM 模型 |
-| `BacktestDaily` | peewee ORM 模型 |
-| `KlineSchema` | Pandera Schema，K 线验证 |
 
 ---
 
-### 4. Optimizer 层
+### 4. Report 层
 
-#### `optimizer/optuna_search.py` — Optuna 统一优化器
+#### `report/builder.py` — 报告构建器
+
+**核心接口**：
 
 ```python
-class OptunaOptimizer:
-    def __init__(self, engine, datasets, search_space, n_trials, search_type="bayesian", ...)
-    def optimize(self) -> OptunaResult
+class ReportBuilder:
+    def build_all(db_path, output_dir, run_id) -> None
+    def export_run_json() -> dict
+    def export_kline_json(symbol) -> dict          # 带缓存
+    def write_entry_html(output_dir, run_id) -> None  # 预加载嵌入
+    def build_frontend(output_dir) -> None           # 触发 npm build
 ```
-
-**工作流程**：
-1. 根据 `search_type` 选择搜索模式：
-   - `"grid"`: 使用 `GridSampler` 穷举所有参数组合
-   - `"bayesian"`: 使用 `TPESampler` 进行贝叶斯优化
-2. 创建 Optuna Study（可选持久化到 SQLite）
-3. 定义目标函数（最大化夏普比率）
-4. 每个 trial 创建策略实例并执行回测
-5. 聚合多品种得分作为目标值
-6. 返回最优参数、最优值和所有试验数据
 
 ---
 
-### 5. CLI 层
-
-#### `cli/main.py` — 命令分发
-
-```python
-def main():
-    parser = argparse.ArgumentParser(...)
-    sub = parser.add_subparsers(dest='command', required=True)
-    # 添加子命令: export, test, backtest, report, live
-    args = parser.parse_args()
-    command_handlers[args.command](args)
-```
-
-#### `cli/commands/backtest.py` — 回测命令
-
-**核心职责**：编排 `data` → `optimizer` → `backtest` 三层。
-
-**模式切换**：
-- `--symbol` 指定单品种 → TqSdk 图形化回测
-- `--pattern` 或省略 → vn.py 批量回测
-
-**回测模式**：
-- `mode=search`：参数搜索（默认）
-- `mode=walk-forward`：Walk-Forward 滚动验证
-
----
-
-### 6. Common 层（零依赖）
+### 5. Common 层（零依赖）
 
 | 模块 | 职责 | 关键函数 |
 |------|------|----------|
 | `constants.py` | 全局常量 | 交易方向、信号原因、默认参数 |
-| `formulas.py` | 量化计算公式 | `simple_moving_average`, `golden_cross`, `position_size` |
+| `formulas.py` | 量化计算公式 | `simple_moving_average`, `golden_cross` |
 | `schemas.py` | Pandera Schema | `KlineSchema`, `DailyReturnSchema` |
 | `metrics.py` | 绩效指标 | `max_drawdown`, `sharpe_ratio` |
 | `stats.py` | 统计聚合 | `rank_by_key`, `summary_stats` |
-| `formatting.py` | 安全格式化 | `format_pct`, `ensure_float`, `parse_percentage` |
-
----
-
-## 数据流
-
-### 回测数据流
-
-```
-DataManager.load_kline() → DataFrame
-    │
-    ├──▶ split_datasets() → train_df, val_df, test_df
-    │
-    └──▶ VnpyBacktestEngine.run(pairs)
-            │
-            ├──▶ vnpy BacktestingEngine
-            │       ├──▶ VnpyStrategyBridge.on_bar()
-            │       │       └──▶ Strategy.on_bar(bar) → Signal
-            │       └──▶ calculate_statistics()
-            │
-            └──▶ 返回: statistics, daily_results
-                    │
-                    └──▶ DataManager.insert_backtest() → SQLite
-```
-
-### 数据导出流
-
-```
-天勤 API → exporter._fetch_from_tqsdk() → DataFrame
-    │
-    ├──▶ 已有 CSV? → pd.concat + drop_duplicates
-    │
-    └──▶ 保存: {symbol}.{interval}.csv
-            │
-            └──▶ DataStore.upsert_metadata() → SQLite
-```
+| `formatting.py` | 安全格式化 | `format_pct`, `ensure_float` |
 
 ---
 
 ## 配置系统
 
-### 配置层级
-
-```
-ProjectConfig (单例)
-    ├── app: AppConfig
-    ├── environment: EnvironmentConfig
-    ├── strategies: list[StrategyItemConfig]
-    ├── backtest: BacktestConfig
-    │   └── split: SplitConfig
-    ├── data: DataConfig
-    ├── export: ExportConfig
-    ├── optimizer: OptimizerConfig
-    ├── system: SystemConfig
-    └── third_party: ThirdPartyConfig
-```
-
 ### 配置加载流程
 
 1. 读取 `config/conf.toml`（基础配置）
-2. 读取 `config/conf.local.toml`（本地覆盖，不提交版本控制）
+2. 读取 `config/conf.local.toml`（本地覆盖）
 3. 解析环境变量（API 密钥优先）
 4. 路径解析（相对路径 → 绝对路径）
 5. Pydantic 模型校验
-
-### 配置访问方式
-
-```python
-from config import ProjectConfig
-
-cfg = ProjectConfig.instance()
-bc = cfg.backtest                    # BacktestConfig
-sc = cfg.get_strategy_config("ma")   # StrategyItemConfig
-```
 
 ---
 
@@ -356,5 +267,3 @@ sc = cfg.get_strategy_config("ma")   # StrategyItemConfig
 | 回撤增加 | 测试集回撤 vs 训练集 | 差异 >10% |
 | 夏普下降 | 风险调整收益衰退 | >50% |
 | 胜率下降 | 交易信号质量退化 | >30% |
-
-**评分范围**：0-100，分数越高风险越大。

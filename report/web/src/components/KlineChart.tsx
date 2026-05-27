@@ -1,44 +1,181 @@
-import { useState } from "react";
-import Plot from "@/components/PlotlyWrapper";
+import { useEffect, useRef, useState } from "react";
+import {
+  createChart,
+  IChartApi,
+  ISeriesApi,
+  CandlestickSeries,
+  HistogramSeries,
+  LineSeries,
+  CandlestickData,
+  HistogramData,
+  Time,
+} from "lightweight-charts";
 import type { KlineData, KlinePoint } from "@/types";
 
 type ViewMode = "daily" | "raw";
-
-function toCandlestick(data: KlinePoint[], name: string) {
-  return {
-    x: data.map((d) => d.datetime),
-    open: data.map((d) => d.open),
-    high: data.map((d) => d.high),
-    low: data.map((d) => d.low),
-    close: data.map((d) => d.close),
-    type: "candlestick" as const,
-    name,
-    increasing: { line: { color: "#26A69A" } },
-    decreasing: { line: { color: "#EF5350" } },
-  };
-}
-
-function toVolume(data: KlinePoint[]) {
-  const colors = data.map((d) =>
-    d.close >= d.open ? "rgba(38,166,154,0.4)" : "rgba(239,83,80,0.4)"
-  );
-  return {
-    x: data.map((d) => d.datetime),
-    y: data.map((d) => d.volume),
-    type: "bar" as const,
-    name: "成交量",
-    marker: { color: colors },
-    yaxis: "y2",
-  };
-}
 
 interface Props {
   data: KlineData;
 }
 
+function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
+  return data.map((d) => ({
+    time: d.datetime as Time,
+    open: d.open,
+    high: d.high,
+    low: d.low,
+    close: d.close,
+  }));
+}
+
+function calculateSMA(data: KlinePoint[], period: number): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i < period - 1) {
+      result.push(NaN);
+      continue;
+    }
+    let sum = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      sum += data[j].close;
+    }
+    result.push(sum / period);
+  }
+  return result;
+}
+
 export default function KlineChart({ data }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  const smaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const smaLongSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [mode, setMode] = useState<ViewMode>("daily");
+  const [indicators, setIndicators] = useState<{ sma: boolean }>({ sma: true });
+
   const klineData = mode === "daily" ? data.daily : data.raw;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const chart = createChart(containerRef.current, {
+      layout: {
+        background: { color: "#ffffff" },
+        textColor: "#333",
+      },
+      grid: {
+        vertLines: { color: "#f0f0f0" },
+        horzLines: { color: "#f0f0f0" },
+      },
+      width: containerRef.current.clientWidth,
+      height: 500,
+      crosshair: {
+        mode: 1,
+      },
+      rightPriceScale: {
+        borderColor: "#e0e0e0",
+      },
+      timeScale: {
+        borderColor: "#e0e0e0",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+    });
+
+    const candlestickSeries = chart.addSeries(CandlestickSeries, {
+      upColor: "#26A69A",
+      downColor: "#EF5350",
+      borderUpColor: "#26A69A",
+      borderDownColor: "#EF5350",
+      wickUpColor: "#26A69A",
+      wickDownColor: "#EF5350",
+    });
+
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      color: "#26A69A",
+      priceFormat: {
+        type: "volume",
+      },
+      priceScaleId: "",
+    });
+
+    const smaShortSeries = chart.addSeries(LineSeries, {
+      color: "#FF6B6B",
+      lineWidth: 2,
+    });
+
+    const smaLongSeries = chart.addSeries(LineSeries, {
+      color: "#4ECDC4",
+      lineWidth: 2,
+    });
+
+    volumeSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.85,
+        bottom: 0,
+      },
+    });
+
+    candlestickSeriesRef.current = candlestickSeries;
+    volumeSeriesRef.current = volumeSeries;
+    smaShortSeriesRef.current = smaShortSeries;
+    smaLongSeriesRef.current = smaLongSeries;
+
+    const handleResize = () => {
+      if (containerRef.current) {
+        chart.applyOptions({
+          width: containerRef.current.clientWidth,
+        });
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      chart.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || !klineData)
+      return;
+
+    const candleData = convertToCandleData(klineData);
+    candlestickSeriesRef.current.setData(candleData);
+
+    const volumeData: HistogramData<Time>[] = klineData.map((d, i) => ({
+      time: d.datetime as Time,
+      value: d.volume,
+      color: d.close >= d.open ? "rgba(38,166,154,0.5)" : "rgba(239,83,80,0.5)",
+    }));
+    volumeSeriesRef.current.setData(volumeData);
+
+    if (indicators.sma && smaShortSeriesRef.current && smaLongSeriesRef.current) {
+      const smaShort = calculateSMA(klineData, 5);
+      const smaLong = calculateSMA(klineData, 60);
+
+      const smaShortData = klineData.map((d, i) => ({
+        time: d.datetime as Time,
+        value: smaShort[i],
+      }));
+
+      const smaLongData = klineData.map((d, i) => ({
+        time: d.datetime as Time,
+        value: smaLong[i],
+      }));
+
+      smaShortSeriesRef.current.setData(smaShortData);
+      smaLongSeriesRef.current.setData(smaLongData);
+    }
+  }, [klineData, indicators]);
+
+  useEffect(() => {
+    if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
+      smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
+      smaLongSeriesRef.current.applyOptions({ visible: indicators.sma });
+    }
+  }, [indicators.sma]);
 
   if (!klineData || klineData.length === 0) {
     return (
@@ -48,122 +185,182 @@ export default function KlineChart({ data }: Props) {
     );
   }
 
-  const traces = [toCandlestick(klineData, "K线"), toVolume(klineData)];
-
   return (
     <div style={styles.wrapper}>
       <div style={styles.toolbar}>
-        <span style={styles.symbol}>{data.symbol}</span>
-        <div style={styles.toggleGroup}>
+        <div style={styles.leftGroup}>
+          <span style={styles.symbol}>{data.symbol}</span>
+          {mode === "raw" && data.raw_downsampled && (
+            <span style={styles.samplingBadge}>抽样显示</span>
+          )}
+        </div>
+        <div style={styles.centerGroup}>
+          <div style={styles.toggleGroup}>
+            <button
+              onClick={() => setMode("daily")}
+              style={{
+                ...styles.toggleBtn,
+                ...(mode === "daily" ? styles.toggleActive : {}),
+              }}
+            >
+              日线
+            </button>
+            <button
+              onClick={() => setMode("raw")}
+              style={{
+                ...styles.toggleBtn,
+                ...(mode === "raw" ? styles.toggleActive : {}),
+              }}
+            >
+              分钟线
+            </button>
+          </div>
+        </div>
+        <div style={styles.rightGroup}>
           <button
-            onClick={() => setMode("daily")}
+            onClick={() => setIndicators((prev) => ({ ...prev, sma: !prev.sma }))}
             style={{
-              ...styles.toggleBtn,
-              ...(mode === "daily" ? styles.toggleActive : {}),
+              ...styles.indicatorBtn,
+              ...(indicators.sma ? styles.indicatorActive : {}),
             }}
           >
-            日线
-          </button>
-          <button
-            onClick={() => setMode("raw")}
-            style={{
-              ...styles.toggleBtn,
-              ...(mode === "raw" ? styles.toggleActive : {}),
-            }}
-          >
-            分钟线
-            {data.raw_downsampled && mode === "raw" && (
-              <span style={styles.badge}>抽样</span>
-            )}
+            SMA 均线
           </button>
         </div>
       </div>
-      <Plot
-        data={traces as any}
-        layout={{
-          height: 500,
-          margin: { l: 60, r: 60, t: 10, b: 40 },
-          hovermode: "x unified",
-          showlegend: false,
-          dragmode: "pan",
-          paper_bgcolor: "#fff",
-          plot_bgcolor: "#fff",
-          xaxis: {
-            showgrid: true,
-            gridcolor: "#f0f0f0",
-            rangeslider: { visible: false },
-          },
-          yaxis: {
-            showgrid: true,
-            gridcolor: "#f0f0f0",
-            title: { text: "价格" },
-          },
-          yaxis2: {
-            title: { text: "成交量" },
-            overlaying: "y",
-            side: "right",
-            showgrid: false,
-            tickformat: ",s",
-          },
-        }}
-        config={{
-          responsive: true,
-          displaylogo: false,
-          scrollZoom: true,
-        }}
-        useResizeHandler
-        style={{ width: "100%" }}
-      />
+      <div ref={containerRef} style={styles.chartContainer} />
+      <div style={styles.legend}>
+        <div style={styles.legendItem}>
+          <span style={{ ...styles.legendDot, backgroundColor: "#FF6B6B" }} />
+          <span>SMA(5)</span>
+        </div>
+        <div style={styles.legendItem}>
+          <span style={{ ...styles.legendDot, backgroundColor: "#4ECDC4" }} />
+          <span>SMA(60)</span>
+        </div>
+        <div style={styles.legendItem}>
+          <span style={{ ...styles.legendDot, backgroundColor: "#26A69A" }} />
+          <span>阳线</span>
+        </div>
+        <div style={styles.legendItem}>
+          <span style={{ ...styles.legendDot, backgroundColor: "#EF5350" }} />
+          <span>阴线</span>
+        </div>
+      </div>
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
-    background: "#fff",
-    borderRadius: "8px",
-    padding: "16px",
-    marginBottom: "16px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "20px",
+    marginBottom: "20px",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
   },
   toolbar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "8px",
+    marginBottom: "16px",
+    paddingBottom: "12px",
+    borderBottom: "1px solid #f0f0f0",
+  },
+  leftGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
   },
   symbol: {
-    fontSize: "16px",
-    fontWeight: 600,
-    color: "#333",
+    fontSize: "18px",
+    fontWeight: 700,
+    color: "#1a1a1a",
+    fontFamily: "Monaco, 'Courier New', monospace",
+  },
+  samplingBadge: {
+    fontSize: "11px",
+    padding: "2px 8px",
+    background: "#fff3cd",
+    color: "#856404",
+    borderRadius: "4px",
+  },
+  centerGroup: {
+    display: "flex",
+    alignItems: "center",
+  },
+  rightGroup: {
+    display: "flex",
+    gap: "8px",
   },
   toggleGroup: {
     display: "flex",
-    gap: 0,
+    background: "#f5f6fa",
+    borderRadius: "8px",
+    padding: "2px",
   },
   toggleBtn: {
-    padding: "4px 12px",
-    border: "1px solid #d1d5db",
-    background: "#fff",
-    fontSize: "12px",
+    padding: "6px 16px",
+    border: "none",
+    background: "transparent",
+    fontSize: "13px",
+    fontWeight: 500,
     cursor: "pointer",
     color: "#666",
+    borderRadius: "6px",
+    transition: "all 0.2s",
   },
   toggleActive: {
     background: "#2563eb",
-    color: "#fff",
-    borderColor: "#2563eb",
+    color: "#ffffff",
+    boxShadow: "0 2px 8px rgba(37, 99, 235, 0.3)",
   },
-  badge: {
-    fontSize: "10px",
-    marginLeft: "4px",
-    opacity: 0.7,
+  indicatorBtn: {
+    padding: "6px 14px",
+    border: "1px solid #e5e7eb",
+    background: "#ffffff",
+    fontSize: "12px",
+    cursor: "pointer",
+    color: "#666",
+    borderRadius: "6px",
+    transition: "all 0.2s",
+  },
+  indicatorActive: {
+    background: "#f0fdf4",
+    borderColor: "#22c55e",
+    color: "#166534",
+  },
+  chartContainer: {
+    width: "100%",
+    height: "500px",
+    position: "relative",
+  },
+  legend: {
+    display: "flex",
+    justifyContent: "center",
+    gap: "24px",
+    marginTop: "12px",
+    paddingTop: "12px",
+    borderTop: "1px solid #f0f0f0",
+  },
+  legendItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    fontSize: "12px",
+    color: "#666",
+  },
+  legendDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
   },
   empty: {
-    background: "#fff",
-    borderRadius: "8px",
-    padding: "40px",
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "60px",
     textAlign: "center",
     color: "#999",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
   },
 };

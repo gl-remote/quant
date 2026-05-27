@@ -1,12 +1,12 @@
 # 项目概览
 
-> 版本: 0.2.0-dev | 最后更新: 2026-05-26
+> 版本: 0.2.0-dev | 最后更新: 2026-05-27
 
 ---
 
 ## 项目简介
 
-天勤量化均线交叉策略交易系统是一个基于 Python 的量化交易框架，提供完整的策略研发、回测、优化和实盘交易能力。
+天勤量化均线交叉策略交易系统是一个基于 **Python + React** 的量化交易框架，提供完整的策略研发、回测、优化和实盘交易能力。
 
 ### 核心特性
 
@@ -17,18 +17,16 @@
 | **参数优化** | 网格搜索 + Optuna 贝叶斯优化 |
 | **Walk-Forward** | 滚动时间窗口验证，评估策略稳健性 |
 | **数据管理** | 统一数据访问入口，支持 Pandera Schema 验证 |
-| **报告生成** | 自动生成回测报告和优化报告 |
+| **报告生成** | React + Plotly 可视化报告，支持 `file://` 协议直接打开 |
 
 ### 技术栈
 
 | 分类 | 技术 |
 |------|------|
-| 语言 | Python 3.10+ |
-| 回测引擎 | vn.py、TqSdk |
-| 数据处理 | pandas、Pandera |
-| 配置管理 | Pydantic、TOML |
+| 后端 | Python 3.10+、vn.py、TqSdk |
+| 前端 | React 18、TypeScript、Vite、Plotly |
 | 数据库 | SQLite + peewee ORM |
-| 可视化 | Plotly |
+| 配置 | Pydantic、TOML |
 
 ---
 
@@ -39,6 +37,10 @@
 ```bash
 cd /Users/REDACTED_API_KEY/Documents/src/quant
 pip install -e .
+
+# 前端依赖（报告模块）
+cd report/web
+npm install
 ```
 
 ### 配置账户
@@ -62,14 +64,9 @@ python main.py backtest --symbol DCE.m2509 --strategy ma --start 2024-01-01 --en
 python main.py backtest --pattern "DCE\.m" --strategy ma
 ```
 
-**参数优化**：
+**查看报告**：
 ```bash
-python main.py backtest --symbol DCE.m2509 --strategy ma --optimizer optuna --mode search
-```
-
-**Walk-Forward 验证**：
-```bash
-python main.py backtest --symbol DCE.m2509 --strategy ma --mode walk-forward
+open output/index.html
 ```
 
 ---
@@ -80,19 +77,15 @@ python main.py backtest --symbol DCE.m2509 --strategy ma --mode walk-forward
 quant/
 ├── main.py                    # 命令行入口
 ├── cli/                       # 命令行子包
-│   ├── main.py                # 参数解析与命令分发
-│   └── commands/              # 子命令实现
 ├── strategies/                # 策略子系统
-│   ├── core/                  # 抽象接口
-│   ├── bridges/               # 框架桥接器
-│   └── ma_strategy.py         # 均线策略核心
 ├── backtest/                  # 回测引擎
 ├── optimizer/                 # 参数优化器
 ├── data/                      # 数据管理
 ├── report/                    # 报告生成
+│   └── web/                   # React 前端工程
 ├── common/                    # 通用工具
 ├── config/                    # 配置管理
-└── tests/                     # 测试用例
+└── docs/                      # 项目文档
 ```
 
 ---
@@ -101,23 +94,22 @@ quant/
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `export` | 导出 K 线数据 | `python main.py export --symbol DCE.m2509 --start 2024-01-01 --end 2024-12-31` |
+| `export` | 导出 K 线数据 | `python main.py export --symbol DCE.m2509` |
 | `test` | 策略逻辑测试 | `python main.py test --strategy ma` |
-| `backtest` | 统一回测 | `python main.py backtest --symbol DCE.m2509 --strategy ma` |
+| `backtest` | 统一回测 | `python main.py backtest --symbol DCE.m2509` |
 | `report` | 查看回测报告 | `python main.py report --id 42` |
-| `live` | 实盘交易 | `python main.py live --symbol DCE.m2509 --strategy ma` |
+| `live` | 实盘交易 | `python main.py live --symbol DCE.m2509` |
 
 ---
 
-## 目录说明
+## 核心模块
 
-| 目录 | 职责 |
+| 模块 | 职责 |
 |------|------|
-| `cli/` | 命令行接口，负责参数解析和命令分发 |
-| `strategies/` | 策略核心，包含策略基类和具体实现 |
-| `backtest/` | 回测引擎，封装 vn.py 和 TqSdk |
-| `optimizer/` | 参数优化，支持网格搜索和贝叶斯优化 |
+| `cli/` | 命令行接口，参数解析和命令分发 |
+| `strategies/` | 策略核心，桥接器模式实现框架无关性 |
+| `backtest/` | 回测引擎，vn.py 批量回测 + Walk-Forward |
+| `optimizer/` | 参数优化，网格搜索 + 贝叶斯优化 |
 | `data/` | 数据层，统一数据访问和持久化 |
-| `report/` | 报告生成，包含可视化和 HTML 报告 |
+| `report/` | 报告生成，Python 数据导出 + React 前端渲染 |
 | `common/` | 通用工具，纯函数库（零依赖） |
-| `config/` | 配置管理，TOML 分层配置 |
