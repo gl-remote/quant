@@ -40,7 +40,7 @@ for tbl in biz_tables:
         pass
 
 # Optuna 相关表（含可能的前缀 optuna_、无前缀、alembic/version）
-optuna_patterns = ('study', 'trial', 'optuna_study', 'optuna_trial', 'alembic', 'version_info')
+optuna_patterns = ('stud', 'trial', 'optuna_stud', 'optuna_trial', 'alembic', 'version_info')
 all_tables = [r[0] for r in cur.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]
 for tbl in all_tables:
     if any(tbl.startswith(p) for p in optuna_patterns):
