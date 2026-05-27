@@ -659,48 +659,7 @@ def _run_optuna_search(
     print(f"  Study:     {opt.study_name}")
     print("===========================================\n")
 
-    # ── 生成优化报告 ──
-    study_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
-    _build_optimization_report(
-        result, all_ids, study_db_url, dm, run_id
-    )
-
     dm.store.log('backtest',
                  f"Optuna 优化完成: best={result.best_value:.4f} "
                  f"params={result.best_params} trials={len(result.trial_data)}",
                  symbol='_optuna_', status=LOG_STATUS_SUCCESS)
-
-
-def _build_optimization_report(
-    result: Any,
-    backtest_ids: list[int],
-    study_db_url: str,
-    dm: DataManager,
-    run_id: int,
-) -> str:
-    """生成 Optuna 优化报告 HTML 文件"""
-    _ = dm
-
-    from pathlib import Path
-    from report import build_optimizer_report
-
-    output_dir = Path("output") / f"r{run_id}"
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
-        html = build_optimizer_report(
-            study_db_url=study_db_url,
-            study_name=result.study.study_name,
-            best_params=result.best_params,
-            best_value=result.best_value,
-            backtest_ids=backtest_ids,
-        )
-        filename = f"optimization_{result.study.study_name}.html"
-        report_path = output_dir / filename
-        report_path.write_text(html, encoding='utf-8')
-        logger.info(f"优化报告已生成: {report_path}")
-        print(f"\n💡 Optuna 优化报告: {report_path}")
-        return str(report_path)
-    except Exception as e:
-        logger.warning(f"优化报告生成失败: {e}", exc_info=True)
-        return ""

@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Plotly 图表生成
+Plotly 图表 spec 生成
 
-基于 BacktestRecord + daily 数据 + trade 数据生成多子图交互式图表。
+不再生成 HTML 字符串，改为返回 Plotly JSON spec (data + layout dict)。
+react-plotly.js 直接消费这些 spec，无需 Python 侧渲染。
 """
 
 from __future__ import annotations
 
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -19,19 +21,34 @@ from common.constants import (
 from data.models import BacktestRecord
 
 
+def build_kline_spec(
+    kline_data: list[dict],
+    trades: list = None,
+) -> dict:
+    """生成 K 线图 Plotly JSON spec
+
+    Returns:
+        {"data": [...], "layout": {...}} 可直接传给 react-plotly.js
+    """
+    fig = create_kline_figure(kline_data, trades)
+    return fig.to_plotly_json()
+
+
+def build_equity_spec(
+    bt: BacktestRecord,
+    daily: list[dict],
+    trades: list,
+) -> dict:
+    """生成资金曲线 Plotly JSON spec"""
+    fig = create_figure(bt, daily, trades)
+    return fig.to_plotly_json()
+
+
 def create_kline_figure(
     kline_data: list[dict],
     trades: list = None,
 ) -> go.Figure:
-    """生成K线图
-    
-    Args:
-        kline_data: K线数据列表，包含 datetime, open, high, low, close, volume
-        trades: 交易明细列表，用于在K线上标注买卖信号
-        
-    Returns:
-        plotly Figure 对象
-    """
+    """生成K线图 Figure 对象"""
     if not kline_data:
         fig = go.Figure()
         fig.add_annotation(
@@ -64,7 +81,6 @@ def create_kline_figure(
         subplot_titles=('K线图', '成交量'),
     )
 
-    # K线图
     fig.add_trace(
         go.Candlestick(
             x=dates,
@@ -79,7 +95,6 @@ def create_kline_figure(
         row=1, col=1,
     )
 
-    # 成交量
     colors = ['#26A69A' if c >= o else '#EF5350' for c, o in zip(closes, opens)]
     fig.add_trace(
         go.Bar(
@@ -91,10 +106,8 @@ def create_kline_figure(
         row=2, col=1,
     )
 
-    # 标注买卖信号
     _add_kline_trade_markers(fig, trades, dates, closes, row=1, col=1)
 
-    # 布局设置
     fig.update_layout(
         height=600,
         hovermode='x unified',
@@ -125,7 +138,6 @@ def _add_kline_trade_markers(
     row: int,
     col: int,
 ) -> None:
-    """在K线上标注买卖信号"""
     if not trades or not dates:
         return
 
@@ -188,14 +200,6 @@ def create_figure(
         Row 1: 资金曲线 + 买卖信号标注
         Row 2: 回撤曲线（填充区域）
         Row 3: 日收益柱状图
-
-    Args:
-        bt: 回测记录
-        daily: 每日资金曲线数据列表
-        trades: 交易明细列表
-
-    Returns:
-        plotly Figure 对象
     """
     if bt.status == STATUS_FAILED or not daily:
         return _empty_figure(bt)
@@ -213,7 +217,6 @@ def create_figure(
         subplot_titles=('资金曲线', '回撤', '日收益'),
     )
 
-    # ── Row 1: 资金曲线 ──
     fig.add_trace(
         go.Scatter(
             x=dates, y=equities,
@@ -225,7 +228,6 @@ def create_figure(
         row=1, col=1,
     )
 
-    # 初始资金参考线
     if bt.initial_capital:
         fig.add_hline(
             y=bt.initial_capital,
@@ -235,10 +237,8 @@ def create_figure(
             row=1, col=1,
         )
 
-    # 买卖信号标注
     _add_trade_markers(fig, trades, dates, equities, row=1, col=1)
 
-    # ── Row 2: 回撤 ──
     fig.add_trace(
         go.Scatter(
             x=dates, y=drawdowns,
@@ -252,7 +252,6 @@ def create_figure(
         row=2, col=1,
     )
 
-    # ── Row 3: 日收益 ──
     colors = ['#DC3545' if r < 0 else '#28A745' for r in daily_returns]
     fig.add_trace(
         go.Bar(
@@ -264,7 +263,6 @@ def create_figure(
         row=3, col=1,
     )
 
-    # ── 全局布局 ──
     fig.update_layout(
         height=800,
         hovermode='x unified',
@@ -278,12 +276,10 @@ def create_figure(
     fig.update_xaxes(showgrid=True, gridcolor='#eee', zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor='#eee', zeroline=False)
 
-    # y 轴格式化
     fig.update_yaxes(title_text='权益', row=1, col=1)
     fig.update_yaxes(title_text='回撤', tickformat='.1%', row=2, col=1)
     fig.update_yaxes(title_text='收益', row=3, col=1)
 
-    # 隐藏 row 1/2 的 x 轴标签（共享 row 3）
     fig.update_xaxes(showticklabels=False, row=1, col=1)
     fig.update_xaxes(showticklabels=False, row=2, col=1)
 
@@ -298,11 +294,9 @@ def _add_trade_markers(
     row: int,
     col: int,
 ) -> None:
-    """在资金曲线上标注买卖信号"""
     if not trades:
         return
 
-    # 建立日期 → 权益的索引
     date_to_equity: dict[str, float] = {}
     for i, d in enumerate(dates):
         if i < len(equities):
@@ -314,7 +308,7 @@ def _add_trade_markers(
     sell_x, sell_y, sell_text = [], [], []
 
     for t in trades:
-        dt = _get_str(t, 'datetime', '')[:10]  # 取日期部分
+        dt = _get_str(t, 'datetime', '')[:10]
         price = _get_float(t, 'close_price') or _get_float(t, 'open_price', 0)
         direction = str(_get_str(t, 'direction', '')).lower()
         offset = str(_get_str(t, 'offset', '')).lower()

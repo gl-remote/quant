@@ -16,7 +16,7 @@ import logging
 
 from config import ConfigManager
 from data import DataManager
-from report import format_single_report, format_summary_report, build_report
+from report import format_single_report, format_summary_report
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +55,11 @@ def _cmd_list(dm: DataManager, symbol: str | None = None, strategy: str | None =
 
 
 def _cmd_show(dm: DataManager, backtest_id: int) -> None:
-    """展示单条回测详细报告 + 生成可视化 HTML"""
+    """展示单条回测详细报告"""
     report = format_single_report(dm, backtest_id)
     print(report)
 
-    # 生成交互式可视化报告
-    html_path = build_report(dm, backtest_id, output_dir="output")
-    if html_path:
-        print(f"\n📊 可视化报告: file://{html_path}")
+    print("\n💡 可视化报告请打开 output/index.html 查看 (需执行 backtest 命令生成)")
 
 
 def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
