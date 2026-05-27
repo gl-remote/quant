@@ -1,3 +1,5 @@
+import type { EChartsOption } from "echarts";
+
 export interface RunInfo {
   id: number;
   strategy: string;
@@ -89,7 +91,7 @@ export interface BestParam {
   value: number;
 }
 
-export interface ParamScatter {
+export interface DenormalizedScatter {
   x_label: string;
   y_label: string;
   x_vals: number[];
@@ -97,22 +99,14 @@ export interface ParamScatter {
   scores: number[];
 }
 
-export interface PlotlySpec {
-  data: object[];
-  layout: object;
-}
-
 export interface OptunaData {
   study_name: string;
-  trial_count: number;
-  trial_nums: number[];
-  trial_values: number[];
   best_params: BestParam[];
-  param_scatter: ParamScatter | null;
-  charts: {
-    optimization_history: PlotlySpec | null;
-    param_importances: PlotlySpec | null;
-    parallel_coordinate: PlotlySpec | null;
-    contour: PlotlySpec | null;
-  };
+  best_value: number | null;
+  optimization_history: EChartsOption | null;
+  param_importances: EChartsOption | null;
+  parallel_coordinate: EChartsOption | null;
+  contour: EChartsOption | null;
 }
+
+export type { EChartsOption };

@@ -1,96 +1,130 @@
 import type { OptunaData } from "@/types";
-import GenericChart from "@/components/GenericChart";
+import EChartsChart from "@/components/EChartsChart";
 
-interface Props {
-  data: OptunaData;
+interface OptunaChartsProps {
+  data: OptunaData | null;
 }
 
-export default function OptunaCharts({ data }: Props) {
-  if (!data || !data.charts) {
-    return <p style={{ textAlign: "center", color: "#999" }}>无优化结果</p>;
+export default function OptunaCharts({ data }: OptunaChartsProps) {
+  if (!data) {
+    return (
+      <div
+        data-ql-id="RUN-OPT-EMPTY"
+        style={{
+          padding: 24,
+          color: "#999",
+          textAlign: "center",
+          background: "#fafafa",
+          borderRadius: 8,
+          border: "1px solid #e8e8e8",
+        }}
+      >
+        暂无参数优化数据
+      </div>
+    );
   }
 
-  const { charts, best_params, study_name } = data;
+  const { study_name, best_params, best_value, optimization_history, param_importances, parallel_coordinate, contour } = data;
 
   return (
-    <div>
-      <h2 style={styles.title}>{study_name} 优化结果</h2>
+    <div data-ql-id="RUN-OPT-CONTAINER">
+      <div
+        data-ql-id="RUN-OPT-HEADER"
+        style={{
+          marginBottom: 16,
+          padding: "12px 16px",
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          borderRadius: 8,
+          color: "#fff",
+        }}
+      >
+        <div data-ql-id="RUN-OPT-STUDYNAME" style={{ fontSize: 16, fontWeight: 600 }}>
+          {study_name}
+        </div>
+        {best_value != null && (
+          <div data-ql-id="RUN-OPT-BESTVALUE" style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>
+            最优目标值: {Number(best_value).toFixed(4)}
+          </div>
+        )}
+      </div>
 
-      {best_params && best_params.length > 0 && (
-        <div style={styles.params}>
-          <h3 style={styles.subtitle}>最优参数</h3>
-          <div style={styles.paramGrid}>
+      {best_params.length > 0 && (
+        <div data-ql-id="RUN-OPT-BESTPARAMS" style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: "#555" }}>
+            最优参数
+          </div>
+          <div
+            data-ql-id="RUN-OPT-PARAMLIST"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gap: 6,
+            }}
+          >
             {best_params.map((p) => (
-              <div key={p.name} style={styles.paramItem}>
-                <span style={styles.paramName}>{p.name}</span>
-                <span style={styles.paramValue}>{p.value}</span>
+              <div
+                key={p.name}
+                data-ql-id={`RUN-OPT-PARAM-${p.name.toUpperCase()}`}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "6px 12px",
+                  background: "#f8f9fa",
+                  borderRadius: 4,
+                  border: "1px solid #e8e8e8",
+                  fontSize: 13,
+                }}
+              >
+                <span style={{ color: "#888" }}>{p.name}</span>
+                <span style={{ fontWeight: 600, color: "#333" }}>
+                  {typeof p.value === "number" ? p.value.toFixed(4) : String(p.value)}
+                </span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      <GenericChart
-        title="优化历史"
-        spec={charts.optimization_history}
-      />
-      <GenericChart
-        title="参数重要性"
-        spec={charts.param_importances}
-      />
-      <GenericChart
-        title="平行坐标"
-        spec={charts.parallel_coordinate}
-      />
-      <GenericChart
-        title="等高线"
-        spec={charts.contour}
-      />
+      <div data-ql-id="RUN-OPT-CHARTS" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {optimization_history && (
+          <div data-ql-id="RUN-OPT-HISTORY" style={chartSectionStyle}>
+            <div style={chartTitleStyle}>优化历史</div>
+            <EChartsChart qlId="RUN-OPT-HISTORY-CHART" option={optimization_history} style={{ height: 350 }} />
+          </div>
+        )}
+        {param_importances && (
+          <div data-ql-id="RUN-OPT-IMPORTANCE" style={chartSectionStyle}>
+            <div style={chartTitleStyle}>参数重要性</div>
+            <EChartsChart qlId="RUN-OPT-IMPORTANCE-CHART" option={param_importances} style={{ height: 350 }} />
+          </div>
+        )}
+        {parallel_coordinate && (
+          <div data-ql-id="RUN-OPT-PARALLEL" style={chartSectionStyle}>
+            <div style={chartTitleStyle}>平行坐标</div>
+            <EChartsChart qlId="RUN-OPT-PARALLEL-CHART" option={parallel_coordinate} style={{ height: 400 }} />
+          </div>
+        )}
+        {contour && (
+          <div data-ql-id="RUN-OPT-CONTOUR" style={chartSectionStyle}>
+            <div style={chartTitleStyle}>等高线</div>
+            <EChartsChart qlId="RUN-OPT-CONTOUR-CHART" option={contour} style={{ height: 400 }} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  title: {
-    fontSize: "20px",
-    fontWeight: 700,
-    marginBottom: "16px",
-    color: "#333",
-  },
-  subtitle: {
-    fontSize: "14px",
-    fontWeight: 600,
-    margin: "0 0 8px 0",
-    color: "#555",
-  },
-  params: {
-    background: "#fff",
-    borderRadius: "8px",
-    padding: "16px",
-    marginBottom: "16px",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-  paramGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-    gap: "8px",
-  },
-  paramItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "6px 10px",
-    background: "#f0fdf4",
-    borderRadius: "4px",
-    border: "1px solid #bbf7d0",
-  },
-  paramName: {
-    fontSize: "12px",
-    color: "#666",
-    fontWeight: 600,
-  },
-  paramValue: {
-    fontSize: "12px",
-    color: "#059669",
-    fontWeight: 600,
-  },
+const chartSectionStyle: React.CSSProperties = {
+  background: "#fff",
+  borderRadius: 8,
+  border: "1px solid #e8e8e8",
+  padding: 12,
+};
+
+const chartTitleStyle: React.CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: "#555",
+  marginBottom: 8,
 };

@@ -10,21 +10,21 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div style={styles.body}>
-      <header style={styles.header}>
+      <header style={styles.header} data-ql-id="LAY-HDR-CONTAINER">
         <div style={styles.headerContent}>
-          <div style={styles.logo}>
+          <div style={styles.logo} data-ql-id="LAY-HDR-LOGO">
             <div style={styles.logoIcon}>📊</div>
             <span style={styles.logoText}>Quant Report</span>
           </div>
           <div style={styles.headerRight}>
-            <span style={styles.version}>v0.2.0</span>
+            <span style={styles.version} data-ql-id="LAY-HDR-VERSION">v0.2.0</span>
           </div>
         </div>
       </header>
       
       {!isHome && (
         <div style={styles.breadcrumb}>
-          <nav style={styles.breadcrumbNav}>
+          <nav style={styles.breadcrumbNav} data-ql-id="LAY-HDR-BREADCRUMB">
             <Link to="/" style={styles.breadcrumbLink}>
               <span style={styles.breadcrumbIcon}>🏠</span>
               <span>回测导航</span>
@@ -37,9 +37,9 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       )}
       
-      <main style={styles.main}>{children}</main>
+      <main style={styles.main} data-ql-id="LAY-MAIN-AREA">{children}</main>
       
-      <footer style={styles.footer}>
+      <footer style={styles.footer} data-ql-id="LAY-FTR-CONTAINER">
         <span style={styles.footerText}>天勤量化交易系统 · 策略回测报告</span>
       </footer>
     </div>

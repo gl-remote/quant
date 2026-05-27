@@ -297,25 +297,6 @@ def build_frontend(output_dir: str) -> None:
         hash_file.write_text(src_hash)
         logger.info("前端构建完成")
 
-    _copy_plotly_vendor(web_dir, assets_dir)
-
-
-def _copy_plotly_vendor(web_dir: Path, assets_dir: Path) -> None:
-    src = web_dir / "public" / "vendor" / "plotly.min.js"
-    if not src.exists():
-        logger.warning("plotly.min.js 未找到: %s", src)
-        return
-    dest_dir = assets_dir / "vendor"
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest = dest_dir / "plotly.min.js"
-    if not dest.exists() or src.stat().st_mtime > dest.stat().st_mtime:
-        import shutil
-        shutil.copy2(src, dest)
-        logger.info("plotly.min.js 已复制到 %s", dest)
-    else:
-        logger.info("plotly.min.js 已是最新，跳过复制")
-
-
 def write_entry_html(output_dir: str) -> None:
     """生成 output/index.html 单入口文件
 
@@ -326,7 +307,6 @@ def write_entry_html(output_dir: str) -> None:
     1. JS 代码 → <script> 标签内联
     2. CSS 样式 → <style> 标签内联（通过 JS 注入）
     3. JSON 数据 → window.__DATA__ 变量
-    4. Plotly 库 → 内联到 HTML
     """
     assets_dir = Path(output_dir) / "assets"
 
@@ -353,19 +333,6 @@ def write_entry_html(output_dir: str) -> None:
     if css_file:
         css_content = (assets_dir / css_file).read_text(encoding="utf-8")
 
-    # 读取 Plotly 库（内联到 HTML）
-    plotly_path = assets_dir / "vendor" / "plotly.min.js"
-    plotly_content = ""
-    if plotly_path.exists():
-        plotly_content = plotly_path.read_text(encoding="utf-8")
-        # 转义 </script> 和 <\/script> 为 \x3C/script\x3E，避免 HTML 提前闭合
-        # 转义 <script> 为 \x3Cscript\x3E，避免 HTML 解析器误解析
-        plotly_content = plotly_content.replace("<script>", "\\x3Cscript\\x3E")
-        plotly_content = plotly_content.replace("<\\/script>", "\\x3C/script\\x3E")
-        plotly_content = plotly_content.replace("</script>", "\\x3C/script\\x3E")
-        plotly_size = len(plotly_content.encode("utf-8")) / (1024 * 1024)
-        logger.info("Plotly 库大小: %.1f MiB", plotly_size)
-
     # 构建预加载脚本（JSON数据）
     preload_script = _build_preload_script(output_dir)
 
@@ -377,9 +344,7 @@ def write_entry_html(output_dir: str) -> None:
         '<meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
         '<title>量化回测监控</title>',
-        # Plotly 库内联
-        f'<script>{plotly_content}</script>' if plotly_content else '',
-        # CSS 内联（通过 JS 动态注入）
+        # CSS 内联
         css_content and f'<style>{css_content}</style>' or '',
         '</head>',
         '<body>',

@@ -49,13 +49,13 @@ export default function NavPage() {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.headerSection}>
+    <div style={styles.container} data-ql-id="NAV-PG-CONTAINER">
+      <div style={styles.headerSection} data-ql-id="NAV-PG-HERO">
         <div style={styles.headerTitle}>
           <h1 style={styles.title}>回测报告导航</h1>
           <p style={styles.subtitle}>共 {runs.length} 条回测记录</p>
         </div>
-        <div style={styles.headerStats}>
+        <div style={styles.headerStats} data-ql-id="NAV-PG-STATS">
           <div style={styles.statItem}>
             <span style={styles.statNumber}>{runs.length}</span>
             <span style={styles.statLabel}>总回测</span>
@@ -75,14 +75,14 @@ export default function NavPage() {
         </div>
       </div>
 
-      <div style={styles.cardGrid}>
+      <div style={styles.cardGrid} data-ql-id="NAV-PG-CARDLIST">
         {runs.map((run) => (
           <Link
             key={run.id}
             to={`/run/${run.id}`}
             style={styles.cardLink}
           >
-            <div style={styles.card}>
+            <div style={styles.card} data-ql-id={`NAV-CARD-${run.id}`}>
               <div style={styles.cardHeader}>
                 <div style={styles.runBadge}>
                   <span style={styles.runId}>#{run.id}</span>

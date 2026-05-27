@@ -55,7 +55,7 @@ export default function RunPage() {
   const loading = runLoading || summaryLoading || btLoading;
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
+      <div data-ql-id="RUN-PG-LOADING" style={styles.loadingContainer}>
         <div style={styles.loadingSpinner}></div>
         <p style={styles.loadingText}>加载中...</p>
       </div>
@@ -65,8 +65,8 @@ export default function RunPage() {
   const hasOptuna = optuna && optuna.study_name;
 
   return (
-    <div>
-      <div style={styles.header}>
+    <div data-ql-id="RUN-PG-CONTAINER">
+      <div data-ql-id="RUN-PG-HEADER" style={styles.header}>
         <div style={styles.headerLeft}>
           <div style={styles.runBadge}>
             <span style={styles.runId}>Run #{runId}</span>
@@ -91,8 +91,9 @@ export default function RunPage() {
           </div>
         </div>
         {hasOptuna && (
-          <div style={styles.headerRight}>
+          <div data-ql-id="RUN-PG-TABS" style={styles.headerRight}>
             <Link
+              data-ql-id="RUN-PG-TAB-BACKTEST"
               to={showOptuna ? `/run/${runId}` : `/run/${runId}/optuna`}
               style={{
                 ...styles.tabLink,
@@ -102,6 +103,7 @@ export default function RunPage() {
               回测结果
             </Link>
             <Link
+              data-ql-id="RUN-PG-TAB-OPTUNA"
               to={showOptuna ? `/run/${runId}/optuna` : `/run/${runId}`}
               style={{
                 ...styles.tabLink,

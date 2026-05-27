@@ -43,10 +43,17 @@ export default function MetricCards({ run, backtests }: Props) {
     cards.unshift({ label: "引擎", value: run.engine });
   }
 
+  const qlIdMap: Record<string, string> = {
+    "总品种数": "RUN-MET-ITEM-SYMBOLS",
+    "平均收益率": "RUN-MET-ITEM-RETURN",
+    "总交易次数": "RUN-MET-ITEM-TRADES",
+    "平均夏普": "RUN-MET-ITEM-SHARPE",
+  };
+
   return (
-    <div style={styles.grid}>
+    <div style={styles.grid} data-ql-id="RUN-MET-CONTAINER">
       {cards.map((c) => (
-        <div key={c.label} style={styles.card}>
+        <div key={c.label} style={styles.card} data-ql-id={qlIdMap[c.label]}>
           <div style={styles.cardLabel}>{c.label}</div>
           <div style={{ ...styles.cardValue, color: c.color || "#333" }}>
             {c.value}

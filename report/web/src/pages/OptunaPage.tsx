@@ -14,7 +14,7 @@ export default function OptunaPage() {
 
   if (loading) {
     return (
-      <p style={{ textAlign: "center", padding: 60, color: "#888" }}>
+      <p data-ql-id="OPT-PG-LOADING" style={{ textAlign: "center", padding: 60, color: "#888" }}>
         加载中...
       </p>
     );
@@ -22,12 +22,12 @@ export default function OptunaPage() {
 
   if (error || !optuna || !optuna.study_name) {
     return (
-      <div>
+      <div data-ql-id="OPT-PG-ERROR">
         <p style={{ textAlign: "center", color: "#999", padding: 40 }}>
           该 run 无优化数据
         </p>
         <div style={{ textAlign: "center" }}>
-          <Link to={`/run/${runId}`} style={styles.backLink}>
+          <Link data-ql-id="OPT-PG-BACKLINK" to={`/run/${runId}`} style={styles.backLink}>
             &larr; 返回回测结果
           </Link>
         </div>
@@ -36,10 +36,10 @@ export default function OptunaPage() {
   }
 
   return (
-    <div>
+    <div data-ql-id="OPT-PG-CONTAINER">
       <div style={styles.header}>
         <h1 style={styles.title}>参数优化</h1>
-        <Link to={`/run/${runId}`} style={styles.backLink}>
+        <Link data-ql-id="OPT-PG-BACKLINK" to={`/run/${runId}`} style={styles.backLink}>
           &larr; 返回回测结果
         </Link>
       </div>

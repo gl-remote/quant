@@ -1,196 +1,164 @@
-import Plot from "@/components/PlotlyWrapper";
-import type { EquityData } from "@/types";
+import type { EquityData, EChartsOption } from "@/types";
+import EChartsChart from "@/components/EChartsChart";
 
-interface Props {
-  data: EquityData;
+interface EquityChartProps {
+  data: EquityData | null;
 }
 
-export default function EquityChart({ data }: Props) {
-  if (!data || data.equity.length === 0) {
+export default function EquityChart({ data }: EquityChartProps) {
+  if (!data || !data.dates?.length) {
     return (
-      <div style={styles.empty}>
-        <p>暂无资金曲线数据</p>
+      <div
+        data-ql-id="RUN-EQ-EMPTY"
+        style={{
+          height: 400,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#999",
+          background: "#fafafa",
+          borderRadius: 8,
+          border: "1px solid #e8e8e8",
+        }}
+      >
+        暂无资金曲线数据
       </div>
     );
   }
 
-  const equityTrace = {
-    x: data.dates,
-    y: data.equity,
-    type: "scatter" as const,
-    mode: "lines",
-    name: "资金曲线",
-    line: {
-      color: "#2563eb",
-      width: 2,
-    },
-    yaxis: "y1",
-  };
+  const startEq = data.equity[0];
+  const totalReturn = startEq
+    ? ((data.equity[data.equity.length - 1] / startEq - 1) * 100).toFixed(2)
+    : "0";
+  const maxDD = data.drawdown.length
+    ? (Math.min(...data.drawdown) * 100).toFixed(2)
+    : "0";
+  const endEq = data.equity[data.equity.length - 1]?.toFixed(2) || "0";
 
-  const drawdownTrace = {
-    x: data.dates,
-    y: data.drawdown.map((d) => d * 100),
-    type: "scatter" as const,
-    mode: "lines",
-    name: "回撤",
-    line: {
-      color: "#dc2626",
-      width: 2,
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    legend: {
+      data: ["权益曲线", "回撤"],
+      top: 0,
+      textStyle: { fontSize: 12 },
     },
-    fill: "tozeroy",
-    fillcolor: "rgba(220, 38, 38, 0.1)",
-    yaxis: "y2",
+    grid: { left: 60, right: 80, top: 40, bottom: 100 },
+    xAxis: {
+      type: "category" as const,
+      data: data.dates,
+      axisLabel: { rotate: 45, fontSize: 10 },
+    },
+    yAxis: [
+      {
+        type: "value" as const,
+        name: "权益",
+        nameTextStyle: { fontSize: 11 },
+        axisLabel: { fontSize: 10, formatter: (v: number) => (v / 10000).toFixed(0) + "w" },
+      },
+      {
+        type: "value" as const,
+        name: "回撤 (%)",
+        nameTextStyle: { fontSize: 11 },
+        axisLabel: { fontSize: 10, formatter: "{value}%" },
+        max: 0,
+        min: (v: { min: number }) => Math.min(v.min * 100 * 1.2, -5),
+      },
+    ],
+    dataZoom: [
+      { type: "slider" as const, xAxisIndex: 0, bottom: 10, height: 20 },
+      { type: "inside" as const, xAxisIndex: 0 },
+    ],
+    series: [
+      {
+        name: "权益曲线",
+        type: "line",
+        data: data.equity,
+        yAxisIndex: 0,
+        smooth: true,
+        symbol: "none",
+        lineStyle: { color: "#5470c6", width: 2 },
+        areaStyle: {
+          color: {
+            type: "linear" as const,
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(84,112,198,0.2)" },
+              { offset: 1, color: "rgba(84,112,198,0.02)" },
+            ],
+          },
+        },
+      },
+      {
+        name: "回撤",
+        type: "line",
+        data: data.drawdown.map((v: number) => (v * 100).toFixed(2)),
+        yAxisIndex: 1,
+        symbol: "none",
+        lineStyle: { color: "#e74c3c", width: 1.5 },
+        areaStyle: {
+          color: {
+            type: "linear" as const,
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: "rgba(231,76,60,0.1)" },
+              { offset: 1, color: "rgba(231,76,60,0.3)" },
+            ],
+          },
+        },
+      },
+    ],
   };
-
-  const startEquity = data.equity[0] || 100000;
-  const endEquity = data.equity[data.equity.length - 1] || 100000;
-  const totalReturn = ((endEquity - startEquity) / startEquity * 100).toFixed(2);
-  const maxDrawdown = (Math.min(...data.drawdown) * 100).toFixed(2);
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
-        <div style={styles.titleSection}>
-          <h3 style={styles.title}>
-            <span style={styles.titleIcon}>💰</span>
-            资金曲线
-          </h3>
-          <span style={styles.symbol}>{data.symbol}</span>
+    <div data-ql-id="RUN-EQ-CONTAINER">
+      <div
+        data-ql-id="RUN-EQ-METRICS"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <div data-ql-id="RUN-EQ-MET-TOTALRET" style={metricStyle}>
+          <div style={metricLabelStyle}>累计收益</div>
+          <div style={{ ...metricValueStyle, color: Number(totalReturn) >= 0 ? "#27ae60" : "#e74c3c" }}>
+            {totalReturn}%
+          </div>
         </div>
-        <div style={styles.statsRow}>
-          <div style={styles.statCard}>
-            <span style={styles.statLabel}>累计收益</span>
-            <span style={{ ...styles.statValue, color: parseFloat(totalReturn) >= 0 ? "#059669" : "#dc2626" }}>
-              {totalReturn}%
-            </span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statLabel}>最大回撤</span>
-            <span style={{ ...styles.statValue, color: "#dc2626" }}>{maxDrawdown}%</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statLabel}>最终权益</span>
-            <span style={styles.statValue}>{endEquity.toLocaleString()}</span>
-          </div>
+        <div data-ql-id="RUN-EQ-MET-MAXDD" style={metricStyle}>
+          <div style={metricLabelStyle}>最大回撤</div>
+          <div style={{ ...metricValueStyle, color: "#e74c3c" }}>{maxDD}%</div>
+        </div>
+        <div data-ql-id="RUN-EQ-MET-ENDEQ" style={metricStyle}>
+          <div style={metricLabelStyle}>最终权益</div>
+          <div style={{ ...metricValueStyle, color: "#333" }}>{endEq}</div>
         </div>
       </div>
-      <Plot
-        data={[equityTrace, drawdownTrace] as any}
-        layout={{
-          height: 350,
-          margin: { l: 60, r: 60, t: 20, b: 40 },
-          hovermode: "x unified",
-          showlegend: true,
-          legend: {
-            orientation: "h",
-            x: 0.05,
-            y: 1.15,
-          },
-          dragmode: "pan",
-          paper_bgcolor: "#fff",
-          plot_bgcolor: "#fff",
-          xaxis: {
-            showgrid: true,
-            gridcolor: "#f0f0f0",
-            rangeslider: { visible: false },
-            tickformat: "%Y-%m-%d",
-          },
-          yaxis: {
-            showgrid: true,
-            gridcolor: "#f0f0f0",
-            title: { text: "权益 (元)" },
-            tickformat: ",.0f",
-          },
-          yaxis2: {
-            title: { text: "回撤 (%)" },
-            overlaying: "y",
-            side: "right",
-            showgrid: false,
-            range: [-100, 0],
-          },
-        }}
-        config={{
-          responsive: true,
-          displaylogo: false,
-          scrollZoom: true,
-        }}
-        useResizeHandler
-        style={{ width: "100%" }}
+      <EChartsChart
+        qlId="RUN-EQ-CHART"
+        option={option}
+        style={{ height: 400 }}
       />
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  wrapper: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "20px",
-    marginBottom: "20px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-  },
-  header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "12px",
-    paddingBottom: "12px",
-    borderBottom: "1px solid #f0f0f0",
-  },
-  titleSection: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-  },
-  title: {
-    fontSize: "16px",
-    fontWeight: 600,
-    margin: 0,
-    color: "#1a1a1a",
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  titleIcon: {
-    fontSize: "18px",
-  },
-  symbol: {
-    fontSize: "13px",
-    padding: "4px 10px",
-    background: "#f0f9ff",
-    color: "#0369a1",
-    borderRadius: "6px",
-    fontWeight: 500,
-  },
-  statsRow: {
-    display: "flex",
-    gap: "16px",
-  },
-  statCard: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "right",
-    padding: "8px 14px",
-    background: "#f9fafb",
-    borderRadius: "8px",
-    minWidth: "90px",
-  },
-  statLabel: {
-    fontSize: "11px",
-    color: "#9ca3af",
-    marginBottom: "4px",
-  },
-  statValue: {
-    fontSize: "14px",
-    fontWeight: 600,
-    color: "#374151",
-  },
-  empty: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "48px",
-    textAlign: "center",
-    color: "#999",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-  },
+const metricStyle: React.CSSProperties = {
+  background: "#f8f9fa",
+  borderRadius: 6,
+  padding: "10px 14px",
+  textAlign: "center",
+  border: "1px solid #e8e8e8",
+};
+
+const metricLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "#888",
+  marginBottom: 4,
+};
+
+const metricValueStyle: React.CSSProperties = {
+  fontSize: 20,
+  fontWeight: 700,
 };

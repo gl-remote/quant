@@ -34,7 +34,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
 
   if (!data || data.length === 0) {
     return (
-      <div style={styles.empty}>
+      <div style={styles.empty} data-ql-id="RUN-TBL-EMPTY">
         <div style={styles.emptyIcon}>📭</div>
         <p>暂无回测记录</p>
       </div>
@@ -66,8 +66,8 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
   };
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
+    <div style={styles.wrapper} data-ql-id="RUN-TBL-CONTAINER">
+      <div style={styles.header} data-ql-id="RUN-TBL-HEADER">
         <h2 style={styles.title}>
           <span style={styles.titleIcon}>📈</span>
           品种汇总
@@ -93,7 +93,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
       </div>
 
       <div style={styles.tableWrap}>
-        <table style={styles.table}>
+        <table style={styles.table} data-ql-id="RUN-TBL-TABLE">
           <thead>
             <tr>
               {columns.map((col) => (
@@ -120,6 +120,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
               return (
                 <tr
                   key={item.symbol}
+                  data-ql-id={`RUN-TBL-ROW-${item.symbol}`}
                   onClick={() => onSelect(item.symbol)}
                   style={{
                     ...styles.row,

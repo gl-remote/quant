@@ -13,10 +13,14 @@ export default function BacktestDetail({
   backtests,
   selectedSymbol,
 }: Props) {
-  if (!backtests || backtests.length === 0) return null;
+  if (!backtests || backtests.length === 0) {
+    return <div data-ql-id="RUN-BT-EMPTY" />;
+  }
 
   const bt = backtests.find((b) => b.symbol === selectedSymbol);
-  if (!bt) return null;
+  if (!bt) {
+    return <div data-ql-id="RUN-BT-EMPTY" />;
+  }
 
   const metrics = [
     ["收益率", formatPct(bt.total_return * 100)],
@@ -32,9 +36,9 @@ export default function BacktestDetail({
   ];
 
   return (
-    <div style={styles.wrapper}>
-      <h2 style={styles.title}>{selectedSymbol} 回测详情</h2>
-      <div style={styles.grid}>
+    <div data-ql-id="RUN-BT-CONTAINER" style={styles.wrapper}>
+      <h2 data-ql-id="RUN-BT-HEADER" style={styles.title}>{selectedSymbol} 回测详情</h2>
+      <div data-ql-id="RUN-BT-METRICS" style={styles.grid}>
         {metrics.map(([label, value]) => (
           <div key={label} style={styles.item}>
             <span style={styles.label}>{label}</span>
@@ -44,7 +48,7 @@ export default function BacktestDetail({
       </div>
 
       {bt.params && bt.params.length > 0 && (
-        <>
+        <div data-ql-id="RUN-BT-PARAMS">
           <h3 style={styles.subtitle}>策略参数</h3>
           <div style={styles.grid}>
             {bt.params.map((p) => (
@@ -54,7 +58,7 @@ export default function BacktestDetail({
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

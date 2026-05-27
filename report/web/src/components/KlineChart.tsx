@@ -179,15 +179,15 @@ export default function KlineChart({ data }: Props) {
 
   if (!klineData || klineData.length === 0) {
     return (
-      <div style={styles.empty}>
+      <div style={styles.empty} data-ql-id="RUN-KLINE-EMPTY">
         <p>暂无 K 线数据</p>
       </div>
     );
   }
 
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.toolbar}>
+    <div style={styles.wrapper} data-ql-id="RUN-KLINE-CONTAINER">
+      <div style={styles.toolbar} data-ql-id="RUN-KLINE-TOOLBAR">
         <div style={styles.leftGroup}>
           <span style={styles.symbol}>{data.symbol}</span>
           {mode === "raw" && data.raw_downsampled && (
@@ -198,6 +198,7 @@ export default function KlineChart({ data }: Props) {
           <div style={styles.toggleGroup}>
             <button
               onClick={() => setMode("daily")}
+              data-ql-id="RUN-KLINE-BTN-DAILY"
               style={{
                 ...styles.toggleBtn,
                 ...(mode === "daily" ? styles.toggleActive : {}),
@@ -207,6 +208,7 @@ export default function KlineChart({ data }: Props) {
             </button>
             <button
               onClick={() => setMode("raw")}
+              data-ql-id="RUN-KLINE-BTN-MINUTE"
               style={{
                 ...styles.toggleBtn,
                 ...(mode === "raw" ? styles.toggleActive : {}),
@@ -219,6 +221,7 @@ export default function KlineChart({ data }: Props) {
         <div style={styles.rightGroup}>
           <button
             onClick={() => setIndicators((prev) => ({ ...prev, sma: !prev.sma }))}
+            data-ql-id="RUN-KLINE-BTN-SMA"
             style={{
               ...styles.indicatorBtn,
               ...(indicators.sma ? styles.indicatorActive : {}),
@@ -228,7 +231,7 @@ export default function KlineChart({ data }: Props) {
           </button>
         </div>
       </div>
-      <div ref={containerRef} style={styles.chartContainer} />
+      <div ref={containerRef} style={styles.chartContainer} data-ql-id="RUN-KLINE-CHART" />
       <div style={styles.legend}>
         <div style={styles.legendItem}>
           <span style={{ ...styles.legendDot, backgroundColor: "#FF6B6B" }} />
