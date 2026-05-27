@@ -1,12 +1,5 @@
-/**
- * @file RunPage.tsx
- * @description 回测详情页面组件
- * 展示单个回测的详细信息，包括回测指标、K线图、资金曲线、品种汇总表、回测详情等
- * 支持在回测结果和参数优化结果之间切换
- */
-
-import { useState, useEffect } from "react";
-import { useParams, Link, useLocation } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useParams } from "react-router-dom";
 import { useFetchJson } from "@/hooks/useFetchJson";
 import type {
   RunInfo,
@@ -23,60 +16,61 @@ import EquityChart from "@/components/EquityChart";
 import BacktestDetail from "@/components/BacktestDetail";
 import OptunaCharts from "@/components/OptunaCharts";
 
-/**
- * RunPage组件
- * 回测详情主页，展示单个回测的完整信息
- * 
- * @component
- * @returns {JSX.Element} 渲染后的回测详情页面组件
- */
+type TabId = "backtest" | "optuna";
+
 export default function RunPage() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
   const runId = Number(id);
-  const showOptuna = location.pathname.includes("/optuna");
+  const [activeTab, setActiveTab] = useState<TabId>("backtest");
+  const [animKey, setAnimKey] = useState(0);
 
-  // 获取回测基本信息
   const { data: run, loading: runLoading } = useFetchJson<RunInfo>(
     "run.json",
     runId
   );
-  // 获取回测汇总数据
   const { data: summary, loading: summaryLoading } =
     useFetchJson<SummaryItem[]>("summary.json", runId);
-  // 获取回测记录数据
   const { data: backtests, loading: btLoading } =
     useFetchJson<BacktestRecord[]>("backtests.json", runId);
-  // 获取资金曲线数据
   const { data: equity } = useFetchJson<Record<string, EquityData>>(
     "equity.json",
     runId
   );
-  // 获取Optuna优化数据
   const { data: optuna } = useFetchJson<OptunaData | null>(
     "optuna.json",
     runId
   );
 
-  // 当前选中的品种
   const [selectedSymbol, setSelectedSymbol] = useState<string>("");
 
-  /**
-   * 当summary数据加载完成时，自动选中第一个品种
-   */
   useEffect(() => {
     if (summary && summary.length > 0 && !selectedSymbol) {
       setSelectedSymbol(summary[0].symbol);
     }
   }, [summary, selectedSymbol]);
 
-  // 获取选中品种的K线数据
   const { data: kline, loading: klineLoading } = useFetchJson<KlineData>(
     `kline_${selectedSymbol}.json`,
     runId
   );
 
-  // 检查是否还有数据在加载中
+  const switchTab = useCallback((tab: TabId) => {
+    if (tab !== activeTab) {
+      setActiveTab(tab);
+      setAnimKey((k) => k + 1);
+    }
+  }, [activeTab]);
+
+  const handleTabKeyDown = useCallback(
+    (e: React.KeyboardEvent, tab: TabId) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        switchTab(tab);
+      }
+    },
+    [switchTab]
+  );
+
   const loading = runLoading || summaryLoading || btLoading;
   if (loading) {
     return (
@@ -87,11 +81,12 @@ export default function RunPage() {
     );
   }
 
-  // 检查是否有Optuna优化数据
   const hasOptuna = optuna && optuna.study_name;
 
   return (
     <div data-ql-id="RUN-PG-CONTAINER">
+      <style>{animationStyles}</style>
+
       <div data-ql-id="RUN-PG-HEADER" style={styles.header}>
         <div style={styles.headerLeft}>
           <div style={styles.runBadge}>
@@ -116,77 +111,119 @@ export default function RunPage() {
             </span>
           </div>
         </div>
-        {hasOptuna && (
-          <div data-ql-id="RUN-PG-TABS" style={styles.headerRight}>
-            <Link
-              data-ql-id="RUN-PG-TAB-BACKTEST"
-              to={showOptuna ? `/run/${runId}` : `/run/${runId}/optuna`}
-              style={{
-                ...styles.tabLink,
-                ...(showOptuna ? styles.tabActive : {}),
-              }}
-            >
-              回测结果
-            </Link>
-            <Link
-              data-ql-id="RUN-PG-TAB-OPTUNA"
-              to={showOptuna ? `/run/${runId}/optuna` : `/run/${runId}`}
-              style={{
-                ...styles.tabLink,
-                ...(!showOptuna ? styles.tabActive : {}),
-              }}
-            >
-              参数优化
-            </Link>
-          </div>
-        )}
+
+        <div role="tablist" aria-label="内容切换" style={styles.tabGroup}>
+          <button
+            role="tab"
+            id="tab-backtest"
+            aria-selected={activeTab === "backtest"}
+            aria-controls="panel-backtest"
+            tabIndex={activeTab === "backtest" ? 0 : -1}
+            data-ql-id="RUN-PG-TAB-BACKTEST"
+            onClick={() => switchTab("backtest")}
+            onKeyDown={(e) => handleTabKeyDown(e, "backtest")}
+            style={{
+              ...styles.tabBtn,
+              ...(activeTab === "backtest" ? styles.tabBtnActive : {}),
+            }}
+          >
+            回测结果
+          </button>
+          <button
+            role="tab"
+            id="tab-optuna"
+            aria-selected={activeTab === "optuna"}
+            aria-controls="panel-optuna"
+            tabIndex={activeTab === "optuna" ? 0 : -1}
+            data-ql-id="RUN-PG-TAB-OPTUNA"
+            onClick={() => switchTab("optuna")}
+            onKeyDown={(e) => handleTabKeyDown(e, "optuna")}
+            disabled={!hasOptuna}
+            style={{
+              ...styles.tabBtn,
+              ...(activeTab === "optuna" ? styles.tabBtnActive : {}),
+              ...(!hasOptuna ? styles.tabBtnDisabled : {}),
+            }}
+            title={hasOptuna ? "查看参数优化结果" : "该 run 无优化数据"}
+          >
+            参数优化
+          </button>
+        </div>
       </div>
 
-      {/* 根据路由显示Optuna优化结果或回测结果 */}
-      {showOptuna && optuna ? (
-        <OptunaCharts data={optuna} />
-      ) : (
-        <>
-          <MetricCards run={run} backtests={backtests} />
-          <div style={styles.contentGrid}>
-            <div style={styles.leftPanel}>
-              <KlineChart data={kline} loading={klineLoading} />
-              {equity && selectedSymbol && equity[selectedSymbol] && (
-                <EquityChart data={equity[selectedSymbol]} />
-              )}
-            </div>
-            <div style={styles.rightPanel}>
-              <SymbolTable
-                data={summary}
-                onSelect={setSelectedSymbol}
-                selectedSymbol={selectedSymbol}
-              />
-              <BacktestDetail
-                backtests={backtests}
-                selectedSymbol={selectedSymbol}
-              />
+      <div style={styles.tabContent}>
+        <div
+          key={`backtest-${animKey}`}
+          id="panel-backtest"
+          role="tabpanel"
+          aria-labelledby="tab-backtest"
+          style={activeTab === "backtest" ? styles.panelVisible : styles.panelHidden}
+        >
+          <div style={activeTab === "backtest" ? { animation: "tabFadeIn 0.25s ease-out" } : undefined}>
+            <MetricCards run={run} backtests={backtests} />
+            <div style={styles.contentGrid}>
+              <div style={styles.leftPanel}>
+                <KlineChart data={kline} loading={klineLoading} />
+                {equity && selectedSymbol && equity[selectedSymbol] && (
+                  <EquityChart data={equity[selectedSymbol]} />
+                )}
+              </div>
+              <div style={styles.rightPanel}>
+                <SymbolTable
+                  data={summary}
+                  onSelect={setSelectedSymbol}
+                  selectedSymbol={selectedSymbol}
+                />
+                <BacktestDetail
+                  backtests={backtests}
+                  selectedSymbol={selectedSymbol}
+                />
+              </div>
             </div>
           </div>
-        </>
-      )}
+        </div>
+
+        <div
+          key={`optuna-${animKey}`}
+          id="panel-optuna"
+          role="tabpanel"
+          aria-labelledby="tab-optuna"
+          style={activeTab === "optuna" ? styles.panelVisible : styles.panelHidden}
+        >
+          <div style={activeTab === "optuna" ? { animation: "tabFadeIn 0.25s ease-out" } : undefined}>
+            {hasOptuna ? (
+              <OptunaCharts data={optuna!} />
+            ) : (
+              <div style={styles.emptyPanel}>
+                <p style={styles.emptyPanelText}>该 run 无优化数据</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-/**
- * 样式对象
- * 定义了RunPage组件中所有元素的样式
- */
+const animationStyles = `
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+`;
+
 const styles: Record<string, React.CSSProperties> = {
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: "24px",
-    padding: "20px",
+    marginBottom: "28px",
+    padding: "24px",
     background: "#ffffff",
     borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+    border: "1px solid #e2e8f0",
+    flexWrap: "wrap" as const,
+    gap: "16px",
   },
   headerLeft: {
     display: "flex",
@@ -202,7 +239,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "14px",
     fontWeight: 700,
     color: "#1a1a1a",
-    fontFamily: "Monaco, 'Courier New', monospace",
+    fontFamily: "SF Mono, Monaco, Consolas, monospace",
   },
   statusPill: {
     fontSize: "11px",
@@ -222,58 +259,88 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: "12px",
+    flexWrap: "wrap" as const,
   },
   metaItem: {
     display: "flex",
     alignItems: "center",
     gap: "4px",
     fontSize: "13px",
-    color: "#6b7280",
+    color: "#64748b",
   },
   metaIcon: {
     fontSize: "14px",
   },
   metaDivider: {
-    color: "#d1d5db",
+    color: "#cbd5e1",
   },
-  headerRight: {
+  tabGroup: {
     display: "flex",
-    background: "#f5f6fa",
+    background: "#f1f5f9",
     borderRadius: "8px",
     padding: "2px",
+    flexShrink: 0,
   },
-  tabLink: {
+  tabBtn: {
     padding: "8px 18px",
-    textDecoration: "none",
+    border: "none",
+    background: "transparent",
     fontSize: "13px",
     fontWeight: 500,
-    color: "#6b7280",
+    color: "#64748b",
     borderRadius: "6px",
-    transition: "all 0.2s",
+    cursor: "pointer",
+    outline: "none",
+    transition: "all 0.2s ease",
+    whiteSpace: "nowrap" as const,
   },
-  tabActive: {
+  tabBtnActive: {
     background: "#2563eb",
     color: "#ffffff",
     boxShadow: "0 2px 8px rgba(37, 99, 235, 0.3)",
   },
+  tabBtnDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+  },
+  tabContent: {
+    position: "relative" as const,
+  },
+  panelVisible: {
+    display: "block",
+  },
+  panelHidden: {
+    display: "none",
+  },
+  emptyPanel: {
+    background: "#ffffff",
+    borderRadius: "12px",
+    border: "1px solid #e2e8f0",
+    padding: "60px 0",
+    textAlign: "center" as const,
+  },
+  emptyPanelText: {
+    color: "#94a3b8",
+    fontSize: "14px",
+    margin: 0,
+  },
   contentGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 400px",
-    gap: "20px",
+    gridTemplateColumns: "1fr 420px",
+    gap: "28px",
   },
   leftPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
   },
   rightPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
-    position: "sticky",
-    top: "120px",
-    maxHeight: "calc(100vh - 120px)",
+    position: "sticky" as const,
+    top: "84px",
+    maxHeight: "calc(100vh - 84px)",
     overflowY: "auto",
+    paddingRight: 4,
   },
   loadingContainer: {
     display: "flex",
@@ -283,19 +350,19 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "80px",
     background: "#ffffff",
     borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+    border: "1px solid #e2e8f0",
   },
   loadingSpinner: {
     width: "40px",
     height: "40px",
-    border: "4px solid #f0f0f0",
+    border: "4px solid #f1f5f9",
     borderTopColor: "#2563eb",
     borderRadius: "50%",
     animation: "spin 1s linear infinite",
   },
   loadingText: {
     marginTop: "16px",
-    color: "#9ca3af",
+    color: "#94a3b8",
     fontSize: "14px",
   },
 };

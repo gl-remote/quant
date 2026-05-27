@@ -3,10 +3,9 @@
  * 
  * 【功能说明】
  * - 配置 HashRouter 路由（支持 file:// 协议）
- * - 定义三个主要路由：
+ * - 定义两个主要路由：
  *   1. "/" → 导航页面（显示所有回测记录）
- *   2. "/run/:id" → 回测详情页面（显示K线、资金曲线、指标等）
- *   3. "/run/:id/optuna" → 参数优化页面（显示Optuna优化结果）
+ *   2. "/run/:id" → 回测详情页面（回测结果 + 参数优化通过页内标签切换）
  * 
  * 【技术选型】
  * - 使用 HashRouter 而非 BrowserRouter，避免 file:// 协议下的路由问题
@@ -19,7 +18,6 @@
 import { HashRouter, Routes, Route } from "react-router-dom";
 import NavPage from "@/pages/NavPage";
 import RunPage from "@/pages/RunPage";
-import OptunaPage from "@/pages/OptunaPage";
 import Layout from "@/components/Layout";
 
 /**
@@ -34,7 +32,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<NavPage />} />
           <Route path="/run/:id" element={<RunPage />} />
-          <Route path="/run/:id/optuna" element={<OptunaPage />} />
         </Routes>
       </Layout>
     </HashRouter>

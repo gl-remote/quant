@@ -1,83 +1,64 @@
-/**
- * @file Layout.tsx
- * @description 应用程序主布局组件
- * 提供统一的页面结构，包括顶部导航栏、面包屑导航（在非首页时显示）、主内容区域和页脚
- * 实现响应式设计，适配不同屏幕尺寸
- */
-
 import { Link, useLocation } from "react-router-dom";
 
-/**
- * Layout组件属性接口
- * @interface LayoutProps
- * @property {React.ReactNode} children - 子组件，将被渲染在主内容区域
- */
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-/**
- * Layout组件
- * 应用程序的根布局组件，提供一致的页面框架
- * 
- * @component
- * @param {LayoutProps} props - 组件属性
- * @returns {JSX.Element} 渲染后的布局组件
- */
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const isHome = location.hash === "#/" || location.hash === "";
 
   return (
     <div style={styles.body}>
-      <header style={styles.header} data-ql-id="LAY-HDR-CONTAINER">
+      <header data-ql-id="LAY-HDR-CONTAINER" style={styles.header}>
         <div style={styles.headerContent}>
-          <div style={styles.logo} data-ql-id="LAY-HDR-LOGO">
+          <div data-ql-id="LAY-HDR-LOGO" style={styles.logo}>
             <div style={styles.logoIcon}>📊</div>
             <span style={styles.logoText}>Quant Report</span>
           </div>
           <div style={styles.headerRight}>
-            <span style={styles.version} data-ql-id="LAY-HDR-VERSION">v0.2.0</span>
+            <span data-ql-id="LAY-HDR-VERSION" style={styles.version}>
+              v0.2.0
+            </span>
           </div>
         </div>
       </header>
-      
+
       {!isHome && (
         <div style={styles.breadcrumb}>
-          <nav style={styles.breadcrumbNav} data-ql-id="LAY-HDR-BREADCRUMB">
+          <nav data-ql-id="LAY-HDR-BREADCRUMB" style={styles.breadcrumbNav}>
             <Link to="/" style={styles.breadcrumbLink}>
               <span style={styles.breadcrumbIcon}>🏠</span>
               <span>回测导航</span>
             </Link>
             <span style={styles.breadcrumbSeparator}>→</span>
             <span style={styles.breadcrumbCurrent}>
-              {location.hash.match(/run\/(\d+)/) ? `回测 #${location.hash.match(/run\/(\d+)/)![1]}` : "优化详情"}
+              {location.hash.match(/run\/(\d+)/)
+                ? `回测 #${location.hash.match(/run\/(\d+)/)![1]}`
+                : "回测详情"}
             </span>
           </nav>
         </div>
       )}
-      
-      <main style={styles.main} data-ql-id="LAY-MAIN-AREA">{children}</main>
-      
-      <footer style={styles.footer} data-ql-id="LAY-FTR-CONTAINER">
+
+      <main data-ql-id="LAY-MAIN-AREA" style={styles.main}>
+        {children}
+      </main>
+
+      <footer data-ql-id="LAY-FTR-CONTAINER" style={styles.footer}>
         <span style={styles.footerText}>天勤量化交易系统 · 策略回测报告</span>
       </footer>
     </div>
   );
 }
 
-/**
- * 样式对象
- * 定义了Layout组件中所有元素的样式
- */
 const styles: Record<string, React.CSSProperties> = {
   body: {
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", sans-serif',
     margin: 0,
     padding: 0,
-    color: "#1a1a1a",
-    background: "#f0f2f5",
+    color: "#1e293b",
+    background: "#f1f5f9",
     minHeight: "100vh",
     display: "flex",
     flexDirection: "column",
@@ -125,7 +106,7 @@ const styles: Record<string, React.CSSProperties> = {
   breadcrumb: {
     padding: "12px 24px",
     background: "#ffffff",
-    borderBottom: "1px solid #e5e7eb",
+    borderBottom: "1px solid #e2e8f0",
   },
   breadcrumbNav: {
     display: "flex",
@@ -142,23 +123,22 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: "none",
     fontSize: "13px",
     fontWeight: 500,
-    transition: "color 0.2s",
   },
   breadcrumbIcon: {
     fontSize: "14px",
   },
   breadcrumbSeparator: {
-    color: "#9ca3af",
+    color: "#94a3b8",
     fontSize: "14px",
   },
   breadcrumbCurrent: {
-    color: "#374151",
+    color: "#475569",
     fontSize: "13px",
     fontWeight: 600,
   },
   main: {
     flex: 1,
-    padding: "24px",
+    padding: "32px 28px",
     maxWidth: "1400px",
     margin: "0 auto",
     width: "100%",
@@ -167,12 +147,12 @@ const styles: Record<string, React.CSSProperties> = {
   footer: {
     padding: "16px 24px",
     background: "#ffffff",
-    borderTop: "1px solid #e5e7eb",
+    borderTop: "1px solid #e2e8f0",
     marginTop: "auto",
   },
   footerText: {
     fontSize: "12px",
-    color: "#6b7280",
+    color: "#94a3b8",
     textAlign: "center",
     display: "block",
   },

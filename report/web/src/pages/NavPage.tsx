@@ -1,44 +1,10 @@
-/**
- * @file NavPage.tsx
- * @description 回测导航页面组件
- * 显示所有回测记录列表，包括回测基本信息、状态和统计数据
- * 支持数据加载状态、错误状态和空状态的展示
- */
-
 import { Link } from "react-router-dom";
-import { fetchJson } from "@/data/loader";
+import { useFetchJson } from "@/hooks/useFetchJson";
 import type { NavItem } from "@/types";
-import { useState, useEffect } from "react";
 
-/**
- * NavPage组件
- * 回测导航主页，展示所有回测记录的列表
- * 
- * @component
- * @returns {JSX.Element} 渲染后的导航页面组件
- */
 export default function NavPage() {
-  const [runs, setRuns] = useState<NavItem[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: runs, loading, error } = useFetchJson<NavItem[]>("nav.json");
 
-  /**
-   * 组件挂载时获取回测导航数据
-   * 从nav.json文件加载所有回测记录信息
-   */
-  useEffect(() => {
-    fetchJson<NavItem[]>("nav.json")
-      .then((data) => {
-        setRuns(data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
-
-  // 加载状态
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
@@ -48,7 +14,6 @@ export default function NavPage() {
     );
   }
 
-  // 错误状态
   if (error) {
     return (
       <div style={styles.errorContainer}>
@@ -58,7 +23,6 @@ export default function NavPage() {
     );
   }
 
-  // 空状态
   if (!runs || runs.length === 0) {
     return (
       <div style={styles.emptyContainer}>
@@ -69,22 +33,26 @@ export default function NavPage() {
     );
   }
 
-  // 正常显示回测列表
   return (
-    <div style={styles.container} data-ql-id="NAV-PG-CONTAINER">
-      <div style={styles.headerSection} data-ql-id="NAV-PG-HERO">
+    <div data-ql-id="NAV-PG-CONTAINER" style={styles.container}>
+      <div
+        data-ql-id="NAV-PG-HERO"
+        style={styles.headerSection}
+      >
         <div style={styles.headerTitle}>
           <h1 style={styles.title}>回测报告导航</h1>
           <p style={styles.subtitle}>共 {runs.length} 条回测记录</p>
         </div>
-        <div style={styles.headerStats} data-ql-id="NAV-PG-STATS">
+        <div data-ql-id="NAV-PG-STATS" style={styles.headerStats}>
           <div style={styles.statItem}>
             <span style={styles.statNumber}>{runs.length}</span>
             <span style={styles.statLabel}>总回测</span>
           </div>
           <div style={styles.statDivider}></div>
           <div style={styles.statItem}>
-            <span style={styles.statNumber}>{runs.filter((r) => r.status === "completed").length}</span>
+            <span style={styles.statNumber}>
+              {runs.filter((r) => r.status === "completed").length}
+            </span>
             <span style={styles.statLabel}>已完成</span>
           </div>
           <div style={styles.statDivider}></div>
@@ -97,7 +65,7 @@ export default function NavPage() {
         </div>
       </div>
 
-      <div style={styles.cardGrid} data-ql-id="NAV-PG-CARDLIST">
+      <div data-ql-id="NAV-PG-CARDLIST" style={styles.cardGrid}>
         {runs.map((run) => (
           <Link
             key={run.id}
@@ -149,10 +117,6 @@ export default function NavPage() {
   );
 }
 
-/**
- * 样式对象
- * 定义了NavPage组件中所有元素的样式
- */
 const styles: Record<string, React.CSSProperties> = {
   container: {
     maxWidth: "1200px",
@@ -161,8 +125,8 @@ const styles: Record<string, React.CSSProperties> = {
   headerSection: {
     background: "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)",
     borderRadius: "12px",
-    padding: "32px",
-    marginBottom: "24px",
+    padding: "40px 40px",
+    marginBottom: "32px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
@@ -210,7 +174,7 @@ const styles: Record<string, React.CSSProperties> = {
   cardGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-    gap: "20px",
+    gap: "28px",
   },
   cardLink: {
     textDecoration: "none",
@@ -219,10 +183,10 @@ const styles: Record<string, React.CSSProperties> = {
   card: {
     background: "#ffffff",
     borderRadius: "12px",
-    padding: "20px",
+    padding: "28px 24px",
     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-    transition: "transform 0.2s, box-shadow 0.2s",
     border: "1px solid #f0f0f0",
+    transition: "transform 0.2s, box-shadow 0.2s",
   },
   cardHeader: {
     display: "flex",

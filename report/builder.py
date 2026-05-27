@@ -22,8 +22,6 @@ from .kline_cache import KlineCache  # 导入K线缓存类
 
 logger = logging.getLogger(__name__)  # 获取当前模块的日志记录器
 
-KLINE_DOWNSAMPLE_THRESHOLD = 5000  # K线数据降采样阈值，超过此数量时进行降采样
-
 
 # ── 公开 API ──────────────────────────────────────────────────
 
@@ -296,15 +294,22 @@ def export_optuna_json(db_path: str, output_dir: str, run_id: int) -> None:
         except Exception as e:
             logger.warning("Optuna chart spec 生成失败: %s", e)
 
-    # 整合数据
+    best_params_raw = optuna_data.get("best_params") or []
+    best_params_from_optuna = charts_spec.get("best_params") or []
+    merged_best_params = best_params_from_optuna if best_params_from_optuna else best_params_raw
+
     result = {
-        "study_name": optuna_data.get("study_name"),
+        "study_name": charts_spec.get("study_name") or optuna_data.get("study_name"),
         "trial_count": optuna_data.get("trial_count"),
         "trial_nums": optuna_data.get("trial_nums"),
         "trial_values": optuna_data.get("trial_values"),
-        "best_params": optuna_data.get("best_params"),
+        "best_params": merged_best_params,
+        "best_value": charts_spec.get("best_value"),
+        "optimization_history": charts_spec.get("optimization_history"),
+        "param_importances": charts_spec.get("param_importances"),
+        "parallel_coordinate": charts_spec.get("parallel_coordinate"),
+        "contour": charts_spec.get("contour"),
         "param_scatter": optuna_data.get("param_scatter"),
-        "charts": charts_spec,
     }
     _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
 
@@ -575,7 +580,7 @@ def _build_kline_dict(
         if start_date:
             df = df[df["datetime"] >= pd.Timestamp(start_date)]
         if end_date:
-            df = df[df["datetime"] <= pd.Timestamp(end_date)]
+            df = df[df["datetime"] <= pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)]
 
         if df.empty:
             return None
@@ -607,17 +612,9 @@ def _build_kline_dict(
             for idx, row in daily_ohlc.iterrows()
         ]
 
-        # 处理原始数据（可能降采样）
+        # 原始数据（不降采样，完整展示）
         raw_data = []
-        total = len(df)
-        skip = (
-            max(1, total // KLINE_DOWNSAMPLE_THRESHOLD)
-            if total > KLINE_DOWNSAMPLE_THRESHOLD
-            else 1
-        )
-
-        for i in range(0, total, skip):
-            row = df.iloc[i]
+        for _, row in df.iterrows():
             raw_data.append({
                 "datetime": str(row["datetime"]),
                 "open": float(row.get("open", 0)),
@@ -627,7 +624,7 @@ def _build_kline_dict(
                 "volume": int(row.get("volume", 0)),
             })
 
-        # 返回完整数据
+        total = len(df)
         return {
             "symbol": symbol,
             "interval": interval,
@@ -635,8 +632,8 @@ def _build_kline_dict(
             "daily": daily_data,
             "raw": raw_data,
             "raw_count": total,
-            "raw_downsampled": total > KLINE_DOWNSAMPLE_THRESHOLD,
-            "raw_sample_max": KLINE_DOWNSAMPLE_THRESHOLD,
+            "raw_downsampled": False,
+            "raw_sample_max": 0,
         }
 
     except Exception as e:
