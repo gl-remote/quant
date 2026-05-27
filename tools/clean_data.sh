@@ -71,11 +71,14 @@ fi
 echo ""
 echo "[2/2] 清理 output..."
 if [ -d "$OUT_DIR" ]; then
-    # 保留根目录 index.html 导航页 + assets/ 目录及内容
+    # 完全内联版本：所有资源（JS/CSS/JSON）都已打包到 index.html
+    # assets/ 目录仅在构建时需要，生成 index.html 后可安全删除
     find "$OUT_DIR" -mindepth 1 -not -name index.html -not -path "$OUT_DIR/assets" -not -path "$OUT_DIR/assets/*" -exec rm -rf {} + 2>/dev/null || true
     # 删除子目录中的 index.html (但保留 assets 内的)
     find "$OUT_DIR" -mindepth 2 -not -path "$OUT_DIR/assets/*" -name 'index.html' -exec rm -f {} + 2>/dev/null || true
-    echo "  已清理 (保留 output/index.html + assets/)"
+    # 清理 assets/ 目录（index.html 已包含所有资源，无需外部引用）
+    rm -rf "$OUT_DIR/assets" 2>/dev/null || true
+    echo "  已清理 (仅保留 output/index.html)"
 fi
 
 echo ""
