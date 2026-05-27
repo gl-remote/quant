@@ -12,11 +12,16 @@ export default defineConfig({
     outDir: process.env.VITE_OUT_DIR || "dist",
     rollupOptions: {
       output: {
-        entryFileNames: "index-[hash].js",
-        chunkFileNames: "chunk-[hash].js",
-        assetFileNames: "index-[hash][extname]",
+        // 输出单个文件，便于内联
+        entryFileNames: "index.js",
+        chunkFileNames: "index.js",
+        assetFileNames: "index[extname]",
+        // 禁用代码分割，打包为单文件
+        manualChunks: undefined,
       },
     },
+    // 启用 CSS 内联到 JS 中
+    cssCodeSplit: false,
   },
   resolve: {
     alias: {

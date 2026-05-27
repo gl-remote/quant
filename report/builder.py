@@ -319,21 +319,47 @@ def _copy_plotly_vendor(web_dir: Path, assets_dir: Path) -> None:
 def write_entry_html(output_dir: str) -> None:
     """生成 output/index.html 单入口文件
 
-    将所有 JSON 数据预加载为 window.__DATA__ 全局变量，
-    彻底避免 file:// 协议下的 CORS 问题。
+    【完全内联版本】将所有资源（JS、CSS、JSON数据）打包到单个 HTML 文件中，
+    彻底避免 file:// 协议下的 CORS 问题，实现真正的离线浏览。
+
+    内联内容：
+    1. JS 代码 → <script> 标签内联
+    2. CSS 样式 → <style> 标签内联（通过 JS 注入）
+    3. JSON 数据 → window.__DATA__ 变量
+    4. Plotly 库 → 内联到 HTML
     """
     assets_dir = Path(output_dir) / "assets"
 
-    js_file = _find_built_file(assets_dir, "index-*.js")
-    css_file = _find_built_file(assets_dir, "index-*.css")
+    # 查找构建产物
+    js_file = _find_built_file(assets_dir, "index*.js")
+    css_file = _find_built_file(assets_dir, "index*.css")
 
     if not js_file:
         logger.warning("未找到 Vite 构建产物，生成降级入口")
         _write_fallback_html(output_dir)
         return
 
+    # 读取 JS 文件内容（内联到 HTML）
+    js_content = (assets_dir / js_file).read_text(encoding="utf-8")
+    js_size = len(js_content.encode("utf-8")) / (1024 * 1024)
+
+    # 读取 CSS 文件内容（如果存在）
+    css_content = ""
+    if css_file:
+        css_content = (assets_dir / css_file).read_text(encoding="utf-8")
+
+    # 读取 Plotly 库（内联到 HTML）
+    plotly_path = assets_dir / "vendor" / "plotly.min.js"
+    plotly_content = ""
+    if plotly_path.exists():
+        plotly_content = plotly_path.read_text(encoding="utf-8")
+        plotly_size = len(plotly_content.encode("utf-8")) / (1024 * 1024)
+        logger.info("Plotly 库大小: %.1f MiB", plotly_size)
+
+    # 构建预加载脚本（JSON数据）
     preload_script = _build_preload_script(output_dir)
 
+    # 生成完全内联的 HTML
     html_parts = [
         '<!DOCTYPE html>',
         '<html lang="zh-CN">',
@@ -341,19 +367,26 @@ def write_entry_html(output_dir: str) -> None:
         '<meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
         '<title>量化回测监控</title>',
-        f'<link rel="stylesheet" href="assets/{css_file}">' if css_file else '',
-        '<script src="assets/vendor/plotly.min.js"></script>',
+        # Plotly 库内联
+        f'<script>{plotly_content}</script>' if plotly_content else '',
+        # CSS 内联（通过 JS 动态注入）
+        css_content and f'<style>{css_content}</style>' or '',
         '</head>',
         '<body>',
         '<div id="root"></div>',
+        # JSON 数据预加载
         preload_script,
-        f'<script src="assets/{js_file}"></script>',
+        # 主 JS 代码内联
+        f'<script>{js_content}</script>',
         '</body>',
         '</html>',
     ]
+
     out_path = Path(output_dir) / "index.html"
     out_path.write_text("\n".join(html_parts), encoding="utf-8")
-    logger.info("入口 HTML 已生成: %s", out_path)
+
+    total_size = out_path.stat().st_size / (1024 * 1024)
+    logger.info("入口 HTML 已生成: %s (JS: %.1f MiB, 总大小: %.1f MiB)", out_path, js_size, total_size)
 
 
 def _build_preload_script(output_dir: str) -> str:
