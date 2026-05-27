@@ -51,11 +51,14 @@ def compute_summary_stats(values: list[float]) -> SummaryStats | dict[str, objec
 
     Returns:
         {mean, median, std, min, max, count, positive_count, negative_count}
-        空列表返回空的 SummaryStats 或 {}
+        空列表或全 NaN 返回 {}
     """
     if not values:
         return {}
     arr = np.array(values, dtype=float)
+    arr = arr[~np.isnan(arr)]
+    if len(arr) == 0:
+        return {}
     pos: int = int(np.sum(arr > 0))
     neg: int = int(np.sum(arr < 0))
     return SummaryStats(

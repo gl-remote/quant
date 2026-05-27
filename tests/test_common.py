@@ -83,8 +83,9 @@ class TestCalcSharpeRatio:
         assert sr < 0
 
     def test_zero_variance_positive_returns(self):
+        # 零方差（恒定增长）无法计算夏普，应返回 0
         sr = calc_sharpe_ratio([100.0, 200.0, 400.0])
-        assert sr == 999.0
+        assert sr == 0.0
 
     def test_zero_variance_negative_returns_noise(self):
         sr = calc_sharpe_ratio([100.0, 99.99, 99.98, 99.97, 99.96])
@@ -448,16 +449,20 @@ class TestPositionSize:
         assert position_size(100000.0, 0.1, 105.0, 10) == 9
 
     def test_minimum_one_lot(self):
-        assert position_size(100000.0, 0.01, 5000.0, 100) == 1
+        # 资金不足时返回 0
+        assert position_size(100000.0, 0.01, 5000.0, 100) == 0
 
     def test_zero_price(self):
-        assert position_size(100000.0, 0.1, 0.0, 10) == 1
+        # 无效价格返回 0
+        assert position_size(100000.0, 0.1, 0.0, 10) == 0
 
     def test_zero_contract_size(self):
-        assert position_size(100000.0, 0.1, 100.0, 0) == 1
+        # 无效乘数返回 0
+        assert position_size(100000.0, 0.1, 100.0, 0) == 0
 
     def test_negative_price(self):
-        assert position_size(100000.0, 0.1, -100.0, 10) == 1
+        # 负价格返回 0
+        assert position_size(100000.0, 0.1, -100.0, 10) == 0
 
 
 # --- simple_moving_average ---

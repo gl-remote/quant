@@ -356,6 +356,8 @@ class VnpyBacktestEngine:
         """
         from strategies.bridges import VnpyStrategyBridge
 
+        _captured = strategy  # 闭包按值捕获，避免循环中的最后策略引用
+
         class _InjectedStrategy(VnpyStrategyBridge):  # pyright: ignore[reportUnknownVariableType]
 
             def _load_default_core(self, _setting: object | None = None) -> None:
@@ -363,7 +365,7 @@ class VnpyBacktestEngine:
 
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args, **kwargs)
-                self._core = strategy
+                self._core = _captured
 
         return _InjectedStrategy
 

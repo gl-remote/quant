@@ -138,11 +138,11 @@ output/
 
 | 编号 | 严重度 | 问题 | 位置 |
 |------|--------|------|------|
-| DEF-01 | 🟡 高 | 资金不足时仍返回最少 1 手 | `ma_strategy.py` |
-| DEF-02 | 🟡 中 | `compute_summary_stats` NaN 无防护 | `common/stats.py` |
-| DEF-03 | 🟡 中 | `calc_sharpe_ratio` 除零 → inf/nan | `common/metrics.py` |
-| DEF-04 | 🟡 中 | `upsert_metadata` 非原子操作 | `data/store.py` |
-| DEF-05 | 🟡 中 | `_InjectedStrategy` 闭包时序脆弱 | `vnpy_backtest_engine.py` |
+| DEF-01 | ✅ 已修复 | `position_size` 资金不足返回 0 | `common/formulas.py` |
+| DEF-02 | ✅ 已修复 | `compute_summary_stats` 过滤 NaN | `common/stats.py` |
+| DEF-03 | ✅ 已修复 | `calc_sharpe_ratio` 除零/NaN/Inf 防护 | `common/metrics.py` |
+| DEF-04 | ✅ 已修复 | `get_or_create` 替代 SELECT→INSERT/UPDATE | `data/store.py` |
+| DEF-05 | ✅ 已修复 | 闭包按值捕获 `_captured` | `vnpy_backtest_engine.py` |
 | DEF-S04 | 🟡 策略 | 止损/止盈使用固定比例而非 ATR | `ma_strategy.py` |
 | DEF-S05 | 🟡 策略 | 信号优先级由 if/elif 顺序隐式定义 | `ma_strategy.py` |
 

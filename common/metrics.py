@@ -41,14 +41,22 @@ def calc_sharpe_ratio(equity_curve: list[float], annual_factor: int = 252) -> fl
         annual_factor: 年化因子 (日线=252, 分钟线需换算)
 
     Returns:
-        年化夏普比率
+        年化夏普比率，除零或无效数据返回 0
     """
     if len(equity_curve) < 2:
         return 0.0
-    returns = np.diff(equity_curve) / np.array(equity_curve[:-1])
+    arr = np.array(equity_curve, dtype=float)
+    prev = arr[:-1]
+    # 避免除零：权益为零的位置跳过
+    mask = prev != 0
+    if not np.any(mask):
+        return 0.0
+    diff = np.diff(arr)
+    returns = np.divide(diff[mask], prev[mask], out=np.full_like(diff[mask], 0.0), where=prev[mask]!=0)
+    returns = returns[~np.isnan(returns) & ~np.isinf(returns)]
     if len(returns) == 0:
         return 0.0
     std: float = float(np.std(returns, ddof=1))
     if std == 0:
-        return 999.0 if float(np.mean(returns)) > 0 else 0.0
+        return 0.0
     return float(np.mean(returns) / std * np.sqrt(annual_factor))

@@ -174,40 +174,22 @@ class DataStore:
                         total_rows: int) -> None:
         """插入或更新元数据（按 symbol+provider+interval 匹配）"""
         now = datetime.now()
-        existing = (
-            ExportMetadata
-            .select()
-            .where(
-                (ExportMetadata.symbol == symbol) &
-                (ExportMetadata.provider == provider) &
-                (ExportMetadata.interval == interval)
-            )
-            .first()
+        # INSERT OR REPLACE — 利用 UNIQUE(symbol, provider, interval) 约束
+        row, created = ExportMetadata.get_or_create(
+            symbol=symbol, provider=provider, interval=interval,
+            defaults=dict(
+                filepath=filepath, start_date=start_date, end_date=end_date,
+                min_dt=min_dt, max_dt=max_dt, total_rows=total_rows,
+                created_at=now, updated_at=now,
+            ),
         )
-        if existing:
+        if not created:
             ExportMetadata.update(
                 filepath=filepath,
-                start_date=start_date,
-                end_date=end_date,
-                min_dt=min_dt,
-                max_dt=max_dt,
-                total_rows=total_rows,
+                start_date=start_date, end_date=end_date,
+                min_dt=min_dt, max_dt=max_dt, total_rows=total_rows,
                 updated_at=now,
-            ).where(ExportMetadata.id == existing.id).execute()
-        else:
-            ExportMetadata.create(
-                symbol=symbol,
-                provider=provider,
-                interval=interval,
-                filepath=filepath,
-                start_date=start_date,
-                end_date=end_date,
-                min_dt=min_dt,
-                max_dt=max_dt,
-                total_rows=total_rows,
-                created_at=now,
-                updated_at=now,
-            )
+            ).where(ExportMetadata.id == row.id).execute()
 
     # ── 运行记录 ────────────────────────────────────────────────────
 

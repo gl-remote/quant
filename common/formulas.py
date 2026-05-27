@@ -208,7 +208,7 @@ def position_size(capital: float, position_ratio: float,
 
     行业标准风险控制公式:
       手数 = capital × position_ratio / (price × contract_size)
-    最少 1 手 (max(1, int(vol)))
+    资金不足以买 1 手时返回 0。
 
     Args:
         capital: 可用资金
@@ -217,12 +217,14 @@ def position_size(capital: float, position_ratio: float,
         contract_size: 合约乘数
 
     Returns:
-        下单手数 (整数，最少 1 手)
+        下单手数 (整数，资金不足时返回 0)
     """
     if price <= 0 or contract_size <= 0:
-        return 1
+        return 0
     vol = capital * position_ratio / (price * contract_size)
-    return max(1, int(vol))
+    if vol < 1:
+        return 0
+    return int(vol)
 
 
 # ============================================================================
