@@ -27,10 +27,13 @@ def build_report(
 ) -> str | None:
     """生成回测可视化 HTML 报告
 
+    若有 run_id，报告自动归入 output/r{run_id}/。
+    生成后自动刷新 index.html 导航页。
+
     Args:
         dm: DataManager 实例
         backtest_id: 回测记录 ID
-        output_dir: 输出目录，默认为 output/
+        output_dir: 输出根目录，默认为 output/
 
     Returns:
         生成的 HTML 文件路径，若回测不存在则返回 None
@@ -47,10 +50,18 @@ def build_report(
 
     html = render_html(bt, plotly_div)
 
-    out_path = Path(output_dir)
+    # 如果有 run，归入 output/r{run}/
+    if bt.run:
+        out_path = Path(output_dir) / f"r{bt.run}"
+    else:
+        out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
     filepath = out_path / f"backtest_{backtest_id}.html"
     filepath.write_text(html, encoding='utf-8')
+
+    # 刷新导航页
+    from .dashboard import build_nav
+    build_nav(dm.store.db_path, output_dir)
 
     return str(filepath.resolve())
 

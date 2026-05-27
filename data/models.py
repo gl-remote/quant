@@ -27,6 +27,7 @@ from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUn
 class BacktestRecord(BaseModel):
     """回测记录 — 字段与 ORM Backtest 表保持一致"""
     id: int | None = None
+    run: int | None = None   # peewee FK 字段名是 run，存的是 run_id 值
     symbol: str
     strategy: str
     strategy_version: str | None = None
