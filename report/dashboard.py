@@ -99,7 +99,7 @@ a:hover{{text-decoration:underline}}
 </style>
 </head>
 <body>
-<h1>📊 量化回测监控</h1>
+<h1>[NAV] 📊 量化回测监控</h1>
 <table>
 <thead><tr><th>回测</th><th>策略</th><th>engine</th><th>品种</th><th>时间</th></tr></thead>
 <tbody>{rows}</tbody>
@@ -131,8 +131,8 @@ h2{{font-size:20px;margin:24px 0 12px}}
 </head>
 <body>
 <div class="tabs">
-<button class="tab-btn active" onclick="showTab('backtest',this)">📈 回测结果</button>
-<button class="tab-btn" onclick="showTab('optuna',this)">🔬 参数优化</button>
+<button class="tab-btn active" onclick="showTab('backtest',this)">[BT-TAB] 📈 回测结果</button>
+<button class="tab-btn" onclick="showTab('optuna',this)">[OPT-TAB] 🔬 参数优化</button>
 </div>
 <div id="tab-backtest" class="tab-content active">
 {backtest_tab}
@@ -181,7 +181,7 @@ def _render_backtest_tab(conn: sqlite3.Connection, run_id: int, output_dir: str 
         if sym not in best or r[1] > best[sym][1]:
             best[sym] = r
 
-    parts = ['<h2>品种汇总</h2>']
+    parts = ['<h2>[BT-SUM] 品种汇总</h2>']
     parts.append("""<table>
 <thead><tr><th>品种</th><th>收益率</th><th>交易次数</th><th>胜率</th><th>最大回撤</th><th>夏普</th><th>最终权益</th></tr></thead>
 <tbody>""")
@@ -220,7 +220,7 @@ def _render_backtest_tab(conn: sqlite3.Connection, run_id: int, output_dir: str 
             dates = [r[0] for r in daily_rows]
             equity = [float(r[1]) for r in daily_rows]
             dd_arr = [float(r[2]) for r in daily_rows]
-            parts.append(f'<h2>资金曲线 — {_escape(first_sym)}</h2>')
+            parts.append(f'<h2>[BT-EQ] 资金曲线 — {_escape(first_sym)}</h2>')
             parts.append('<div id="chart-equity" class="chart"></div>')
             parts.append('<script>Plotly.newPlot("chart-equity",[{')
             parts.append(f'x:{json.dumps(dates)},y:{json.dumps(equity)},type:"scatter",name:"权益",line:{{color:"#2563eb"}}}},')
@@ -233,7 +233,7 @@ def _render_backtest_tab(conn: sqlite3.Connection, run_id: int, output_dir: str 
     study_dir = Path(output_dir) / f"r{run_id}"
     reports = sorted(glob.glob(str(study_dir / "backtest_*.html")))
     if reports:
-        parts.append('<h2>📄 详细报告</h2>')
+        parts.append('<h2>[BT-RPTS] 📄 详细报告</h2>')
         parts.append('<ul>')
         for rp in reports:
             fn = os.path.basename(rp)
@@ -291,10 +291,10 @@ def _render_optuna_tab(conn: sqlite3.Connection, run_id: int) -> str:
         ORDER BY tp.param_name
     """, (study_id, study_id)).fetchall()
 
-    parts = [f'<h2>优化概览</h2>', f'<p>Study: {_escape(study_name)} | Trials: {len(trials)}</p>']
+    parts = [f'<h2>[OPT-OV] 优化概览</h2>', f'<p>Study: {_escape(study_name)} | Trials: {len(trials)}</p>']
 
     if best:
-        parts.append('<h3>最优参数</h3><table><thead><tr><th>参数</th><th>值</th></tr></thead><tbody>')
+        parts.append('<h3>[OPT-BEST] 最优参数</h3><table><thead><tr><th>参数</th><th>值</th></tr></thead><tbody>')
         for p in best:
             parts.append(f"<tr><td>{_escape(p[0])}</td><td>{float(p[1]):.0f}</td></tr>")
         parts.append("</tbody></table>")
@@ -302,7 +302,7 @@ def _render_optuna_tab(conn: sqlite3.Connection, run_id: int) -> str:
     if trials:
         nums = [t[0] for t in trials]
         values = [float(t[1] or 0) for t in trials]
-        parts.append('<h3>优化收敛曲线</h3><div id="chart-converge" class="chart"></div>')
+        parts.append('<h3>[OPT-CONV] 优化收敛曲线</h3><div id="chart-converge" class="chart"></div>')
         parts.append(f'<script>Plotly.newPlot("chart-converge",[{{x:{json.dumps(nums)},y:{json.dumps(values)},type:"scatter",mode:"lines+markers",line:{{color:"#2563eb"}},marker:{{size:6}}}}],{{margin:{{t:10,b:50,l:55}},xaxis:{{title:"Trial"}},yaxis:{{title:"Score"}}}});</script>')
 
     if params_rows and len(set(p[1] for p in params_rows)) >= 2:
@@ -312,7 +312,7 @@ def _render_optuna_tab(conn: sqlite3.Connection, run_id: int) -> str:
         p1_vals = [float(p[2]) for p in params_rows if p[1] == p1]
         p2_vals = [float(p[2]) for p in params_rows if p[1] == p2]
         scores = [float(t[1] or 0) for t in trials]
-        parts.append(f'<h3>{_escape(p1)} × {_escape(p2)} → Score</h3>')
+        parts.append(f'<h3>[OPT-PARAM] {_escape(p1)} × {_escape(p2)} → Score</h3>')
         parts.append('<div id="chart-params" class="chart"></div>')
         parts.append(f'<script>Plotly.newPlot("chart-params",[{{x:{json.dumps(p1_vals)},y:{json.dumps(p2_vals)},type:"scatter",mode:"markers",marker:{{size:10,color:{json.dumps(scores)},colorscale:"RdYlGn",showscale:true,colorbar:{{title:"Score"}}}}}}],{{margin:{{t:10,b:50,l:55}},xaxis:{{title:{json.dumps(p1)}}},yaxis:{{title:{json.dumps(p2)}}}}});</script>')
 
