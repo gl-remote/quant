@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>量化回测监控</title>
+<style>
+body{font-family:-apple-system,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px;color:#333}
+h1{border-bottom:2px solid #2563eb;padding-bottom:8px}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th{text-align:left;padding:10px 8px;border-bottom:2px solid #e5e7eb;color:#666;font-weight:600}
+td{padding:10px 8px;border-bottom:1px solid #f3f4f6}
+a{color:#2563eb;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<h1>[NAV] 📊 量化回测监控</h1>
+<table>
+<thead><tr><th>回测</th><th>策略</th><th>engine</th><th>品种</th><th>时间</th></tr></thead>
+<tbody>
+{% for r in runs %}
+<tr><td>📁 <a href="r{{ r.id }}/index.html">r{{ r.id }}</a></td><td>{{ r.strategy }}</td><td>{{ r.engine }}</td><td>{{ r.symbols }}</td><td>{{ r.created[:16] if r.created else '' }}</td></tr>
+{% endfor %}
+{% if not runs %}
+<tr><td colspan="5" style="color:#999;text-align:center">暂无回测记录</td></tr>
+{% endif %}
+</tbody>
+</table>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>r{{ run_id }}</title>
+<script src="../assets/plotly.min.js"></script>
+<style>
+body{font-family:-apple-system,sans-serif;margin:0;padding:0;color:#333}
+.tabs{display:flex;border-bottom:2px solid #e5e7eb;background:#f9fafb;position:sticky;top:0;z-index:10}
+.tab-btn{padding:12px 24px;border:none;background:none;cursor:pointer;font-size:15px;color:#666;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab-btn.active{color:#2563eb;border-bottom-color:#2563eb;font-weight:600}
+.tab-content{display:none;padding:24px;max-width:1400px;margin:0 auto}
+.tab-content.active{display:block}
+.chart{margin:20px 0}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+th{text-align:left;padding:8px;background:#f9fafb;border-bottom:2px solid #e5e7eb}
+td{padding:8px;border-bottom:1px solid #f3f4f6}
+.badge-green{color:#059669}
+.badge-red{color:#dc2626}
+h2{font-size:20px;margin:24px 0 12px}
+</style>
+</head>
+<body>
+<div class="tabs">
+<button class="tab-btn active" onclick="showTab('backtest',this)">[BT-TAB] 📈 回测结果</button>
+<button class="tab-btn" onclick="showTab('optuna',this)">[OPT-TAB] 🔬 参数优化</button>
+</div>
+<div id="tab-backtest" class="tab-content active">
+{% include "backtest_tab.html" %}
+</div>
+<div id="tab-optuna" class="tab-content">
+{% include "optuna_tab.html" %}
+</div>
+<script>
+function showTab(name,btn){
+ document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+ document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+ btn.classList.add('active');
+ document.getElementById('tab-'+name).classList.add('active');
+}
+</script>
+</body>
+</html>

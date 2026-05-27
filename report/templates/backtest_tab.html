@@ -1,0 +1,30 @@
+<h2>[BT-SUM] 品种汇总</h2>
+{% if symbols %}
+<table>
+<thead><tr><th>品种</th><th>收益率</th><th>交易次数</th><th>胜率</th><th>最大回撤</th><th>夏普</th><th>最终权益</th></tr></thead>
+<tbody>
+{% for s in symbols %}
+<tr><td>{{ s.symbol }}</td><td class="{{ s.ret_cls }}">{{ "%.2f"|format(s.total_return*100) }}%</td><td>{{ s.total_trades }}</td><td>{{ "%.1f"|format(s.win_rate) }}%</td><td>{{ "%.2f"|format(s.max_drawdown) }}%</td><td class="{{ s.sr_cls }}">{{ "%.2f"|format(s.sharpe) }}</td><td>{{ "%.0f"|format(s.end_balance) }}</td></tr>
+{% endfor %}
+</tbody></table>
+{% else %}
+<p>无回测记录</p>
+{% endif %}
+
+{% if equity %}
+<h2>[BT-EQ] 资金曲线 — {{ equity.symbol }}</h2>
+<div id="chart-equity" class="chart"></div>
+<script>Plotly.newPlot("chart-equity",[{
+x:{{ equity.dates|tojson }},y:{{ equity.equity|tojson }},type:"scatter",name:"权益",line:{color:"#2563eb"}},
+{
+x:{{ equity.dates|tojson }},y:{{ equity.drawdown|tojson }},type:"scatter",name:"回撤%",
+yaxis:"y2",line:{color:"#dc2626",dash:"dot"}}],
+{margin:{t:10,b:50,l:60,r:60},yaxis:{title:"权益"},yaxis2:{title:"回撤%",overlaying:"y",side:"right"},legend:{x:0,y:1}});</script>
+{% endif %}
+
+{% if reports %}
+<h2>[BT-RPTS] 📄 详细报告</h2>
+<ul>
+{% for rp in reports %}<li><a href="{{ rp.filename }}">{{ rp.filename }} ({{ rp.symbol }})</a></li>{% endfor %}
+</ul>
+{% endif %}

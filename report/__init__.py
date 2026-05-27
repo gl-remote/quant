@@ -1,23 +1,20 @@
 # -*- coding: utf-8 -*-
-"""
-报告生成模块
-
-从数据库读取回测数据，生成文字报告和交互式 HTML 可视化。
-
-  - single.py:          单次回测文字报告 (format_single_report)
-  - summary.py:         回测记录汇总 (format_summary_report)
-  - charts.py:          plotly 图表生成
-  - _html.py:           HTML 模板渲染
-  - optimizer_report.py: Optuna 优化看板 (build_optimizer_report)
-"""
+"""报告生成模块 — Jinja2 模板 + 数据查询"""
 
 from pathlib import Path
 
 from data import DataManager
 from .reports import format_single_report, format_summary_report
 from .charts import create_figure
-from ._html import render_html
+from .builder import build_all, build_dashboard, build_nav
 from .optimizer_report import build_optimizer_report
+
+from jinja2 import Environment, PackageLoader, select_autoescape
+
+_j2 = Environment(
+    loader=PackageLoader("report", "templates"),
+    autoescape=select_autoescape(["html"]),
+)
 
 
 def build_report(
@@ -48,7 +45,53 @@ def build_report(
     fig = create_figure(bt, daily, trades)
     plotly_div = fig.to_html(full_html=False, include_plotlyjs='cdn')
 
-    html = render_html(bt, plotly_div, trades)
+    # 交易明细
+    trade_list = []
+    for t in trades[:100]:
+        if hasattr(t, 'model_dump'):
+            td = t.model_dump()
+        elif hasattr(t, '__dict__'):
+            td = vars(t)
+        else:
+            td = t
+        pnl = float(td.get('pnl', 0))
+        trade_list.append({
+            'dt': str(td.get('datetime', ''))[:16],
+            'dir': str(td.get('direction', '')),
+            'offset': str(td.get('offset', '')),
+            'price': f"{float(td.get('open_price', td.get('price', 0))):.0f}",
+            'vol': int(td.get('quantity', td.get('volume', 0))),
+            'pnl': f"{pnl:+.0f}",
+            'cls': 'positive' if pnl > 0 else 'negative' if pnl < 0 else '',
+        })
+
+    total_trades = len(trades)
+    if total_trades > 100:
+        total_trades_text = str(total_trades)
+    else:
+        total_trades_text = ""
+
+    # 指标卡片
+    total_return = float(bt.total_return or 0)
+    ret_color = '#28A745' if total_return >= 0 else '#DC3545'
+    cards = [
+        f'<div class="card"><div class="card-label">总收益率</div><div class="card-value" style="color:{ret_color}">{total_return:.2%}</div></div>',
+        f'<div class="card"><div class="card-label">夏普比率</div><div class="card-value">{float(bt.sharpe_ratio or 0):.2f}</div></div>',
+        f'<div class="card"><div class="card-label">最大回撤</div><div class="card-value" style="color:#DC3545">{float(bt.max_drawdown or 0):.2%}</div></div>',
+        f'<div class="card"><div class="card-label">胜率</div><div class="card-value">{float(bt.win_rate or 0):.1%}</div></div>',
+        f'<div class="card"><div class="card-label">交易次数</div><div class="card-value">{bt.total_trades or 0}</div></div>',
+        f'<div class="card"><div class="card-label">年化收益</div><div class="card-value">{(float(getattr(bt, "annual_return", 0) or 0)):.2%}</div></div>',
+        f'<div class="card"><div class="card-label">初始资金</div><div class="card-value">{float(bt.initial_capital or 0):,.0f}</div></div>',
+        f'<div class="card"><div class="card-label">最终权益</div><div class="card-value">{(float(getattr(bt, "end_balance", 0) or 0)):,.0f}</div></div>',
+    ]
+
+    html = _j2.get_template("single_report.html").render(
+        title=f"回测报告 #{bt.id} — {bt.symbol} / {bt.strategy}",
+        cards=cards,
+        plotly_div=plotly_div,
+        trades=trade_list,
+        total_trades=total_trades_text,
+    )
 
     # 如果有 run，归入 output/r{run}/
     if bt.run:
@@ -70,5 +113,8 @@ __all__ = [
     'format_single_report',
     'format_summary_report',
     'build_report',
+    'build_all',
+    'build_dashboard',
+    'build_nav',
     'build_optimizer_report',
 ]

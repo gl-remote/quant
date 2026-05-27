@@ -50,7 +50,7 @@ from strategies.core import (
     serialize_strategy_params,
 )
 from optimizer import OptunaOptimizer
-from report.dashboard import build_all as build_dashboard
+from report import build_all as build_dashboard
 from common.formulas import calculate_fifo_profit
 
 logger = logging.getLogger(__name__)
