@@ -110,7 +110,7 @@ def _build_info(bt: Any, trades: list, daily: list) -> dict:
         'interval': getattr(bt, 'kline_interval', '1m') or '1m',
         'initial_capital': f"{float(bt.initial_capital or 0):,.0f}",
         'total_trades': len(trades),
-        'params': [{'name': p[0], 'value': f"{float(p[1]):.0f}"} for p in params],
+        'params': [{'name': p[0], 'value': f"{float(p[1]):.4g}"} for p in params],
     }
 
 
