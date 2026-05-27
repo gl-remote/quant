@@ -39,19 +39,22 @@ for tbl in biz_tables:
     except Exception:
         pass
 
-# Optuna 相关表（含可能的前缀 optuna_、无前缀、alembic/version）
-optuna_patterns = ('stud', 'trial', 'optuna_stud', 'optuna_trial', 'alembic', 'version_info')
-all_tables = [r[0] for r in cur.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]
-for tbl in all_tables:
-    if any(tbl.startswith(p) for p in optuna_patterns):
-        try:
-            cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
-            n = cur.fetchone()[0]
-            if n > 0:
-                cur.execute(f'DELETE FROM \"{tbl}\"')
-                print(f'  {tbl:<24} 删除 {n} 条')
-        except Exception:
-            pass
+# Optuna 相关表
+optuna_tables = [
+    'studies', 'study_directions', 'study_system_attributes', 'study_user_attributes',
+    'trials', 'trial_heartbeats', 'trial_intermediate_values', 'trial_params',
+    'trial_system_attributes', 'trial_user_attributes', 'trial_values',
+    'version_info', 'alembic_version',
+]
+for tbl in optuna_tables:
+    try:
+        cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
+        n = cur.fetchone()[0]
+        if n > 0:
+            cur.execute(f'DELETE FROM \"{tbl}\"')
+            print(f'  {tbl:<24} 删除 {n} 条')
+    except Exception:
+        pass
 
 try:
     cur.execute('DELETE FROM sqlite_sequence')
