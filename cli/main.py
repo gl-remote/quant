@@ -90,7 +90,7 @@ def main() -> None:
 '''
     )
     p.add_argument('--symbol', default=None, help='品种代码（单品种模式，启用 TqSdk）')
-    p.add_argument('--pattern', default=None, help='品种代码正则表达式（批量模式，启用 vn.py）')
+    p.add_argument('--pattern', default=None, help='文件名正则表达式（如 "DCE\\.m.*\\.1m\\." 匹配 DCE 豆粕的 1 分钟数据）')
     p.add_argument('--start', default=None, help='开始日期 YYYY-MM-DD（可选）')
     p.add_argument('--end', default=None, help='结束日期 YYYY-MM-DD（可选）')
     p.add_argument('--strategy', required=True,

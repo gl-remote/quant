@@ -291,13 +291,17 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                     "批量" if mode_label == MODE_BATCH else "单品种",
                     len(symbol_list), strategy_name, mode_name)
 
-        datasets: list[tuple[str, pd.DataFrame]] = []
+        datasets: list[tuple[str, pd.DataFrame, str]] = []
         for sym in symbol_list:
-            df = dm.load_kline_safe(sym, start_arg, end_arg, bc.interval)
-            if df is None or df.empty:
+            result = dm.load_kline(sym, start_arg, end_arg, bc.interval, return_path=True)
+            if result is None or (isinstance(result, tuple) and result[0] is None):
                 logger.warning(f"跳过 {sym}: 数据加载失败")
                 continue
-            datasets.append((sym, df))
+            if isinstance(result, tuple):
+                df, filepath = result
+            else:
+                df, filepath = result, None
+            datasets.append((sym, df, filepath))
 
         if not datasets:
             logger.error("所有品种数据加载失败")
@@ -334,7 +338,6 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             wf_result = engine.run_walk_forward(data=df, symbol=sym, strategy=strategy)
 
             if wf_result.get('success'):
-                # 将 W-F 聚合结果作为一条回测记录落地
                 bt_id = dm.insert_backtest(
                     symbol=sym,
                     strategy=get_strategy_class_name(strategy),
@@ -348,6 +351,8 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                     end_date=end_arg,
                     strategy_version=getattr(strategy, 'VERSION', None),
                     git_hash=git_hash,
+                    run_id=run_id,
+                    data_src=datasets[0][2],
                 )
                 logger.info(f"Walk-Forward 完成: id={bt_id}, "
                             f"窗口={wf_result.get('windows', 0)}")
@@ -418,19 +423,7 @@ def _persist_results(
     git_hash: str | None,
     run_id: int | None = None,
 ) -> list[int]:
-    """将引擎返回的结构化回测结果持久化到数据库
-
-    每个 result dict 自包含 strategy_name / strategy_params /
-    strategy_version，不再需要外部统一传入。
-
-    Args:
-        dm: 数据管理器
-        results: engine.run() 返回的结果列表
-        git_hash: Git 提交哈希
-
-    Returns:
-        成功写入的 backtest ID 列表
-    """
+    """将引擎返回的结构化回测结果持久化到数据库"""
     bt_ids: list[int] = []
     for r in results:
         if r.get('success'):
@@ -451,6 +444,7 @@ def _persist_results(
                 strategy_version=r.get('strategy_version'),
                 git_hash=git_hash,
                 run_id=run_id,
+                data_src=r.get('_data_src'),
             )
             bt_ids.append(bt_id)
 
@@ -487,6 +481,7 @@ def _persist_results(
                 start_date=None,
                 end_date=None,
                 run_id=run_id,
+                data_src=r.get('_data_src'),
             )
 
     persisted = len(bt_ids)
@@ -508,7 +503,7 @@ def _persist_results(
 
 def _run_grid_search(
     engine: VnpyBacktestEngine,
-    datasets: list[tuple[str, pd.DataFrame]],
+    datasets: list[tuple[str, pd.DataFrame, str]],
     strategy_name: str,
     param_grid: dict[str, list[Any]],
     strategy_params: dict[str, Any],
@@ -523,7 +518,6 @@ def _run_grid_search(
     """网格搜索：使用 Optuna GridSampler 穷举所有参数组合"""
 
     if optimizer_enabled and param_grid:
-        # 将 param_grid 转换为 search_space 格式
         search_space = {}
         for param_name, values in param_grid.items():
             if values:
@@ -532,12 +526,11 @@ def _run_grid_search(
                     "choices": values
                 }
         
-        # 使用 OptunaOptimizer + GridSampler
         study_name = f"{strategy_name}_grid_r{run_id}"
         dm.store.link_study(run_id, study_name)
         opt = OptunaOptimizer(
             engine=engine,
-            datasets=datasets,
+            datasets=[(s, d) for s, d, _ in datasets],
             strategy_name=strategy_name,
             search_space=search_space,
             strategy_params=strategy_params,
@@ -549,19 +542,25 @@ def _run_grid_search(
             study_name=study_name,
         )
         result = opt.optimize()
-        # 从 trial_data 提取 engine_results
         results = []
         for trial in result.trial_data:
-            results.extend(trial.get('engine_results', []))
+            for r in trial.get('engine_results', []):
+                sym = r['symbol']
+                filepath = next((f for s, _, f in datasets if s == sym), None)
+                r['_data_src'] = filepath
+                results.append(r)
         logger.info("Grid Search: %d 试验, %d 结果",
                     len(result.trial_data), len(results))
     else:
-        # 未启用或空 param_grid → 单策略回退
         s = load_strategy(strategy_name,
                           strategy_params=strategy_params,
                           capital=capital, contract_size=contract_size)
-        pairs = [(sym, df, s) for sym, df in datasets]
+        pairs = [(sym, df, s) for sym, df, _ in datasets]
         results = engine.run(pairs)
+        for r in results:
+            sym = r['symbol']
+            filepath = next((f for s, _, f in datasets if s == sym), None)
+            r['_data_src'] = filepath
 
     _persist_results(dm, results, git_hash, run_id=run_id)
 
@@ -574,7 +573,7 @@ def _run_grid_search(
 
 def _run_optuna_search(
     engine: VnpyBacktestEngine,
-    datasets: list[tuple[str, pd.DataFrame]],
+    datasets: list[tuple[str, pd.DataFrame, str]],
     strategy_name: str,
     search_space: dict[str, dict[str, Any]],
     strategy_params: dict[str, Any],
@@ -594,7 +593,7 @@ def _run_optuna_search(
 
     opt = OptunaOptimizer(
         engine=engine,
-        datasets=datasets,
+        datasets=[(s, d) for s, d, _ in datasets],
         strategy_name=strategy_name,
         search_space=search_space,
         strategy_params=strategy_params,
@@ -606,30 +605,33 @@ def _run_optuna_search(
     )
     result = opt.optimize()
 
-    # ── 持久化全部 trial ──
     engine_cfg = {
         'type': 'vnpy',
         'optimizer': 'optuna',
         'study_name': opt.study_name,
-        'study_db': dm._store.db_path,  # 共享主数据库
+        'study_db': dm._store.db_path,
     }
     all_ids: list[int] = []
     for i, trial_entry in enumerate(result.trial_data):
         trial_cfg = {**engine_cfg, 'trial_index': i}
         for engine_result in trial_entry['engine_results']:
             if engine_result.get('success'):
+                sym = engine_result['symbol']
+                data_src = next((f for s, _, f in datasets if s == sym), None)
                 bt_id = dm.insert_backtest(
-                    symbol=engine_result['symbol'],
+                    symbol=sym,
                     strategy=engine_result.get('strategy_name', strategy_name),
                     status=STATUS_SUCCESS,
                     error_message=None,
                     statistics=engine_result.get('statistics', {}),
-                    engine_config=trial_cfg,  # pyright: ignore[reportArgumentType]
+                    engine_config=trial_cfg,
                     params=trial_entry.get('params', {}),
                     start_date=engine_result.get('start_date'),
                     end_date=engine_result.get('end_date'),
                     strategy_version=engine_result.get('strategy_version'),
                     git_hash=git_hash,
+                    run_id=run_id,
+                    data_src=data_src,
                 )
                 all_ids.append(bt_id)
 
@@ -660,7 +662,7 @@ def _run_optuna_search(
     # ── 生成优化报告 ──
     study_db_url = f"sqlite:///{os.path.abspath(dm._store.db_path)}"
     _build_optimization_report(
-        result, all_ids, study_db_url, dm
+        result, all_ids, study_db_url, dm, run_id
     )
 
     dm.store.log('backtest',
@@ -674,16 +676,16 @@ def _build_optimization_report(
     backtest_ids: list[int],
     study_db_url: str,
     dm: DataManager,
-) -> None:
+    run_id: int,
+) -> str:
     """生成 Optuna 优化报告 HTML 文件"""
-    # 忽略 dm 参数（预留给后续扩展）
     _ = dm
 
     from pathlib import Path
     from report import build_optimizer_report
 
-    output_dir = "output"
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_dir = Path("output") / f"r{run_id}"
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
         html = build_optimizer_report(
@@ -693,11 +695,12 @@ def _build_optimization_report(
             best_value=result.best_value,
             backtest_ids=backtest_ids,
         )
-        report_path = os.path.join(
-            output_dir, f"optimization_{result.study.study_name}.html"
-        )
-        Path(report_path).write_text(html, encoding='utf-8')
+        filename = f"optimization_{result.study.study_name}.html"
+        report_path = output_dir / filename
+        report_path.write_text(html, encoding='utf-8')
         logger.info(f"优化报告已生成: {report_path}")
         print(f"\n💡 Optuna 优化报告: {report_path}")
+        return str(report_path)
     except Exception as e:
         logger.warning(f"优化报告生成失败: {e}", exc_info=True)
+        return ""

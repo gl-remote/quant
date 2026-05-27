@@ -11,6 +11,62 @@
 <p>无回测记录</p>
 {% endif %}
 
+{% if kline %}
+<h2>[BT-KLINE] K线图 — {{ kline.symbol }}</h2>
+<div id="chart-kline" class="chart"></div>
+<script>
+var klineData = {{ kline.data|tojson }};
+var dates = klineData.map(function(d) { return d.datetime; });
+var opens = klineData.map(function(d) { return d.open; });
+var highs = klineData.map(function(d) { return d.high; });
+var lows = klineData.map(function(d) { return d.low; });
+var closes = klineData.map(function(d) { return d.close; });
+var volumes = klineData.map(function(d) { return d.volume; });
+var colors = closes.map(function(c, i) { return c >= opens[i] ? '#26A69A' : '#EF5350'; });
+
+var buyMarkers = {{ kline.buy_markers|tojson }};
+var sellMarkers = {{ kline.sell_markers|tojson }};
+
+var layout = {
+  height: 600,
+  margin: {t: 40, b: 40, l: 60, r: 60},
+  hovermode: 'x unified',
+  showlegend: false,
+  paper_bgcolor: 'white',
+  plot_bgcolor: 'white',
+  grid: {rows: 2, columns: 1, rowHeights: [0.8, 0.2], sharedXaxes: true, verticalSpacing: 0.03},
+  yaxis: {title: '价格', gridcolor: '#eee'},
+  yaxis2: {title: '成交量', gridcolor: '#eee'},
+  xaxis2: {title: '日期', gridcolor: '#eee'}
+};
+
+var traces = [
+  {x: dates, open: opens, high: highs, low: lows, close: closes, type: 'candlestick', name: 'K线', increasing: {line: {color: '#26A69A'}}, decreasing: {line: {color: '#EF5350'}}},
+  {x: dates, y: volumes, type: 'bar', name: '成交量', marker: {color: colors}, xaxis: 'x2', yaxis: 'y2'}
+];
+
+if (buyMarkers.length > 0) {
+  traces.push({
+    x: buyMarkers.map(function(m) { return m.date; }),
+    y: buyMarkers.map(function(m) { return m.price; }),
+    type: 'scatter', mode: 'markers', name: '开仓',
+    marker: {symbol: 'triangle-up', size: 12, color: '#28A745', line: {width: 2}}
+  });
+}
+
+if (sellMarkers.length > 0) {
+  traces.push({
+    x: sellMarkers.map(function(m) { return m.date; }),
+    y: sellMarkers.map(function(m) { return m.price; }),
+    type: 'scatter', mode: 'markers', name: '平仓',
+    marker: {symbol: 'triangle-down', size: 12, color: '#DC3545', line: {width: 2}}
+  });
+}
+
+Plotly.newPlot('chart-kline', traces, layout);
+</script>
+{% endif %}
+
 {% if equity %}
 <h2>[BT-EQ] 资金曲线 — {{ equity.symbol }}</h2>
 <div id="chart-equity" class="chart"></div>

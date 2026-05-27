@@ -22,13 +22,25 @@ def build_all(db_path: str, output_dir: str, run_id: int) -> None:
 
 
 def build_dashboard(db_path: str, run_id: int, output_dir: str) -> str:
-    from .queries.backtest import get_run_summary, get_equity_data, get_report_list
+    from .queries.backtest import get_run_summary, get_equity_data, get_report_list, get_kline_data, get_trade_markers
     from .queries.optuna import get_optuna_data
 
     symbols = get_run_summary(db_path, run_id)
     equity = None
+    kline = None
+    
     if symbols:
         equity = get_equity_data(db_path, symbols[0]["symbol"], run_id)
+        kline_data = get_kline_data(db_path, symbols[0]["symbol"], run_id)
+        if kline_data:
+            trade_markers = get_trade_markers(db_path, symbols[0]["symbol"], run_id)
+            kline = {
+                'symbol': kline_data['symbol'],
+                'data': kline_data['data'],
+                'buy_markers': trade_markers['buy_markers'],
+                'sell_markers': trade_markers['sell_markers'],
+            }
+    
     optuna = get_optuna_data(db_path, run_id)
     reports = get_report_list(db_path, run_id, output_dir)
 
@@ -36,6 +48,7 @@ def build_dashboard(db_path: str, run_id: int, output_dir: str) -> str:
         run_id=run_id,
         symbols=symbols,
         equity=equity,
+        kline=kline,
         optuna=optuna,
         reports=reports,
     )

@@ -40,8 +40,8 @@ df = dm.load_kline(
     interval="1m"              # 可选，默认从配置读取
 )
 
-# 安全加载（失败返回 None）
-df = dm.load_kline_safe("DCE.m2509")
+# 失败返回 None
+df = dm.load_kline("DCE.m2509")
 ```
 
 #### 回测记录

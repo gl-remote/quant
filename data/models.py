@@ -56,6 +56,7 @@ class BacktestRecord(BaseModel):
     daily_std: float | None = None
     return_drawdown_ratio: float | None = None
     created_at: str | None = None
+    data_src: str | None = None
 
 
 class TradeRecord(BaseModel):
@@ -219,6 +220,7 @@ class Backtest(OrmBaseModel):
     return_drawdown_ratio: FloatField = FloatField(null=True)
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     updated_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
+    data_src: TextField = TextField(null=True)
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = 'backtests'

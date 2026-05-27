@@ -19,6 +19,164 @@ from common.constants import (
 from data.models import BacktestRecord
 
 
+def create_kline_figure(
+    kline_data: list[dict],
+    trades: list = None,
+) -> go.Figure:
+    """生成K线图
+    
+    Args:
+        kline_data: K线数据列表，包含 datetime, open, high, low, close, volume
+        trades: 交易明细列表，用于在K线上标注买卖信号
+        
+    Returns:
+        plotly Figure 对象
+    """
+    if not kline_data:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="无K线数据",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=18, color='#999'),
+        )
+        fig.update_layout(
+            height=500,
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+        return fig
+
+    dates = [d.get('datetime', '') for d in kline_data]
+    opens = [d.get('open', 0) for d in kline_data]
+    highs = [d.get('high', 0) for d in kline_data]
+    lows = [d.get('low', 0) for d in kline_data]
+    closes = [d.get('close', 0) for d in kline_data]
+    volumes = [d.get('volume', 0) for d in kline_data]
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.03,
+        row_heights=[0.8, 0.2],
+        subplot_titles=('K线图', '成交量'),
+    )
+
+    # K线图
+    fig.add_trace(
+        go.Candlestick(
+            x=dates,
+            open=opens,
+            high=highs,
+            low=lows,
+            close=closes,
+            name='K线',
+            increasing_line_color='#26A69A',
+            decreasing_line_color='#EF5350',
+        ),
+        row=1, col=1,
+    )
+
+    # 成交量
+    colors = ['#26A69A' if c >= o else '#EF5350' for c, o in zip(closes, opens)]
+    fig.add_trace(
+        go.Bar(
+            x=dates,
+            y=volumes,
+            name='成交量',
+            marker_color=colors,
+        ),
+        row=2, col=1,
+    )
+
+    # 标注买卖信号
+    _add_kline_trade_markers(fig, trades, dates, closes, row=1, col=1)
+
+    # 布局设置
+    fig.update_layout(
+        height=600,
+        hovermode='x unified',
+        showlegend=False,
+        margin=dict(l=60, r=60, t=40, b=40),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        font=dict(family='Arial, sans-serif', size=12, color='#333'),
+    )
+
+    fig.update_xaxes(showgrid=True, gridcolor='#eee', zeroline=False)
+    fig.update_yaxes(showgrid=True, gridcolor='#eee', zeroline=False)
+
+    fig.update_xaxes(title_text='日期', row=2, col=1)
+    fig.update_yaxes(title_text='价格', row=1, col=1)
+    fig.update_yaxes(title_text='成交量', row=2, col=1)
+
+    fig.update_xaxes(showticklabels=False, row=1, col=1)
+
+    return fig
+
+
+def _add_kline_trade_markers(
+    fig: go.Figure,
+    trades: list,
+    dates: list[str],
+    closes: list[float],
+    row: int,
+    col: int,
+) -> None:
+    """在K线上标注买卖信号"""
+    if not trades or not dates:
+        return
+
+    date_to_close = {d[:10]: closes[i] for i, d in enumerate(dates)}
+
+    buy_x, buy_y = [], []
+    sell_x, sell_y = [], []
+
+    for t in trades:
+        dt = _get_str(t, 'datetime', '')[:10]
+        price = _get_float(t, 'close_price') or _get_float(t, 'open_price', 0)
+        direction = str(_get_str(t, 'direction', '')).lower()
+        offset = str(_get_str(t, 'offset', '')).lower()
+
+        if dt not in date_to_close:
+            continue
+
+        close_val = date_to_close[dt]
+
+        if direction == TRADE_DIRECTION_LONG and offset == TRADE_OFFSET_OPEN:
+            buy_x.append(dt)
+            buy_y.append(close_val)
+        elif offset == TRADE_OFFSET_CLOSE:
+            sell_x.append(dt)
+            sell_y.append(close_val)
+
+    if buy_x:
+        fig.add_trace(
+            go.Scatter(
+                x=buy_x, y=buy_y,
+                mode='markers',
+                name='开仓',
+                marker=dict(symbol='triangle-up', size=12, color='#28A745', line=dict(width=2)),
+                hovertemplate='买入<extra></extra>',
+            ),
+            row=row, col=col,
+        )
+
+    if sell_x:
+        fig.add_trace(
+            go.Scatter(
+                x=sell_x, y=sell_y,
+                mode='markers',
+                name='平仓',
+                marker=dict(symbol='triangle-down', size=12, color='#DC3545', line=dict(width=2)),
+                hovertemplate='卖出<extra></extra>',
+            ),
+            row=row, col=col,
+        )
+
+
 def create_figure(
     bt: BacktestRecord,
     daily: list[dict],

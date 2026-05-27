@@ -1,6 +1,7 @@
 {% if optuna %}
 <h2>[OPT-OV] 优化概览</h2>
-<p>Study: {{ optuna.study_name }} | Trials: {{ optuna.trial_count }}</p>
+<p>Study: {{ optuna.study_name }} | Trials: {{ optuna.trial_count }}
+| 📄 <a href="{{ optuna.report_file }}" target="_blank">查看完整优化报告</a></p>
 
 {% if optuna.best_params %}
 <h3>[OPT-BEST] 最优参数</h3>

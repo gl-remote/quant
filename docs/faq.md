@@ -284,7 +284,7 @@ A:
 
 A: 
 1. 分批加载数据
-2. 使用 `load_kline_safe()` 安全加载
+2. 使用 `load_kline()` 加载（失败返回 None）
 3. 定期清理缓存：`dm.clear_cache()`
 
 ---

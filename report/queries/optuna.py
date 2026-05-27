@@ -71,4 +71,5 @@ def get_optuna_data(db_path: str, run_id: int) -> dict[str, Any] | None:
         'trial_values': trial_values,
         'best_params': [{'name': p[0], 'value': float(p[1])} for p in best],
         'param_scatter': param_scatter,
+        'report_file': f"optimization_{study_name}.html",
     }

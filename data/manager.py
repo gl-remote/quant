@@ -140,14 +140,39 @@ class DataManager:
         """按正则表达式搜索可用品种
 
         Args:
-            pattern: 正则表达式模式（如 'DCE\\.m' 匹配所有豆粕合约）
+            pattern: 正则表达式模式（匹配文件名，如 'DCE\\.m.*\\.1m\\.' 匹配 DCE 豆粕的 1 分钟数据）
 
         Returns:
             匹配的品种代码列表
         """
-        all_symbols = self.get_all_symbols()
-        regex = re.compile(pattern)
-        return [s for s in all_symbols if regex.search(s)]
+        data_dir = self._get_data_dir()
+        csv_dir = Path(data_dir)
+        if not csv_dir.exists():
+            return []
+
+        files = list(csv_dir.glob('*.csv'))
+        common_intervals = COMMON_KLINE_INTERVALS
+        known_providers = set(list_sources())
+
+        data_regex = re.compile(pattern) if pattern else None
+
+        symbols: set[str] = set()
+        for f in files:
+            filename = f.name
+            if data_regex and not data_regex.search(filename):
+                continue
+            name = f.stem
+            parts3 = name.rsplit('.', 2)
+            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
+                symbols.add(parts3[0])
+            else:
+                parts2 = name.rsplit('.', 1)
+                if len(parts2) == 2 and parts2[-1] in common_intervals:
+                    symbols.add(parts2[0])
+                else:
+                    symbols.add(name)
+
+        return sorted(symbols)
 
     def get_symbol_info(self, symbol: str) -> SymbolInfo:
         """获取品种的详细元数据信息
@@ -224,10 +249,10 @@ class DataManager:
             logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
             return None
 
-    @pa.check_output(KlineSchema)
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None, provider: str | None = None) -> pd.DataFrame:
-        """加载K线数据，直接返回经过 Pandera 验证的 DataFrame
+                   interval: str | None = None, provider: str | None = None,
+                   return_path: bool = False) -> pd.DataFrame | None | tuple[pd.DataFrame | None, str | None]:
+        """加载K线数据，返回经过 Pandera 验证的 DataFrame，失败返回 None
 
         Args:
             symbol: 品种代码（如 'DCE.m2509'）
@@ -235,64 +260,66 @@ class DataManager:
             end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
             interval: K线周期（默认从配置读取）
             provider: 数据源（默认从配置读取）
+            return_path: 为 True 时返回 (df, filepath) 元组
 
         Returns:
-            经过 Pandera KlineSchema 验证的 K 线数据
+            经过 Pandera KlineSchema 验证的 K 线数据，或 (df, filepath) 元组，失败返回 None
         """
-        if interval is None:
-            interval = self._get_default_interval()
-
-        data_dir = self._get_data_dir()
-        filename_template = self._get_filename_template()
-
-        # 尝试找到数据文件：指定 provider > 回测配置 provider > 遍历所有
-        if provider:
-            candidates = [provider]
-        else:
-            bt_provider = self._get_default_provider()
-            if bt_provider:
-                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
-            else:
-                candidates = list_sources()
-        filepath = None
-        matched_provider = None
-        for p in candidates:
-            fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
-            if fp.exists():
-                filepath = fp
-                matched_provider = p
-                break
-
-        if filepath is None:
-            raise FileNotFoundError(
-                f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
-            )
-
-        cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
-        if cache_key in self._data_cache:
-            logger.debug(f"从缓存加载数据: {symbol}")
-            return self._data_cache[cache_key]
-
-        df = pd.read_csv(filepath)
-        df['datetime'] = pd.to_datetime(df['datetime'])
-
-        if start_date:
-            df = df[df['datetime'] >= pd.Timestamp(start_date)]
-        if end_date:
-            df = df[df['datetime'] <= pd.Timestamp(end_date)]
-
-        self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
-        logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
-
-        return df  # pyright: ignore[reportReturnType]
-
-    def load_kline_safe(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                        interval: str | None = None, provider: str | None = None) -> pd.DataFrame | None:
-        """加载K线数据，失败返回None（不抛异常）"""
         try:
-            return self.load_kline(symbol, start_date, end_date, interval, provider)
+            if interval is None:
+                interval = self._get_default_interval()
+
+            data_dir = self._get_data_dir()
+            filename_template = self._get_filename_template()
+
+            if provider:
+                candidates = [provider]
+            else:
+                bt_provider = self._get_default_provider()
+                if bt_provider:
+                    candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
+                else:
+                    candidates = list_sources()
+            filepath = None
+            matched_provider = None
+            for p in candidates:
+                fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
+                if fp.exists():
+                    filepath = fp
+                    matched_provider = p
+                    break
+
+            if filepath is None:
+                raise FileNotFoundError(
+                    f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
+                )
+
+            cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
+            if cache_key in self._data_cache:
+                logger.debug(f"从缓存加载数据: {symbol}")
+                cached_df = self._data_cache[cache_key]
+                if return_path:
+                    return cached_df, str(filepath)
+                return cached_df
+
+            df = pd.read_csv(filepath)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+
+            if start_date:
+                df = df[df['datetime'] >= pd.Timestamp(start_date)]
+            if end_date:
+                df = df[df['datetime'] <= pd.Timestamp(end_date)]
+
+            self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
+            logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+
+            if return_path:
+                return df, str(filepath)  # pyright: ignore[reportReturnType]
+            return df  # pyright: ignore[reportReturnType]
         except Exception as e:
             logger.error(f"加载K线数据失败: {e}")
+            if return_path:
+                return None, None
             return None
 
     # ── 回测记录 ────────────────────────────────────────────
@@ -303,8 +330,13 @@ class DataManager:
                         start_date: str | None, end_date: str | None,
                         strategy_version: str | None = None,
                         git_hash: str | None = None,
-                        run_id: int | None = None) -> int:
-        """插入完整的回测记录"""
+                        run_id: int | None = None,
+                        data_src: str | None = None) -> int:
+        """插入完整的回测记录
+        
+        Args:
+            data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
+        """
         return self.store.insert_backtest_detailed(
             symbol=symbol,
             strategy=strategy,
@@ -318,6 +350,7 @@ class DataManager:
             strategy_version=strategy_version,
             git_hash=git_hash,
             run_id=run_id,
+            data_src=data_src,
         )
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:

@@ -30,10 +30,10 @@ echo "=========================================="
 echo ""
 echo "[步骤 1/2] 执行全量回测 + 网格搜索..."
 if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
-    --pattern "DCE.*" \
+    --pattern "\.1m\." \
     --strategy ma \
     --mode search \
-    --optimizer grid \
+    --optimizer optuna \
     --trials 20 \
     --capital 100000 \
     --contract-size 10; then

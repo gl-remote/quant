@@ -222,15 +222,19 @@ class DataStore:
         strategy_version: str | None = None,
         git_hash: str | None = None,
         run_id: int | None = None,
+        data_src: str | None = None,
     ) -> int:
-        """插入完整的回测记录"""
+        """插入完整的回测记录
+        
+        Args:
+            data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
+        """
         now = datetime.now()
 
         total_trades = statistics.get('total_trade_count', statistics.get('total_trades', 0)) or 0
         initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))
         end_balance = float(statistics.get('end_balance', initial_capital))
         total_return = calc_total_return(initial_capital, end_balance, total_trades=total_trades)
-        # vnpy 使用 profit_days/loss_days（日级别），测试 fixture 用 win_trades/loss_trades
         win_trades_v = statistics.get('profit_days', statistics.get('win_trades', 0))
         loss_trades_v = statistics.get('loss_days', statistics.get('loss_trades', 0))
         win_rate_val = calc_win_rate(win_trades_v, total_trades)
@@ -269,6 +273,7 @@ class DataStore:
                                                  statistics.get('max_ddpercent_duration', 0)),
             daily_std=statistics.get('return_std', statistics.get('daily_std')),
             return_drawdown_ratio=statistics.get('return_drawdown_ratio'),
+            data_src=data_src,
             created_at=now,
             updated_at=now,
         )
