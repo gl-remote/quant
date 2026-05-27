@@ -357,7 +357,35 @@ def write_entry_html(output_dir: str) -> None:
 
 
 def _build_preload_script(output_dir: str) -> str:
-    """读取所有 JSON 数据文件，嵌入为 window.__DATA__ 对象"""
+    """读取所有 JSON 数据文件，嵌入为 window.__DATA__ 对象
+
+    【重要特性】数据预加载机制 - 保持此特性不变
+
+    设计目的：
+    1. 支持 file:// 协议访问（避免 CORS 问题）
+    2. 实现离线浏览能力
+    3. 提升页面加载性能（一次加载，无需多次网络请求）
+
+    工作原理：
+    1. 遍历 output 目录下的所有 JSON 文件
+    2. 按规则生成数据键：
+       - 公共数据: data/{filename}.json
+       - 回测数据: r{runId}/data/{filename}.json
+    3. 序列化为 JSON 字符串，嵌入到 <script> 标签中
+    4. 前端通过 fetchJson() 从 window.__DATA__ 读取数据
+
+    注意事项（修改此函数时必须保持）：
+    1. 必须保持数据键格式与 web/src/data/loader.ts 中的 dataKey() 一致
+    2. 必须将所有 JSON 数据嵌入到 HTML 中，不依赖网络请求
+    3. 保持 JSON 序列化时 ensure_ascii=False（支持中文）
+    4. 异常处理：单个文件加载失败不应中断整体流程
+
+    Args:
+        output_dir: 输出目录路径
+
+    Returns:
+        包含 window.__DATA__ 赋值的 script 标签字符串
+    """
     root = Path(output_dir)
     data_map: dict[str, object] = {}
 
