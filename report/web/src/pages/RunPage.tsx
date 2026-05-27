@@ -47,7 +47,7 @@ export default function RunPage() {
     }
   }, [summary, selectedSymbol]);
 
-  const { data: kline } = useFetchJson<KlineData>(
+  const { data: kline, loading: klineLoading } = useFetchJson<KlineData>(
     `kline_${selectedSymbol}.json`,
     runId
   );
@@ -123,7 +123,7 @@ export default function RunPage() {
           <MetricCards run={run} backtests={backtests} />
           <div style={styles.contentGrid}>
             <div style={styles.leftPanel}>
-              <KlineChart data={kline!} />
+              <KlineChart data={kline} loading={klineLoading} />
               {equity && selectedSymbol && equity[selectedSymbol] && (
                 <EquityChart data={equity[selectedSymbol]} />
               )}

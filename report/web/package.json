@@ -5,12 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "lint": "eslint src --ext .ts,.tsx",
+    "build": "npm run lint && tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "echarts": "^6.1.0",
-    "echarts-for-react": "^3.0.6",
     "lightweight-charts": "^5.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -20,7 +20,11 @@
     "@types/node": "^25.9.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
+    "@typescript-eslint/parser": "^8.60.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
   }

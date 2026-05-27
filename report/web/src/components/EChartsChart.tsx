@@ -43,7 +43,7 @@ export default function EChartsChart({
   option,
   style,
   qlId,
-}: EChartsChartProps) {
+}: EChartsChartProps): JSX.Element | null {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
 

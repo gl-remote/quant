@@ -15,7 +15,8 @@ import type { KlineData, KlinePoint } from "@/types";
 type ViewMode = "daily" | "raw";
 
 interface Props {
-  data: KlineData;
+  data: KlineData | null;
+  loading?: boolean;
 }
 
 function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
@@ -44,7 +45,7 @@ function calculateSMA(data: KlinePoint[], period: number): number[] {
   return result;
 }
 
-export default function KlineChart({ data }: Props) {
+export default function KlineChart({ data, loading }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
@@ -53,7 +54,7 @@ export default function KlineChart({ data }: Props) {
   const [mode, setMode] = useState<ViewMode>("daily");
   const [indicators, setIndicators] = useState<{ sma: boolean }>({ sma: true });
 
-  const klineData = mode === "daily" ? data.daily : data.raw;
+  const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -177,10 +178,30 @@ export default function KlineChart({ data }: Props) {
     }
   }, [indicators.sma]);
 
-  if (!klineData || klineData.length === 0) {
+  if (loading) {
+    return (
+      <>
+        <style>{`@keyframes ql-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+        <div style={styles.loading} data-ql-id="RUN-KLINE-LOADING">
+          <div style={styles.spinner} />
+          <p style={{ marginTop: 12, color: "#999", fontSize: 14 }}>K 线数据加载中...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (!data) {
     return (
       <div style={styles.empty} data-ql-id="RUN-KLINE-EMPTY">
         <p>暂无 K 线数据</p>
+      </div>
+    );
+  }
+
+  if (!klineData || klineData.length === 0) {
+    return (
+      <div style={styles.empty} data-ql-id="RUN-KLINE-EMPTY">
+        <p>当前周期暂无 K 线数据，请切换周期</p>
       </div>
     );
   }
@@ -365,5 +386,25 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
     color: "#999",
     boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+  },
+  loading: {
+    background: "#ffffff",
+    borderRadius: "12px",
+    padding: "80px",
+    textAlign: "center",
+    color: "#999",
+    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  spinner: {
+    width: 36,
+    height: 36,
+    border: "3px solid #f0f0f0",
+    borderTop: "3px solid #2563eb",
+    borderRadius: "50%",
+    animation: "ql-spin 0.8s linear infinite",
   },
 };
