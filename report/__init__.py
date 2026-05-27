@@ -103,7 +103,6 @@ def build_report(
     filepath.write_text(html, encoding='utf-8')
 
     # 刷新导航页
-    from .dashboard import build_nav
     build_nav(dm.store.db_path, output_dir)
 
     return str(filepath.resolve())
