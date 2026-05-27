@@ -12,8 +12,8 @@ def get_run_summary(db_path: str, run_id: int) -> list[dict[str, Any]]:
     """每品种最优回测记录"""
     conn = sqlite3.connect(db_path)
     rows = conn.execute("""
-        SELECT symbol, total_return, total_trades, win_rate, max_drawdown,
-               sharpe_ratio, end_balance, params_json
+        SELECT id, symbol, total_return, total_trades, win_rate, max_drawdown,
+               sharpe_ratio, end_balance
         FROM backtests
         WHERE run_id=? AND status='success'
         ORDER BY symbol, total_return DESC
@@ -21,33 +21,33 @@ def get_run_summary(db_path: str, run_id: int) -> list[dict[str, Any]]:
 
     best: dict[str, dict[str, Any]] = {}
     for r in rows:
-        sym = r[0]
-        if sym not in best or (r[1] or 0) > (best[sym].get('total_return') or 0):
+        sym = r[1]
+        if sym not in best or (r[2] or 0) > (best[sym].get('total_return') or 0):
             best[sym] = {
+                'id': r[0],
                 'symbol': sym,
-                'total_return': float(r[1] or 0),
-                'total_trades': r[2],
-                'win_rate': float(r[3] or 0) * 100,
-                'max_drawdown': float(r[4] or 0) * 100,
-                'sharpe': float(r[5] or 0),
-                'end_balance': float(r[6] or 0),
-                'ret_cls': 'badge-green' if (r[1] or 0) > 0 else 'badge-red',
-                'sr_cls': 'badge-green' if (r[5] or 0) > 0 else 'badge-red',
+                'total_return': float(r[2] or 0),
+                'total_trades': r[3],
+                'win_rate': float(r[4] or 0) * 100,
+                'max_drawdown': float(r[5] or 0) * 100,
+                'sharpe': float(r[6] or 0),
+                'end_balance': float(r[7] or 0),
+                'ret_cls': 'badge-green' if (r[2] or 0) > 0 else 'badge-red',
+                'sr_cls': 'badge-green' if (r[6] or 0) > 0 else 'badge-red',
             }
     conn.close()
     return [best[s] for s in sorted(best)]
 
 
-def get_equity_data(db_path: str, symbol: str, run_id: int) -> dict[str, Any] | None:
-    """获取资金曲线数据"""
+def get_equity_data(db_path: str, symbol: str, backtest_id: int) -> dict[str, Any] | None:
+    """获取指定回测记录的资金曲线数据"""
     conn = sqlite3.connect(db_path)
     rows = conn.execute("""
-        SELECT bd.date, bd.equity, bd.drawdown
-        FROM backtest_daily bd
-        JOIN backtests b ON bd.backtest_id = b.id
-        WHERE b.symbol=? AND b.run_id=? AND b.status='success'
-        ORDER BY bd.date
-    """, (symbol, run_id)).fetchall()
+        SELECT date, equity, drawdown
+        FROM backtest_daily
+        WHERE backtest_id=?
+        ORDER BY date
+    """, (backtest_id,)).fetchall()
     conn.close()
     if not rows:
         return None
@@ -76,20 +76,13 @@ def get_report_list(db_path: str, run_id: int, output_dir: str) -> list[dict[str
     return result
 
 
-def get_kline_data(db_path: str, symbol: str, run_id: int, export_dir: str = None) -> dict[str, Any] | None:
-    """获取K线数据
-    
-    Args:
-        db_path: 数据库路径
-        symbol: 品种代码
-        run_id: 运行ID
-        export_dir: 导出目录（已废弃，保留用于兼容）
-    """
+def get_kline_data(db_path: str, symbol: str, backtest_id: int) -> dict[str, Any] | None:
+    """获取指定回测记录的K线数据"""
     conn = sqlite3.connect(db_path)
     bt = conn.execute("""
-        SELECT start_date, end_date, data_src FROM backtests 
-        WHERE symbol=? AND run_id=? AND status='success' LIMIT 1
-    """, (symbol, run_id)).fetchone()
+        SELECT start_date, end_date, data_src FROM backtests
+        WHERE id=? AND status='success'
+    """, (backtest_id,)).fetchone()
     conn.close()
     
     if not bt:
@@ -128,24 +121,15 @@ def get_kline_data(db_path: str, symbol: str, run_id: int, export_dir: str = Non
     return {'symbol': symbol, 'data': kline_data}
 
 
-def get_trade_markers(db_path: str, symbol: str, run_id: int) -> dict[str, list[dict]]:
-    """获取交易信号标记"""
+def get_trade_markers(db_path: str, backtest_id: int) -> dict[str, list[dict]]:
+    """获取指定回测记录的交易信号标记"""
     conn = sqlite3.connect(db_path)
-    rows = conn.execute("""
-        SELECT b.id FROM backtests b 
-        WHERE b.symbol=? AND b.run_id=? AND b.status='success' LIMIT 1
-    """, (symbol, run_id)).fetchone()
-    
-    if not rows:
-        return {'buy_markers': [], 'sell_markers': []}
-    
-    bt_id = rows[0]
-    
+
     trades = conn.execute("""
-        SELECT datetime, direction, offset, close_price, open_price 
-        FROM backtest_trades 
+        SELECT datetime, direction, offset, close_price, open_price
+        FROM backtest_trades
         WHERE backtest_id=?
-    """, (bt_id,)).fetchall()
+    """, (backtest_id,)).fetchall()
     conn.close()
     
     buy_markers = []

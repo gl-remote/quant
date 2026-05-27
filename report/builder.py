@@ -197,7 +197,9 @@ def export_equity_json(db_path: str, output_dir: str, run_id: int) -> None:
     result = {}
     # 为每个品种获取权益数据
     for s in summary:
-        equity = get_equity_data(db_path, s["symbol"], run_id)
+        if not s.get("id"):
+            continue
+        equity = get_equity_data(db_path, s["symbol"], s["id"])
         if equity:
             result[s["symbol"]] = equity
     _write_json(output_dir, f"r{run_id}/data/equity.json", result)
@@ -207,37 +209,34 @@ def export_kline_json(db_path: str, output_dir: str, run_id: int) -> None:
     """
     导出 K 线数据 JSON（使用 KlineCache 避免重复转换）
 
-    从 backtests 表获取各品种的 CSV 路径和日期范围，
+    从最优回测记录获取各品种的 CSV 路径和日期范围，
     按品种独立生成 kline_{symbol}.json。
-    
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
     """
-    cache = KlineCache(output_dir)  # 初始化缓存
+    from .queries.backtest import get_run_summary
 
-    # 连接数据库查询K线源信息
+    cache = KlineCache(output_dir)
+    summary = get_run_summary(db_path, run_id)
+
     conn = sqlite3.connect(db_path)
-    rows = conn.execute("""
-        SELECT DISTINCT symbol,
-               FIRST_VALUE(data_src) OVER w AS data_src,
-               FIRST_VALUE(start_date) OVER w AS start_date,
-               FIRST_VALUE(end_date) OVER w AS end_date,
-               FIRST_VALUE(kline_interval) OVER w AS kline_interval
-        FROM backtests
-        WHERE run_id=? AND status='success' AND data_src IS NOT NULL
-        WINDOW w AS (PARTITION BY symbol ORDER BY id)
-    """, (run_id,)).fetchall()
-    conn.close()
+    for s in summary:
+        symbol = s["symbol"]
+        best_id = s.get("id")
+        if not best_id:
+            continue
 
-    # 处理每个品种的K线数据
-    for row in rows:
-        symbol = row[0]
-        data_src = row[1]
-        start_date = row[2]
-        end_date = row[3]
-        interval = row[4] or "1m"
+        bt = conn.execute(
+            "SELECT symbol, data_src, start_date, end_date, kline_interval "
+            "FROM backtests WHERE id=?",
+            (best_id,),
+        ).fetchone()
+
+        if not bt or not bt[1]:
+            continue
+
+        data_src = bt[1]
+        start_date = bt[2]
+        end_date = bt[3]
+        interval = bt[4] or "1m"
         dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.json"
 
         # 尝试从缓存复制
@@ -255,11 +254,13 @@ def export_kline_json(db_path: str, output_dir: str, run_id: int) -> None:
             data_src, symbol, interval, start_date, end_date
         )
         if kline_dict:
-            cache.put(symbol, data_src, interval, kline_dict)  # 存入缓存
+            cache.put(symbol, data_src, interval, kline_dict)
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "w", encoding="utf-8") as f:
                 json.dump(kline_dict, f, ensure_ascii=False, default=str)
             logger.info("K线已导出: %s → %s", symbol, dest.name)
+
+    conn.close()
 
 
 def export_optuna_json(db_path: str, output_dir: str, run_id: int) -> None:
