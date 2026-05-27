@@ -68,13 +68,15 @@ def _build_single_report(db_path: str, run_id: int, output_dir: str) -> None:
         from data import DataManager
         dm = DataManager()
         conn = sqlite3.connect(db_path)
-        bt = conn.execute(
-            "SELECT id FROM backtests WHERE run_id=? ORDER BY id DESC LIMIT 1",
-            (run_id,),
-        ).fetchone()
+        bt_ids = [
+            r[0] for r in conn.execute(
+                "SELECT id FROM backtests WHERE run_id=? AND status='success'",
+                (run_id,),
+            ).fetchall()
+        ]
         conn.close()
-        if bt:
-            build_report(dm, bt[0], output_dir=output_dir)
+        for bid in bt_ids:
+            build_report(dm, bid, output_dir=output_dir)
     except Exception:
         pass
 
