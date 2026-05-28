@@ -126,6 +126,17 @@ export default function KlineChart({ data, loading }: Props) {
         timeVisible: true,
         secondsVisible: false,
       },
+      localization: {
+        dateFormat: "yyyy/MM/dd",
+        timeFormatter: (time: Time) => {
+          if (typeof time === "number") {
+            const d = new Date(time * 1000);
+            const pad = (n: number) => String(n).padStart(2, "0");
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          }
+          return String(time);
+        },
+      },
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
