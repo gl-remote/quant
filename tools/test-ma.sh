@@ -3,7 +3,7 @@
 # MA策略全链路测试脚本 - 一键执行
 # ============================================================================
 # 功能: 测试MA策略全链路是否正常工作
-# 步骤: 1. 全量回测 + 网格搜索  2. 生成报告
+# 步骤: 1. 全量回测 + 贝叶斯搜索  2. 生成报告
 #
 # 用法: bash test-ma.sh
 
@@ -33,7 +33,7 @@ if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
     --pattern "\.1m\." \
     --strategy ma \
     --mode search \
-    --optimizer optuna \
+    --optimizer bayesian \
     --trials 20 \
     --capital 100000 \
     --contract-size 10; then

@@ -117,5 +117,5 @@ format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 # ============================================================
 [optimizer]
 enabled = true
-engine = "grid"                 # grid: 穷举搜索 | optuna: 贝叶斯优化
+engine = "grid"                 # grid: 穷举搜索 | bayesian: 贝叶斯优化
 n_trials = 50                   # optuna 最大试验次数

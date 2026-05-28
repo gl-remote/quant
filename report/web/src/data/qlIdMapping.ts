@@ -28,7 +28,7 @@ export const qlIdNameMap: Record<string, string> = {
   "RUN-PG-HEADER": "回测概要头部",
   "RUN-PG-TABS": "回测/优化切换栏",
   "RUN-PG-TAB-BACKTEST": "回测结果标签",
-  "RUN-PG-TAB-OPTUNA": "参数优化标签",
+  "RUN-PG-TAB-PARAMS": "参数优化标签",
   "RUN-PG-CONTENT": "回测内容区",
 
   // ─── MET 指标卡片 ───

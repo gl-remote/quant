@@ -374,7 +374,7 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
             search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
             
             if search_space:
-                if run_engine == "optuna":
+                if run_engine == "bayesian":
                     _run_optuna_search(
                         engine=engine, datasets=datasets,
                         strategy_name=strategy_name,
@@ -607,7 +607,7 @@ def _run_optuna_search(
 
     engine_cfg = {
         'type': 'vnpy',
-        'optimizer': 'optuna',
+        'optimizer': 'bayesian',
         'study_name': opt.study_name,
         'study_db': dm._store.db_path,
     }

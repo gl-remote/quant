@@ -82,7 +82,7 @@ A: 在配置文件中设置：
 ```toml
 [optimizer]
 enabled = true
-engine = "optuna"  # 或 "grid"
+engine = "bayesian"  # 或 "grid"
 n_trials = 50
 ```
 

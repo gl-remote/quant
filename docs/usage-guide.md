@@ -64,7 +64,7 @@ python main.py backtest --pattern "DCE\.m" --strategy ma
 python main.py backtest --symbol DCE.m2509 --optimizer grid --mode search
 
 # 贝叶斯优化
-python main.py backtest --symbol DCE.m2509 --optimizer optuna --mode search
+python main.py backtest --symbol DCE.m2509 --optimizer bayesian --mode search
 ```
 
 ### Walk-Forward 验证

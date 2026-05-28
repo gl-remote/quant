@@ -101,8 +101,8 @@ def main() -> None:
     p.add_argument('--gui', action='store_true', help='启用图形界面（仅单品种模式生效）')
     p.add_argument('--mode', choices=['search', 'walk-forward'], default='search',
                    help='回测模式: search=参数搜索(默认), walk-forward=滚动验证')
-    p.add_argument('--optimizer', choices=['grid', 'optuna'], default=None,
-                   help='参数搜索引擎: grid=网格搜索, optuna=贝叶斯优化 (默认读 TOML)')
+    p.add_argument('--optimizer', choices=['grid', 'bayesian'], default=None,
+                   help='参数搜索引擎: grid=网格搜索, bayesian=贝叶斯优化 (默认读 TOML)')
     p.add_argument('--trials', type=int, default=None,
                    help='optimizer 最大试验次数（默认从配置文件读取）')
 

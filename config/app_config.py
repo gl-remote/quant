@@ -107,7 +107,7 @@ class OptimizerConfig(BaseModel):
 
     基于 Optuna 的统一优化框架，支持两种搜索模式：
     - engine: "grid" — 使用 GridSampler 穷举搜索
-    - engine: "optuna" — 使用 TPESampler 贝叶斯优化
+    - engine: "bayesian" — 使用 TPESampler 贝叶斯优化
 
     search_space: 搜索空间定义，{param: {type, low, high, step}}
     n_trials: 最大试验次数
@@ -117,7 +117,7 @@ class OptimizerConfig(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    engine: str = "grid"  # grid | optuna
+    engine: str = "grid"  # grid | bayesian
     n_trials: int = 50
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)

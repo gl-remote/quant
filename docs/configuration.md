@@ -51,7 +51,7 @@ db_file = "quant_shared.db"
 
 [optimizer]
 enabled = true
-engine = "optuna"
+engine = "bayesian"
 n_trials = 50
 
 [optimizer.search_space]
@@ -106,7 +106,7 @@ enabled = true
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `enabled` | bool | true | 是否启用优化 |
-| `engine` | str | "optuna" | 优化引擎：grid/optuna |
+| `engine` | str | "bayesian" | 优化引擎：grid/bayesian |
 | `n_trials` | int | 50 | 试验次数 |
 
 ### [strategies.items]

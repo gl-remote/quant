@@ -16,7 +16,7 @@ import EquityChart from "@/components/EquityChart";
 import BacktestDetail from "@/components/BacktestDetail";
 import OptunaCharts from "@/components/OptunaCharts";
 
-type TabId = "backtest" | "optuna";
+type TabId = "backtest" | "params";
 
 export default function RunPage() {
   const { id } = useParams<{ id: string }>();
@@ -131,17 +131,17 @@ export default function RunPage() {
           </button>
           <button
             role="tab"
-            id="tab-optuna"
-            aria-selected={activeTab === "optuna"}
-            aria-controls="panel-optuna"
-            tabIndex={activeTab === "optuna" ? 0 : -1}
-            data-ql-id="RUN-PG-TAB-OPTUNA"
-            onClick={() => switchTab("optuna")}
-            onKeyDown={(e) => handleTabKeyDown(e, "optuna")}
+            id="tab-params"
+            aria-selected={activeTab === "params"}
+            aria-controls="panel-params"
+            tabIndex={activeTab === "params" ? 0 : -1}
+            data-ql-id="RUN-PG-TAB-PARAMS"
+            onClick={() => switchTab("params")}
+            onKeyDown={(e) => handleTabKeyDown(e, "params")}
             disabled={!hasOptuna}
             style={{
               ...styles.tabBtn,
-              ...(activeTab === "optuna" ? styles.tabBtnActive : {}),
+              ...(activeTab === "params" ? styles.tabBtnActive : {}),
               ...(!hasOptuna ? styles.tabBtnDisabled : {}),
             }}
             title={hasOptuna ? "查看参数优化结果" : "该 run 无优化数据"}
@@ -184,13 +184,13 @@ export default function RunPage() {
         </div>
 
         <div
-          key={`optuna-${animKey}`}
-          id="panel-optuna"
+          key={`params-${animKey}`}
+          id="panel-params"
           role="tabpanel"
-          aria-labelledby="tab-optuna"
-          style={activeTab === "optuna" ? styles.panelVisible : styles.panelHidden}
+          aria-labelledby="tab-params"
+          style={activeTab === "params" ? styles.panelVisible : styles.panelHidden}
         >
-          <div style={activeTab === "optuna" ? { animation: "tabFadeIn 0.25s ease-out" } : undefined}>
+          <div style={activeTab === "params" ? { animation: "tabFadeIn 0.25s ease-out" } : undefined}>
             {hasOptuna ? (
               <OptunaCharts data={optuna!} />
             ) : (

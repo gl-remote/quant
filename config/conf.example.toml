@@ -53,7 +53,7 @@ debug = true                      # 是否启用调试模式
 # ============================================================
 [optimizer]
 enabled = true                    # 是否启用参数优化
-engine = "optuna"                 # 优化引擎: "grid" 或 "optuna"
+engine = "bayesian"                 # 优化引擎: "grid" 或 "bayesian"
 n_trials = 50                     # Optuna 最大试验次数
 table_prefix = "optuna_"          # Optuna 表名前缀
 
