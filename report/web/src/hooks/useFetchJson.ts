@@ -56,6 +56,12 @@ export function useFetchJson<T>(
     // 标记是否已取消（用于组件卸载时避免状态更新）
     let cancelled = false;
 
+    // 如果路径为空，直接返回空数据
+    if (!relPath) {
+      setState({ data: null, loading: false, error: null });
+      return () => { cancelled = true; };
+    }
+
     // 开始加载：重置错误，设置 loading=true
     setState((prev) => ({ ...prev, loading: true, error: null }));
 

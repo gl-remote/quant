@@ -602,7 +602,7 @@ def _build_kline_dict(
         # 格式化日线数据
         daily_data = [
             {
-                "datetime": str(idx.date()),
+                "datetime": idx.strftime("%Y-%m-%d"),
                 "open": float(row.open),
                 "high": float(row.high),
                 "low": float(row.low),
@@ -615,8 +615,9 @@ def _build_kline_dict(
         # 原始数据（不降采样，完整展示）
         raw_data = []
         for _, row in df.iterrows():
+            dt = row["datetime"]
             raw_data.append({
-                "datetime": str(row["datetime"]),
+                "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
                 "open": float(row.get("open", 0)),
                 "high": float(row.get("high", 0)),
                 "low": float(row.get("low", 0)),

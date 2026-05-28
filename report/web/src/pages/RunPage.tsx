@@ -50,8 +50,8 @@ export default function RunPage() {
   }, [summary, selectedSymbol]);
 
   const { data: kline, loading: klineLoading } = useFetchJson<KlineData>(
-    `kline_${selectedSymbol}.json`,
-    runId
+    selectedSymbol ? `kline_${selectedSymbol}.json` : "",
+    selectedSymbol ? runId : undefined
   );
 
   const switchTab = useCallback((tab: TabId) => {
