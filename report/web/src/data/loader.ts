@@ -67,3 +67,20 @@ export async function fetchJson<T>(
 export function clearCache(): void {
   Object.keys(__DATA__).forEach((k) => delete __DATA__[k]);
 }
+
+/**
+ * 获取数据存储（用于测试）
+ */
+export function getDataStore(): Record<string, unknown> {
+  return { ...__DATA__ };
+}
+
+/**
+ * 设置数据存储（用于测试）
+ */
+export function setDataStore(data: Record<string, unknown>): void {
+  clearCache();
+  Object.keys(data).forEach((k) => {
+    __DATA__[k] = data[k];
+  });
+}
