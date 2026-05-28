@@ -350,8 +350,11 @@ const styles: Record<string, React.CSSProperties> = {
     position: "sticky" as const,
     top: "84px",
     maxHeight: "calc(100vh - 84px)",
-    overflowY: "auto",
+    overflowY: "auto" as const,
     paddingRight: 4,
+    // 量化终端风格细滚动条
+    scrollbarWidth: "thin" as const,
+    scrollbarColor: "#cbd5e1 transparent",
   },
   loadingContainer: {
     display: "flex",

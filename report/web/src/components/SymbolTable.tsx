@@ -208,8 +208,6 @@ const styles: Record<string, React.CSSProperties> = {
   },
   tableWrap: {
     overflowX: "auto",
-    maxHeight: "400px",
-    overflowY: "auto",
   },
   table: {
     width: "100%",
