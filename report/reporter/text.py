@@ -1,8 +1,8 @@
 """
 文字报告格式化模块
 
-提供两种文本报告:
-  - format_single_report:  单次回测完整详情
+提供两种文本报告：
+  - format_single_report: 单次回测完整详情
   - format_summary_report: 回测记录汇总表格
 """
 
@@ -30,7 +30,7 @@ def _na_str(v: object | None) -> str:
     
     Args:
         v: 可能为 None 的值
-        
+    
     Returns:
         转换后的字符串，None 返回 'N/A'
     """
@@ -45,7 +45,7 @@ def _get_attr(obj: object, key: str, default: object = None) -> object:
         obj: 目标对象
         key: 属性名
         default: 默认值
-        
+    
     Returns:
         属性值或默认值
     """

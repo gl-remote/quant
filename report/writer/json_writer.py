@@ -7,10 +7,20 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+import pandas as pd
 
-from data import get_data_manager
+from data import DataManager
 from report.cache import KlineCache
-from report.utils import _build_kline_dict, _write_json
+
+# 全局数据管理器实例（按需创建）
+_data_manager: DataManager | None = None
+
+def get_data_manager() -> DataManager:
+    """获取数据管理器实例"""
+    global _data_manager
+    if _data_manager is None:
+        _data_manager = DataManager()
+    return _data_manager
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +161,7 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
     charts_spec: dict[str, Any] = {}
     if study_name:
         try:
-            from report.optimizer_report import build_optuna_spec
+            from report.reporter import build_optuna_spec
             study_db_url = f"sqlite:///{os.path.abspath(dm.store.db_path)}"
             charts_spec = build_optuna_spec(study_db_url, study_name)
         except Exception as e:
@@ -184,3 +194,104 @@ def write_nav_json(output_dir: str) -> None:
     dm = get_data_manager()
     runs = dm.get_all_runs()
     _write_json(output_dir, "data/nav.json", runs)
+
+
+def _write_json(output_dir: str, rel_path: str, data: object) -> None:
+    """
+    将数据写入JSON文件
+    
+    Args:
+        output_dir: 输出目录
+        rel_path: 相对路径
+        data: 要写入的数据
+    """
+    full_path = Path(output_dir) / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)  # 创建目录
+    with open(full_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, default=str)
+
+
+def _build_kline_dict(
+    csv_path: str,
+    symbol: str,
+    interval: str,
+    start_date: str | None,
+    end_date: str | None,
+) -> dict | None:
+    """
+    从 CSV 构建 K 线 JSON dict (daily resampled + raw 降采样)
+    
+    Args:
+        csv_path: CSV文件路径
+        symbol: 品种代码
+        interval: K线周期
+        start_date: 开始日期
+        end_date: 结束日期
+        
+    Returns:
+        K线数据字典，失败返回None
+    """
+    try:
+        df = pd.read_csv(csv_path)  # 读取CSV
+        # 处理时间列
+        if "datetime" not in df.columns:
+            if "date" in df.columns:
+                df["datetime"] = df["date"]
+            else:
+                return None
+
+        df["datetime"] = pd.to_datetime(df["datetime"])
+
+        # 按日期范围筛选
+        if start_date:
+            df = df[df["datetime"] >= pd.Timestamp(start_date)]
+        if end_date:
+            df = df[df["datetime"] <= pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)]
+
+        if df.empty:
+            return None
+
+        # 重采样生成日线数据
+        df_daily = df.set_index("datetime")
+        daily_ohlc = (
+            df_daily.resample("1d")
+            .agg(
+                open=("open", "first"),
+                high=("high", "max"),
+                low=("low", "min"),
+                close=("close", "last"),
+                volume=("volume", "sum"),
+            )
+        )
+        daily_data = daily_ohlc.reset_index()
+        daily_data["datetime"] = daily_data["datetime"].dt.strftime("%Y-%m-%d")
+
+        # 分钟级数据不抽样，完整保留
+        # 转换为秒级时间戳（对于lightweight-charts）
+        raw_rows = []
+        for _, row in df.iterrows():
+            dt = row["datetime"]
+            # 使用秒级时间戳
+            raw_rows.append({
+                "time": int(dt.timestamp()),
+                "open": row["open"],
+                "high": row["high"],
+                "low": row["low"],
+                "close": row["close"],
+                "volume": row["volume"] if "volume" in row and pd.notna(row["volume"]) else 0,
+            })
+
+        # 构建结果
+        return {
+            "symbol": symbol,
+            "interval": interval,
+            "range": {
+                "start": start_date,
+                "end": end_date,
+            },
+            "daily": daily_data.to_dict("records"),
+            "raw": raw_rows,
+        }
+    except Exception as e:
+        logger.warning("K线数据构建失败: %s - %s", csv_path, e)
+        return None

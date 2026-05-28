@@ -570,8 +570,6 @@ class DataStore:
 
         study_name = study_rows[0]['study_name']
         
-        from playhouse.shortcuts import RequeryMixin
-        
         trials = list(
             database.execute_sql("""
                 SELECT t.number, tv.value FROM trials t

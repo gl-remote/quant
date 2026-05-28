@@ -168,23 +168,23 @@ class TestReportPublicAPI:
 
 class TestReportHelpers:
     def test_na_str_none(self):
-        from report.reports import _na_str
+        from report.reporter.text import _na_str
         assert _na_str(None) == 'N/A'
 
     def test_na_str_value(self):
-        from report.reports import _na_str
+        from report.reporter.text import _na_str
         assert _na_str('hello') == 'hello'
         assert _na_str(123) == '123'
 
     def test_get_attr_dict(self):
-        from report.reports import _get_attr
+        from report.reporter.text import _get_attr
         d = {'a': 1, 'b': 2}
         assert _get_attr(d, 'a') == 1
         assert _get_attr(d, 'c', 'default') == 'default'
         assert _get_attr(d, 'missing') is None
 
     def test_get_attr_object(self):
-        from report.reports import _get_attr
+        from report.reporter.text import _get_attr
 
         class Obj:
             a = 10
