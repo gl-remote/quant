@@ -233,7 +233,7 @@ def _export_kline_with_incremental(
         start_date = str(s.get("start_date")) if s.get("start_date") else None
         end_date = str(s.get("end_date")) if s.get("end_date") else None
         interval = str(s.get("kline_interval") or "1m")
-        dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.json"
+        dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.{interval}.json"
         
         if not data_src:
             continue

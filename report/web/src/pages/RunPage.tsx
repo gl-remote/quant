@@ -42,6 +42,7 @@ export default function RunPage() {
   );
 
   const [selectedSymbol, setSelectedSymbol] = useState<string>("");
+  const [selectedInterval, setSelectedInterval] = useState<string>("");
 
   useEffect(() => {
     if (summary && summary.length > 0 && !selectedSymbol) {
@@ -49,8 +50,18 @@ export default function RunPage() {
     }
   }, [summary, selectedSymbol]);
 
+  // 当选中的 symbol 变化时，从 backtests 中获取对应的 interval
+  useEffect(() => {
+    if (selectedSymbol && backtests) {
+      const bt = backtests.find((b) => b.symbol === selectedSymbol);
+      if (bt) {
+        setSelectedInterval(bt.kline_interval || "1m");
+      }
+    }
+  }, [selectedSymbol, backtests]);
+
   const { data: kline, loading: klineLoading } = useFetchJson<KlineData>(
-    selectedSymbol ? `kline_${selectedSymbol}.json` : "",
+    selectedSymbol && selectedInterval ? `kline_${selectedSymbol}.${selectedInterval}.json` : "",
     selectedSymbol ? runId : undefined
   );
 

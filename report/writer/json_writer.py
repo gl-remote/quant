@@ -104,7 +104,7 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
     导出 K 线数据 JSON（使用 KlineCache 避免重复转换）
 
     从最优回测记录获取各品种的 CSV 路径和日期范围，
-    按品种独立生成 kline_{symbol}.json。
+    按品种独立生成 kline_{symbol}.{interval}.json。
     """
     dm = get_data_manager()
     cache = KlineCache(output_dir)
@@ -119,7 +119,7 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
         start_date = str(s.get("start_date")) if s.get("start_date") else None
         end_date = str(s.get("end_date")) if s.get("end_date") else None
         interval: str = str(s.get("kline_interval") or "1m")
-        dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.json"
+        dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.{interval}.json"
 
         if not data_src:
             continue
