@@ -9,6 +9,7 @@ import {
   CandlestickData,
   HistogramData,
   Time,
+  TickMarkType,
 } from "lightweight-charts";
 import type { KlineData, KlinePoint } from "@/types";
 import QlPanel from "@/components/QlPanel";
@@ -116,10 +117,33 @@ export default function KlineChart({ data, loading }: Props) {
         borderColor: "#e0e0e0",
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: Time, tickMarkType: TickMarkType, _locale: string) => {
+          if (typeof time !== "number") return null;
+          const d = new Date(time * 1000);
+          const pad = (n: number) => String(n).padStart(2, "0");
+          switch (tickMarkType) {
+            case TickMarkType.Year:
+              return String(d.getFullYear());
+            case TickMarkType.Month:
+              return `${d.getFullYear()}/${pad(d.getMonth() + 1)}`;
+            case TickMarkType.DayOfMonth:
+              return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+            case TickMarkType.Time:
+              return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            case TickMarkType.TimeWithSeconds:
+              return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+          }
+          return null;
+        },
       },
       localization: {
         locale: "zh-CN",
-        dateFormat: "yyyy/MM/dd",
+        timeFormatter: (time: Time) => {
+          if (typeof time !== "number") return String(time);
+          const d = new Date(time * 1000);
+          const pad = (n: number) => String(n).padStart(2, "0");
+          return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        },
       },
     });
 
