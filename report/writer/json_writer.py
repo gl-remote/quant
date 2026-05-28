@@ -175,12 +175,12 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
     result = {
         "study_name": study_name,
         "trial_count": optuna_data.get("trial_count", 0),
-        "best_value": optuna_data.get("best_value"),
+        "best_value": charts_spec.get("best_value"),
         "best_params": merged_best_params,
-        "trials": optuna_data.get("trials", []),
-        "param_names": optuna_data.get("param_names", []),
-        "charts": charts_spec.get("charts", {}),
-        "param_scatter": charts_spec.get("param_scatter"),
+        "optimization_history": charts_spec.get("optimization_history"),
+        "param_importances": charts_spec.get("param_importances"),
+        "parallel_coordinate": charts_spec.get("parallel_coordinate"),
+        "contour": charts_spec.get("contour"),
     }
     _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
 
