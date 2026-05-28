@@ -23,9 +23,10 @@ export default function MetricCards({ run, backtests }: Props) {
   const avgSharpe =
     backtests.reduce((sum, b) => sum + (b.sharpe_ratio || 0), 0) /
     backtests.length;
+  const uniqueSymbols = new Set(backtests.map((b) => b.symbol)).size;
 
   const cards = [
-    { label: "总品种数", value: String(backtests.length) },
+    { label: "总品种数", value: String(uniqueSymbols) },
     {
       label: "平均收益率",
       value: `${(avgReturn * 100).toFixed(2)}%`,
