@@ -1,6 +1,5 @@
 import type { BacktestRecord } from "@/types";
 import QlPanel from "@/components/QlPanel";
-import { qlIdNameMap } from "@/data/qlIdMapping";
 
 interface Props {
   backtests: BacktestRecord[] | null;
@@ -8,7 +7,7 @@ interface Props {
 }
 
 function formatPct(v: number, digits = 2): string {
-  return `${(v).toFixed(digits)}%`;
+  return `${v.toFixed(digits)}%`;
 }
 
 export default function BacktestDetail({
@@ -17,12 +16,8 @@ export default function BacktestDetail({
 }: Props) {
   if (!backtests || backtests.length === 0) {
     return (
-      <QlPanel
-        qlId="RUN-BT-EMPTY"
-        name={qlIdNameMap["RUN-BT-EMPTY"]}
-        style={{ marginBottom: 24 }}
-      >
-        <></>
+      <QlPanel qlId="RUN-BT-EMPTY" name="回测记录详情" style={{ marginBottom: 24 }}>
+        <div style={styles.emptyText}>暂无回测记录</div>
       </QlPanel>
     );
   }
@@ -30,12 +25,8 @@ export default function BacktestDetail({
   const bt = backtests.find((b) => b.symbol === selectedSymbol);
   if (!bt) {
     return (
-      <QlPanel
-        qlId="RUN-BT-EMPTY"
-        name={qlIdNameMap["RUN-BT-EMPTY"]}
-        style={{ marginBottom: 24 }}
-      >
-        <></>
+      <QlPanel qlId="RUN-BT-EMPTY" name={`回测记录详情  ·  ${selectedSymbol}`} style={{ marginBottom: 24 }}>
+        <div style={styles.emptyText}>未找到 "{selectedSymbol}" 的回测记录</div>
       </QlPanel>
     );
   }
@@ -56,7 +47,7 @@ export default function BacktestDetail({
   return (
     <QlPanel
       qlId="RUN-BT-CONTAINER"
-      name={`${qlIdNameMap["RUN-BT-CONTAINER"]}  ·  ${selectedSymbol}`}
+      name={`回测记录详情  ·  ${selectedSymbol}`}
       style={{ marginBottom: 24 }}
     >
       <div data-ql-id="RUN-BT-METRICS" style={styles.grid}>
@@ -86,6 +77,12 @@ export default function BacktestDetail({
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  emptyText: {
+    color: "#94a3b8",
+    fontSize: "13px",
+    padding: "16px 0",
+    textAlign: "center",
+  },
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
