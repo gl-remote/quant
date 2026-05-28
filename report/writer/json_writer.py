@@ -241,7 +241,12 @@ def _build_kline_dict(
             else:
                 return None
 
-        df["datetime"] = pd.to_datetime(df["datetime"])
+        # 将 datetime 列转换为 UTC 时间戳
+        # pandas 解析的 naive datetime 会被视为本地时区 (Asia/Shanghai)
+        # 因此需要先转为 UTC 再获取 Unix timestamp
+        df["datetime"] = pd.to_datetime(df["datetime"]).apply(
+            lambda x: int(pd.Timestamp(x).tz_localize("Asia/Shanghai").tz_convert("UTC").timestamp())
+        )
 
         # 按日期范围筛选
         if start_date:
@@ -265,17 +270,14 @@ def _build_kline_dict(
             )
         )
         daily_data = daily_ohlc.reset_index()
-        # 使用 Unix 时间戳（秒）
-        daily_data["datetime"] = (daily_data["datetime"].astype(np.int64) // 10**9).astype(int)
+        # datetime 已经是 UTC Unix 时间戳（秒），直接使用
 
         # 分钟级数据不抽样，完整保留
-        # 转换为秒级时间戳（对于lightweight-charts）
+        # dt 已经是 UTC Unix 时间戳（秒）
         raw_rows = []
         for _, row in df.iterrows():
-            dt = row["datetime"]
-            # 使用秒级时间戳
             raw_rows.append({
-                "datetime": int(dt.timestamp()),
+                "datetime": int(row["datetime"]),
                 "open": row["open"],
                 "high": row["high"],
                 "low": row["low"],
