@@ -176,12 +176,7 @@ export default function RunPage() {
                 )}
               </div>
               <div
-                className="flex flex-col gap-7 min-h-0 overflow-y-auto pr-1"
-                style={{
-                  height: "calc(100vh - 84px)",
-                  scrollbarWidth: "thin",
-                  scrollbarColor: "#cbd5e1 transparent",
-                } as React.CSSProperties}
+                className="flex flex-col gap-7"
               >
                 <SymbolTable
                   data={summary}

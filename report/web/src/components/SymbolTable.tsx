@@ -103,7 +103,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto max-h-[50vh] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" } as React.CSSProperties}>
         <table className="w-full border-collapse text-[13px]" data-ql-id="RUN-TBL-TABLE">
           <thead>
             <tr>
