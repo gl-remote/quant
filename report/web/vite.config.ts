@@ -32,7 +32,9 @@ export default defineConfig({
   plugins: [react()],
   base: "./", // 使用相对路径，支持 file:// 协议访问
   build: {
-    outDir: process.env.VITE_OUT_DIR || "dist", // 输出目录，支持环境变量配置
+    outDir: process.env.VITE_OUT_DIR || "dist",
+    // 单文件打包必然较大，提高 chunk 大小警告阈值
+    chunkSizeWarningLimit: 2000,
     rollupOptions: {
       output: {
         // 输出单个文件，便于内联到 HTML
