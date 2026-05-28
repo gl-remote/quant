@@ -1,309 +1,165 @@
-# Report 模块 - 缓存与增量构建机制
+# report 模块 — 权责划分与模块关系
 
-## 概述
-
-Report 模块负责生成量化回测报告，包含完整的缓存和增量构建机制，显著提升重复构建性能。
+> 版本: 0.2.0 | 最后更新: 2026-05-28
 
 ---
 
-## 模块结构
+## 一、模块定位
+
+`report` 是报告生成模块，负责将回测和优化结果转化为可离线浏览的静态 HTML 报告。它是整个系统的**出口层**——只读数据、不写业务数据、不执行回测。
+
+**一句话**：report 是"把已有的结果变成可看的页面"。
+
+---
+
+## 二、与其他模块的关系
+
+```
+                    ┌──────────────┐
+                    │   cli/main   │  CLI 入口: report 子命令
+                    └──────┬───────┘
+                           │ build_all()
+                           ▼
+                    ┌──────────────┐
+                    │   report/    │  本模块（报告生成）
+                    └──────┬───────┘
+                           │ 读数据
+                           ▼
+                    ┌──────────────┐
+                    │    data/     │  SQLite + peewee + CSV
+                    └──────────────┘
+                           ▲ 读写
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+        backtest/    optimizer/       ...
+        执行回测      参数搜索
+                      (调用 backtest
+                       作为评估器)
+```
+
+| 模块 | report 如何与之交互 | 方向 |
+|------|-------------------|------|
+| `data/` | 通过 `DataManager` 读取 runs/backtests/equity/optuna 数据；通过 CSV 文件读取 K 线原始数据 | 读 |
+| `backtest/` | 不直接交互。回测结果写入 `data/`，report 从中读取 | 无 |
+| `optimizer/` | 不直接交互。optimizer 调用 backtest 评估每个 trial，结果写入 `data/`。report 通过 `data/` + `build_optuna_spec()` 生成图表 | 无 |
+| `strategies/` | 完全不交互 | 无 |
+| `common/` | 可能复用纯函数工具，但不依赖 | 可选 |
+| `config/` | 不直接交互 | 无 |
+| `cli/main.py` | `build_all()` 由 CLI 的 `report` 子命令调用 | 被调用 |
+
+**关键原则**：report 是只读消费者。optimizer 在 backtest 命令内部被调用——optimizer 调用 backtest 作为子过程，每次 trial 写入 `data/`，report 从 `data/` 读取结果生成报告。
+
+---
+
+## 三、内部结构
 
 ```
 report/
-├── builder.py          # 报告构建编排入口
-├── cache/              # 缓存模块
-│   ├── __init__.py     # 统一导出接口
-│   ├── build.py        # BuildCache - 增量构建缓存管理器
-│   └── kline.py        # KlineCache - K线数据转换缓存
-├── writer/             # JSON 数据写入模块
-│   ├── __init__.py
-│   └── json_writer.py
-├── optimizer_report.py # Optuna 优化报告生成
-└── web/                # React 前端应用
+├── builder.py               # 编排入口 — build_all()
+│   ├── 调用 writer 导出 JSON
+│   ├── 调用 reporter 生成图表 spec
+│   ├── 触发前端构建 (npm run build)
+│   └── 写入入口 HTML（数据内联）
+├── writer/
+│   └── json_writer.py       # JSON 导出: run/summary/backtests/equity/kline/optuna/nav
+│       └── _build_kline_dict()  # CSV→dict 转换（唯一实现，builder 通过 import 调用）
+├── cache/
+│   ├── build.py             # BuildCache — 数据指纹增量决策
+│   └── kline.py             # KlineCache — K 线 CSV→JSON 转换结果复用
+├── reporter/
+│   ├── optimizer.py         # build_optuna_spec() — Optuna 图表 ECharts option 生成
+│   └── text.py              # 文本报告生成（如有）
+├── web/                     # React 前端（详见 web/DEVELOPMENT.md）
+│   └── src/ ...
+└── __init__.py              # 公开 build_all
+```
+
+### 权责划分
+
+| 子模块 | 职责 | 不负责 |
+|--------|------|--------|
+| `builder.py` | 编排构建流程、增量决策、HTML 生成 | 具体数据格式转换 |
+| `writer/json_writer.py` | CSV/DB → JSON dict 转换 + 文件写入 | 构建流程、缓存决策 |
+| `cache/` | 数据指纹计算、K 线转换缓存 | 数据格式、构建流程 |
+| `reporter/` | ECharts option 生成、文本报告 | 文件写入、数据读取 |
+| `web/` | 前端渲染、用户交互 | 后端数据逻辑 |
+
+---
+
+## 四、构建流程
+
+```
+build_all(output_dir, run_id)
+│
+├── 增量模式 (incremental=True, 默认)
+│   ├── 逐个比对数据指纹 → 仅导出变更的数据类型
+│   ├── K 线使用 KlineCache 复用转换结果
+│   └── 前端源码哈希比对 → 仅变更时 rebuild
+│
+├── 全量模式 (incremental=False)
+│   └── 无条件导出全部 7 种数据类型 + 重建前端
+│
+├── build_frontend()         ← cd web && npm run build
+│   └── 输出 output/assets/index.js
+│
+└── write_entry_html()       ← 仅数据变更时执行
+    └── 读取所有 output/r*/data/*.json + index.js
+        → 注入为 window.__DATA__ + <script src="...">
+        → 写入 output/index.html
 ```
 
 ---
 
-## 缓存机制
+## 五、数据产出物
 
-### 1. 统一缓存管理器 `BuildCache`
-
-**功能定位**：统一管理所有数据类型的指纹，支持增量构建决策。
-
-```python
-from report.build_cache import BuildCache
-
-cache = BuildCache(output_dir="output")
-
-# 检查数据是否需要更新
-if cache.needs_update("run", run_id=1, new_data=data):
-    # 执行导出
-    cache.update_fingerprint("run", run_id=1, data=data)
-
-# 检查前端是否需要重建
-if cache.needs_frontend_rebuild(web_dir):
-    # 执行前端构建
-    cache.set_frontend_hash(src_hash)
-```
-
-**缓存目录结构**：
-```
-output/.build_cache/
-├── fingerprints/         # 数据指纹存储
-│   ├── run_1.json
-│   ├── summary_1.json
-│   ├── backtests_1.json
-│   ├── equity_1.json
-│   ├── kline_1.json
-│   ├── optuna_1.json
-│   └── nav.json
-└── frontend_hash         # 前端源码哈希
-```
-
-**API 接口**：
-
-| 方法 | 功能 |
-|------|------|
-| `needs_update(data_type, run_id, new_data)` | 检查数据是否变更 |
-| `update_fingerprint(data_type, run_id, data)` | 更新数据指纹 |
-| `needs_frontend_rebuild(web_dir)` | 检查前端是否需要重建 |
-| `set_frontend_hash(src_hash)` | 设置前端源码哈希 |
-| `get_frontend_hash()` | 获取前端源码哈希 |
-| `clear()` | 清空所有缓存 |
+| JSON 文件 | 生成函数 | 数据来源 |
+|-----------|---------|---------|
+| `run.json` | `export_run_json` | `DataManager.get_run_info()` |
+| `summary.json` | `export_summary_json` | `DataManager.get_run_summary()` |
+| `backtests.json` | `export_backtests_json` | `DataManager.get_backtests_for_run()` |
+| `equity.json` | `export_equity_json` | `DataManager.get_equity_data()` |
+| `kline_{symbol}.{interval}.json` | `export_kline_json` | CSV 文件 → `_build_kline_dict()` |
+| `optuna.json` | `export_optuna_json` | `DataManager.get_optuna_data()` + `build_optuna_spec()` |
+| `nav.json` | `write_nav_json` | `DataManager.get_all_runs()` |
 
 ---
 
-### 2. K线转换缓存 `KlineCache`
+## 六、开发约定
 
-**功能定位**：复用 K线 CSV→JSON 转换结果，避免重复计算。
+### 6.1 添加新数据类型
 
-```python
-from report.kline_cache import KlineCache
+1. 在 `writer/json_writer.py` 中新增 `export_xxx_json()` 函数
+2. 在 `writer/__init__.py` 中导出
+3. 在 `builder.py` 的 `build_all()` 中加入调用（增量和全量两个分支）
+4. 在 `_dispatch_export()` 中添加分发 case
+5. 前端如需消费，在 `types/index.ts` 添加对应 interface
 
-cache = KlineCache(output_dir="output")
+### 6.2 修改 JSON 输出结构
 
-# 尝试从缓存获取
-data = cache.get(symbol, csv_path, interval)
-if data is None:
-    # 计算并缓存
-    data = build_kline_dict(...)
-    cache.put(symbol, csv_path, interval, data)
+**必须同步检查**：
+- `writer/json_writer.py` — 修改输出 dict
+- `web/src/types/index.ts` — 同步 TypeScript 类型
+- 前端消费组件 — 可能需适配新字段
 
-# 直接复制缓存到目标路径
-cache.copy_to(symbol, csv_path, interval, dest_path)
-```
+### 6.3 缓存失效
 
-**缓存键设计**：`md5(symbol|csv_path|interval|csv_mtime)`
+以下情况需手动清除缓存（`rm -rf output/.build_cache output/.kline_cache`）：
+- 修改了 `_build_kline_dict` 或任何 JSON 导出逻辑
+- 前端构建工具链升级
+- 缓存与实际数据不一致时
 
----
-
-## 增量构建机制
-
-### `build_all` 函数
-
-**签名**：`build_all(output_dir: str, run_id: int, incremental: bool = True)`
-
-**增量构建流程**：
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    build_all 增量构建流程                    │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌───────────────────────┐                                  │
-│  │ 检查 incremental 参数 │                                  │
-│  └───────────┬───────────┘                                  │
-│              │                                              │
-│     ┌────────┴────────┐                                    │
-│     │                 │                                    │
-│   True             False                                    │
-│     │                 │                                    │
-│     ▼                 ▼                                    │
-│  ┌─────────┐    全量导出所有数据                            │
-│  │BuildCache│    └──────────────────────────────────┐       │
-│  └────┬────┘                                       │       │
-│       │                                            │       │
-│       ▼                                            │       │
-│  ┌─────────────────────────┐                       │       │
-│  │ 逐个比对数据指纹:        │                       │       │
-│  │ - run                   │                       │       │
-│  │ - summary               │                       │       │
-│  │ - backtests             │                       │       │
-│  │ - equity                │                       │       │
-│  │ - kline                 │                       │       │
-│  │ - optuna                │                       │       │
-│  │ - nav                   │                       │       │
-│  └──────┬──────────────────┘                       │       │
-│         │                                          │       │
-│         ▼                                          │       │
-│  ┌─────────────────────────┐                       │       │
-│  │ 数据变更?              │                       │       │
-│  └──────┬──────────────────┘                       │       │
-│    Yes  │  No                                     │       │
-│    ▼    │    ▼                                    │       │
-│ 导出数据 更新指纹 跳过导出                           │       │
-│         │                                          │       │
-│         └─────────────┬────────────────────────────┘       │
-│                       │                                   │
-│                       ▼                                   │
-│           ┌─────────────────────┐                         │
-│           │ build_frontend()    │ ← 前端增量构建            │
-│           └─────────┬───────────┘                         │
-│                     │                                     │
-│                     ▼                                     │
-│           ┌─────────────────────┐                         │
-│           │ 数据变更?          │                         │
-│           └───────┬─────────────┘                         │
-│             Yes   │   No                                 │
-│              ▼    │    ▼                                 │
-│       write_entry_html()  跳过                             │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**日志输出示例**：
-
-```
-# 首次构建
-→ 导出 run（数据已变更）
-→ 导出 summary（数据已变更）
-→ 导出 backtests（数据已变更）
-→ 导出 equity（数据已变更）
-→ 导出 kline（数据已变更）
-→ 导出 optuna（数据已变更）
-→ 导出 nav（数据已变更）
-✓ 构建前端完成
-✓ 写入入口HTML完成
-报告构建结束: 成功=8, 跳过=0, 失败=0, 耗时=35.20s
-
-# 二次构建（无数据变更）
-○ 跳过 run（数据未变更）
-○ 跳过 summary（数据未变更）
-○ 跳过 backtests（数据未变更）
-○ 跳过 equity（数据未变更）
-○ 跳过 kline（数据未变更）
-○ 跳过 optuna（数据未变更）
-○ 跳过 nav（数据未变更）
-前端源码未变更，跳过构建
-○ 数据未变更，跳过写入入口HTML
-报告构建结束: 成功=0, 跳过=7, 失败=0, 耗时=0.85s
-```
-
----
-
-## 性能提升
-
-| 场景 | 优化前 | 优化后 | 提升 |
-|------|-------|-------|------|
-| 首次构建 | ~35s | ~35s | - |
-| 二次构建（无变化） | ~35s | ~1s | **35x** |
-| 前端未变更 | ~35s | ~15s | **2.3x** |
-| K线缓存命中 | ~35s | ~10s | **3.5x** |
-
----
-
-## 核心设计原则
-
-### 1. 数据指纹算法
-
-采用 MD5 哈希算法，基于数据内容生成唯一指纹：
-
-```python
-def _compute_fingerprint(data):
-    content = json.dumps(data, sort_keys=True, default=str)
-    return hashlib.md5(content.encode()).hexdigest()
-```
-
-### 2. 缓存有效性保障
-
-- **K线缓存**：包含 CSV 文件修改时间，文件变更自动失效
-- **数据指纹**：每次构建前重新计算，确保准确性
-- **前端哈希**：基于源码目录内容，文件变更自动检测
-
-### 3. 容错设计
-
-- 单个数据类型导出失败不影响其他类型
-- 前端构建失败仍尝试写入入口HTML（降级处理）
-- 详细的失败日志记录
-
----
-
-## 使用示例
-
-### 基本使用
-
-```python
-from report import build_all
-
-# 默认启用增量构建
-build_all(output_dir="output", run_id=1)
-
-# 强制全量构建
-build_all(output_dir="output", run_id=1, incremental=False)
-```
-
-### 缓存管理
-
-```python
-from report.build_cache import BuildCache
-
-cache = BuildCache("output")
-
-# 获取缓存统计
-stats = cache.get_cache_stats()
-print(stats)
-# {
-#     "cache_dir": "output/.build_cache",
-#     "fingerprint_count": 7,
-#     "total_size_bytes": 1536,
-#     "run_ids": [1, 2, 3]
-# }
-
-# 清空指定 run 的缓存
-cache.clear_fingerprints(run_id=1)
-
-# 清空所有缓存
-cache.clear()
-```
-
----
-
-## 开发注意事项
-
-### 1. 添加新数据类型
-
-如需添加新的数据导出类型，需：
-
-1. 在 `_export_with_incremental` 调用中添加新类型
-2. 在 `_dispatch_export` 函数中添加分发逻辑
-3. 确保数据可被 JSON 序列化（用于指纹计算）
-
-### 2. 缓存失效场景
-
-以下情况会导致缓存失效：
-
-- 数据库中回测记录发生变更
-- CSV 源文件修改时间变化
-- 前端源码目录内容变化
-- 手动删除 `.build_cache` 目录
-
-### 3. 调试模式
-
-设置日志级别为 DEBUG 可查看详细的缓存命中信息：
+### 6.4 调试
 
 ```python
 import logging
-logging.basicConfig(level=logging.DEBUG)
+logging.getLogger("report").setLevel(logging.DEBUG)
 ```
 
 ---
 
-## 版本历史
+## 七、AI 协作提示
 
-| 版本 | 变更说明 |
-|------|---------|
-| v1.0 | 初始版本，无缓存机制 |
-| v1.1 | 添加 KlineCache，复用 K线转换结果 |
-| v1.2 | 添加前端源码哈希缓存 |
-| v1.3 | 引入 BuildCache 统一管理所有数据指纹 |
-| v1.4 | `build_all` 支持增量构建模式 |
+与 AI 讨论 report 模块时，提供以下上下文：
+
+> report 是报告生成模块。它从 `data/` 模块读取数据（通过 DataManager），导出为 JSON 文件，然后构建 React 前端（`web/`），最后将所有 JSON + JS 内联到单个 HTML 文件中。前端通过 `window.__DATA__` 读取数据，不使用 fetch()。时区处理：全程 UTC timestamp，显示层用 `new Date()` 转本地时区。`builder.py` 是编排入口。`_build_kline_dict` 的唯一实现在 `writer/json_writer.py`，`builder.py` 通过 import 调用。
