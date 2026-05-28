@@ -21,18 +21,9 @@ interface Props {
   loading?: boolean;
 }
 
-/**
- * 将 UTC Unix 时间戳转为 lightweight-charts 的 Time 类型。
- *
- * lightweight-charts 将 UTCTimestamp（number）在时间轴上按浏览器本地时区显示，
- * 但在当前版本中实际显示为 UTC 时间。因此需要加上本地时区偏移量，
- * 使图表时间轴显示为本地时间。
- */
 function toChartTime(dt: string | number): Time {
   if (typeof dt === "number") {
-    // lightweight-charts 将 number 当作 UTC 显示，加本地时区偏移补偿
-    const tzOffsetSec = -new Date().getTimezoneOffset() * 60;
-    return (dt + tzOffsetSec) as Time;
+    return dt as Time;
   }
   // 处理字符串格式的时间戳
   if (!isNaN(Number(dt))) {
