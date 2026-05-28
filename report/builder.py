@@ -13,332 +13,289 @@ import json  # 用于JSON序列化
 import logging  # 用于日志记录
 import os  # 用于操作系统相关操作
 import subprocess  # 用于执行子进程
-import sqlite3  # 用于SQLite数据库操作
 from pathlib import Path  # 用于路径操作
+from typing import Callable
 
 import pandas as pd  # 用于数据处理
 
-from .kline_cache import KlineCache  # 导入K线缓存类
+from data import DataManager  # 导入数据管理器
+from .cache import BuildCache  # 导入统一缓存管理器
+from .writer import (  # 导入数据写入模块
+    export_run_json,
+    export_summary_json,
+    export_backtests_json,
+    export_equity_json,
+    export_kline_json,
+    export_optuna_json,
+    write_nav_json,
+)
 
 logger = logging.getLogger(__name__)  # 获取当前模块的日志记录器
+
+_data_manager: DataManager | None = None
+
+def get_data_manager() -> DataManager:
+    """获取数据管理器实例（延迟初始化）"""
+    global _data_manager
+    if _data_manager is None:
+        _data_manager = DataManager()
+    return _data_manager
 
 
 # ── 公开 API ──────────────────────────────────────────────────
 
 
-def build_all(db_path: str, output_dir: str, run_id: int) -> None:
+def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
     """
-    回测完成后统一入口
+    回测完成后统一入口（支持增量构建）
 
     执行步骤：
-    1. 导出全部 JSON 数据文件
-    2. 增量构建 React 前端
-    3. 写入入口 HTML
+    1. 增量导出 JSON 数据文件（基于数据指纹）
+    2. 增量构建 React 前端（基于源码哈希）
+    3. 写入入口 HTML（仅在有数据变更时）
 
     Args:
-        db_path: SQLite 数据库路径
         output_dir: 输出根目录 (e.g. "output")
         run_id: 回测运行ID
+        incremental: 是否启用增量构建（默认启用）
     """
-    # 依次导出各类数据
-    export_run_json(db_path, output_dir, run_id)
-    export_summary_json(db_path, output_dir, run_id)
-    export_backtests_json(db_path, output_dir, run_id)
-    export_equity_json(db_path, output_dir, run_id)
-    export_kline_json(db_path, output_dir, run_id)
-    export_optuna_json(db_path, output_dir, run_id)
-    write_nav_json(db_path, output_dir)
-    # 构建前端和入口HTML
-    build_frontend(output_dir)
-    write_entry_html(output_dir)
-    logger.info("报告构建完成: output/r%d/", run_id)
-
-
-# ── JSON 导出函数 ────────────────────────────────────────────────
-
-
-def export_run_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出单次 run 的元信息到 JSON 文件
+    import time
+    start_time = time.time()
+    success_count = 0
+    fail_count = 0
+    skip_count = 0
+    failed_tasks = []
+    has_data_change = False
     
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
-    """
-    # 连接数据库并查询运行信息
-    conn = sqlite3.connect(db_path)
-    row = conn.execute(
-        "SELECT id, strategy, engine, symbols, status, created_at "
-        "FROM runs WHERE id=?",
-        (run_id,),
-    ).fetchone()
-    conn.close()
-
-    # 检查是否找到记录
-    if not row:
-        logger.warning("run_id=%d 不存在", run_id)
-        return
-
-    # 构建数据字典
-    data = {
-        "id": row[0],
-        "strategy": row[1],
-        "engine": row[2],
-        "symbols": row[3],
-        "status": row[4],
-        "created_at": row[5],
-    }
-    # 写入JSON文件
-    _write_json(output_dir, f"r{run_id}/data/run.json", data)
-
-
-def export_summary_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出品种汇总表（每品种最优回测记录）
+    logger.info("开始构建报告: run_id=%d, output_dir=%s, incremental=%s", 
+                run_id, output_dir, incremental)
     
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
-    """
-    from .queries.backtest import get_run_summary  # 导入查询函数
-    # 获取汇总数据并写入
-    data = get_run_summary(db_path, run_id)
-    _write_json(output_dir, f"r{run_id}/data/summary.json", data)
+    dm = get_data_manager()
+    cache = BuildCache(output_dir) if incremental else None
 
-
-def export_backtests_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出所有回测记录完整信息（含指标、参数、日线数据）
+    if incremental and cache:
+        executed_count = 0
+        if _export_with_incremental(
+            cache, dm, output_dir, run_id, "run", 
+            lambda: dm.get_run_info(run_id)
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_with_incremental(
+            cache, dm, output_dir, run_id, "summary",
+            lambda: dm.get_run_summary(run_id)
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_with_incremental(
+            cache, dm, output_dir, run_id, "backtests",
+            lambda: dm.get_backtests_for_run(run_id)
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_equity_with_incremental(
+            cache, dm, output_dir, run_id
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_kline_with_incremental(
+            cache, dm, output_dir, run_id
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_with_incremental(
+            cache, dm, output_dir, run_id, "optuna",
+            lambda: dm.get_optuna_data(run_id)
+        ):
+            executed_count += 1
+            has_data_change = True
+        if _export_nav_with_incremental(
+            cache, dm, output_dir
+        ):
+            executed_count += 1
+            has_data_change = True
+        skip_count = 7 - executed_count
+    else:
+        export_run_json(output_dir, run_id)
+        export_summary_json(output_dir, run_id)
+        export_backtests_json(output_dir, run_id)
+        export_equity_json(output_dir, run_id)
+        export_kline_json(output_dir, run_id)
+        export_optuna_json(output_dir, run_id)
+        write_nav_json(output_dir)
+        success_count = 7
+        skip_count = 0
+        has_data_change = True
     
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
-    """
-    conn = sqlite3.connect(db_path)
-    # 查询所有成功的回测记录
-    backtests = conn.execute(
-        "SELECT id, symbol, strategy, status, start_date, end_date, "
-        "initial_capital, end_balance, total_return, sharpe_ratio, "
-        "max_drawdown, win_rate, total_trades, data_src, kline_interval, "
-        "strategy_version, git_hash "
-        "FROM backtests WHERE run_id=? AND status='success'",
-        (run_id,),
-    ).fetchall()
+    # 构建前端
+    try:
+        build_frontend(output_dir)
+        logger.info("✓ 构建前端完成")
+        success_count += 1
+    except Exception as e:
+        logger.error("✗ 构建前端失败: %s", str(e))
+        fail_count += 1
+        failed_tasks.append(("构建前端", str(e)))
 
-    result = []
-    for bt in backtests:
-        bt_id = bt[0]
-        # 查询回测参数
-        params = conn.execute(
-            "SELECT param_name, param_value FROM backtest_params "
-            "WHERE backtest_id=? ORDER BY param_name",
-            (bt_id,),
-        ).fetchall()
-
-        # 查询日线数据
-        daily = conn.execute(
-            "SELECT date, equity, daily_return, drawdown "
-            "FROM backtest_daily WHERE backtest_id=? ORDER BY date",
-            (bt_id,),
-        ).fetchall()
-
-        # 格式化日线数据
-        daily_data = [
-            {"date": d[0], "equity": d[1], "daily_return": d[2], "drawdown": d[3]}
-            for d in daily
-        ]
-
-        # 构建完整回测记录
-        result.append({
-            "id": bt_id,
-            "symbol": bt[1],
-            "strategy": bt[2],
-            "status": bt[3],
-            "start_date": bt[4],
-            "end_date": bt[5],
-            "initial_capital": bt[6],
-            "end_balance": bt[7],
-            "total_return": bt[8],
-            "sharpe_ratio": bt[9],
-            "max_drawdown": bt[10],
-            "win_rate": bt[11],
-            "total_trades": bt[12],
-            "data_src": bt[13],
-            "kline_interval": bt[14],
-            "strategy_version": bt[15],
-            "git_hash": bt[16],
-            "params": [{"name": p[0], "value": p[1]} for p in params],
-            "daily": daily_data,
-        })
-    conn.close()
-
-    # 写入JSON文件
-    _write_json(output_dir, f"r{run_id}/data/backtests.json", result)
-
-
-def export_equity_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出资金曲线数据（每品种最优回测的日线权益/回撤）
+    # 写入入口 HTML（仅在有数据变更时）
+    if has_data_change:
+        try:
+            write_entry_html(output_dir)
+            logger.info("✓ 写入入口HTML完成")
+            success_count += 1
+        except Exception as e:
+            logger.error("✗ 写入入口HTML失败: %s", str(e))
+            fail_count += 1
+            failed_tasks.append(("写入入口HTML", str(e)))
+    else:
+        logger.info("○ 数据未变更，跳过写入入口HTML")
     
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
-    """
-    from .queries.backtest import get_equity_data, get_run_summary
+    duration = time.time() - start_time
+    logger.info("报告构建结束: 成功=%d, 跳过=%d, 失败=%d, 耗时=%.2fs", 
+                success_count, skip_count, fail_count, duration)
+    
+    if failed_tasks:
+        logger.warning("失败任务列表:")
+        for task_name, error in failed_tasks:
+            logger.warning("  - %s: %s", task_name, error)
 
-    # 获取汇总信息
-    summary = get_run_summary(db_path, run_id)
-    result = {}
-    # 为每个品种获取权益数据
+
+def _export_with_incremental(
+    cache: BuildCache,
+    dm: DataManager,
+    output_dir: str,
+    run_id: int,
+    data_type: str,
+    data_getter: Callable[[], object],
+) -> bool:
+    """
+    使用增量检查导出数据
+    
+    Returns:
+        bool: 数据是否实际执行了导出
+    """
+    new_data = data_getter()
+    if cache.needs_update(data_type, run_id, new_data):
+        logger.info("→ 导出 %s（数据已变更）", data_type)
+        _dispatch_export(data_type, output_dir, run_id)
+        cache.update_fingerprint(data_type, run_id, new_data)
+        return True
+    else:
+        logger.info("○ 跳过 %s（数据未变更）", data_type)
+        return False
+
+
+def _export_equity_with_incremental(
+    cache: BuildCache,
+    dm: DataManager,
+    output_dir: str,
+    run_id: int,
+) -> bool:
+    """导出 equity 数据（带增量检查）"""
+    summary = dm.get_run_summary(run_id)
+    equity_data = {}
     for s in summary:
+        s_id = s.get("id")
+        if not s_id:
+            continue
+        equity = dm.get_equity_data(int(s_id))  # type: ignore[call-overload]
+        if equity:
+            equity_data[str(s["symbol"])] = equity
+    
+    if cache.needs_update("equity", run_id, equity_data):
+        logger.info("→ 导出 equity（数据已变更）")
+        export_equity_json(output_dir, run_id)
+        cache.update_fingerprint("equity", run_id, equity_data)
+        return True
+    else:
+        logger.info("○ 跳过 equity（数据未变更）")
+        return False
+
+
+def _export_kline_with_incremental(
+    cache: BuildCache,
+    dm: DataManager,
+    output_dir: str,
+    run_id: int,
+) -> bool:
+    """导出 kline 数据（使用 KlineCache 复用转换结果）"""
+    from .cache import KlineCache
+    summary = dm.get_run_summary(run_id)
+    kline_changed = False
+    cache_instance = KlineCache(output_dir)
+    
+    for s in summary:
+        symbol = str(s["symbol"])
         if not s.get("id"):
             continue
-        equity = get_equity_data(db_path, s["symbol"], s["id"])
-        if equity:
-            result[s["symbol"]] = equity
-    _write_json(output_dir, f"r{run_id}/data/equity.json", result)
-
-
-def export_kline_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出 K 线数据 JSON（使用 KlineCache 避免重复转换）
-
-    从最优回测记录获取各品种的 CSV 路径和日期范围，
-    按品种独立生成 kline_{symbol}.json。
-    """
-    from .queries.backtest import get_run_summary
-
-    cache = KlineCache(output_dir)
-    summary = get_run_summary(db_path, run_id)
-
-    conn = sqlite3.connect(db_path)
-    for s in summary:
-        symbol = s["symbol"]
-        best_id = s.get("id")
-        if not best_id:
-            continue
-
-        bt = conn.execute(
-            "SELECT symbol, data_src, start_date, end_date, kline_interval "
-            "FROM backtests WHERE id=?",
-            (best_id,),
-        ).fetchone()
-
-        if not bt or not bt[1]:
-            continue
-
-        data_src = bt[1]
-        start_date = bt[2]
-        end_date = bt[3]
-        interval = bt[4] or "1m"
+        
+        data_src = str(s.get("data_src", ""))
+        start_date = str(s.get("start_date")) if s.get("start_date") else None
+        end_date = str(s.get("end_date")) if s.get("end_date") else None
+        interval = str(s.get("kline_interval") or "1m")
         dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.json"
-
-        # 尝试从缓存复制
-        if cache.copy_to(symbol, data_src, interval, dest):
-            logger.info("K线缓存命中: %s", symbol)
+        
+        if not data_src:
             continue
-
-        # 检查数据源文件是否存在
-        if not data_src or not Path(data_src).exists():
+        
+        # 尝试从缓存复制
+        if cache_instance.copy_to(symbol, data_src, interval, dest):
+            logger.debug("K线缓存命中: %s", symbol)
+            continue
+        
+        # 缓存未命中，需要转换
+        if not Path(data_src).exists():
             logger.warning("K线数据源不存在: %s → %s", symbol, data_src)
             continue
-
-        # 构建K线字典
-        kline_dict = _build_kline_dict(
-            data_src, symbol, interval, start_date, end_date
-        )
+        
+        kline_dict = _build_kline_dict(data_src, symbol, interval, start_date, end_date)
         if kline_dict:
-            cache.put(symbol, data_src, interval, kline_dict)
+            cache_instance.put(symbol, data_src, interval, kline_dict)
             dest.parent.mkdir(parents=True, exist_ok=True)
+            import json
             with open(dest, "w", encoding="utf-8") as f:
                 json.dump(kline_dict, f, ensure_ascii=False, default=str)
-            logger.info("K线已导出: %s → %s", symbol, dest.name)
-
-    conn.close()
-
-
-def export_optuna_json(db_path: str, output_dir: str, run_id: int) -> None:
-    """
-    导出 Optuna 优化数据 JSON（含图表配置）
+            logger.info("→ K线已导出: %s", symbol)
+            kline_changed = True
     
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-        run_id: 运行ID
-    """
-    from .queries.optuna import get_optuna_data
-
-    # 获取Optuna数据
-    optuna_data = get_optuna_data(db_path, run_id)
-    if not optuna_data:
-        return
-
-    # 查询study名称
-    conn = sqlite3.connect(db_path)
-    study_rows = conn.execute(
-        "SELECT study_name FROM run_studies WHERE run_id=?", (run_id,)
-    ).fetchall()
-    conn.close()
-
-    # 构建图表配置
-    charts_spec = {}
-    if study_rows:
-        try:
-            from .optimizer_report import build_optuna_spec
-            study_db_url = f"sqlite:///{os.path.abspath(db_path)}"
-            charts_spec = build_optuna_spec(study_db_url, study_rows[0][0])
-        except Exception as e:
-            logger.warning("Optuna chart spec 生成失败: %s", e)
-
-    best_params_raw = optuna_data.get("best_params") or []
-    best_params_from_optuna = charts_spec.get("best_params") or []
-    merged_best_params = best_params_from_optuna if best_params_from_optuna else best_params_raw
-
-    result = {
-        "study_name": charts_spec.get("study_name") or optuna_data.get("study_name"),
-        "trial_count": optuna_data.get("trial_count"),
-        "trial_nums": optuna_data.get("trial_nums"),
-        "trial_values": optuna_data.get("trial_values"),
-        "best_params": merged_best_params,
-        "best_value": charts_spec.get("best_value"),
-        "optimization_history": charts_spec.get("optimization_history"),
-        "param_importances": charts_spec.get("param_importances"),
-        "parallel_coordinate": charts_spec.get("parallel_coordinate"),
-        "contour": charts_spec.get("contour"),
-        "param_scatter": optuna_data.get("param_scatter"),
-    }
-    _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
+    if kline_changed:
+        cache.update_fingerprint("kline", run_id, {"symbols": len(summary)})
+    return kline_changed
 
 
-def write_nav_json(db_path: str, output_dir: str) -> None:
-    """
-    导出全局导航数据 JSON（所有运行记录）
-    
-    Args:
-        db_path: 数据库路径
-        output_dir: 输出目录
-    """
-    conn = sqlite3.connect(db_path)
-    # 查询所有运行记录
-    rows = conn.execute(
-        "SELECT id, strategy, engine, symbols, status, created_at "
-        "FROM runs ORDER BY id DESC"
-    ).fetchall()
-    conn.close()
+def _export_nav_with_incremental(
+    cache: BuildCache,
+    dm: DataManager,
+    output_dir: str,
+) -> bool:
+    """导出 nav 数据（带增量检查）"""
+    runs = dm.get_all_runs()
+    if cache.needs_update("nav", None, runs):
+        logger.info("→ 导出 nav（数据已变更）")
+        write_nav_json(output_dir)
+        cache.update_fingerprint("nav", None, runs)
+        return True
+    else:
+        logger.info("○ 跳过 nav（数据未变更）")
+        return False
 
-    # 格式化运行记录
-    runs = [
-        {
-            "id": r[0], "strategy": r[1], "engine": r[2],
-            "symbols": r[3], "status": r[4], "created": r[5],
-        }
-        for r in rows
-    ]
-    _write_json(output_dir, "data/nav.json", runs)
+
+def _dispatch_export(data_type: str, output_dir: str, run_id: int) -> None:
+    """根据数据类型分发导出任务"""
+    if data_type == "run":
+        export_run_json(output_dir, run_id)
+    elif data_type == "summary":
+        export_summary_json(output_dir, run_id)
+    elif data_type == "backtests":
+        export_backtests_json(output_dir, run_id)
+    elif data_type == "equity":
+        export_equity_json(output_dir, run_id)
+    elif data_type == "kline":
+        export_kline_json(output_dir, run_id)
+    elif data_type == "optuna":
+        export_optuna_json(output_dir, run_id)
+    elif data_type == "nav":
+        write_nav_json(output_dir)
 
 
 # ── 前端构建相关函数 ──────────────────────────────────────────────────
@@ -346,7 +303,9 @@ def write_nav_json(db_path: str, output_dir: str) -> None:
 
 def build_frontend(output_dir: str) -> None:
     """
-    检查 React 源码 hash，必要时触发 npm run build，并复制 vendor 文件
+    检查 React 源码 hash，必要时触发 npm run build
+    
+    使用 BuildCache 统一管理前端构建缓存，支持增量构建。
     
     Args:
         output_dir: 输出目录
@@ -354,40 +313,33 @@ def build_frontend(output_dir: str) -> None:
     web_dir = Path(__file__).parent / "web"  # 前端工程目录
     assets_dir = Path(output_dir) / "assets"  # 输出资源目录
 
-    # 检查前端工程是否初始化
     if not (web_dir / "package.json").exists():
         logger.info("前端工程未初始化，跳过构建")
         return
 
-    # 计算源码哈希值，用于判断是否需要重新构建
-    src_hash = _compute_dir_hash(web_dir / "src") + _compute_dir_hash(
-        web_dir / "public"
-    )
-    hash_file = assets_dir / ".build_hash"  # 哈希值存储文件
-
-    # 检查是否需要重新构建
-    needs_build = True
-    if hash_file.exists() and hash_file.read_text().strip() == src_hash:
+    cache = BuildCache(output_dir)
+    
+    if not cache.needs_frontend_rebuild(web_dir):
         logger.info("前端源码未变更，跳过构建")
-        needs_build = False
+        return
 
-    # 执行构建
-    if needs_build:
-        logger.info("开始前端构建...")
-        _clean_old_bundles(assets_dir)  # 清理旧构建产物
-        # 运行npm构建
-        subprocess.run(
-            ["npm", "run", "build"],
-            cwd=str(web_dir),
-            check=True,
-            env={
-                **os.environ,
-                "VITE_OUT_DIR": str(assets_dir.absolute()),
-            },
-        )
-        assets_dir.mkdir(parents=True, exist_ok=True)
-        hash_file.write_text(src_hash)  # 保存新哈希值
-        logger.info("前端构建完成")
+    logger.info("开始前端构建...")
+    _clean_old_bundles(assets_dir)
+    subprocess.run(
+        ["npm", "run", "build"],
+        cwd=str(web_dir),
+        check=True,
+        env={
+            **os.environ,
+            "VITE_OUT_DIR": str(assets_dir.absolute()),
+        },
+    )
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    cache.set_frontend_hash(
+        cache.compute_dir_hash(web_dir / "src") + 
+        cache.compute_dir_hash(web_dir / "public")
+    )
+    logger.info("前端构建完成")
 
 def write_entry_html(output_dir: str) -> None:
     """

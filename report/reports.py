@@ -137,7 +137,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         f"  初始资金:   {bt.initial_capital:,.2f}",
         f"  最终权益:   {_get_attr(bt, 'end_balance', 0):,.2f}",
         f"  总收益率:   {format_pct(bt.total_return)}",
-        f"  年化收益:   {format_pct(_get_attr(bt, 'annual_return'))}",  # pyright: ignore[reportArgumentType]
+        f"  年化收益:   {format_pct(_get_attr(bt, 'annual_return'))}",  # type: ignore[arg-type]
         "",
         "【交易统计】",
         f"  总交易次数: {bt.total_trades or 0}",
@@ -149,7 +149,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "【风险评估】",
         f"  夏普比率:   {format_float(bt.sharpe_ratio)}",
         f"  最大回撤:   {format_pct(bt.max_drawdown)}",
-        f"  日均波动率: {format_float(_get_attr(bt, 'daily_std'))}",  # pyright: ignore[reportArgumentType]
+        f"  日均波动率: {format_float(_get_attr(bt, 'daily_std'))}",  # type: ignore[arg-type]
         "",
         "【交易明细】",
         f"  成交笔数:   {len(trades)} (开仓{buy_count} / 平仓{sell_count})",
@@ -191,7 +191,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
                 f"  {_get_attr(t, 'datetime'):<20} "
                 f"{_get_attr(t, 'symbol'):<16} "
                 f"{d_tag:>5} {o_tag:>4} "
-                f"{ensure_float(price):>9.2f} "  # pyright: ignore[reportArgumentType]
+                f"{ensure_float(price):>9.2f} "  # type: ignore[arg-type]
                 f"{qty:>4}"
             )
 

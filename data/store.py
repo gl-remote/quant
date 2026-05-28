@@ -60,14 +60,14 @@ class DataStore:
         self._insert_count: int = 0
         self._init_tables()
 
-    def _init_tables(self):
+    def _init_tables(self) -> None:
         """初始化数据库表"""
         database.create_tables(
             [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily],
             safe=True,
         )
 
-    def close(self):
+    def close(self) -> None:
         """关闭数据库连接"""
         if not database.is_closed():
             database.close()
@@ -116,10 +116,10 @@ class DataStore:
                 .delete()
                 .where(OperationLog.id < cutoff_id)
                 .execute()
-            )
+            )  # type: ignore[no-any-return]
             if deleted > 0:
                 logger.info(f"操作日志自动清理: 删除 {deleted} 条旧记录")
-            return deleted
+            return deleted  # type: ignore[no-any-return]
         except Exception as e:
             logger.warning(f"操作日志清理失败: {e}")
             return 0
@@ -196,7 +196,7 @@ class DataStore:
     def create_run(self, strategy: str, engine: str, symbols: int) -> int:
         """创建一次批量回测运行记录，返回 run_id"""
         r = Run.create(strategy=strategy, engine=engine, symbols=symbols)
-        return r.id
+        return r.id  # type: ignore[no-any-return]
 
     def finish_run(self, run_id: int, status: str = "success") -> None:
         """标记运行完成"""
@@ -231,12 +231,12 @@ class DataStore:
         """
         now = datetime.now()
 
-        total_trades = statistics.get('total_trade_count', statistics.get('total_trades', 0)) or 0
-        initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))
-        end_balance = float(statistics.get('end_balance', initial_capital))
+        total_trades: int = int(statistics.get('total_trade_count', statistics.get('total_trades', 0)) or 0)  # type: ignore[call-overload]
+        initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))  # type: ignore[arg-type]
+        end_balance = float(statistics.get('end_balance', initial_capital))  # type: ignore[arg-type]
         total_return = calc_total_return(initial_capital, end_balance, total_trades=total_trades)
-        win_trades_v = statistics.get('profit_days', statistics.get('win_trades', 0))
-        loss_trades_v = statistics.get('loss_days', statistics.get('loss_trades', 0))
+        win_trades_v: int = int(statistics.get('profit_days', statistics.get('win_trades', 0)) or 0)  # type: ignore[call-overload]
+        loss_trades_v: int = int(statistics.get('loss_days', statistics.get('loss_trades', 0)) or 0)  # type: ignore[call-overload]
         win_rate_val = calc_win_rate(win_trades_v, total_trades)
 
         bt = Backtest.create(
@@ -268,7 +268,7 @@ class DataStore:
             avg_loss=statistics.get('average_loss'),
             win_loss_ratio=statistics.get('win_loss_ratio'),
             sharpe_ratio=statistics.get('sharpe_ratio'),
-            max_drawdown=_normalize_max_dd(statistics.get('max_drawdown')),
+            max_drawdown=_normalize_max_dd(float(statistics.get('max_drawdown')) if statistics.get('max_drawdown') else None),  # type: ignore[arg-type]
             max_drawdown_duration=statistics.get('max_drawdown_duration',
                                                  statistics.get('max_ddpercent_duration', 0)),
             daily_std=statistics.get('return_std', statistics.get('daily_std')),
@@ -281,7 +281,7 @@ class DataStore:
         if params:
             for name, value in params.items():
                 BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
-        return bt.id
+        return bt.id  # type: ignore[no-any-return]
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
@@ -295,11 +295,11 @@ class DataStore:
                 'datetime': trade.get('datetime', ''),
                 'direction': str(trade.get('direction', '')).lower(),
                 'offset': str(trade.get('offset', 'open')).lower(),
-                'open_price': float(trade.get('open_price', trade.get('price', 0))),
-                'close_price': float(trade.get('close_price', trade.get('price', 0))),
-                'quantity': int(trade.get('quantity', trade.get('volume', 0))),
-                'pnl': float(trade.get('pnl', 0)),
-                'commission': float(trade.get('commission', 0)),
+                'open_price': float(trade.get('open_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
+                'close_price': float(trade.get('close_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
+                'quantity': int(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[call-overload]
+                'pnl': float(trade.get('pnl', 0.0)),  # type: ignore[arg-type]
+                'commission': float(trade.get('commission', 0.0)),  # type: ignore[arg-type]
                 'created_at': now,
             })
 
@@ -381,8 +381,8 @@ class DataStore:
                 continue
             date_str = str(dt).split(' ')[0] if ' ' in str(dt) else str(dt).split('T')[0]
 
-            net_pnl = float(daily.get('net_pnl', daily.get('daily_return', 0)))
-            equity = float(daily.get('balance', daily.get('equity', 0)))
+            net_pnl = float(daily.get('net_pnl', daily.get('daily_return', 0.0)))  # type: ignore[arg-type]
+            equity = float(daily.get('balance', daily.get('equity', 0.0)))  # type: ignore[arg-type]
             if equity > peak:
                 peak = equity
             drawdown = equity - peak if peak != 0 else 0.0
@@ -422,6 +422,212 @@ class DataStore:
                 'drawdown': row.get('drawdown', 0),
             })
         return results
+
+    def get_run_info(self, run_id: int) -> dict[str, object] | None:
+        """获取运行信息"""
+        row = Run.select().where(Run.id == run_id).dicts()
+        result = next(iter(row), None)
+        if result:
+            for field in ['created_at', 'updated_at']:
+                if result.get(field) is not None:
+                    result[field] = str(result[field])
+        return result
+
+    def get_all_runs(self) -> list[dict[str, object]]:
+        """获取所有运行记录"""
+        rows = list(
+            Run
+            .select(Run.id, Run.strategy, Run.engine, Run.symbols, Run.status, Run.created_at)
+            .order_by(Run.id.desc())
+            .dicts()
+        )
+        result = []
+        for r in rows:
+            result.append({
+                'id': r['id'],
+                'strategy': r['strategy'],
+                'engine': r['engine'],
+                'symbols': r['symbols'],
+                'status': r['status'],
+                'created': str(r['created_at']),
+            })
+        return result
+
+    def get_run_summary(self, run_id: int) -> list[dict[str, object]]:
+        """获取每品种最优回测记录"""
+        rows = list(
+            Backtest
+            .select(
+                Backtest.id,
+                Backtest.symbol,
+                Backtest.total_return,
+                Backtest.total_trades,
+                Backtest.win_rate,
+                Backtest.max_drawdown,
+                Backtest.sharpe_ratio,
+                Backtest.end_balance,
+                Backtest.data_src,
+                Backtest.start_date,
+                Backtest.end_date,
+                Backtest.kline_interval,
+            )
+            .where(Backtest.run_id == run_id, Backtest.status == 'success')
+            .order_by(Backtest.symbol, Backtest.total_return.desc())
+            .dicts()
+        )
+
+        best: dict[str, dict[str, object]] = {}
+        for r in rows:
+            sym = r['symbol']
+            total_return = float(r['total_return'] or 0)
+            if sym not in best or total_return > float(best[sym].get('total_return') or 0):  # type: ignore[arg-type]
+                best[sym] = {
+                    'id': r['id'],
+                    'symbol': sym,
+                    'total_return': total_return,
+                    'total_trades': r['total_trades'] or 0,
+                    'win_rate': float(r['win_rate'] or 0) * 100,
+                    'max_drawdown': float(r['max_drawdown'] or 0) * 100,
+                    'sharpe': float(r['sharpe_ratio'] or 0),
+                    'end_balance': float(r['end_balance'] or 0),
+                    'ret_cls': 'badge-green' if total_return > 0 else 'badge-red',
+                    'sr_cls': 'badge-green' if (r['sharpe_ratio'] or 0) > 0 else 'badge-red',
+                    'data_src': r['data_src'],
+                    'start_date': r['start_date'],
+                    'end_date': r['end_date'],
+                    'kline_interval': r['kline_interval'],
+                }
+        return [best[s] for s in sorted(best)]
+
+    def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
+        """获取某 run 下所有回测记录（含参数和日线数据）"""
+        backtests = list(
+            Backtest
+            .select()
+            .where(Backtest.run_id == run_id, Backtest.status == 'success')
+            .dicts()
+        )
+
+        result = []
+        for bt in backtests:
+            bt_id = bt['id']
+            
+            params = list(
+                BacktestParam
+                .select(BacktestParam.param_name, BacktestParam.param_value)
+                .where(BacktestParam.backtest == bt_id)
+                .order_by(BacktestParam.param_name)
+                .dicts()
+            )
+
+            daily = self.query_daily(bt_id)
+
+            result.append({
+                'id': bt_id,
+                'symbol': bt['symbol'],
+                'strategy': bt['strategy'],
+                'status': bt['status'],
+                'start_date': bt['start_date'],
+                'end_date': bt['end_date'],
+                'initial_capital': bt['initial_capital'],
+                'end_balance': bt['end_balance'],
+                'total_return': bt['total_return'],
+                'sharpe_ratio': bt['sharpe_ratio'],
+                'max_drawdown': bt['max_drawdown'],
+                'win_rate': bt['win_rate'],
+                'total_trades': bt['total_trades'],
+                'data_src': bt['data_src'],
+                'kline_interval': bt['kline_interval'],
+                'strategy_version': bt['strategy_version'],
+                'git_hash': bt['git_hash'],
+                'params': [{'name': p['param_name'], 'value': p['param_value']} for p in params],
+                'daily': daily,
+            })
+        return result
+
+    def get_equity_data(self, backtest_id: int) -> dict[str, object] | None:
+        """获取指定回测记录的资金曲线数据"""
+        rows = self.query_daily(backtest_id)
+        if not rows:
+            return None
+        
+        return {
+            'dates': [r['date'] for r in rows],
+            'equity': [float(r['equity']) for r in rows],  # type: ignore[arg-type]
+            'drawdown': [float(r['drawdown']) for r in rows],  # type: ignore[arg-type]
+        }
+
+    def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
+        """获取 Optuna 优化数据"""
+        study_rows = list(
+            RunStudy
+            .select(RunStudy.study_name)
+            .where(RunStudy.run_id == run_id)
+            .dicts()
+        )
+        if not study_rows:
+            return None
+
+        study_name = study_rows[0]['study_name']
+        
+        from playhouse.shortcuts import RequeryMixin
+        
+        trials = list(
+            database.execute_sql("""
+                SELECT t.number, tv.value FROM trials t
+                LEFT JOIN trial_values tv ON t.trial_id = tv.trial_id
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) 
+                  AND t.state='COMPLETE'
+                ORDER BY t.number
+            """, (study_name,))
+        )
+
+        params_rows = list(
+            database.execute_sql("""
+                SELECT t.number, tp.param_name, tp.param_value
+                FROM trials t JOIN trial_params tp ON t.trial_id = tp.trial_id
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) 
+                  AND t.state='COMPLETE'
+                ORDER BY t.number, tp.param_name
+            """, (study_name,))
+        )
+
+        best = list(
+            database.execute_sql("""
+                SELECT tp.param_name, tp.param_value FROM trial_params tp
+                JOIN trial_values tv ON tp.trial_id = tv.trial_id
+                JOIN trials t ON t.trial_id = tp.trial_id
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
+                  AND tv.value=(
+                      SELECT MIN(tv2.value) FROM trial_values tv2
+                      JOIN trials t2 ON tv2.trial_id=t2.trial_id 
+                      WHERE t2.study_id=(SELECT study_id FROM studies WHERE study_name=?))
+            """, (study_name, study_name))
+        )
+
+        trial_nums = [t[0] for t in trials]
+        trial_values = [float(t[1] or 0) for t in trials]  # type: ignore[arg-type]
+
+        param_names = sorted(set(p[1] for p in params_rows))
+        param_scatter = None
+        if len(param_names) >= 2:
+            p1, p2 = param_names[0], param_names[1]
+            param_scatter = {
+                'x_label': p1, 'y_label': p2,
+                'x_vals': [float(p[2]) for p in params_rows if p[1] == p1],  # type: ignore[arg-type]
+                'y_vals': [float(p[2]) for p in params_rows if p[1] == p2],  # type: ignore[arg-type]
+                'scores': trial_values,
+            }
+
+        return {
+            'study_name': study_name,
+            'trial_count': len(trials),
+            'trial_nums': trial_nums,
+            'trial_values': trial_values,
+            'best_params': [{'name': p[0], 'value': float(p[1])} for p in best],
+            'param_scatter': param_scatter,
+            'report_file': f"optimization_{study_name}.html",
+        }
 
     def delete_backtest(self, backtest_id: int) -> bool:
         """硬删除回测记录及其关联的交易明细和每日资金曲线

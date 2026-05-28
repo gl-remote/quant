@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import Callable, ClassVar
 
 import pandas as pd
 
@@ -80,10 +80,10 @@ class BaseDataSource(ABC):
 
         df = df.reset_index(drop=True)
 
-        return df[Qlib_COLUMNS]
+        return df[Qlib_COLUMNS]  # type: ignore[no-any-return]
 
     def _retry_fetch(
-        self, fetch_fn, symbol: str, start_date: str, end_date: str, interval: str
+        self, fetch_fn: Callable[[], pd.DataFrame], symbol: str, start_date: str, end_date: str, interval: str
     ) -> pd.DataFrame:
         """带指数退避重试的通用 fetch 包装"""
         source_name = self.name or self.__class__.__name__
@@ -113,7 +113,7 @@ class BaseDataSource(ABC):
         start_date: str,
         end_date: str,
         interval: str = "1m",
-        **kwargs,
+        **kwargs: object,  # type: ignore[no-untyped-def]
     ) -> pd.DataFrame:
         """获取 K 线数据
 

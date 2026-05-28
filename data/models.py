@@ -267,13 +267,13 @@ class BacktestDaily(OrmBaseModel):
         table_name: str = 'backtest_daily'
 
 
-def init_database(db_path: str):
+def init_database(db_path: str) -> None:
     """初始化数据库连接"""
     database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
     database.create_tables([Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily], safe=True)  # pyright: ignore[reportUnknownMemberType]
 
 
-def close_database():
+def close_database() -> None:
     """关闭数据库连接"""
     if not database.is_closed():
         _ = database.close()

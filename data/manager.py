@@ -194,7 +194,7 @@ class DataManager:
                     filepath=meta_filepath,
                     start_date=str(meta.get('start_date', '')),
                     end_date=str(meta.get('end_date', '')),
-                    total_rows=int(meta.get('total_rows', 0)),  # pyright: ignore[reportArgumentType]  # SQLite dict
+                    total_rows=int(meta.get('total_rows', 0) or 0),  # type: ignore[call-overload]  # SQLite dict
                 )
 
         data_dir = self._get_data_dir()
@@ -395,6 +395,32 @@ class DataManager:
         self._init_store()
         assert self._store is not None
         return self._store.delete_backtest(backtest_id)
+
+    # ── 报告生成相关查询 ──────────────────────────────────────
+
+    def get_run_info(self, run_id: int) -> dict[str, object] | None:
+        """获取运行信息"""
+        return self.store.get_run_info(run_id)
+
+    def get_all_runs(self) -> list[dict[str, object]]:
+        """获取所有运行记录"""
+        return self.store.get_all_runs()
+
+    def get_run_summary(self, run_id: int) -> list[dict[str, object]]:
+        """获取每品种最优回测记录"""
+        return self.store.get_run_summary(run_id)
+
+    def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
+        """获取某 run 下所有回测记录（含参数和日线数据）"""
+        return self.store.get_backtests_for_run(run_id)
+
+    def get_equity_data(self, backtest_id: int) -> dict[str, object] | None:
+        """获取指定回测记录的资金曲线数据"""
+        return self.store.get_equity_data(backtest_id)
+
+    def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
+        """获取 Optuna 优化数据"""
+        return self.store.get_optuna_data(run_id)
 
     # ── 资源管理 ────────────────────────────────────────────
 

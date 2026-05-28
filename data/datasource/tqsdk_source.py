@@ -30,7 +30,7 @@ class TqSdkDataSource(BaseDataSource):
         start_date: str,
         end_date: str,
         interval: str = "1m",
-        **kwargs,
+        **kwargs: object,  # type: ignore[no-untyped-def]
     ) -> pd.DataFrame:
         """从天勤获取 K 线数据
 
@@ -69,7 +69,7 @@ class TqSdkDataSource(BaseDataSource):
         start_date: str,
         end_date: str,
         kline_period: int,
-        account,
+        account: object,
     ) -> pd.DataFrame:
         """执行单次天勤 API 拉取"""
         from tqsdk import TqApi, TqAuth, TqBacktest
@@ -94,7 +94,7 @@ class TqSdkDataSource(BaseDataSource):
             )
             start_dt = adjusted_start
 
-        auth = TqAuth(account.api_key, account.api_secret) if account else None
+        auth = TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
         api = TqApi(
             backtest=TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth

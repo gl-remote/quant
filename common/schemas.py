@@ -40,19 +40,19 @@ class KlineSchema(pa.DataFrameModel):
     close: Series[float] = pa.Field(ge=0.0)
     volume: Series[int] = pa.Field(ge=0)
 
-    @pa.dataframe_check
+    @pa.dataframe_check  # type: ignore[misc]
     def check_high_greater_than_open_close(cls, df: pd.DataFrame) -> bool:
         """验证最高价 >= 开盘价和收盘价"""
         result: bool = bool((df['high'] >= df[['open', 'close']].max(axis=1)).all())
         return result
 
-    @pa.dataframe_check
+    @pa.dataframe_check  # type: ignore[misc]
     def check_low_less_than_open_close(cls, df: pd.DataFrame) -> bool:
         """验证最低价 <= 开盘价和收盘价"""
         result: bool = bool((df['low'] <= df[['open', 'close']].min(axis=1)).all())
         return result
 
-    @pa.dataframe_check
+    @pa.dataframe_check  # type: ignore[misc]
     def check_price_range_valid(cls, df: pd.DataFrame) -> bool:
         """验证价格区间有效性：low <= close <= high"""
         result: bool = bool((df['low'] <= df['close']).all() & (df['close'] <= df['high']).all())

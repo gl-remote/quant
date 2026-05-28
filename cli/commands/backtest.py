@@ -405,7 +405,6 @@ def _run_vnpy_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMan
                 # 自动生成回测看板
                 dm.store.finish_run(run_id)
                 build_dashboard(
-                    db_path=dm.store.db_path,
                     output_dir="output",
                     run_id=run_id,
                 )

@@ -44,7 +44,7 @@ class KlineCache:
         if not cache_file.exists():
             return None
         with open(cache_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return json.load(f)  # type: ignore[no-any-return]
 
     def put(self, symbol: str, csv_path: str, interval: str, data: dict) -> None:
         key = self._cache_key(symbol, csv_path, interval)

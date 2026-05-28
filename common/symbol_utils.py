@@ -40,7 +40,7 @@ class ContractInfo:
     def default_start(self) -> str:
         """默认导出开始日期: 交割月 - 4 个月"""
         return (datetime(self.year, self.month, 1) -
-                relativedelta(months=4)).strftime('%Y-%m-%d')
+                relativedelta(months=4)).strftime('%Y-%m-%d')  # type: ignore[no-any-return]
 
     @property
     def default_end(self) -> str:

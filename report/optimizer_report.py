@@ -85,12 +85,12 @@ def build_optuna_spec(
     return result
 
 
-def _completed_trials(trials):
+def _completed_trials(trials: list[optuna.trial.FrozenTrial]) -> list[optuna.trial.FrozenTrial]:
     """筛选状态为 COMPLETE 且有目标值的 trial"""
     return [t for t in trials if t.state == optuna.trial.TrialState.COMPLETE and t.value is not None]
 
 
-def _param_names(study) -> list[str]:
+def _param_names(study: optuna.study.Study) -> list[str]:
     """提取所有参数名（按搜索空间顺序）"""
     try:
         return list(study.trials[0].params.keys())
@@ -98,14 +98,14 @@ def _param_names(study) -> list[str]:
         return []
 
 
-def _build_history(trials) -> dict | None:
+def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
     """优化历史散点图：X=试验序号, Y=目标值"""
     ct = _completed_trials(trials)
     if not ct:
         return None
 
     nums = [t.number for t in ct]
-    values = [t.value for t in ct]
+    values: list[float] = [t.value for t in ct if t.value is not None]
 
     best = []
     best_sofar = float("inf")
@@ -138,7 +138,7 @@ def _build_history(trials) -> dict | None:
     }
 
 
-def _build_importances(study) -> dict | None:
+def _build_importances(study: optuna.study.Study) -> dict | None:
     """参数重要性柱状图 (用 fANOVA 计算)"""
     try:
         from optuna.importance import get_param_importances
@@ -168,7 +168,7 @@ def _build_importances(study) -> dict | None:
     }
 
 
-def _build_parallel(study, trials) -> dict | None:
+def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenTrial]) -> dict | None:
     """平行坐标图"""
     ct = _completed_trials(trials)
     if not ct:
@@ -181,7 +181,7 @@ def _build_parallel(study, trials) -> dict | None:
     values_list = [t.values for t in ct]
     params_list = [t.params for t in ct]
 
-    dims = []
+    dims: list[dict] = []
     # 每个参数作为维度
     for p in param_names:
         vals_set = set()
@@ -221,7 +221,7 @@ def _build_parallel(study, trials) -> dict | None:
     }
 
 
-def _build_contour(study, trials) -> dict | None:
+def _build_contour(study: optuna.study.Study, trials: list[optuna.trial.FrozenTrial]) -> dict | None:
     """等高线图（取前两个参数）"""
     ct = _completed_trials(trials)
     param_names = _param_names(study)
@@ -232,7 +232,10 @@ def _build_contour(study, trials) -> dict | None:
     points = [(t.params.get(p1, 0), t.params.get(p2, 0), t.value) for t in ct]
     xs = [p[0] for p in points]
     ys = [p[1] for p in points]
-    vs = [p[2] for p in points]
+    vs: list[float] = [p[2] for p in points if p[2] is not None]
+
+    if not vs:
+        return None
 
     return {
         "tooltip": {},
