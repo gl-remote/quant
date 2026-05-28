@@ -61,12 +61,12 @@ export interface SummaryItem {
  * OHLCV 格式：开盘价、最高价、最低价、收盘价、成交量
  */
 export interface KlinePoint {
-  datetime: string;       // 时间
-  open: number;         // 开盘价
-  high: number;         // 最高价
-  low: number;          // 最低价
-  close: number;        // 收盘价
-  volume: number;       // 成交量
+  datetime: number;    // Unix 时间戳（秒）
+  open: number;       // 开盘价
+  high: number;        // 最高价
+  low: number;         // 最低价
+  close: number;       // 收盘价
+  volume: number;      // 成交量
 }
 
 /**

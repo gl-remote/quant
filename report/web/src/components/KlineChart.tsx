@@ -21,13 +21,23 @@ interface Props {
   loading?: boolean;
 }
 
-function toChartTime(dt: string): Time {
+function toChartTime(dt: string | number): Time {
+  // 直接处理 Unix 时间戳（秒）
+  if (typeof dt === "number") {
+    return dt as Time;
+  }
+  // 处理字符串格式的时间戳
+  if (!isNaN(Number(dt))) {
+    return Number(dt) as Time;
+  }
+  // 兼容旧格式（已废弃，保留用于迁移）
   if (dt.includes(" ")) {
-    return (new Date(dt.replace(" ", "T") + "+08:00").getTime() / 1000) as Time;
+    return (new Date(dt.replace(" ", "T") + "Z").getTime() / 1000) as Time;
   }
   if (dt.includes("T")) {
-    return (new Date(dt + "+08:00").getTime() / 1000) as Time;
+    return (new Date(dt + "Z").getTime() / 1000) as Time;
   }
+  // 纯日期格式返回字符串
   return dt as Time;
 }
 

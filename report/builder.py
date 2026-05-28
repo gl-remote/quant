@@ -551,10 +551,10 @@ def _build_kline_dict(
             .dropna()
         )
 
-        # 格式化日线数据
+        # 格式化日线数据（使用 Unix 时间戳）
         daily_data = [
             {
-                "datetime": idx.strftime("%Y-%m-%d"),
+                "datetime": int(idx.timestamp()),
                 "open": float(row.open),
                 "high": float(row.high),
                 "low": float(row.low),
@@ -564,12 +564,12 @@ def _build_kline_dict(
             for idx, row in daily_ohlc.iterrows()
         ]
 
-        # 原始数据（不降采样，完整展示）
+        # 原始数据（不降采样，完整展示，使用 Unix 时间戳）
         raw_data = []
         for _, row in df.iterrows():
             dt = row["datetime"]
             raw_data.append({
-                "datetime": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "datetime": int(dt.timestamp()),
                 "open": float(row.get("open", 0)),
                 "high": float(row.get("high", 0)),
                 "low": float(row.get("low", 0)),

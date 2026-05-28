@@ -7,6 +7,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any
+import numpy as np
 import pandas as pd
 
 from data import DataManager
@@ -264,7 +265,8 @@ def _build_kline_dict(
             )
         )
         daily_data = daily_ohlc.reset_index()
-        daily_data["datetime"] = daily_data["datetime"].dt.strftime("%Y-%m-%d")
+        # 使用 Unix 时间戳（秒）
+        daily_data["datetime"] = (daily_data["datetime"].astype(np.int64) // 10**9).astype(int)
 
         # 分钟级数据不抽样，完整保留
         # 转换为秒级时间戳（对于lightweight-charts）
@@ -273,7 +275,7 @@ def _build_kline_dict(
             dt = row["datetime"]
             # 使用秒级时间戳
             raw_rows.append({
-                "time": int(dt.timestamp()),
+                "datetime": int(dt.timestamp()),
                 "open": row["open"],
                 "high": row["high"],
                 "low": row["low"],
