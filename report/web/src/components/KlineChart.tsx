@@ -254,9 +254,9 @@ export default function KlineChart({ data, loading }: Props) {
     return (
       <QlPanel qlId="RUN-KLINE-LOADING" name={qlIdNameMap["RUN-KLINE-LOADING"]} style={{ marginBottom: 28 }}>
         <style>{`@keyframes ql-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-        <div style={styles.loadingInner}>
-          <div style={styles.spinner} />
-          <p style={{ marginTop: 12, color: "#94a3b8", fontSize: 14 }}>K 线数据加载中...</p>
+        <div className="flex flex-col items-center py-16">
+          <div className="w-9 h-9 border-[3px] border-slate-100 border-t-blue-600 rounded-full animate-[ql-spin_0.8s_linear_infinite]" />
+          <p className="mt-3 text-sm text-slate-400">K 线数据加载中...</p>
         </div>
       </QlPanel>
     );
@@ -265,7 +265,7 @@ export default function KlineChart({ data, loading }: Props) {
   if (!data) {
     return (
       <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} style={{ marginBottom: 28 }}>
-        <p style={styles.emptyText}>暂无 K 线数据</p>
+        <p className="text-center text-slate-400 py-10">暂无 K 线数据</p>
       </QlPanel>
     );
   }
@@ -273,51 +273,50 @@ export default function KlineChart({ data, loading }: Props) {
   if (!klineData || klineData.length === 0) {
     return (
       <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} style={{ marginBottom: 28 }}>
-        <p style={styles.emptyText}>当前周期暂无 K 线数据，请切换周期</p>
+        <p className="text-center text-slate-400 py-10">当前周期暂无 K 线数据，请切换周期</p>
       </QlPanel>
     );
   }
 
+  const btnBase = "px-4 py-1.5 text-[13px] font-medium border-none bg-transparent cursor-pointer rounded-md transition-all";
+  const toggleBtn = `${btnBase} text-slate-500`;
+  const toggleActive = `${btnBase} bg-blue-600 text-white shadow-md shadow-blue-600/30`;
+
   const toolbar = (
-    <div style={styles.toolbar} data-ql-id="RUN-KLINE-TOOLBAR">
-      <div style={styles.leftGroup}>
-        <span style={styles.symbol}>{data.symbol}</span>
+    <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100" data-ql-id="RUN-KLINE-TOOLBAR">
+      <div className="flex items-center gap-2">
+        <span className="text-lg font-bold text-slate-900 font-mono">{data.symbol}</span>
         {mode === "raw" && data.raw_downsampled && (
-          <span style={styles.samplingBadge}>抽样显示</span>
+          <span className="text-[11px] px-2 py-0.5 bg-amber-50 text-amber-800 rounded">抽样显示</span>
         )}
       </div>
-      <div style={styles.centerGroup}>
-        <div style={styles.toggleGroup}>
+      <div className="flex items-center">
+        <div className="flex bg-slate-100 rounded-lg p-0.5">
           <button
             onClick={() => setMode("daily")}
             data-ql-id="RUN-KLINE-BTN-DAILY"
-            style={{
-              ...styles.toggleBtn,
-              ...(mode === "daily" ? styles.toggleActive : {}),
-            }}
+            className={mode === "daily" ? toggleActive : toggleBtn}
           >
             日线
           </button>
           <button
             onClick={() => setMode("raw")}
             data-ql-id="RUN-KLINE-BTN-MINUTE"
-            style={{
-              ...styles.toggleBtn,
-              ...(mode === "raw" ? styles.toggleActive : {}),
-            }}
+            className={mode === "raw" ? toggleActive : toggleBtn}
           >
             分钟线
           </button>
         </div>
       </div>
-      <div style={styles.rightGroup}>
+      <div className="flex gap-2">
         <button
           onClick={() => setIndicators((prev) => ({ ...prev, sma: !prev.sma }))}
           data-ql-id="RUN-KLINE-BTN-SMA"
-          style={{
-            ...styles.indicatorBtn,
-            ...(indicators.sma ? styles.indicatorActive : {}),
-          }}
+          className={`px-3.5 py-1.5 text-xs cursor-pointer rounded-md transition-all border ${
+            indicators.sma
+              ? "bg-green-50 border-green-300 text-green-700"
+              : "bg-white border-slate-200 text-slate-500"
+          }`}
         >
           SMA 均线
         </button>
@@ -334,144 +333,27 @@ export default function KlineChart({ data, loading }: Props) {
       {toolbar}
       <div
         ref={containerRef}
-        style={styles.chartContainer}
+        className="w-full h-[500px]"
         data-ql-id="RUN-KLINE-CHART"
       />
-      <div style={styles.legend}>
-        <div style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, backgroundColor: "#FF6B6B" }} />
+      <div className="flex justify-center gap-6 mt-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-[#FF6B6B]" />
           <span>SMA(5)</span>
         </div>
-        <div style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, backgroundColor: "#4ECDC4" }} />
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-[#4ECDC4]" />
           <span>SMA(60)</span>
         </div>
-        <div style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, backgroundColor: "#26A69A" }} />
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-[#26A69A]" />
           <span>阳线</span>
         </div>
-        <div style={styles.legendItem}>
-          <span style={{ ...styles.legendDot, backgroundColor: "#EF5350" }} />
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="w-2 h-2 rounded-full bg-[#EF5350]" />
           <span>阴线</span>
         </div>
       </div>
     </QlPanel>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  toolbar: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "16px",
-    paddingBottom: "12px",
-    borderBottom: "1px solid #f1f5f9",
-  },
-  leftGroup: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-  },
-  symbol: {
-    fontSize: "18px",
-    fontWeight: 700,
-    color: "#1a1a1a",
-    fontFamily: "SF Mono, Monaco, Consolas, monospace",
-  },
-  samplingBadge: {
-    fontSize: "11px",
-    padding: "2px 8px",
-    background: "#fef3c7",
-    color: "#92400e",
-    borderRadius: "4px",
-  },
-  centerGroup: {
-    display: "flex",
-    alignItems: "center",
-  },
-  rightGroup: {
-    display: "flex",
-    gap: "8px",
-  },
-  toggleGroup: {
-    display: "flex",
-    background: "#f1f5f9",
-    borderRadius: "8px",
-    padding: "2px",
-  },
-  toggleBtn: {
-    padding: "6px 16px",
-    border: "none",
-    background: "transparent",
-    fontSize: "13px",
-    fontWeight: 500,
-    cursor: "pointer",
-    color: "#64748b",
-    borderRadius: "6px",
-    transition: "all 0.2s",
-  },
-  toggleActive: {
-    background: "#2563eb",
-    color: "#ffffff",
-    boxShadow: "0 2px 8px rgba(37, 99, 235, 0.3)",
-  },
-  indicatorBtn: {
-    padding: "6px 14px",
-    border: "1px solid #e2e8f0",
-    background: "#ffffff",
-    fontSize: "12px",
-    cursor: "pointer",
-    color: "#64748b",
-    borderRadius: "6px",
-    transition: "all 0.2s",
-  },
-  indicatorActive: {
-    background: "#f0fdf4",
-    borderColor: "#86efac",
-    color: "#166534",
-  },
-  chartContainer: {
-    width: "100%",
-    height: "500px",
-  },
-  legend: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "24px",
-    marginTop: "12px",
-    paddingTop: "12px",
-    borderTop: "1px solid #f1f5f9",
-  },
-  legendItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-    fontSize: "12px",
-    color: "#64748b",
-  },
-  legendDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: "50%",
-  },
-  loadingInner: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "60px 0",
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid #f1f5f9",
-    borderTopColor: "#2563eb",
-    borderRadius: "50%",
-    animation: "ql-spin 0.8s linear infinite",
-  },
-  emptyText: {
-    textAlign: "center",
-    color: "#94a3b8",
-    padding: "40px 0",
-  },
-};

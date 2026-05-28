@@ -7,107 +7,105 @@ export default function NavPage() {
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner}></div>
-        <p style={styles.loadingText}>加载中...</p>
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-10 h-10 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin" />
+        <p className="mt-4 text-sm text-slate-400">加载中...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={styles.errorContainer}>
-        <div style={styles.errorIcon}>❌</div>
-        <p style={styles.errorText}>加载失败: {error}</p>
+      <div className="flex flex-col items-center py-20 bg-white rounded-xl shadow-md border border-slate-200">
+        <div className="text-5xl mb-4">❌</div>
+        <p className="text-sm text-red-600">加载失败: {error}</p>
       </div>
     );
   }
 
   if (!runs || runs.length === 0) {
     return (
-      <div style={styles.emptyContainer}>
-        <div style={styles.emptyIcon}>📊</div>
-        <h2 style={styles.emptyTitle}>暂无回测记录</h2>
-        <p style={styles.emptyText}>运行回测后，结果将在这里显示</p>
+      <div className="flex flex-col items-center py-20 bg-white rounded-xl shadow-md border border-slate-200">
+        <div className="text-6xl mb-4">📊</div>
+        <h2 className="text-xl font-semibold text-slate-900 mb-2">暂无回测记录</h2>
+        <p className="text-sm text-slate-400">运行回测后，结果将在这里显示</p>
       </div>
     );
   }
 
   return (
-    <div data-ql-id="NAV-PG-CONTAINER" style={styles.container}>
+    <div data-ql-id="NAV-PG-CONTAINER" className="max-w-[1200px] mx-auto">
       <div
         data-ql-id="NAV-PG-HERO"
-        style={styles.headerSection}
+        className="flex justify-between items-center bg-gradient-to-br from-[#1e3a5f] to-[#2d5a87] rounded-xl py-10 px-10 mb-8 shadow-lg shadow-[#1e3a5f]/20"
       >
-        <div style={styles.headerTitle}>
-          <h1 style={styles.title}>回测报告导航</h1>
-          <p style={styles.subtitle}>共 {runs.length} 条回测记录</p>
+        <div className="text-white">
+          <h1 className="text-2xl font-bold mb-2">回测报告导航</h1>
+          <p className="text-sm text-white/80">共 {runs.length} 条回测记录</p>
         </div>
-        <div data-ql-id="NAV-PG-STATS" style={styles.headerStats}>
-          <div style={styles.statItem}>
-            <span style={styles.statNumber}>{runs.length}</span>
-            <span style={styles.statLabel}>总回测</span>
+        <div data-ql-id="NAV-PG-STATS" className="flex items-center gap-6">
+          <div className="flex flex-col items-center">
+            <span className="text-[28px] font-bold text-white">{runs.length}</span>
+            <span className="text-xs text-white/70 mt-1">总回测</span>
           </div>
-          <div style={styles.statDivider}></div>
-          <div style={styles.statItem}>
-            <span style={styles.statNumber}>
+          <div className="w-px h-10 bg-white/20" />
+          <div className="flex flex-col items-center">
+            <span className="text-[28px] font-bold text-white">
               {runs.filter((r) => r.status === "completed").length}
             </span>
-            <span style={styles.statLabel}>已完成</span>
+            <span className="text-xs text-white/70 mt-1">已完成</span>
           </div>
-          <div style={styles.statDivider}></div>
-          <div style={styles.statItem}>
-            <span style={styles.statNumber}>
+          <div className="w-px h-10 bg-white/20" />
+          <div className="flex flex-col items-center">
+            <span className="text-[28px] font-bold text-white">
               {runs.reduce((sum, r) => sum + r.symbols, 0)}
             </span>
-            <span style={styles.statLabel}>品种数</span>
+            <span className="text-xs text-white/70 mt-1">品种数</span>
           </div>
         </div>
       </div>
 
-      <div data-ql-id="NAV-PG-CARDLIST" style={styles.cardGrid}>
+      <div data-ql-id="NAV-PG-CARDLIST" className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-7">
         {runs.map((run) => (
           <Link
             key={run.id}
             to={`/run/${run.id}`}
-            style={styles.cardLink}
+            className="no-underline text-inherit"
           >
-            <div style={styles.card} data-ql-id={`NAV-CARD-${run.id}`}>
-              <div style={styles.cardHeader}>
-                <div style={styles.runBadge}>
-                  <span style={styles.runId}>#{run.id}</span>
+            <div data-ql-id={`NAV-CARD-${run.id}`} className="bg-white rounded-xl py-7 px-6 shadow-md border border-slate-100 transition-transform hover:scale-[1.02] hover:shadow-lg">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                <div className="flex gap-2 items-center">
+                  <span className="text-sm font-bold text-slate-900">#{run.id}</span>
                   <span
+                    className="text-[11px] font-medium px-2 py-0.5 rounded-xl"
                     style={{
-                      ...styles.statusBadge,
-                      backgroundColor:
-                        run.status === "completed" ? "#dcfce7" : "#fef3c7",
-                      color:
-                        run.status === "completed" ? "#166534" : "#854d0e",
+                      backgroundColor: run.status === "completed" ? "#dcfce7" : "#fef3c7",
+                      color: run.status === "completed" ? "#166534" : "#854d0e",
                     }}
                   >
                     {run.status === "completed" ? "完成" : "运行中"}
                   </span>
                 </div>
-                <div style={styles.cardDate}>{run.created}</div>
+                <div className="text-xs text-slate-400">{run.created}</div>
               </div>
 
-              <div style={styles.cardBody}>
-                <div style={styles.cardTitle}>{run.strategy}</div>
-                <div style={styles.cardMeta}>
-                  <span style={styles.metaItem}>
-                    <span style={styles.metaIcon}>⚙️</span>
+              <div className="mb-4">
+                <div className="text-lg font-semibold text-slate-900 mb-2">{run.strategy}</div>
+                <div className="flex gap-4">
+                  <span className="flex items-center gap-1 text-[13px] text-slate-500">
+                    <span className="text-sm">⚙️</span>
                     {run.engine}
                   </span>
-                  <span style={styles.metaItem}>
-                    <span style={styles.metaIcon}>📈</span>
+                  <span className="flex items-center gap-1 text-[13px] text-slate-500">
+                    <span className="text-sm">📈</span>
                     {run.symbols} 个品种
                   </span>
                 </div>
               </div>
 
-              <div style={styles.cardFooter}>
-                <span style={styles.viewText}>查看详情</span>
-                <span style={styles.viewArrow}>→</span>
+              <div className="flex justify-between items-center pt-3 border-t border-slate-100 text-blue-600">
+                <span className="text-[13px] font-medium">查看详情</span>
+                <span className="text-base">→</span>
               </div>
             </div>
           </Link>
@@ -116,204 +114,3 @@ export default function NavPage() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    maxWidth: "1200px",
-    margin: "0 auto",
-  },
-  headerSection: {
-    background: "linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)",
-    borderRadius: "12px",
-    padding: "40px 40px",
-    marginBottom: "32px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    boxShadow: "0 8px 32px rgba(30, 58, 95, 0.2)",
-  },
-  headerTitle: {
-    color: "#ffffff",
-  },
-  title: {
-    fontSize: "24px",
-    fontWeight: 700,
-    margin: 0,
-    marginBottom: "8px",
-  },
-  subtitle: {
-    fontSize: "14px",
-    color: "rgba(255, 255, 255, 0.8)",
-    margin: 0,
-  },
-  headerStats: {
-    display: "flex",
-    alignItems: "center",
-    gap: "24px",
-  },
-  statItem: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-  },
-  statNumber: {
-    fontSize: "28px",
-    fontWeight: 700,
-    color: "#ffffff",
-  },
-  statLabel: {
-    fontSize: "12px",
-    color: "rgba(255, 255, 255, 0.7)",
-    marginTop: "4px",
-  },
-  statDivider: {
-    width: "1px",
-    height: "40px",
-    background: "rgba(255, 255, 255, 0.2)",
-  },
-  cardGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-    gap: "28px",
-  },
-  cardLink: {
-    textDecoration: "none",
-    color: "inherit",
-  },
-  card: {
-    background: "#ffffff",
-    borderRadius: "12px",
-    padding: "28px 24px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-    border: "1px solid #f0f0f0",
-    transition: "transform 0.2s, box-shadow 0.2s",
-  },
-  cardHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "16px",
-    paddingBottom: "12px",
-    borderBottom: "1px solid #f0f0f0",
-  },
-  runBadge: {
-    display: "flex",
-    gap: "8px",
-    alignItems: "center",
-  },
-  runId: {
-    fontSize: "14px",
-    fontWeight: 700,
-    color: "#1a1a1a",
-  },
-  statusBadge: {
-    fontSize: "11px",
-    padding: "3px 8px",
-    borderRadius: "10px",
-    fontWeight: 500,
-  },
-  cardDate: {
-    fontSize: "12px",
-    color: "#9ca3af",
-  },
-  cardBody: {
-    marginBottom: "16px",
-  },
-  cardTitle: {
-    fontSize: "18px",
-    fontWeight: 600,
-    color: "#1a1a1a",
-    marginBottom: "8px",
-  },
-  cardMeta: {
-    display: "flex",
-    gap: "16px",
-  },
-  metaItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    fontSize: "13px",
-    color: "#6b7280",
-  },
-  metaIcon: {
-    fontSize: "14px",
-  },
-  cardFooter: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: "12px",
-    borderTop: "1px solid #f0f0f0",
-    color: "#2563eb",
-  },
-  viewText: {
-    fontSize: "13px",
-    fontWeight: 500,
-  },
-  viewArrow: {
-    fontSize: "16px",
-  },
-  loadingContainer: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "80px",
-  },
-  loadingSpinner: {
-    width: "40px",
-    height: "40px",
-    border: "4px solid #f0f0f0",
-    borderTopColor: "#2563eb",
-    borderRadius: "50%",
-    animation: "spin 1s linear infinite",
-  },
-  loadingText: {
-    marginTop: "16px",
-    color: "#9ca3af",
-    fontSize: "14px",
-  },
-  errorContainer: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "80px",
-    background: "#ffffff",
-    borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-  },
-  errorIcon: {
-    fontSize: "48px",
-    marginBottom: "16px",
-  },
-  errorText: {
-    color: "#dc2626",
-    fontSize: "14px",
-  },
-  emptyContainer: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    padding: "80px",
-    background: "#ffffff",
-    borderRadius: "12px",
-    boxShadow: "0 4px 20px rgba(0, 0, 0, 0.08)",
-  },
-  emptyIcon: {
-    fontSize: "64px",
-    marginBottom: "16px",
-  },
-  emptyTitle: {
-    fontSize: "20px",
-    fontWeight: 600,
-    color: "#1a1a1a",
-    margin: 0,
-    marginBottom: "8px",
-  },
-  emptyText: {
-    color: "#9ca3af",
-    fontSize: "14px",
-    margin: 0,
-  },
-};

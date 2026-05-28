@@ -41,8 +41,8 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
         name={qlIdNameMap["RUN-TBL-EMPTY"]}
         style={{ marginBottom: 28 }}
       >
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#94a3b8" }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
+        <div className="text-center py-10 text-slate-400">
+          <div className="text-5xl mb-3">📭</div>
           <p>暂无回测记录</p>
         </div>
       </QlPanel>
@@ -79,44 +79,44 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
       name={qlIdNameMap["RUN-TBL-CONTAINER"]}
       style={{ marginBottom: 28 }}
     >
-      <div style={styles.headRow} data-ql-id="RUN-TBL-HEADER">
+      <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100" data-ql-id="RUN-TBL-HEADER">
         <div>
-          <h2 style={styles.headTitle}>📈 品种汇总</h2>
+          <h2 className="text-base font-semibold text-slate-800 m-0">📈 品种汇总</h2>
         </div>
-        <div style={styles.statsRow}>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>平均收益</span>
-            <span style={{ ...styles.statVal, color: totalStats.avgReturn >= 0 ? "#059669" : "#dc2626" }}>
+        <div className="flex gap-6">
+          <div className="flex flex-col items-end">
+            <span className="text-[11px] text-slate-400 mb-0.5">平均收益</span>
+            <span className="text-sm font-semibold" style={{ color: totalStats.avgReturn >= 0 ? "#059669" : "#dc2626" }}>
               {formatPct(totalStats.avgReturn * 100)}
             </span>
           </div>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>平均夏普</span>
-            <span style={{ ...styles.statVal, color: totalStats.avgSharpe >= 0 ? "#059669" : "#dc2626" }}>
+          <div className="flex flex-col items-end">
+            <span className="text-[11px] text-slate-400 mb-0.5">平均夏普</span>
+            <span className="text-sm font-semibold" style={{ color: totalStats.avgSharpe >= 0 ? "#059669" : "#dc2626" }}>
               {totalStats.avgSharpe.toFixed(2)}
             </span>
           </div>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>总交易次数</span>
-            <span style={styles.statVal}>{formatNumber(totalStats.totalTrades)}</span>
+          <div className="flex flex-col items-end">
+            <span className="text-[11px] text-slate-400 mb-0.5">总交易次数</span>
+            <span className="text-sm font-semibold text-slate-600">{formatNumber(totalStats.totalTrades)}</span>
           </div>
         </div>
       </div>
 
-      <div style={styles.tableWrap}>
-        <table style={styles.table} data-ql-id="RUN-TBL-TABLE">
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-[13px]" data-ql-id="RUN-TBL-TABLE">
           <thead>
             <tr>
               {columns.map((col) => (
                 <th
                   key={String(col.key)}
-                  style={styles.th}
+                  className="text-left px-3.5 py-2.5 bg-slate-50 border-b-2 border-slate-200 text-slate-500 sticky top-0 cursor-pointer whitespace-nowrap"
                   onClick={() => handleSort(col.key)}
                 >
-                  <div style={styles.thContent}>
+                  <div className="flex items-center gap-1.5">
                     <span>{col.label}</span>
                     {sortKey === col.key && (
-                      <span style={styles.sortIcon}>
+                      <span className="text-[10px] text-slate-400">
                         {sortOrder === "asc" ? "↑" : "↓"}
                       </span>
                     )}
@@ -133,35 +133,27 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                   key={item.symbol}
                   data-ql-id={`RUN-TBL-ROW-${item.symbol}`}
                   onClick={() => onSelect(item.symbol)}
-                  style={{
-                    ...styles.row,
-                    ...(isSelected ? styles.selectedRow : {}),
-                  }}
+                  className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50" : "hover:bg-slate-50"}`}
                 >
-                  <td style={{ ...styles.td, fontWeight: 600 }}>{item.symbol}</td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 font-semibold text-slate-600 whitespace-nowrap">{item.symbol}</td>
                   <td
-                    style={{
-                      ...styles.td,
-                      color: item.total_return >= 0 ? "#059669" : "#dc2626",
-                      fontWeight: 600,
-                    }}
+                    className="px-3.5 py-2.5 border-b border-slate-50 font-semibold whitespace-nowrap"
+                    style={{ color: item.total_return >= 0 ? "#059669" : "#dc2626" }}
                   >
                     {formatPct(item.total_return * 100)}
                   </td>
-                  <td style={styles.td}>{formatNumber(item.total_trades)}</td>
-                  <td style={styles.td}>{formatPct(item.win_rate, 1)}</td>
-                  <td style={{ ...styles.td, color: "#dc2626" }}>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.total_trades)}</td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatPct(item.win_rate, 1)}</td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-red-600 whitespace-nowrap">
                     {formatPct(item.max_drawdown)}
                   </td>
                   <td
-                    style={{
-                      ...styles.td,
-                      color: item.sharpe >= 0 ? "#059669" : "#dc2626",
-                    }}
+                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
+                    style={{ color: item.sharpe >= 0 ? "#059669" : "#dc2626" }}
                   >
                     {item.sharpe.toFixed(2)}
                   </td>
-                  <td style={styles.td}>{formatNumber(item.end_balance)}</td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.end_balance)}</td>
                 </tr>
               );
             })}
@@ -171,80 +163,3 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
     </QlPanel>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  headRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "16px",
-    paddingBottom: "12px",
-    borderBottom: "1px solid #f1f5f9",
-  },
-  headTitle: {
-    fontSize: "16px",
-    fontWeight: 600,
-    margin: 0,
-    color: "#1e293b",
-  },
-  statsRow: {
-    display: "flex",
-    gap: "24px",
-  },
-  statItem: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-  },
-  statLabel: {
-    fontSize: "11px",
-    color: "#94a3b8",
-    marginBottom: "2px",
-  },
-  statVal: {
-    fontSize: "14px",
-    fontWeight: 600,
-    color: "#475569",
-  },
-  tableWrap: {
-    overflowX: "auto",
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-    fontSize: "13px",
-  },
-  th: {
-    textAlign: "left" as const,
-    padding: "10px 14px",
-    background: "#f8fafc",
-    borderBottom: "2px solid #e2e8f0",
-    color: "#64748b",
-    position: "sticky" as const,
-    top: 0,
-    cursor: "pointer",
-    whiteSpace: "nowrap" as const,
-  },
-  thContent: {
-    display: "flex",
-    alignItems: "center",
-    gap: "6px",
-  },
-  sortIcon: {
-    fontSize: "10px",
-    color: "#94a3b8",
-  },
-  td: {
-    padding: "10px 14px",
-    borderBottom: "1px solid #f8fafc",
-    color: "#475569",
-    whiteSpace: "nowrap" as const,
-  },
-  row: {
-    cursor: "pointer",
-    transition: "background-color 0.15s",
-  },
-  selectedRow: {
-    background: "#eff6ff",
-  },
-};

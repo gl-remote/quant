@@ -58,11 +58,11 @@ export default function MetricCards({ run, backtests }: Props) {
       name="指标总览"
       style={{ marginBottom: 28 }}
     >
-      <div style={styles.grid}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
         {cards.map((c) => (
-          <div key={c.label} style={styles.card} data-ql-id={qlIdMap[c.label]}>
-            <div style={styles.cardLabel}>{c.label}</div>
-            <div style={{ ...styles.cardValue, color: c.color || "#333" }}>
+          <div key={c.label} className="bg-slate-50 rounded-lg p-3.5 text-center" data-ql-id={qlIdMap[c.label]}>
+            <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">{c.label}</div>
+            <div className="text-xl font-bold" style={{ color: c.color || "#333" }}>
               {c.value}
             </div>
           </div>
@@ -71,28 +71,3 @@ export default function MetricCards({ run, backtests }: Props) {
     </QlPanel>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: "16px",
-  },
-  card: {
-    background: "#f8fafc",
-    borderRadius: "8px",
-    padding: "14px",
-    textAlign: "center",
-  },
-  cardLabel: {
-    fontSize: "11px",
-    color: "#94a3b8",
-    marginBottom: "4px",
-    textTransform: "uppercase",
-    letterSpacing: "0.5px",
-  },
-  cardValue: {
-    fontSize: "20px",
-    fontWeight: 700,
-  },
-};

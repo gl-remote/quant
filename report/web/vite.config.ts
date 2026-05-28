@@ -14,6 +14,7 @@
 
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -29,7 +30,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns {import('vite').UserConfig} Vite 配置对象
  */
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   base: "./", // 使用相对路径，支持 file:// 协议访问
   build: {
     outDir: process.env.VITE_OUT_DIR || "dist",

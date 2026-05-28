@@ -17,7 +17,7 @@ export default function BacktestDetail({
   if (!backtests || backtests.length === 0) {
     return (
       <QlPanel qlId="RUN-BT-EMPTY" name="回测记录详情" style={{ marginBottom: 24 }}>
-        <div style={styles.emptyText}>暂无回测记录</div>
+        <div className="text-[13px] text-slate-400 py-4 text-center">暂无回测记录</div>
       </QlPanel>
     );
   }
@@ -26,7 +26,7 @@ export default function BacktestDetail({
   if (!bt) {
     return (
       <QlPanel qlId="RUN-BT-EMPTY" name={`回测记录详情  ·  ${selectedSymbol}`} style={{ marginBottom: 24 }}>
-        <div style={styles.emptyText}>未找到 "{selectedSymbol}" 的回测记录</div>
+        <div className="text-[13px] text-slate-400 py-4 text-center">未找到 "{selectedSymbol}" 的回测记录</div>
       </QlPanel>
     );
   }
@@ -50,23 +50,23 @@ export default function BacktestDetail({
       name={`回测记录详情  ·  ${selectedSymbol}`}
       style={{ marginBottom: 24 }}
     >
-      <div data-ql-id="RUN-BT-METRICS" style={styles.grid}>
+      <div data-ql-id="RUN-BT-METRICS" className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
         {metrics.map(([label, value]) => (
-          <div key={label} style={styles.item}>
-            <span style={styles.label}>{label}</span>
-            <span style={styles.value}>{value}</span>
+          <div key={label} className="flex justify-between px-2.5 py-1.5 bg-slate-50 rounded border border-slate-100">
+            <span className="text-xs text-slate-400">{label}</span>
+            <span className="text-[13px] font-semibold text-slate-600">{value}</span>
           </div>
         ))}
       </div>
 
       {bt.params && bt.params.length > 0 && (
-        <div data-ql-id="RUN-BT-PARAMS" style={{ marginTop: 16 }}>
-          <div style={styles.subtitle}>策略参数</div>
-          <div style={styles.grid}>
+        <div data-ql-id="RUN-BT-PARAMS" className="mt-4">
+          <div className="text-sm font-semibold text-slate-600 mb-2">策略参数</div>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
             {bt.params.map((p) => (
-              <div key={p.name} style={styles.item}>
-                <span style={styles.label}>{p.name}</span>
-                <span style={styles.value}>{p.value}</span>
+              <div key={p.name} className="flex justify-between px-2.5 py-1.5 bg-slate-50 rounded border border-slate-100">
+                <span className="text-xs text-slate-400">{p.name}</span>
+                <span className="text-[13px] font-semibold text-slate-600">{p.value}</span>
               </div>
             ))}
           </div>
@@ -75,39 +75,3 @@ export default function BacktestDetail({
     </QlPanel>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  emptyText: {
-    color: "#94a3b8",
-    fontSize: "13px",
-    padding: "16px 0",
-    textAlign: "center",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-    gap: "8px",
-  },
-  item: {
-    display: "flex",
-    justifyContent: "space-between",
-    padding: "6px 10px",
-    background: "#f8fafc",
-    borderRadius: "4px",
-  },
-  label: {
-    fontSize: "12px",
-    color: "#94a3b8",
-  },
-  value: {
-    fontSize: "13px",
-    fontWeight: 600,
-    color: "#475569",
-  },
-  subtitle: {
-    fontSize: "14px",
-    fontWeight: 600,
-    marginBottom: "8px",
-    color: "#475569",
-  },
-};

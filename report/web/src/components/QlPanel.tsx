@@ -15,50 +15,6 @@ interface QlPanelProps {
   compact?: boolean;
 }
 
-const panelOuter: CSSProperties = {
-  borderRadius: 10,
-  border: "1px solid #e2e8f0",
-  overflow: "hidden",
-  background: "#fff",
-};
-
-const headerBar: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  padding: "8px 16px",
-  background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)",
-  borderBottom: "1px solid #e2e8f0",
-  userSelect: "none",
-};
-
-const headerBarCompact: CSSProperties = {
-  ...headerBar,
-  padding: "5px 12px",
-};
-
-const headerName: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 700,
-  color: "#334155",
-  letterSpacing: "0.3px",
-};
-
-const headerId: CSSProperties = {
-  fontSize: 10,
-  fontFamily: "SF Mono, Monaco, Consolas, monospace",
-  color: "#94a3b8",
-  letterSpacing: "0.5px",
-};
-
-const contentArea: CSSProperties = {
-  padding: 16,
-};
-
-const contentAreaCompact: CSSProperties = {
-  padding: 12,
-};
-
 export default function QlPanel({
   qlId,
   name,
@@ -69,21 +25,23 @@ export default function QlPanel({
 }: QlPanelProps) {
   return (
     <div
-      className="ql-section"
+      className="ql-section rounded-xl border border-slate-200 overflow-hidden bg-white"
       data-ql-id={qlId}
-      style={{
-        ...panelOuter,
-        ...(background ? { background } : {}),
-        ...style,
-      }}
+      style={{ ...(background ? { background } : {}), ...style }}
     >
-      <div style={compact ? headerBarCompact : headerBar}>
-        <span style={headerName}>{name}</span>
-        <span style={headerId}>{qlId}</span>
+      <div
+        className={`flex items-center justify-between border-b border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100 select-none ${
+          compact ? "px-3 py-1.5" : "px-4 py-2"
+        }`}
+      >
+        <span className="text-[13px] font-bold text-slate-700 tracking-wide">
+          {name}
+        </span>
+        <span className="text-[10px] font-mono text-slate-400 tracking-wider">
+          {qlId}
+        </span>
       </div>
-      <div style={compact ? contentAreaCompact : contentArea}>
-        {children}
-      </div>
+      <div className={compact ? "p-3" : "p-4"}>{children}</div>
     </div>
   );
 }
