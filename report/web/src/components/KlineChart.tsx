@@ -21,9 +21,17 @@ interface Props {
   loading?: boolean;
 }
 
+/**
+ * 将 UTC Unix 时间戳转为 lightweight-charts 的 Time 类型。
+ *
+ * lightweight-charts 将 UTCTimestamp 在时间轴上按 UTC 显示，
+ * 因此加上浏览器本地时区偏移量，使时间轴显示本地时间。
+ * 十字线（crosshair）由 timeFormatter 单独处理，会扣除此偏移量。
+ */
 function toChartTime(dt: string | number): Time {
   if (typeof dt === "number") {
-    return dt as Time;
+    const tzOffsetSec = -new Date().getTimezoneOffset() * 60;
+    return (dt + tzOffsetSec) as Time;
   }
   // 处理字符串格式的时间戳
   if (!isNaN(Number(dt))) {
@@ -118,14 +126,15 @@ export default function KlineChart({ data, loading }: Props) {
         secondsVisible: false,
       },
       localization: {
-        dateFormat: "yyyy/MM/dd",
         timeFormatter: (time: Time) => {
-          if (typeof time === "number") {
-            const d = new Date(time * 1000);
-            const pad = (n: number) => String(n).padStart(2, "0");
-            return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-          }
-          return String(time);
+          if (typeof time !== "number") return String(time);
+          // toChartTime 为时间轴加了时区偏移，此处扣回以还原 UTC 戳
+          const tzOffsetSec = -new Date().getTimezoneOffset() * 60;
+          const d = new Date((time - tzOffsetSec) * 1000);
+          const pad = (n: number) => String(n).padStart(2, "0");
+          const date = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
+          const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          return `${date} ${hm}`;
         },
       },
     });
