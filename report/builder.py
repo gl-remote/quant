@@ -20,6 +20,7 @@ import pandas as pd  # 用于数据处理
 
 from data import DataManager  # 导入数据管理器
 from .cache import BuildCache  # 导入统一缓存管理器
+from .writer.json_writer import _build_kline_dict
 from .writer import (  # 导入数据写入模块
     export_run_json,
     export_summary_json,
@@ -495,103 +496,6 @@ def _collect_json(
 
 
 # ── 内部辅助函数 ──────────────────────────────────────────────────
-
-
-def _build_kline_dict(
-    csv_path: str,
-    symbol: str,
-    interval: str,
-    start_date: str | None,
-    end_date: str | None,
-) -> dict | None:
-    """
-    从 CSV 构建 K 线 JSON dict (daily resampled + raw 降采样)
-    
-    Args:
-        csv_path: CSV文件路径
-        symbol: 品种代码
-        interval: K线周期
-        start_date: 开始日期
-        end_date: 结束日期
-        
-    Returns:
-        K线数据字典，失败返回None
-    """
-    try:
-        df = pd.read_csv(csv_path)  # 读取CSV
-        # 处理时间列
-        if "datetime" not in df.columns:
-            if "date" in df.columns:
-                df["datetime"] = df["date"]
-            else:
-                return None
-
-        df["datetime"] = pd.to_datetime(df["datetime"])
-
-        # 按日期范围筛选
-        if start_date:
-            df = df[df["datetime"] >= pd.Timestamp(start_date)]
-        if end_date:
-            df = df[df["datetime"] <= pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)]
-
-        if df.empty:
-            return None
-
-        # 重采样生成日线数据
-        df_daily = df.set_index("datetime")
-        daily_ohlc = (
-            df_daily.resample("1d")
-            .agg(
-                open=("open", "first"),
-                high=("high", "max"),
-                low=("low", "min"),
-                close=("close", "last"),
-                volume=("volume", "sum"),
-            )
-            .dropna()
-        )
-
-        # 格式化日线数据（使用 Unix 时间戳）
-        daily_data = [
-            {
-                "datetime": int(idx.timestamp()),
-                "open": float(row.open),
-                "high": float(row.high),
-                "low": float(row.low),
-                "close": float(row.close),
-                "volume": int(row.volume),
-            }
-            for idx, row in daily_ohlc.iterrows()
-        ]
-
-        # 原始数据（不降采样，完整展示，使用 Unix 时间戳）
-        raw_data = []
-        for _, row in df.iterrows():
-            dt = row["datetime"]
-            raw_data.append({
-                "datetime": int(dt.timestamp()),
-                "open": float(row.get("open", 0)),
-                "high": float(row.get("high", 0)),
-                "low": float(row.get("low", 0)),
-                "close": float(row.get("close", 0)),
-                "volume": int(row.get("volume", 0)),
-            })
-
-        total = len(df)
-        return {
-            "symbol": symbol,
-            "interval": interval,
-            "csv_source": csv_path,
-            "daily": daily_data,
-            "raw": raw_data,
-            "raw_count": total,
-            "raw_downsampled": False,
-            "raw_sample_max": 0,
-        }
-
-    except Exception as e:
-        logger.error("K线数据构建失败 [%s]: %s", symbol, e)
-        return None
 
 
 def _write_json(output_dir: str, rel_path: str, data: object) -> None:

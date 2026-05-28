@@ -221,14 +221,18 @@ def _build_kline_dict(
 ) -> dict | None:
     """
     从 CSV 构建 K 线 JSON dict (daily resampled + raw 降采样)
-    
+
+    CSV 中的 datetime 为北京时间字符串（无时区标记）。
+    转换逻辑：解析为 Asia/Shanghai → 转 UTC → 输出 Unix timestamp（秒）。
+    lightweight-charts 接收 UTC timestamp 后自动按浏览器本地时区显示。
+
     Args:
         csv_path: CSV文件路径
         symbol: 品种代码
         interval: K线周期
         start_date: 开始日期
         end_date: 结束日期
-        
+
     Returns:
         K线数据字典，失败返回None
     """
@@ -241,26 +245,26 @@ def _build_kline_dict(
             else:
                 return None
 
-        # 将 datetime 列转换为 UTC 时间戳
-        # pandas 解析的 naive datetime 会被视为本地时区 (Asia/Shanghai)
-        # 因此需要先转为 UTC 再获取 Unix timestamp
-        df["datetime"] = pd.to_datetime(df["datetime"]).apply(
-            lambda x: int(pd.Timestamp(x).tz_localize("Asia/Shanghai").tz_convert("UTC").timestamp())
-        )
+        # 解析 CSV datetime 为 Asia/Shanghai 时区的 Timestamp
+        df["datetime"] = pd.to_datetime(df["datetime"]).dt.tz_localize("Asia/Shanghai")
 
-        # 按日期范围筛选
+        # 按日期范围筛选（使用带时区的 Timestamp 比较）
         if start_date:
-            df = df[df["datetime"] >= pd.Timestamp(start_date)]
+            tz_start = pd.Timestamp(start_date, tz="Asia/Shanghai")
+            df = df[df["datetime"] >= tz_start]
         if end_date:
-            df = df[df["datetime"] <= pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)]
+            tz_end = pd.Timestamp(end_date, tz="Asia/Shanghai") + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            df = df[df["datetime"] <= tz_end]
 
         if df.empty:
             return None
 
-        # 重采样生成日线数据
-        df_daily = df.set_index("datetime")
+        # 重采样生成日线数据（先转 UTC 再 resample，确保日线分组合正确）
+        df_for_daily = df.copy()
+        df_for_daily["datetime"] = df_for_daily["datetime"].dt.tz_convert("UTC")
+        df_for_daily = df_for_daily.set_index("datetime")
         daily_ohlc = (
-            df_daily.resample("1d")
+            df_for_daily.resample("1D")
             .agg(
                 open=("open", "first"),
                 high=("high", "max"),
@@ -268,34 +272,46 @@ def _build_kline_dict(
                 close=("close", "last"),
                 volume=("volume", "sum"),
             )
+            .dropna()
         )
-        daily_data = daily_ohlc.reset_index()
-        # datetime 已经是 UTC Unix 时间戳（秒），直接使用
 
-        # 分钟级数据不抽样，完整保留
-        # dt 已经是 UTC Unix 时间戳（秒）
-        raw_rows = []
+        # 格式化日线数据（转为 UTC Unix 时间戳）
+        daily_data = [
+            {
+                "datetime": int(idx.timestamp()),
+                "open": float(row.open),
+                "high": float(row.high),
+                "low": float(row.low),
+                "close": float(row.close),
+                "volume": int(row.volume),
+            }
+            for idx, row in daily_ohlc.iterrows()
+        ]
+
+        # 原始数据（转为 UTC Unix 时间戳）
+        raw_data = []
         for _, row in df.iterrows():
-            raw_rows.append({
-                "datetime": int(row["datetime"]),
-                "open": row["open"],
-                "high": row["high"],
-                "low": row["low"],
-                "close": row["close"],
-                "volume": row["volume"] if "volume" in row and pd.notna(row["volume"]) else 0,
+            raw_data.append({
+                "datetime": int(row["datetime"].tz_convert("UTC").timestamp()),
+                "open": float(row.get("open", 0)),
+                "high": float(row.get("high", 0)),
+                "low": float(row.get("low", 0)),
+                "close": float(row.get("close", 0)),
+                "volume": int(row.get("volume", 0)),
             })
 
-        # 构建结果
+        total = len(df)
         return {
             "symbol": symbol,
             "interval": interval,
-            "range": {
-                "start": start_date,
-                "end": end_date,
-            },
-            "daily": daily_data.to_dict("records"),
-            "raw": raw_rows,
+            "csv_source": csv_path,
+            "daily": daily_data,
+            "raw": raw_data,
+            "raw_count": total,
+            "raw_downsampled": False,
+            "raw_sample_max": 0,
         }
+
     except Exception as e:
-        logger.warning("K线数据构建失败: %s - %s", csv_path, e)
+        logger.error("K线数据构建失败 [%s]: %s", symbol, e)
         return None
