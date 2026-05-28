@@ -91,13 +91,23 @@ export default function OptunaCharts({ data }: OptunaChartsProps) {
             <EChartsChart qlId="RUN-OPT-HISTORY-CHART" option={optimization_history} style={{ height: 350 }} />
           </QlPanel>
         )}
-        {param_importances && (
+        {param_importances ? (
           <QlPanel
             qlId="RUN-OPT-IMPORTANCE"
             name={qlIdNameMap["RUN-OPT-IMPORTANCE"]}
             compact
           >
             <EChartsChart qlId="RUN-OPT-IMPORTANCE-CHART" option={param_importances} style={{ height: 350 }} />
+          </QlPanel>
+        ) : (
+          <QlPanel
+            qlId="RUN-OPT-IMPORTANCE"
+            name={qlIdNameMap["RUN-OPT-IMPORTANCE"]}
+            compact
+          >
+            <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>
+              参数重要性无法计算（trial 数量不足或目标值无显著差异）
+            </div>
           </QlPanel>
         )}
         {parallel_coordinate && (
