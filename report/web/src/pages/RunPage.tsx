@@ -348,6 +348,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: "28px",
+    minHeight: 0,  // 关键: CSS Grid item 默认 min-height:auto 会撑破容器
     height: "calc(100vh - 84px)",
     overflowY: "auto" as const,
     paddingRight: 4,
