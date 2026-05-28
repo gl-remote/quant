@@ -347,9 +347,8 @@ const styles: Record<string, React.CSSProperties> = {
   rightPanel: {
     display: "flex",
     flexDirection: "column",
-    position: "sticky" as const,
-    top: "84px",
-    maxHeight: "calc(100vh - 84px)",
+    gap: "28px",
+    height: "calc(100vh - 84px)",
     overflowY: "auto" as const,
     paddingRight: 4,
     // 量化终端风格细滚动条
