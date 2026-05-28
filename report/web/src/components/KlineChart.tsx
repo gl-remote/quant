@@ -59,6 +59,7 @@ function calculateSMA(data: KlinePoint[], period: number): number[] {
 
 export default function KlineChart({ data, loading }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const smaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
@@ -67,11 +68,25 @@ export default function KlineChart({ data, loading }: Props) {
   const [indicators, setIndicators] = useState<{ sma: boolean }>({ sma: true });
 
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
+  console.log("[KlineChart] 渲染 - data:", data ? "有数据" : "null", "loading:", loading, "klineData:", klineData ? `${klineData.length}条` : "null");
 
+  // 初始化图表 - 依赖 klineData，当有数据且容器挂载后才初始化
   useEffect(() => {
-    if (!containerRef.current) return;
+    console.log("[KlineChart] 图表初始化 useEffect, klineData:", !!klineData, "container:", !!containerRef.current, "chart:", !!chartRef.current);
+    
+    if (!klineData) return;
+    const container = containerRef.current;
+    if (!container) {
+      console.log("[KlineChart] 无容器，跳过");
+      return;
+    }
+    if (chartRef.current) {
+      console.log("[KlineChart] 图表已存在，跳过");
+      return;
+    }
 
-    const chart = createChart(containerRef.current, {
+    console.log("[KlineChart] 创建图表");
+    const chart = createChart(container, {
       layout: {
         background: { color: "#ffffff" },
         textColor: "#333",
@@ -80,7 +95,7 @@ export default function KlineChart({ data, loading }: Props) {
         vertLines: { color: "#f0f0f0" },
         horzLines: { color: "#f0f0f0" },
       },
-      width: containerRef.current.clientWidth,
+      width: container.clientWidth,
       height: 500,
       crosshair: {
         mode: 1,
@@ -133,6 +148,8 @@ export default function KlineChart({ data, loading }: Props) {
     volumeSeriesRef.current = volumeSeries;
     smaShortSeriesRef.current = smaShortSeries;
     smaLongSeriesRef.current = smaLongSeries;
+    chartRef.current = chart;
+    console.log("[KlineChart] 图表创建成功");
 
     const handleResize = () => {
       if (containerRef.current) {
@@ -147,35 +164,40 @@ export default function KlineChart({ data, loading }: Props) {
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
+      chartRef.current = null;
     };
-  }, []);
+  }, [klineData]);
 
+  // 设置 K 线数据
   useEffect(() => {
-    if (!candlestickSeriesRef.current || !volumeSeriesRef.current || !klineData)
-      return;
+    if (!klineData) return;
+    const candleSeries = candlestickSeriesRef.current;
+    const volSeries = volumeSeriesRef.current;
+    if (!candleSeries || !volSeries) return;
 
+    console.log("[KlineChart] 设置 K 线数据:", klineData.length, "条");
     const candleData = convertToCandleData(klineData);
-    candlestickSeriesRef.current.setData(candleData);
+    candleSeries.setData(candleData);
 
-    const volumeData: HistogramData<Time>[] = klineData.map((d, i) => ({
+    const volumeData: HistogramData<Time>[] = klineData.map((d) => ({
       time: toChartTime(d.datetime),
       value: d.volume,
       color: d.close >= d.open ? "rgba(38,166,154,0.5)" : "rgba(239,83,80,0.5)",
     }));
-    volumeSeriesRef.current.setData(volumeData);
+    volSeries.setData(volumeData);
 
     if (indicators.sma && smaShortSeriesRef.current && smaLongSeriesRef.current) {
       const smaShort = calculateSMA(klineData, 5);
       const smaLong = calculateSMA(klineData, 60);
 
-      const smaShortData = klineData.map((d, i) => ({
+      const smaShortData = klineData.map((d, idx) => ({
         time: toChartTime(d.datetime),
-        value: smaShort[i],
+        value: smaShort[idx],
       }));
 
-      const smaLongData = klineData.map((d, i) => ({
+      const smaLongData = klineData.map((d, idx) => ({
         time: toChartTime(d.datetime),
-        value: smaLong[i],
+        value: smaLong[idx],
       }));
 
       smaShortSeriesRef.current.setData(smaShortData);
@@ -183,6 +205,7 @@ export default function KlineChart({ data, loading }: Props) {
     }
   }, [klineData, indicators]);
 
+  // 控制 SMA 可见性
   useEffect(() => {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
       smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
@@ -405,7 +428,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 36,
     height: 36,
     border: "3px solid #f1f5f9",
-    borderTop: "3px solid #2563eb",
+    borderTopColor: "#2563eb",
     borderRadius: "50%",
     animation: "ql-spin 0.8s linear infinite",
   },
