@@ -47,6 +47,7 @@ def load_batch_datasets(dm: DataManager, symbol_list: list[str],
             continue
         if isinstance(result, tuple):
             df, filepath = result
+            assert df is not None  # 前面的 guard 已排除 result[0] is None
         else:
             df, filepath = result, None
         datasets.append((sym, df, filepath))
