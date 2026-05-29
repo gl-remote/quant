@@ -14,7 +14,7 @@ from strategies import Strategy
 logger = logging.getLogger(__name__)
 
 
-def apply_strategy_config(strategy: Strategy, config_manager: Any) -> None:
+def apply_strategy_config(strategy: Strategy[Any], config_manager: Any) -> None:
     """将配置文件中的策略参数应用到策略实例的 config 上
 
     通过 dataclasses.fields() 校验 TOML 配置键是否对应合法数据类字段，
@@ -45,7 +45,7 @@ def apply_strategy_config(strategy: Strategy, config_manager: Any) -> None:
             )
 
 
-def serialize_strategy_params(strategy: Strategy) -> dict[str, float]:
+def serialize_strategy_params(strategy: Strategy[Any]) -> dict[str, float]:
     """将策略配置序列化为参数字典，用于写入 backtest_params 表
 
     Args:
