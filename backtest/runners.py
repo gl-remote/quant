@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def load_batch_datasets(dm: DataManager, symbol_list: list[str],
                        start_arg: str | None, end_arg: str | None,
-                       interval: str) -> list[tuple[str, pd.DataFrame, str]]:
+                       interval: str) -> list[tuple[str, pd.DataFrame, str | None]]:
     """加载批量回测所需的数据集
 
     Args:

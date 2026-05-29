@@ -417,7 +417,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
 def _persist_search_results(
     dm: DataManager,
     result: SearchResult,
-    datasets: list[tuple[str, pd.DataFrame, str]],
+    datasets: list[tuple[str, pd.DataFrame, str | None]],
     search_type: str,
     study_name: str,
     git_hash: str | None,
