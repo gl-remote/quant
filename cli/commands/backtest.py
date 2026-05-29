@@ -59,7 +59,6 @@ from strategies.utils import (
 )
 from backtest import (
     VnpyBacktestEngine,
-    load_batch_datasets,
     execute_walk_forward,
     execute_parameter_search,
     SearchResult,
@@ -309,7 +308,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                     len(symbol_list), strategy_name, mode_name)
 
         # ── 步骤 2: 加载批量数据 ──
-        datasets = load_batch_datasets(dm, symbol_list, start_arg, end_arg, bc.interval)
+        datasets = dm.load_kline(symbol_list, start_arg, end_arg, bc.interval)
         if not datasets:
             logger.error("所有品种数据加载失败")
             return

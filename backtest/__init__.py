@@ -16,14 +16,13 @@
 
 from .vnpy_backtest_engine import VnpyBacktestEngine
 from .walk_forward import walk_forward_split, walk_forward_split_by_ratio
-from .runners import load_batch_datasets, execute_walk_forward, execute_parameter_search
+from .runners import execute_walk_forward, execute_parameter_search
 from .optimizer import run_param_search, OptunaOptimizer, OptunaResult, SearchResult
 
 __all__ = [
     'VnpyBacktestEngine',
     'walk_forward_split',
     'walk_forward_split_by_ratio',
-    'load_batch_datasets',
     'execute_walk_forward',
     'execute_parameter_search',
     'run_param_search',

@@ -24,24 +24,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def load_batch_datasets(dm: DataManager, symbol_list: list[str],
-                       start_arg: str | None, end_arg: str | None,
-                       interval: str) -> list[tuple[str, pd.DataFrame, str]]:
-    """加载批量回测所需的数据集
-
-    Args:
-        dm: DataManager 实例
-        symbol_list: 品种代码列表
-        start_arg: 开始日期
-        end_arg: 结束日期
-        interval: 数据周期
-
-    Returns:
-        数据集列表，每项为 (symbol, dataframe, data_src)
-    """
-    return dm.load_kline(symbol_list, start_arg, end_arg, interval)
-
-
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],
                         capital: float, contract_size: int,
