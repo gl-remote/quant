@@ -9,7 +9,7 @@ import dataclasses
 import logging
 from typing import Any
 
-from strategies.core.base import Strategy
+from strategies import Strategy
 
 logger = logging.getLogger(__name__)
 

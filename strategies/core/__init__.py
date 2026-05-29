@@ -11,13 +11,13 @@
   - types: Bar, Signal, Fill, StrategyPosition 标准化数据类型
 
 【推荐导入方式】
-  from strategies.core import Strategy, Bar, Signal  # 从 core 直接导入
-  from strategies import Strategy, Bar, Signal        # 或者从顶层导入（更推荐）
-  from strategies.core import CORE_VERSION             # 版本号常量
+  from strategies import Strategy, Bar, Signal  # 从顶层统一入口导入
+  from strategies import CORE_VERSION             # 版本号常量
+  包内模块推荐从 strategies 顶层导入，避免依赖内部目录结构。
 
 【版本号规则】
   CORE_VERSION: 策略基础设施版本，core/ 下任何文件改动 → 递增此版本
-  各策略引用: from strategies.core import CORE_VERSION
+  各策略引用: from strategies import CORE_VERSION
   策略版本格式: f"{CORE_VERSION}-<策略标识><迭代号>"
     例: ma_strategy.py → VERSION = f"{CORE_VERSION}-ma1"
 """

@@ -74,6 +74,9 @@ output/
 dist/
 build/
 
+# Comate AI assistant workspace files
+.comate/
+
 # MCP related directories
 .memory/
 .quant_shared_data

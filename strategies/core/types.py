@@ -5,6 +5,9 @@ Bridge 接收行情 (Bar)，喂给 Strategy 产生信号。
 """
 
 from dataclasses import dataclass
+from datetime import datetime as dt
+
+from common.types import TradeAction, PositionDirection
 
 
 @dataclass
@@ -15,7 +18,7 @@ class Bar:
     Strategy 因此无需感知 vnpy BarData / tqsdk kline_serial 等异构格式。
     """
     symbol: str = ""
-    datetime: str = ""
+    datetime: dt = dt.min
     open: float = 0.0
     high: float = 0.0
     low: float = 0.0
@@ -30,7 +33,7 @@ class Signal:
     Strategy.on_bar() 返回此对象，Bridge 据此执行或转发。
     volume 由策略预计算，Bridge 只需执行，不做数量决策。
     """
-    action: str = ""        # 'buy' | 'sell' | ''
+    action: TradeAction = ''        # 'buy' | 'sell' | ''
     reason: str = ""        # 'golden_cross' | 'stop_loss' | 'take_profit' | ...
     volume: int = 0         # 策略预计算的开仓手数
 
@@ -38,7 +41,7 @@ class Signal:
 @dataclass
 class StrategyPosition:
     """持仓快照"""
-    direction: str = ""        # 'long' | ''
+    direction: PositionDirection = ''        # 'long' | ''
     entry_price: float = 0.0
     volume: int = 0
 
@@ -48,7 +51,7 @@ class Fill:
     """订单成交记录 — Bridge 通知 Strategy 的成交回执"""
     timestamp: str = ""
     symbol: str = ""
-    action: str = ""        # 'buy' | 'sell'
+    action: TradeAction = ''        # 'buy' | 'sell'
     price: float = 0.0
     volume: int = 0
     reason: str = ""        # 触发原因

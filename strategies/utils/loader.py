@@ -8,7 +8,7 @@
 import importlib
 from pathlib import Path
 
-from strategies.core.base import Strategy
+from strategies import Strategy
 from common.constants import STRATEGY_MA
 
 

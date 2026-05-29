@@ -9,12 +9,14 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Generic, TypeVar
 
 from .types import Bar, Signal, Fill, StrategyPosition
 
+T = TypeVar('T')
 
-class Strategy(ABC):
+
+class Strategy(ABC, Generic[T]):
     """量化策略抽象基类
 
     Bridge 调用流程:
@@ -64,11 +66,11 @@ class Strategy(ABC):
 
     @property
     @abstractmethod
-    def config(self) -> Any:
+    def config(self) -> T:
         """策略配置"""
 
     @config.setter
-    def config(self, value: Any) -> None:
+    def config(self, value: T) -> None:
         ...
 
     # ---- 生命周期 ----

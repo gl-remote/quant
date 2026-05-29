@@ -13,10 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 from typing_extensions import override
 
-from strategies.core import CORE_VERSION
-
-from .core.base import Strategy
-from .core.types import Bar, Signal, Fill, StrategyPosition
+from strategies import CORE_VERSION, Strategy, Bar, Signal, Fill, StrategyPosition
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -57,7 +54,7 @@ class MACrossParams:
     position_ratio: float = DEFAULT_POSITION_RATIO
 
 
-class MaStrategyCore(Strategy):
+class MaStrategyCore(Strategy[MACrossParams]):
     """均线交叉策略核心
 
     负责全部业务逻辑，Bridge 仅做数据转换和下单执行。

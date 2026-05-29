@@ -16,9 +16,9 @@
   from strategies import CORE_VERSION             # 版本号常量
   from strategies.utils import load_strategy      # 工具函数
 
-【也可以但不推荐】
-  from strategies.core import Strategy           # 直接从 core 导入
-  from strategies.ma_strategy import MaStrategyCore  # 直接从子模块导入
+【不再推荐直接从 core 子模块导入】
+  包内所有模块统一从 strategies 顶层导入，
+  避免 from strategies.core / from .core.base 等内部路径依赖。
 
 
 ============================================================

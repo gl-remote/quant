@@ -12,10 +12,11 @@
 
 import argparse
 import logging
+from datetime import datetime
 
 from config import ConfigManager
 from data import DataManager
-from strategies.core import Bar, Fill
+from strategies import Bar, Fill
 from strategies.utils import load_strategy, apply_strategy_config, get_strategy_class_name
 from common.constants import (
     TRADE_ACTION_BUY,
@@ -62,7 +63,7 @@ def cmd_test(args: argparse.Namespace):
             f"止盈={tc.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO):.0%}"
         )
 
-        bar1 = Bar(symbol="TEST", datetime="2026-01-01",
+        bar1 = Bar(symbol="TEST", datetime=datetime(2026, 1, 1),
                    open=10, high=15, low=10, close=15, volume=1000)
         signal1 = strategy.on_bar(bar1)
         logger.info(
@@ -72,18 +73,18 @@ def cmd_test(args: argparse.Namespace):
 
         if signal1.action == TRADE_ACTION_BUY:
             strategy.on_fill(Fill(
-                timestamp=bar1.datetime, symbol=bar1.symbol,
+                timestamp=str(bar1.datetime), symbol=bar1.symbol,
                 action=TRADE_ACTION_BUY, price=bar1.close, volume=signal1.volume,
                 reason=signal1.reason))
 
-            bar2 = Bar(symbol="TEST", datetime="2026-01-02",
+            bar2 = Bar(symbol="TEST", datetime=datetime(2026, 1, 2),
                        open=15, high=16, low=13, close=13.5, volume=500)
             signal2 = strategy.on_bar(bar2)
             logger.info(f"信号2: action={signal2.action} reason={signal2.reason}")
 
             if signal2.action == TRADE_ACTION_SELL:
                 strategy.on_fill(Fill(
-                    timestamp=bar2.datetime, symbol=bar2.symbol,
+                    timestamp=str(bar2.datetime), symbol=bar2.symbol,
                     action=TRADE_ACTION_SELL, price=bar2.close, volume=signal1.volume,
                     reason=signal2.reason))
 

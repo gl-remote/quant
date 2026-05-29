@@ -6,9 +6,11 @@
 """
 
 import dataclasses
+from datetime import datetime
 
 from strategies.ma_strategy import MaStrategyCore, MACrossParams
-from strategies.core.types import Bar, Signal, Fill
+from strategies import Bar, Signal, Fill
+from common.types import TradeAction
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -24,9 +26,9 @@ from common.constants import (
 # 辅助函数
 # ==============================================================================
 
-def _make_bar(close: float, datetime: str = '2024-01-01 10:00:00') -> Bar:
+def _make_bar(close: float, dt: datetime = datetime(2024, 1, 1, 10, 0, 0)) -> Bar:
     return Bar(
-        datetime=datetime,
+        datetime=dt,
         open=close - 1.0,
         high=close + 1.0,
         low=close - 2.0,
@@ -35,7 +37,7 @@ def _make_bar(close: float, datetime: str = '2024-01-01 10:00:00') -> Bar:
     )
 
 
-def _make_signal(action: str, reason: str, volume: int) -> Signal:
+def _make_signal(action: TradeAction, reason: str, volume: int) -> Signal:
     s = Signal()
     s.action = action
     s.reason = reason

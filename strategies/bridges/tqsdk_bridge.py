@@ -14,8 +14,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from ..core.base import Strategy
-from ..core.types import Bar, Signal, Fill
+from strategies import Strategy, Bar, Signal, Fill
+from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class TqsdkStrategyBridge:
 
         bar = Bar(
             symbol=self.symbol,
-            datetime=str(datetime.now()),
+            datetime=datetime.now(),
             open=float(kline_data.open.iloc[idx]),
             high=float(kline_data.high.iloc[idx]),
             low=float(kline_data.low.iloc[idx]),
@@ -143,10 +143,10 @@ class TqsdkStrategyBridge:
                 current_len = len(klines)
                 for i in range(prev_kline_len, current_len):
                     signal = self.on_bar(klines, idx=i)
-                    if signal.action == 'buy':
+                    if signal.action == TRADE_ACTION_BUY:
                         target_pos.set_target_volume(signal.volume)
                         self.notify_fill(signal, float(klines.close.iloc[i]))
-                    elif signal.action == 'sell':
+                    elif signal.action == TRADE_ACTION_SELL:
                         target_pos.set_target_volume(0)
                         self.notify_fill(signal, float(klines.close.iloc[i]))
                 prev_kline_len = current_len
@@ -175,7 +175,7 @@ class TqsdkStrategyBridge:
                 self.api.close()
             p = self._strategy
             fills_count = len(p.fills)
-            sells = len([f for f in p.fills if f.action == 'sell'])
+            sells = len([f for f in p.fills if f.action == TRADE_ACTION_SELL])
             logger.info(
                 f"策略停止: fills={fills_count} sells={sells}"
             )

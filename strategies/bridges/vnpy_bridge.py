@@ -13,11 +13,13 @@ vn.py 为强制依赖。
 """
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from vnpy_ctastrategy import CtaTemplate
 
-from ..core.types import Bar, Signal, Fill
+from strategies import Bar, Signal, Fill
+from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,7 @@ class VnpyStrategyBridge(CtaTemplate):
 
     def on_stop(self) -> None:
         fills_count = len(self._core.fills) if self._core else 0
-        sells = len([f for f in self._core.fills if f.action == 'sell']) if self._core else 0
+        sells = len([f for f in self._core.fills if f.action == TRADE_ACTION_SELL]) if self._core else 0
         logger.info(
             f"[{self._strategy_name}] 策略停止 | "
             f"fills={fills_count} sells={sells}"
@@ -74,15 +76,15 @@ class VnpyStrategyBridge(CtaTemplate):
         standardized = self._vnpy_bar_to_bar(bar)
         signal = self._core.on_bar(standardized)
 
-        if signal.action == 'buy' and self.pos == 0:
+        if signal.action == TRADE_ACTION_BUY and self.pos == 0:
             self._execute_buy(signal, standardized)
-        elif signal.action == 'sell' and self.pos > 0:
+        elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
             self._execute_sell(signal, standardized)
 
     def _vnpy_bar_to_bar(self, vnpy_bar: Any) -> Bar:
         return Bar(
             symbol=getattr(vnpy_bar, 'symbol', ''),
-            datetime=str(getattr(vnpy_bar, 'datetime', '')),
+            datetime=getattr(vnpy_bar, 'datetime', datetime.min),
             open=float(getattr(vnpy_bar, 'open_price', 0)),
             high=float(getattr(vnpy_bar, 'high_price', 0)),
             low=float(getattr(vnpy_bar, 'low_price', 0)),
@@ -101,9 +103,9 @@ class VnpyStrategyBridge(CtaTemplate):
             f"@{bar.close:.2f} x{volume}"
         )
         self._core.on_fill(Fill(
-            timestamp=bar.datetime,
+            timestamp=str(bar.datetime),
             symbol=bar.symbol,
-            action='buy',
+            action=TRADE_ACTION_BUY,
             price=bar.close,
             volume=volume,
             reason=signal.reason,
@@ -121,9 +123,9 @@ class VnpyStrategyBridge(CtaTemplate):
             f"@{bar.close:.2f} 盈亏{profit:.2f}"
         )
         self._core.on_fill(Fill(
-            timestamp=bar.datetime,
+            timestamp=str(bar.datetime),
             symbol=bar.symbol,
-            action='sell',
+            action=TRADE_ACTION_SELL,
             price=bar.close,
             volume=pos,
             reason=signal.reason,

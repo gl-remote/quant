@@ -12,6 +12,7 @@ common — 通用纯函数工具层
   - formatting:    安全格式化 (format_pct, format_float, ensure_float)
   - schemas:       Pandera Schema 定义 (KlineSchema, DailyReturnSchema)
   - symbol_utils:  合约代码解析 & 默认日期范围推算
+  - types:         全局类型别名 (TradeAction, PositionDirection)
 """
 
 from .formulas import calculate_fifo_profit
@@ -25,6 +26,7 @@ from .schemas import (
     DailyReturnDataFrame,
 )
 from .symbol_utils import parse_contract, resolve_date_range
+from .types import TradeAction, PositionDirection
 
 __all__ = [
     'calculate_fifo_profit',
@@ -44,4 +46,7 @@ __all__ = [
     # 合约工具
     'parse_contract',
     'resolve_date_range',
+    # 类型别名
+    'TradeAction',
+    'PositionDirection',
 ]

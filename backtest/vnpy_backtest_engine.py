@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pandas as pd
 
-from strategies.core.base import Strategy
+from strategies import Strategy
 from strategies.utils import serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
