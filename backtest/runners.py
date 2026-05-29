@@ -13,11 +13,10 @@ from typing import Any, TYPE_CHECKING
 
 import pandas as pd
 
-from strategies.utils import load_strategy, serialize_strategy_params, get_strategy_class_name
+from strategies.utils import load_strategy
 from config import ConfigManager
 from data import DataManager
 from .optimizer import run_param_search, SearchResult
-from common.constants import STATUS_SUCCESS, STATUS_FAILED
 
 if TYPE_CHECKING:
     from .vnpy_backtest_engine import VnpyBacktestEngine
