@@ -259,10 +259,10 @@ class DataManager:
 
         Args:
             symbols: 品种代码列表（如 ['DCE.m2509', 'SHFE.rb2505']）
-            start_date: 开始日期（可选，格式 'YYYY-MM-DD'）
-            end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
-            interval: K线周期（默认从配置读取）
-            provider: 数据源名称（可选，遍历所有可用源）
+            start_date: 开始日期（格式 'YYYY-MM-DD'），None 时不作下限过滤
+            end_date: 结束日期（格式 'YYYY-MM-DD'），None 时不作上限过滤
+            interval: K线周期，None 时从配置读取默认周期
+            provider: 数据源名称（如 'tqsdk'），None 时遍历所有可用源
 
         Returns:
             按 symbols 顺序返回 [(symbol, DataFrame, data_src), ...]
