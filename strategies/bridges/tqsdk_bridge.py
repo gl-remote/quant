@@ -103,7 +103,7 @@ class TqsdkStrategyBridge:
             auth = tqsdk.TqAuth("guest", "")
         return auth or tqsdk.TqAuth("guest", "")
 
-    def _watch_klines(self, api, klines, symbol: str):
+    def _watch_klines(self, api: Any, klines: KlineDataFrame, symbol: str) -> None:
         """监控 K 线序列变化并驱动策略 — 回测/实盘共用核心循环
 
         跟踪 kline_serial 长度变化，每次 wait_update 处理所有新增 K 线，
