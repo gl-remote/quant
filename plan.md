@@ -15,8 +15,11 @@ main.py
 │   ├── core/               ABC + 类型定义
 │   ├── bridges/            vnpy / 天勤 桥接
 │   └── ma_strategy.py      双均线策略 (已证实无效)
-├── backtest/               回测引擎 (纯执行器)
-├── optimizer/              Optuna 参数搜索 (grid + bayesian)
+├── backtest/               回测与优化引擎 (含参数优化)
+│   ├── vnpy_backtest_engine.py  批量回测
+│   ├── walk_forward.py          Walk-Forward 时间窗口
+│   ├── runners.py               批量回测编排
+│   └── optimizer.py             Optuna 参数优化
 ├── data/                   数据层 (多数据源 + SQLite + peewee)
 ├── common/                 纯函数工具层
 ├── report/                 React SPA 报告系统
@@ -82,7 +85,7 @@ main.py
 
 | 编号 | 严重度 | 问题 | 位置 |
 |------|--------|------|------|
-| DEF-06 | 🔴 | 优化器可选退化解 (零交易 → 最优) | optimizer + `ma_strategy.py` |
+| DEF-06 | 🔴 | 优化器可选退化解 (零交易 → 最优) | backtest/optimizer.py + `ma_strategy.py` |
 | DEF-S04 | 🟡 | 止损/止盈使用固定比例而非 ATR | `ma_strategy.py` |
 | DEF-S05 | 🟡 | 信号优先级由 if/elif 顺序隐式定义 | `ma_strategy.py` |
 

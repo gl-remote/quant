@@ -13,6 +13,8 @@ from dataclasses import dataclass
 from typing import Any
 from typing_extensions import override
 
+from strategies.core import CORE_VERSION
+
 from .core.base import Strategy
 from .core.types import Bar, Signal, Fill, StrategyPosition
 from common.constants import (
@@ -64,7 +66,7 @@ class MaStrategyCore(Strategy):
     """
 
     name: str = STRATEGY_MA
-    VERSION: str = "v1.0.0"
+    VERSION: str = f"{CORE_VERSION}-ma1"
 
     def __init__(self, strategy_params: dict[str, Any] | None = None,
                  capital: float | None = None,

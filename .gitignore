@@ -80,3 +80,6 @@ build/
 
 # Temporary commit message files
 .commit_msg_tmp
+
+# VS Code user settings
+.vscode/

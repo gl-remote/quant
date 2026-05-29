@@ -78,8 +78,7 @@ quant/
 ├── main.py                    # 命令行入口
 ├── cli/                       # 命令行子包
 ├── strategies/                # 策略子系统
-├── backtest/                  # 回测引擎
-├── optimizer/                 # 参数优化器
+├── backtest/                  # 回测与优化引擎（含参数优化）
 ├── data/                      # 数据管理
 ├── report/                    # 报告生成
 │   └── web/                   # React 前端工程
@@ -108,8 +107,7 @@ quant/
 |------|------|
 | `cli/` | 命令行接口，参数解析和命令分发 |
 | `strategies/` | 策略核心，桥接器模式实现框架无关性 |
-| `backtest/` | 回测引擎，vn.py 批量回测 + Walk-Forward |
-| `optimizer/` | 参数优化，网格搜索 + 贝叶斯优化 |
+| `backtest/` | 回测与优化引擎：vn.py 批量回测 + Walk-Forward + 参数优化 |
 | `data/` | 数据层，统一数据访问和持久化 |
 | `report/` | 报告生成，Python 数据导出 + React 前端渲染 |
 | `common/` | 通用工具，纯函数库（零依赖） |

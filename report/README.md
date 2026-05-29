@@ -32,23 +32,22 @@
                            │
               ┌────────────┼────────────┐
               │            │            │
-        backtest/    optimizer/       ...
-        执行回测      参数搜索
-                      (调用 backtest
-                       作为评估器)
+        backtest/       ...
+        执行回测 + 参数搜索
+        (含 optimizer 逻辑，
+         调用自身作为评估器)
 ```
 
 | 模块 | report 如何与之交互 | 方向 |
 |------|-------------------|------|
 | `data/` | 通过 `DataManager` 读取 runs/backtests/equity/optuna 数据；通过 CSV 文件读取 K 线原始数据 | 读 |
-| `backtest/` | 不直接交互。回测结果写入 `data/`，report 从中读取 | 无 |
-| `optimizer/` | 不直接交互。optimizer 调用 backtest 评估每个 trial，结果写入 `data/`。report 通过 `data/` + `build_optuna_spec()` 生成图表 | 无 |
+| `backtest/` | 不直接交互。回测和参数优化结果写入 `data/`，report 从中读取 | 无 |
 | `strategies/` | 完全不交互 | 无 |
 | `common/` | 可能复用纯函数工具，但不依赖 | 可选 |
 | `config/` | 不直接交互 | 无 |
 | `cli/main.py` | `build_all()` 由 CLI 的 `report` 子命令调用 | 被调用 |
 
-**关键原则**：report 是只读消费者。optimizer 在 backtest 命令内部被调用——optimizer 调用 backtest 作为子过程，每次 trial 写入 `data/`，report 从 `data/` 读取结果生成报告。
+**关键原则**：report 是只读消费者。参数优化逻辑在 `backtest/optimizer.py` 内部调用回测引擎，每次 trial 写入 `data/`，report 从 `data/` 读取结果生成报告。
 
 ---
 

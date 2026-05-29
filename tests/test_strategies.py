@@ -110,7 +110,7 @@ class TestMaStrategyInit:
 
     def test_version(self):
         strat = MaStrategyCore()
-        assert strat.VERSION == 'v1.0.0'
+        assert strat.VERSION == 'v1.0.0-ma1'
 
 
 # ==============================================================================

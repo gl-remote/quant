@@ -17,7 +17,7 @@ import logging
 from config import ConfigManager
 from data import DataManager
 from strategies import TqsdkStrategyBridge
-from strategies.core import (
+from strategies.utils import (
     load_strategy,
     get_strategy_class_name,
 )

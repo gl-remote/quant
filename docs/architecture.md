@@ -31,11 +31,11 @@ main.py → cli/
 │   └── bridges/             框架桥接器
 │       ├── vnpy_bridge.py   vn.py 桥接
 │       └── tqsdk_bridge.py  天勤桥接
-├── backtest/                回测引擎
-│   ├── vnpy_backtest_engine.py  批量回测 + Walk-Forward
-│   └── walk_forward.py          数据加载与时间窗口切分
-├── optimizer/               参数优化
-│   └── optuna_search.py     Optuna 统一优化器
+├── backtest/                回测与优化引擎
+│   ├── vnpy_backtest_engine.py  批量回测
+│   ├── walk_forward.py          Walk-Forward 时间窗口切分
+│   ├── runners.py               批量回测编排
+│   └── optimizer.py             Optuna 参数优化器
 ├── data/                    数据层
 │   ├── manager.py           DataManager 统一入口
 │   ├── models.py            Pydantic + peewee ORM 模型

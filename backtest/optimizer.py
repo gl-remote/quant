@@ -1,13 +1,24 @@
 # -*- coding: utf-8 -*-
-"""Optuna 贝叶斯优化调度器
+"""基于 Optuna 的参数优化引擎
 
-替代 grid_search 的穷举 + CLI 调度模式。OptunaOptimizer 持有 engine 和 datasets，
-每个 trial 自动创建策略 → 跑 engine → 聚合多品种得分 → 持久化结果。
+提供统一的参数优化接口，支持网格搜索和贝叶斯搜索两种模式。
+
+架构设计:
+    CLI 层：负责 orchestrate、持久化回测结果
+    Optimizer 层：负责参数搜索逻辑，不做持久化
+    Engine 层：负责运行单个回测
+
+流程:
+    1. 定义搜索空间
+    2. 每个 trial 采样参数，创建策略
+    3. 调用 engine.run() 运行回测
+    4. 聚合多品种夏普比率均值
+    5. 返回优化结果（SearchResult），持久化由调用方处理
 
 用法:
-    from optimizer import OptunaOptimizer
+    from backtest.optimizer import run_param_search
 
-    opt = OptunaOptimizer(
+    result = run_param_search(
         engine=engine,
         datasets=[(symbol, df), ...],
         strategy_name="ma",
@@ -16,8 +27,8 @@
         capital=100000,
         contract_size=10,
         n_trials=50,
+        search_type="bayesian",  # 或 "grid"
     )
-    result = opt.optimize()
     print(result.best_params)
 """
 
@@ -33,8 +44,8 @@ import pandas as pd
 
 import optuna
 
-from strategies.core import load_strategy
-from strategies.core import serialize_strategy_params
+from strategies.utils import load_strategy
+from strategies.utils import serialize_strategy_params
 
 logger = logging.getLogger(__name__)
 
@@ -46,28 +57,54 @@ class OptunaResult:
     Attributes:
         best_params: 最优参数组合
         best_value: 最优目标值
-        trial_data: 全部试验数据 [{params, value, backtest_ids, status}, ...]
+        trial_data: 全部试验数据 [{search_params, value, engine_results, strategy_params, ...}, ...]
         study: optuna.Study 实例（用于可视化）
-        backtest_ids: 所有试验生成的 backtest ID 列表
     """
 
     best_params: dict[str, Any] = field(default_factory=dict)
     best_value: float = 0.0
     trial_data: list[dict[str, Any]] = field(default_factory=list)
     study: optuna.Study | None = None
-    backtest_ids: list[int] = field(default_factory=list)
+
+
+@dataclass
+class SearchResult:
+    """参数搜索结果摘要
+
+    用于 CLI 层获取搜索结果，不包含持久化相关字段。
+
+    Attributes:
+        best_params: 最优参数组合
+        best_value: 最优目标值
+        n_trials: 试验次数
+        study_name: optuna study 名称
+        trial_data: 全部试验数据
+    """
+
+    best_params: dict[str, Any] = field(default_factory=dict)
+    best_value: float = 0.0
+    n_trials: int = 0
+    study_name: str = ""
+    trial_data: list[dict[str, Any]] = field(default_factory=list)
 
 
 class OptunaOptimizer:
-    """Optuna 贝叶斯优化调度器
+    """基于 Optuna 的参数优化器
 
-    负责：
-      1. 定义搜索空间 → Optuna suggest API
-      2. 每个 trial 创建策略 → 调 engine.run → 聚合得分
-      3. 管理 trial 间数据流向：从 engine 结果提取 score
+    支持两种搜索模式：
+      1. **Grid Search** (网格)：穷举搜索空间的所有组合
+      2. **Bayesian Search** (贝叶斯)：使用 TPESampler 进行智能采样
+
+    核心功能：
+      - 定义搜索空间并通过 Optuna suggest API 采样
+      - 每个 trial 创建策略，调用 engine.run，聚合多品种得分
+      - 管理 trial 间数据流向
+      - 支持 SQLite 持久化 study（便于恢复和可视化）
+
+    目标函数：最大化夏普比率平均值（取各品种夏普的均值）
 
     不负责：
-      - 持久化到数据库（由调用方 CLI 处理）
+      - 持久化回测结果到数据库（由 CLI 层处理）
       - 生成可视化报告（由 report/ 模块处理）
     """
 
@@ -171,10 +208,10 @@ class OptunaOptimizer:
                 score = float(sum(sharpes) / len(sharpes))
 
             trial_index.append({
-                'params': params,
+                'search_params': params,
                 'value': score,
                 'engine_results': engine_results,
-                'params': serialize_strategy_params(strategy),
+                'strategy_params': serialize_strategy_params(strategy),
                 'strategy_name': type(strategy).__name__,
                 'strategy_version': getattr(strategy, 'VERSION', None),
             })
@@ -210,7 +247,13 @@ class OptunaOptimizer:
             grid_space = self._create_grid_space()
             sampler = optuna.samplers.GridSampler(grid_space)
             # 网格搜索的 trial 数等于组合数
-            n_trials = min(self._n_trials, len(grid_space) > 0 and len(grid_space[next(iter(grid_space))]) or self._n_trials)
+            if not grid_space:
+                n_trials = 0
+            else:
+                n_combinations = 1
+                for values in grid_space.values():
+                    n_combinations *= len(values)
+                n_trials = min(self._n_trials, n_combinations)
             logger.info("Grid Search: 搜索空间=%s, 计划试验=%d", grid_space, n_trials)
         else:
             sampler = optuna.samplers.TPESampler()
@@ -262,3 +305,58 @@ class OptunaOptimizer:
                     name, spec.get("choices", []),
                 )
         return params
+
+
+def run_param_search(
+    engine: Any,
+    datasets: list[tuple[str, pd.DataFrame]],
+    strategy_name: str,
+    search_space: dict[str, dict[str, Any]],
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    n_trials: int,
+    search_type: str,
+    study_db_path: str = "",
+    study_name: str = "",
+) -> SearchResult:
+    """执行参数搜索（网格或贝叶斯）
+
+    Args:
+        engine: 回测引擎实例
+        datasets: [(symbol, DataFrame), ...] 多品种数据
+        strategy_name: 策略名称
+        search_space: 搜索空间定义
+        strategy_params: 策略默认参数
+        capital: 初始资金
+        contract_size: 合约乘数
+        n_trials: 最大试验次数
+        search_type: "grid" 或 "bayesian"
+        study_db_path: Optuna study 存储路径
+        study_name: 自定义 study 名称
+
+    Returns:
+        SearchResult 搜索结果
+    """
+    optimizer = OptunaOptimizer(
+        engine=engine,
+        datasets=datasets,
+        strategy_name=strategy_name,
+        search_space=search_space,
+        strategy_params=strategy_params,
+        capital=capital,
+        contract_size=contract_size,
+        n_trials=n_trials,
+        study_db_path=study_db_path,
+        search_type=search_type,
+        study_name=study_name,
+    )
+    opt_result = optimizer.optimize()
+
+    return SearchResult(
+        best_params=opt_result.best_params,
+        best_value=opt_result.best_value,
+        n_trials=len(opt_result.trial_data),
+        study_name=optimizer.study_name,
+        trial_data=opt_result.trial_data,
+    )

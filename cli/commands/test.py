@@ -15,7 +15,8 @@ import logging
 
 from config import ConfigManager
 from data import DataManager
-from strategies.core import Bar, Fill, load_strategy, apply_strategy_config, get_strategy_class_name
+from strategies.core import Bar, Fill
+from strategies.utils import load_strategy, apply_strategy_config, get_strategy_class_name
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,

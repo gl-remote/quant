@@ -280,7 +280,7 @@ export default function KlineChart({ data, loading }: Props) {
 
   const btnBase = "px-4 py-1.5 text-[13px] font-medium border-none bg-transparent cursor-pointer rounded-md transition-all";
   const toggleBtn = `${btnBase} text-slate-500`;
-  const toggleActive = `${btnBase} bg-blue-600 text-white shadow-md shadow-blue-600/30`;
+  const toggleActive = `${btnBase} bg-blue-800 text-slate-900 shadow-md shadow-blue-800/30`;
 
   const toolbar = (
     <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100" data-ql-id="RUN-KLINE-TOOLBAR">

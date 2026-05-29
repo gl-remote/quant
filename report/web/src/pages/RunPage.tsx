@@ -94,7 +94,7 @@ export default function RunPage() {
   const hasOptuna = optuna && optuna.study_name;
 
   const tabBtn = "px-[18px] py-2 text-[13px] font-medium rounded-md border-none bg-transparent cursor-pointer outline-none transition-all whitespace-nowrap";
-  const tabActive = "bg-blue-600 text-white shadow-md shadow-blue-600/30";
+  const tabActive = "bg-blue-800 text-slate-900 shadow-md shadow-blue-800/30";
   const tabInactive = "text-slate-500";
 
   return (
