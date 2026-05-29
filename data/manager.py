@@ -258,7 +258,7 @@ class DataManager:
     @overload
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
                    interval: str | None = None, provider: str | None = None,
-                   return_path: Literal[True]) -> tuple[pd.DataFrame, str]: ...
+                   return_path: Literal[True] = True) -> tuple[pd.DataFrame, str]: ...
 
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
                    interval: str | None = None, provider: str | None = None,
