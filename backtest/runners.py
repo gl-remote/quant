@@ -39,7 +39,7 @@ def load_batch_datasets(dm: DataManager, symbol_list: list[str],
     Returns:
         数据集列表，每项为 (symbol, dataframe, filepath)
     """
-    datasets: list[tuple[str, pd.DataFrame, str]] = []
+    datasets: list[tuple[str, pd.DataFrame, str | None]] = []
     for sym in symbol_list:
         result = dm.load_kline(sym, start_arg, end_arg, interval, return_path=True)
         if result is None or (isinstance(result, tuple) and result[0] is None):
@@ -57,7 +57,7 @@ def load_batch_datasets(dm: DataManager, symbol_list: list[str],
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],
                         capital: float, contract_size: int,
-                        datasets: list[tuple[str, pd.DataFrame, str]]) -> tuple[dict, Any, str]:
+                        datasets: list[tuple[str, pd.DataFrame, str | None]]) -> tuple[dict, Any, str]:
     """执行 Walk-Forward 滚动验证
 
     Args:
@@ -87,7 +87,7 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
 def execute_parameter_search(engine: "VnpyBacktestEngine",
                             strategy_name: str, strategy_params: dict[str, Any],
                             capital: float, contract_size: int,
-                            datasets: list[tuple[str, pd.DataFrame, str]],
+                            datasets: list[tuple[str, pd.DataFrame, str | None]],
                             n_trials: int, optimizer_cfg: Any, cm: ConfigManager,
                             optimizer_arg: str | None, git_hash: str | None,
                             dm: DataManager, run_id: int | None) -> SearchResult | None:
