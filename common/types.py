@@ -8,6 +8,9 @@
     from common.types import TradeAction, PositionDirection
 
     signal = Signal(action='buy')  # type checker validates 'buy' | 'sell' | ''
+
+单一事实来源：全项目（core、strategies、bridges）共享同一组 Literal 类型。
+与 common/constants.py 中同名运行时常量同源，修改时同步更新。
 """
 
 from typing import Literal

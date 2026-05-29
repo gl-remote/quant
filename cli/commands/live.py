@@ -53,8 +53,11 @@ def cmd_live(args: argparse.Namespace):
             dm.store.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
             sys.exit(1)
 
-        from tqsdk import TqAuth
-        auth = TqAuth(account.api_key, account.api_secret)
+        from common.tqsdk_imports import tqsdk
+        if not tqsdk.ensure():
+            logger.error("tqsdk 未安装，无法启动实盘模式")
+            sys.exit(1)
+        auth = tqsdk.TqAuth(account.api_key, account.api_secret)
         sc = cm.get_trading_config(args.strategy)
         strategy_params = sc.model_dump(exclude={"name", "enabled"})
         bc = cm.get_backtest_config()

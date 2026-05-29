@@ -130,9 +130,8 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         cm: ConfigManager 实例
         dm: DataManager 实例
     """
-    from tqsdk import TqApi, TqAuth, TqBacktest  # pyright: ignore[reportMissingTypeStubs]
-    from tqsdk.exceptions import BacktestFinished  # pyright: ignore[reportMissingTypeStubs]
     from strategies import TqsdkStrategyBridge
+    from common.tqsdk_imports import tqsdk
 
     strategy: str = args.strategy  # pyright: ignore[reportAny]
     symbol: str = args.symbol  # pyright: ignore[reportAny]
@@ -141,7 +140,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
     gui_flag: bool = args.gui  # pyright: ignore[reportAny]
     capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
 
-    api: TqApi | None = None
+    api = None
     strategy_cls = ""
     try:
         sc = cm.get_trading_config(strategy)
@@ -171,9 +170,9 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
                      ),
                      symbol=symbol, status=LOG_STATUS_INFO)
 
-        auth = TqAuth(account.api_key, account.api_secret) if account else None
-        api = TqApi(
-            backtest=TqBacktest(
+        auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None
+        api = tqsdk.TqApi(
+            backtest=tqsdk.TqBacktest(
                 start_dt=datetime.strptime(start_date_str, '%Y-%m-%d'),
                 end_dt=datetime.strptime(end_date_str, '%Y-%m-%d')
             ),
@@ -246,7 +245,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             try:
                 while True:
                     api.wait_update()
-            except BacktestFinished:
+except tqsdk.BacktestFinished:
                 pass
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)

@@ -16,34 +16,11 @@ from typing import Any
 
 from strategies import Strategy, Bar, Signal, Fill
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
+from common.schemas import KlineDataFrame
+from common.typing import check_types
+from common.tqsdk_imports import tqsdk
 
 logger = logging.getLogger(__name__)
-
-
-class TqsdkImports:
-    """天勤 SDK 延迟导入管理器"""
-
-    def __init__(self):
-        self._loaded: bool = False
-        self.TqApi: Any = None
-        self.TqAuth: Any = None
-        self.TargetPosTask: Any = None
-
-    def ensure(self) -> bool:
-        if self._loaded:
-            return True
-        try:
-            from tqsdk import TqApi, TqAuth, TargetPosTask
-            self.TqApi = TqApi
-            self.TqAuth = TqAuth
-            self.TargetPosTask = TargetPosTask
-            self._loaded = True
-            return True
-        except ImportError:
-            return False
-
-
-_tqsdk = TqsdkImports()
 
 
 class TqsdkStrategyBridge:
@@ -54,15 +31,15 @@ class TqsdkStrategyBridge:
       caller 根据 signal 执行下单 → strategy.on_fill(fill)
     """
 
-    def __init__(self, strategy: Strategy, symbol: str):
-        self._strategy: Strategy = strategy
+    def __init__(self, strategy: Strategy[Any], symbol: str):
+        self._strategy: Strategy[Any] = strategy
         self.symbol: str = symbol
 
         self.api: Any = None
         self.account: Any = None
 
     @property
-    def strategy(self) -> Strategy:
+    def strategy(self) -> Strategy[Any]:
         return self._strategy
 
     def initialize(self, api: Any | None = None):
@@ -70,7 +47,8 @@ class TqsdkStrategyBridge:
         if api:
             self.account = api.get_account()
 
-    def on_bar(self, kline_data, idx: int = -1) -> Signal:
+    @check_types
+    def on_bar(self, kline_data: KlineDataFrame, idx: int = -1) -> Signal:
         """处理天勤K线数据指定索引行，返回标准化 Signal
 
         无状态 — 每次调用独立转换并返回结果。
@@ -115,8 +93,8 @@ class TqsdkStrategyBridge:
         """统一认证和符号设置"""
         self.symbol = symbol or self.symbol or ""
         if not auth and self.account is None:
-            auth = _tqsdk.TqAuth("guest", "")
-        return auth or _tqsdk.TqAuth("guest", "")
+            auth = tqsdk.TqAuth("guest", "")
+        return auth or tqsdk.TqAuth("guest", "")
 
     def _watch_klines(self, api, klines, symbol: str):
         """监控 K 线序列变化并驱动策略 — 回测/实盘共用核心循环
@@ -135,7 +113,7 @@ class TqsdkStrategyBridge:
         Raises:
             BacktestFinished: 回测模式下由 TqApi.wait_update() 自然抛出
         """
-        target_pos = _tqsdk.TargetPosTask(api, symbol)
+        target_pos = tqsdk.TargetPosTask(api, symbol)
         prev_kline_len = len(klines)
         while True:
             api.wait_update()
@@ -153,12 +131,12 @@ class TqsdkStrategyBridge:
 
     def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False):
         """实盘/模拟主循环 — 初始化 API 后委托 _watch_klines 驱动策略"""
-        if not _tqsdk.ensure():
+        if not tqsdk.ensure():
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
             return
 
         try:
-            api = _tqsdk.TqApi(auth=auth, web_gui=web_gui)
+            api = tqsdk.TqApi(auth=auth, web_gui=web_gui)
             self.initialize(api)
             klines = api.get_kline_serial(symbol, 86400)
             log_msg = f"开始运行策略: {symbol}，按Ctrl+C停止"

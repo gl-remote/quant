@@ -2,6 +2,16 @@
 
 Strategy 产生决策 (Signal)，Bridge 转换为框架指令。
 Bridge 接收行情 (Bar)，喂给 Strategy 产生信号。
+
+【类型选择说明】
+- Bar.datetime 使用 datetime 对象而非 str：策略内可直接
+  bar.datetime.hour / .weekday() 做时间维度逻辑，无需自行 strptime。
+- Fill.timestamp 保持 str：成交时间戳在 Bridge 中已有格式化逻辑 (strftime)，
+  且语义不同。Bar.datetime → Fill.timestamp 时通过 str() 显式转换。
+
+【扩展准则】
+  新增类型应判断：如果是 Strategy 和 Bridge 之间传递的数据 → 放 core；
+  如果是回测或实盘运行产生的衍生数据 → 放对应模块（如 backtest / report）。
 """
 
 from dataclasses import dataclass

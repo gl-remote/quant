@@ -29,6 +29,16 @@ class Strategy(ABC, Generic[T]):
     直接获取策略状态，不经过 Bridge 代理。
     绩效数据统一由回测引擎（vnpy BacktestingEngine.calculate_statistics）
     计算和对外输出，Strategy 不再自行统计盈亏。
+
+    【config 泛型化】
+    Strategy(ABC, Generic[T]) 中的 T 由子类指定具体参数类型
+    （如 Strategy[MACrossParams]），使调用方访问 strategy.config
+    时静态类型检查能自动推断出具体字段，无需手动 cast。
+
+    【指标缓存不在 core】
+    core 只提供抽象接口和通信协议，不涉及具体指标实现。
+    指标缓存应放在独立模块（如 strategies/indicators/），
+    在 3 个以上策略共享计算时引入。
     """
 
     name: str = "base"

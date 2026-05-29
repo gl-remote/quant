@@ -72,9 +72,12 @@ class TqSdkDataSource(BaseDataSource):
         account: object,
     ) -> pd.DataFrame:
         """执行单次天勤 API 拉取"""
-        from tqsdk import TqApi, TqAuth, TqBacktest
-        from tqsdk.exceptions import BacktestFinished
         from datetime import timedelta
+        from common.tqsdk_imports import tqsdk
+
+        if not tqsdk.ensure():
+            logger.error("tqsdk 未安装，无法拉取数据")
+            return pd.DataFrame()
 
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
@@ -94,10 +97,10 @@ class TqSdkDataSource(BaseDataSource):
             )
             start_dt = adjusted_start
 
-        auth = TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
+        auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
-        api = TqApi(
-            backtest=TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth
+        api = tqsdk.TqApi(
+            backtest=tqsdk.TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth
         )
 
         # tqsdk 以 end_dt 为锚点，从数据源拉回最多 data_length 条
@@ -127,7 +130,7 @@ class TqSdkDataSource(BaseDataSource):
                         }
                         rows.append(row)
                     prev_len = current_len
-        except BacktestFinished:
+        except tqsdk.BacktestFinished:
             pass
         except Exception:
             api.close()
