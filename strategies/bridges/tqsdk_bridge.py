@@ -14,8 +14,6 @@ import logging
 from datetime import datetime
 from typing import Any
 
-import pandas as pd
-
 from strategies import Strategy, Bar, Signal, Fill
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 from common.schemas import KlineDataFrame
@@ -25,16 +23,16 @@ from common.tqsdk_imports import tqsdk
 logger = logging.getLogger(__name__)
 
 
-def _to_datetime(raw_dt: Any) -> datetime:
+def _to_datetime(raw_dt: int) -> datetime:
     """将 tqsdk kline_serial 的 datetime 转为 Python datetime
 
-    tqsdk 的 datetime 列可能为 int64 (纳秒)、pd.Timestamp 或 NaT，
-    统一转换为 Python datetime。NaT/异常时返回 datetime.min。
+    tqsdk 文档:
+      datetime 列为自 unix epoch 以来的**纳秒**数 (int64)，例如 1501080715000000000。
+    参见: TqApi.get_kline_serial 的 Returns 部分。
+
+    注意: 此格式不同于常见的毫秒/秒时间戳，转换时必须除以 1e9。
     """
-    try:
-        return pd.Timestamp(raw_dt).to_pydatetime()
-    except Exception:
-        return datetime.min
+    return datetime.fromtimestamp(raw_dt / 1_000_000_000)
 
 
 class TqsdkStrategyBridge:
