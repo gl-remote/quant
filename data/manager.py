@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, overload, Literal
+from typing import TYPE_CHECKING
 
 from common.constants import COMMON_KLINE_INTERVALS
 from common.types import BacktestResult
@@ -249,16 +249,6 @@ class DataManager:
         except Exception as e:
             logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
             return None
-
-    @overload
-    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None, provider: str | None = None,
-                   return_path: Literal[False] = False) -> pd.DataFrame: ...
-
-    @overload
-    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None, provider: str | None = None,
-                   return_path: Literal[True] = True) -> tuple[pd.DataFrame, str]: ...
 
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
                    interval: str | None = None, provider: str | None = None,
