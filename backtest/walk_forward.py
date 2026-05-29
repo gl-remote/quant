@@ -121,8 +121,10 @@ def walk_forward_split_by_ratio(
     effective_ratio = step_ratio
     train_size, val_size, test_size, step = _calc_sizes(effective_ratio)
 
+    # 逐步缩小窗口，直到窗口数达标或窗口过小无法继续
+    # range(max_attempts) 提供兜底的死循环防护，最多重试 10 次
     max_attempts = 10
-    for attempt in range(max_attempts):
+    for _ in range(max_attempts):
         actual_windows = _count_windows(train_size, val_size, test_size, step)
         if actual_windows < min_windows:
             effective_ratio *= 0.8
