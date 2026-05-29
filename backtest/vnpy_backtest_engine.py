@@ -139,7 +139,7 @@ class VnpyBacktestEngine:
 
     def run(
         self,
-        pairs: list[tuple[str, pd.DataFrame, Strategy]],
+        pairs: list[tuple[str, pd.DataFrame, Strategy[Any]]],
     ) -> list[BacktestResult]:
         """执行多策略 × 多品种回测
 
@@ -159,7 +159,7 @@ class VnpyBacktestEngine:
 
         # 按 DataFrame 分组，同一份数据共用一个 vnpy engine
         from collections import defaultdict
-        groups: dict[int, list[tuple[str, Strategy]]] = defaultdict(list)
+        groups: dict[int, list[tuple[str, Strategy[Any]]]] = defaultdict(list)
         df_map: dict[int, pd.DataFrame] = {}
         for sym, df, strategy in pairs:
             df_id = id(df)
@@ -229,7 +229,7 @@ class VnpyBacktestEngine:
         self,
         data: pd.DataFrame | None,
         symbol: str,
-        strategy: Strategy,
+        strategy: Strategy[Any],
         train_size: int | None = None,
         val_size: int | None = None,
         test_size: int | None = None,
@@ -360,7 +360,7 @@ class VnpyBacktestEngine:
     # ── 内部方法 ──────────────────────────────────────────────
 
     def _wrap_injected_strategy(
-        self, strategy: Strategy,
+        self, strategy: Strategy[Any],
     ) -> type:
         """创建注入了策略实例的桥接器策略类
 
@@ -387,7 +387,7 @@ class VnpyBacktestEngine:
         self,
         df: pd.DataFrame,
         symbol: str,
-        strategies: list[Strategy],
+        strategies: list[Strategy[Any]],
     ) -> list[dict[str, Any]]:
         """在单个数据集上执行 vnpy 回测
 
