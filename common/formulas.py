@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 # 每交易日交易秒数 (4 小时日盘，不含夜盘)
@@ -32,7 +33,7 @@ _SECONDS_PER_TRADING_DAY = 14400
 # FIFO 盈亏计算 (FIFO PnL Calculation)
 # ============================================================================
 
-def calculate_fifo_profit(fills: list[object]) -> float:
+def calculate_fifo_profit(fills: Sequence[object]) -> float:
     """按 FIFO 顺序计算已平仓交易的盈亏总额
 
     与笛卡尔积不同，此函数按先入先出规则将每笔买入与卖出匹配，

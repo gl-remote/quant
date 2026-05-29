@@ -15,9 +15,10 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from common.constants import COMMON_KLINE_INTERVALS
+from common.schemas import KlineDataFrame
 from common.types import BacktestResult
 import pandas as pd
 from pathlib import Path
@@ -55,7 +56,7 @@ class DataManager:
         """
         self._config: ConfigManager | None = config_manager
         self._store: DataStore | None = None
-        self._data_cache: dict[str, pd.DataFrame] = {}
+        self._data_cache: dict[str, KlineDataFrame] = {}
         self._default_config: ConfigManager | None = None
 
     def _get_config(self) -> ConfigManager:
@@ -252,7 +253,7 @@ class DataManager:
 
     def load_kline(self, symbols: list[str], start_date: str | None = None,
                    end_date: str | None = None, interval: str | None = None,
-                   provider: str | None = None) -> list[tuple[str, pd.DataFrame, str]]:
+                   provider: str | None = None) -> list[tuple[str, KlineDataFrame, str]]:
         """加载K线数据，返回 [(symbol, df, data_src), ...]
 
         data_src 来自 ExportMetadata 表，由导出过程注册，作为数据溯源路径。
@@ -283,7 +284,7 @@ class DataManager:
             else:
                 candidates = list_sources()
 
-        results: list[tuple[str, pd.DataFrame, str]] = []
+        results: list[tuple[str, KlineDataFrame, str]] = []
 
         for symbol in symbols:
             data_src = self._resolve_data_src(symbol, interval, candidates)
@@ -302,7 +303,8 @@ class DataManager:
             if end_date:
                 df = df[df['datetime'] <= pd.Timestamp(end_date)]
 
-            self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]
+            df = cast(KlineDataFrame, df)
+            self._data_cache[cache_key] = df
             logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
             results.append((symbol, df, data_src))
 
@@ -316,7 +318,7 @@ class DataManager:
             FileNotFoundError: 查不到注册记录或文件缺失
         """
         for p in candidates:
-            meta = self._store.get_metadata(symbol, p, interval)
+            meta = self.store.get_metadata(symbol, p, interval)
             if meta:
                 fp = meta['filepath']
                 if not isinstance(fp, str):

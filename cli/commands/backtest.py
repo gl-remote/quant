@@ -35,8 +35,6 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
-
 from config import ConfigManager
 from data import DataManager
 
@@ -66,6 +64,7 @@ from backtest import (
 from report import build_all as build_dashboard
 from common.formulas import calculate_fifo_profit
 from common.types import BacktestResult
+from common.schemas import KlineDataFrame
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +142,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
 
     api = None
     strategy_cls = ""
+    capital_val: float | None = None
     try:
         sc = cm.get_trading_config(strategy)
         account = cm.get_account_info()
@@ -324,7 +324,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         git_hash = get_git_hash()
 
         # 创建运行记录
-        run_engine = optimizer_arg or cm._config.optimizer.engine or "grid"
+        run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"
         run_id = dm.store.create_run(
             strategy=strategy_name,
             engine=run_engine if mode == "search" else "walk-forward",
@@ -370,7 +370,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             else:
                 logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
         else:
-            optimizer_cfg = cm._config.optimizer  # pyright: ignore[reportPrivateUsage]
+            optimizer_cfg = cm.get_optimizer_config()
             n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
             result = execute_parameter_search(
                 engine=engine,
@@ -389,11 +389,11 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             )
             if result:
                 # CLI 统一持久化
-                bt_ids = _persist_search_results(
+                _persist_search_results(
                     dm=dm,
                     result=result,
                     datasets=datasets,
-                    search_type=optimizer_arg or cm._config.optimizer.engine or "grid",
+                    search_type=optimizer_arg or cm.get_optimizer_config().engine or "grid",
                     study_name=result.study_name,
                     git_hash=git_hash,
                     run_id=run_id,
@@ -416,7 +416,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
 def _persist_search_results(
     dm: DataManager,
     result: SearchResult,
-    datasets: list[tuple[str, pd.DataFrame, str]],
+    datasets: list[tuple[str, KlineDataFrame, str]],
     search_type: str,
     study_name: str,
     git_hash: str | None,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any, TYPE_CHECKING
 
-import pandas as pd
+from common.schemas import KlineDataFrame
 
 from strategies.utils import load_strategy
 from config import ConfigManager
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],
                         capital: float, contract_size: int,
-                        datasets: list[tuple[str, pd.DataFrame, str]]) -> tuple[dict, Any, str]:
+                        datasets: list[tuple[str, KlineDataFrame, str]]) -> tuple[dict[str, Any], Any, str]:
     """执行 Walk-Forward 滚动验证
 
     Args:
@@ -57,10 +57,10 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
 def execute_parameter_search(engine: "VnpyBacktestEngine",
                             strategy_name: str, strategy_params: dict[str, Any],
                             capital: float, contract_size: int,
-                            datasets: list[tuple[str, pd.DataFrame, str]],
+                            datasets: list[tuple[str, KlineDataFrame, str]],
                             n_trials: int, optimizer_cfg: Any, cm: ConfigManager,
                             optimizer_arg: str | None, git_hash: str | None,
-                            dm: DataManager, run_id: int | None) -> SearchResult | None:
+                            dm: DataManager, run_id: int ) -> SearchResult | None:
     """执行参数搜索
 
     Args:
@@ -81,7 +81,7 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
     Returns:
         SearchResult（如果成功执行搜索），否则 None
     """
-    run_engine = optimizer_arg or cm._config.optimizer.engine or "grid"
+    run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"
     
     # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
     sc = cm.get_trading_config(strategy_name)

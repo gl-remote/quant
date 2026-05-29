@@ -499,6 +499,13 @@ class ConfigManager:
         return self._config.system.logging
 
     # --------------------------------------------------
+    # 优化器
+    # --------------------------------------------------
+
+    def get_optimizer_config(self) -> OptimizerConfig:
+        return self._config.optimizer
+
+    # --------------------------------------------------
     # 校验
     # --------------------------------------------------
 
