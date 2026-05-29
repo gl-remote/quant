@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload, Literal
 
 from common.constants import COMMON_KLINE_INTERVALS
 from common.types import BacktestResult
@@ -250,10 +250,20 @@ class DataManager:
             logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
             return None
 
+    @overload
     def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
                    interval: str | None = None, provider: str | None = None,
-                   return_path: bool = False) -> pd.DataFrame | None | tuple[pd.DataFrame | None, str | None]:
-        """加载K线数据，返回经过 Pandera 验证的 DataFrame，失败返回 None
+                   return_path: Literal[False] = False) -> pd.DataFrame: ...
+
+    @overload
+    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
+                   interval: str | None = None, provider: str | None = None,
+                   return_path: Literal[True] = True) -> tuple[pd.DataFrame, str]: ...
+
+    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
+                   interval: str | None = None, provider: str | None = None,
+                   return_path: bool = False) -> pd.DataFrame | tuple[pd.DataFrame, str]:
+        """加载K线数据，返回经过 Pandera 验证的 DataFrame
 
         Args:
             symbol: 品种代码（如 'DCE.m2509'）
@@ -264,64 +274,63 @@ class DataManager:
             return_path: 为 True 时返回 (df, filepath) 元组
 
         Returns:
-            经过 Pandera KlineSchema 验证的 K 线数据，或 (df, filepath) 元组，失败返回 None
+            return_path=False 时返回 DataFrame，
+            return_path=True 时返回 (df, filepath) 元组。
+
+        Raises:
+            FileNotFoundError: 数据文件不存在
+            Exception: 数据读取或验证失败
         """
-        try:
-            if interval is None:
-                interval = self._get_default_interval()
+        if interval is None:
+            interval = self._get_default_interval()
 
-            data_dir = self._get_data_dir()
-            filename_template = self._get_filename_template()
+        data_dir = self._get_data_dir()
+        filename_template = self._get_filename_template()
 
-            if provider:
-                candidates = [provider]
+        if provider:
+            candidates = [provider]
+        else:
+            bt_provider = self._get_default_provider()
+            if bt_provider:
+                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
             else:
-                bt_provider = self._get_default_provider()
-                if bt_provider:
-                    candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
-                else:
-                    candidates = list_sources()
-            filepath = None
-            matched_provider = None
-            for p in candidates:
-                fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
-                if fp.exists():
-                    filepath = fp
-                    matched_provider = p
-                    break
+                candidates = list_sources()
+        filepath = None
+        matched_provider = None
+        for p in candidates:
+            fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
+            if fp.exists():
+                filepath = fp
+                matched_provider = p
+                break
 
-            if filepath is None:
-                raise FileNotFoundError(
-                    f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
-                )
+        if filepath is None:
+            raise FileNotFoundError(
+                f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
+            )
 
-            cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
-            if cache_key in self._data_cache:
-                logger.debug(f"从缓存加载数据: {symbol}")
-                cached_df = self._data_cache[cache_key]
-                if return_path:
-                    return cached_df, str(filepath)
-                return cached_df
-
-            df = pd.read_csv(filepath)
-            df['datetime'] = pd.to_datetime(df['datetime'])
-
-            if start_date:
-                df = df[df['datetime'] >= pd.Timestamp(start_date)]
-            if end_date:
-                df = df[df['datetime'] <= pd.Timestamp(end_date)]
-
-            self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
-            logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
-
+        cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
+        if cache_key in self._data_cache:
+            logger.debug(f"从缓存加载数据: {symbol}")
+            cached_df = self._data_cache[cache_key]
             if return_path:
-                return df, str(filepath)  # pyright: ignore[reportReturnType]
-            return df  # pyright: ignore[reportReturnType]
-        except Exception as e:
-            logger.error(f"加载K线数据失败: {e}")
-            if return_path:
-                return None, None
-            return None
+                return cached_df, str(filepath)
+            return cached_df
+
+        df = pd.read_csv(filepath)
+        df['datetime'] = pd.to_datetime(df['datetime'])
+
+        if start_date:
+            df = df[df['datetime'] >= pd.Timestamp(start_date)]
+        if end_date:
+            df = df[df['datetime'] <= pd.Timestamp(end_date)]
+
+        self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
+        logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+
+        if return_path:
+            return df, str(filepath)
+        return df
 
     # ── 回测记录 ────────────────────────────────────────────
 

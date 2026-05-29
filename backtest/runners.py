@@ -41,15 +41,11 @@ def load_batch_datasets(dm: DataManager, symbol_list: list[str],
     """
     datasets: list[tuple[str, pd.DataFrame, str | None]] = []
     for sym in symbol_list:
-        result = dm.load_kline(sym, start_arg, end_arg, interval, return_path=True)
-        if result is None or (isinstance(result, tuple) and result[0] is None):
+        try:
+            df, filepath = dm.load_kline(sym, start_arg, end_arg, interval, return_path=True)
+        except Exception:
             logger.warning(f"跳过 {sym}: 数据加载失败")
             continue
-        if isinstance(result, tuple):
-            df, filepath = result
-            assert df is not None  # 前面的 guard 已排除 result[0] is None
-        else:
-            df, filepath = result, None
         datasets.append((sym, df, filepath))
     return datasets
 
