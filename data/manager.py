@@ -250,32 +250,29 @@ class DataManager:
             logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
             return None
 
-    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None, provider: str | None = None,
-                   return_path: bool = False) -> pd.DataFrame | tuple[pd.DataFrame, str]:
-        """加载K线数据，返回经过 Pandera 验证的 DataFrame
+    def load_kline(self, symbols: list[str], start_date: str | None = None,
+                   end_date: str | None = None, interval: str | None = None,
+                   provider: str | None = None) -> list[tuple[str, pd.DataFrame, str]]:
+        """加载K线数据，返回 [(symbol, df, data_src), ...]
+
+        data_src 来自 ExportMetadata 表，由导出过程注册，作为数据溯源路径。
 
         Args:
-            symbol: 品种代码（如 'DCE.m2509'）
+            symbols: 品种代码列表（如 ['DCE.m2509', 'SHFE.rb2505']）
             start_date: 开始日期（可选，格式 'YYYY-MM-DD'）
             end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
             interval: K线周期（默认从配置读取）
-            provider: 数据源（默认从配置读取）
-            return_path: 为 True 时返回 (df, filepath) 元组
+            provider: 数据源名称（可选，遍历所有可用源）
 
         Returns:
-            return_path=False 时返回 DataFrame，
-            return_path=True 时返回 (df, filepath) 元组。
+            按 symbols 顺序返回 [(symbol, DataFrame, data_src), ...]
 
         Raises:
-            FileNotFoundError: 数据文件不存在
-            Exception: 数据读取或验证失败
+            FileNotFoundError: ExportMetadata 查不到数据源或文件缺失
+            Exception: CSV 读取或解析错误
         """
         if interval is None:
             interval = self._get_default_interval()
-
-        data_dir = self._get_data_dir()
-        filename_template = self._get_filename_template()
 
         if provider:
             candidates = [provider]
@@ -285,42 +282,55 @@ class DataManager:
                 candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
             else:
                 candidates = list_sources()
-        filepath = None
-        matched_provider = None
+
+        results: list[tuple[str, pd.DataFrame, str]] = []
+
+        for symbol in symbols:
+            data_src = self._resolve_data_src(symbol, interval, candidates)
+            cache_key = f"{symbol}_{interval}_{start_date}_{end_date}"
+
+            if cache_key in self._data_cache:
+                logger.debug(f"从缓存加载数据: {symbol}")
+                results.append((symbol, self._data_cache[cache_key], data_src))
+                continue
+
+            df = pd.read_csv(data_src)
+            df['datetime'] = pd.to_datetime(df['datetime'])
+
+            if start_date:
+                df = df[df['datetime'] >= pd.Timestamp(start_date)]
+            if end_date:
+                df = df[df['datetime'] <= pd.Timestamp(end_date)]
+
+            self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]
+            logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+            results.append((symbol, df, data_src))
+
+        return results
+
+    def _resolve_data_src(self, symbol: str, interval: str,
+                          candidates: list[str]) -> str:
+        """查 ExportMetadata 获取指定品种的数据源路径
+
+        Raises:
+            FileNotFoundError: 查不到注册记录或文件缺失
+        """
         for p in candidates:
-            fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
-            if fp.exists():
-                filepath = fp
-                matched_provider = p
-                break
-
-        if filepath is None:
-            raise FileNotFoundError(
-                f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
-            )
-
-        cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
-        if cache_key in self._data_cache:
-            logger.debug(f"从缓存加载数据: {symbol}")
-            cached_df = self._data_cache[cache_key]
-            if return_path:
-                return cached_df, str(filepath)
-            return cached_df
-
-        df = pd.read_csv(filepath)
-        df['datetime'] = pd.to_datetime(df['datetime'])
-
-        if start_date:
-            df = df[df['datetime'] >= pd.Timestamp(start_date)]
-        if end_date:
-            df = df[df['datetime'] <= pd.Timestamp(end_date)]
-
-        self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
-        logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
-
-        if return_path:
-            return df, str(filepath)
-        return df
+            meta = self._store.get_metadata(symbol, p, interval)
+            if meta:
+                fp = meta['filepath']
+                if not isinstance(fp, str):
+                    continue
+                if not Path(fp).exists():
+                    raise FileNotFoundError(
+                        f"数据源记录存在但文件缺失: {symbol} "
+                        f"provider={p} filepath={fp}"
+                    )
+                return fp
+        raise FileNotFoundError(
+            f"ExportMetadata 中找不到 {symbol} "
+            f"(interval={interval}, candidates={candidates})"
+        )
 
     # ── 回测记录 ────────────────────────────────────────────
 

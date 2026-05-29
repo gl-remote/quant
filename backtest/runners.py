@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 def load_batch_datasets(dm: DataManager, symbol_list: list[str],
                        start_arg: str | None, end_arg: str | None,
-                       interval: str) -> list[tuple[str, pd.DataFrame, str | None]]:
+                       interval: str) -> list[tuple[str, pd.DataFrame, str]]:
     """加载批量回测所需的数据集
 
     Args:
@@ -37,25 +37,15 @@ def load_batch_datasets(dm: DataManager, symbol_list: list[str],
         interval: 数据周期
 
     Returns:
-        数据集列表，每项为 (symbol, dataframe, filepath)
+        数据集列表，每项为 (symbol, dataframe, data_src)
     """
-    datasets: list[tuple[str, pd.DataFrame, str | None]] = []
-    for sym in symbol_list:
-        try:
-            result = dm.load_kline(sym, start_arg, end_arg, interval, return_path=True)
-            assert isinstance(result, tuple)
-            df, filepath = result
-        except Exception:
-            logger.warning(f"跳过 {sym}: 数据加载失败")
-            continue
-        datasets.append((sym, df, filepath))
-    return datasets
+    return dm.load_kline(symbol_list, start_arg, end_arg, interval)
 
 
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],
                         capital: float, contract_size: int,
-                        datasets: list[tuple[str, pd.DataFrame, str | None]]) -> tuple[dict, Any, str]:
+                        datasets: list[tuple[str, pd.DataFrame, str]]) -> tuple[dict, Any, str]:
     """执行 Walk-Forward 滚动验证
 
     Args:
@@ -85,7 +75,7 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
 def execute_parameter_search(engine: "VnpyBacktestEngine",
                             strategy_name: str, strategy_params: dict[str, Any],
                             capital: float, contract_size: int,
-                            datasets: list[tuple[str, pd.DataFrame, str | None]],
+                            datasets: list[tuple[str, pd.DataFrame, str]],
                             n_trials: int, optimizer_cfg: Any, cm: ConfigManager,
                             optimizer_arg: str | None, git_hash: str | None,
                             dm: DataManager, run_id: int | None) -> SearchResult | None:
