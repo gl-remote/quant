@@ -69,14 +69,14 @@ class TradeRecord(BaseModel):
     offset: str = "open"
     open_price: float
     close_price: float
-    quantity: int
+    quantity: float
     pnl: float = 0.0
     commission: float = 0.0
     created_at: str | None = None
 
     @field_validator('quantity')
     @classmethod
-    def validate_quantity(cls, v: int) -> int:
+    def validate_quantity(cls, v: float) -> float:
         if v <= 0:
             raise ValueError('quantity must be greater than 0')
         return v
@@ -245,7 +245,7 @@ class BacktestTrade(OrmBaseModel):
     offset: CharField = CharField()
     open_price: FloatField = FloatField()
     close_price: FloatField = FloatField()
-    quantity: IntegerField = IntegerField()
+    quantity: FloatField = FloatField()
     pnl: FloatField = FloatField()
     commission: FloatField = FloatField()
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])

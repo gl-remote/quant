@@ -66,6 +66,7 @@ from backtest import (
 )
 from report import build_all as build_dashboard
 from common.formulas import calculate_fifo_profit
+from common.types import BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
     """
     from strategies import TqsdkStrategyBridge
     from common.tqsdk_imports import tqsdk
+    from common.types import BacktestResult
 
     strategy: str = args.strategy  # pyright: ignore[reportAny]
     symbol: str = args.symbol  # pyright: ignore[reportAny]
@@ -183,8 +185,8 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         bridge.initialize(api)
         bridge._watch_klines(api, klines, symbol)  # pyright: ignore[reportPrivateUsage]
 
-    except BacktestFinished:
-        fills = getattr(strategy_core, 'fills', [])  # pyright: ignore[reportPossiblyUnboundVariable]
+    except tqsdk.BacktestFinished:
+        fills = bridge.fills  # pyright: ignore[reportPossiblyUnboundVariable]
 
         total_profit = calculate_fifo_profit(fills)
         total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
@@ -204,20 +206,18 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         )
         print(report)
 
-        bt_id = dm.insert_backtest(
+        bt_id = dm.insert_backtest(BacktestResult(
             symbol=symbol,
             strategy=strategy_cls,
             status=STATUS_SUCCESS,
-            error_message=None,
-            statistics={
-                'total_trades': total_trades,
-                'total_profit': total_profit,
-            },
-            engine_config={'type': 'tqsdk', 'gui': gui_flag},
-            params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
+            total_trades=total_trades,
+            total_return=total_profit,
+            end_balance=capital_val + total_profit if capital_val else 0,
             start_date=start_date_str,
             end_date=end_date_str,
-        )
+            strategy_params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
+            engine_config={'type': 'tqsdk', 'gui': gui_flag},
+        ))
 
         if fills:
             trade_dicts = []
@@ -245,22 +245,18 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             try:
                 while True:
                     api.wait_update()
-except tqsdk.BacktestFinished:
+            except tqsdk.BacktestFinished:
                 pass
     except Exception as e:
         logger.error(f"回测执行失败: {e}", exc_info=True)
         dm.store.log('backtest', f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
-        _ = dm.insert_backtest(
+        _ = dm.insert_backtest(BacktestResult(
             symbol=symbol,
             strategy=strategy_cls or 'unknown',
             status=STATUS_FAILED,
             error_message=str(e),
-            statistics={},
             engine_config={'type': 'tqsdk'},
-            params={},
-            start_date=None,
-            end_date=None,
-        )
+        ))
         raise
     finally:
         if api:
@@ -348,22 +344,23 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             )
             bt_id = None
             if wf_result.get('success'):
-                bt_id = dm.insert_backtest(
+                bt_id = dm.insert_backtest(BacktestResult(
                     symbol=sym,
                     strategy=get_strategy_class_name(strategy),
                     status=STATUS_SUCCESS,
-                    error_message=None,
-                    statistics=wf_result.get('aggregate', {}),
-                    engine_config={'type': 'vnpy', 'mode': 'walk-forward',
-                                   'windows': wf_result.get('windows', 0)},
-                    params=serialize_strategy_params(strategy),
-                    start_date=start_arg,
-                    end_date=end_arg,
                     strategy_version=getattr(strategy, 'VERSION', None),
                     git_hash=git_hash,
-                    run_id=run_id,
-                    data_src=datasets[0][2],
-                )
+                    strategy_params=serialize_strategy_params(strategy),
+                    start_date=start_arg,
+                    end_date=end_arg,
+                    engine_config={'type': 'vnpy', 'mode': 'walk-forward',
+                                   'windows': wf_result.get('windows', 0)},
+                    # walk_forward 聚合指标映射到 BacktestResult 字段
+                    sharpe_ratio=wf_result.get('aggregate', {}).get('sharpe_mean'),
+                    max_drawdown=wf_result.get('aggregate', {}).get('max_drawdown_mean'),
+                    total_return=wf_result.get('aggregate', {}).get('return_mean'),
+                    daily_std=wf_result.get('aggregate', {}).get('return_std'),
+                ), run_id=run_id, data_src=datasets[0][2])
                 logger.info(f"Walk-Forward 完成: id={bt_id}, "
                            f"窗口={wf_result.get('windows', 0)}")
                 if bt_id:
@@ -449,45 +446,27 @@ def _persist_search_results(
     for i, trial in enumerate(result.trial_data):
         trial_cfg = {**engine_cfg, 'trial_index': i}
         for er in trial.get('engine_results', []):
-            if not er.get('success'):
-                # 失败的 engine_result 仍然持久化，标记为失败
-                dm.insert_backtest(
-                    symbol=er.get('symbol', 'unknown'),
-                    strategy=er.get('strategy_name', ''),
-                    status=STATUS_FAILED,
-                    error_message=er.get('error'),
-                    engine_config=trial_cfg,
-                    params=trial.get('search_params', {}),
-                    run_id=run_id,
-                    data_src=next(
-                        (f for s, _, f in datasets if s == er.get('symbol')),
-                        None,
-                    ),
-                )
+            # 覆盖引擎结果中的 trial 级别字段
+            er.engine_config = trial_cfg
+            er.strategy_params = trial.get('search_params', {})
+            er.git_hash = git_hash
+
+            if not er.success:
+                er.status = STATUS_FAILED
+                dm.insert_backtest(er, run_id=run_id,
+                                   data_src=next(
+                                       (f for s, _, f in datasets if s == er.symbol),
+                                       None))
                 continue
 
-            sym = er['symbol']
+            sym = er.symbol
             data_src = next((f for s, _, f in datasets if s == sym), None)
-
-            bt_id = dm.insert_backtest(
-                symbol=sym,
-                strategy=er.get('strategy_name', ''),
-                status=STATUS_SUCCESS,
-                error_message=None,
-                statistics=er.get('statistics', {}),
-                engine_config=trial_cfg,
-                params=trial.get('search_params', {}),
-                start_date=er.get('start_date'),
-                end_date=er.get('end_date'),
-                strategy_version=er.get('strategy_version'),
-                git_hash=git_hash,
-                run_id=run_id,
-                data_src=data_src,
-            )
+            er.status = STATUS_SUCCESS
+            bt_id = dm.insert_backtest(er, run_id=run_id, data_src=data_src)
             all_ids.append(bt_id)
 
             # 保存交易明细 + 每日资金曲线
-            daily = er.get('daily_results', [])
+            daily = er.daily_results
             if daily:
                 trades = []
                 for d in daily:

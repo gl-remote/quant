@@ -201,7 +201,7 @@
 
 
 # 策略核心与类型（来自 core）
-from .core import Strategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION
+from .core import Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION
 
 # 具体策略实现
 from .ma_strategy import MaStrategyCore, MACrossParams
@@ -229,7 +229,7 @@ __all__ = [
     # 版本号
     'CORE_VERSION',
     # 核心类型
-    'Strategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
     # 策略实现
     'MaStrategyCore', 'MACrossParams',
     # 工具函数

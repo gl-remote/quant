@@ -9,7 +9,7 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from .types import Bar, Signal, Fill, StrategyPosition
 
@@ -25,8 +25,8 @@ class Strategy(ABC, Generic[T]):
       bridge.execute(signal)             # Bridge 翻译为框架指令并执行
       strategy.on_fill(fill)             # 成交回执 → Strategy 更新状态
 
-    调用方（回测引擎/CLI）通过 strategy.position / strategy.fills
-    直接获取策略状态，不经过 Bridge 代理。
+    调用方（回测引擎/CLI）通过 strategy.position 直接获取策略状态，
+    成交记录 (fills) 由 Bridge 管理，不经过策略接口。
     绩效数据统一由回测引擎（vnpy BacktestingEngine.calculate_statistics）
     计算和对外输出，Strategy 不再自行统计盈亏。
 
@@ -88,3 +88,35 @@ class Strategy(ABC, Generic[T]):
     @abstractmethod
     def reset(self) -> None:
         """重置策略状态 (用于新一轮回测)"""
+
+
+class UninitializedStrategy(Strategy[Any]):
+    """注入前的占位策略 — 被调用时抛出 RuntimeError
+
+    Bridge __init__ 时赋值为默认值，替换 None₀ sentinel₁
+    避免每次使用时需要 None 判断。
+    注入后（bridge._core = real_strategy）自动替换。
+    """
+    name = "_uninitialized"
+    VERSION = ""
+
+    def on_bar(self, bar: Bar) -> Signal:
+        raise RuntimeError("Strategy core not yet injected into bridge")
+
+    def on_fill(self, fill: Fill) -> None:
+        raise RuntimeError("Strategy core not yet injected into bridge")
+
+    @property
+    def position(self) -> StrategyPosition:
+        raise RuntimeError("Strategy core not yet injected into bridge")
+
+    @property
+    def config(self) -> Any:
+        raise RuntimeError("Strategy core not yet injected into bridge")
+
+    @config.setter
+    def config(self, value: Any) -> None:
+        raise RuntimeError("Strategy core not yet injected into bridge")
+
+    def reset(self) -> None:
+        raise RuntimeError("Strategy core not yet injected into bridge")

@@ -33,6 +33,7 @@ class TqsdkStrategyBridge:
 
     def __init__(self, strategy: Strategy[Any], symbol: str):
         self._strategy: Strategy[Any] = strategy
+        self._fills: list[Fill] = []
         self.symbol: str = symbol
 
         self.api: Any = None
@@ -41,6 +42,10 @@ class TqsdkStrategyBridge:
     @property
     def strategy(self) -> Strategy[Any]:
         return self._strategy
+
+    @property
+    def fills(self) -> list[Fill]:
+        return list(self._fills)
 
     def initialize(self, api: Any | None = None):
         self.api = api
@@ -78,14 +83,16 @@ class TqsdkStrategyBridge:
 
     def notify_fill(self, signal: Signal, fill_price: float) -> None:
         """通知 Strategy 订单成交"""
-        self._strategy.on_fill(Fill(
+        fill = Fill(
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             symbol=self.symbol,
             action=signal.action,
             price=fill_price,
             volume=signal.volume,
             reason=signal.reason,
-        ))
+        )
+        self._fills.append(fill)
+        self._strategy.on_fill(fill)
 
     # ---- 实盘/模拟运行 ----
 
@@ -151,9 +158,8 @@ class TqsdkStrategyBridge:
         finally:
             if self.api:
                 self.api.close()
-            p = self._strategy
-            fills_count = len(p.fills)
-            sells = len([f for f in p.fills if f.action == TRADE_ACTION_SELL])
+            fills_count = len(self._fills)
+            sells = len([f for f in self._fills if f.action == TRADE_ACTION_SELL])
             logger.info(
                 f"策略停止: fills={fills_count} sells={sells}"
             )

@@ -30,12 +30,12 @@ CORE_VERSION = "v1.0.0"
 # ============================================================
 # 核心基类和类型
 # ============================================================
-from .base import Strategy
+from .base import Strategy, UninitializedStrategy
 from .types import Bar, Signal, Fill, StrategyPosition
 
 __all__ = [
     # 版本号
     'CORE_VERSION',
     # 核心基类和类型
-    'Strategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
 ]

@@ -199,8 +199,8 @@ class OptunaOptimizer:
 
             # 聚合得分：取各品种夏普均值
             sharpes = [
-                r['statistics'].get('sharpe_ratio', 0)
-                for r in engine_results if r.get('success')
+                r.sharpe_ratio or 0
+                for r in engine_results if r.success
             ]
             if not sharpes:
                 score = -999.0

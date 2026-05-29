@@ -100,10 +100,6 @@ class TestMaStrategyInit:
         assert pos.entry_price == 0.0
         assert pos.volume == 0
 
-    def test_initial_fills_empty(self):
-        strat = MaStrategyCore()
-        assert len(strat.fills) == 0
-
     def test_config_setter_updates(self):
         strat = MaStrategyCore()
         new_cfg = MACrossParams(sma_short=15)
@@ -281,23 +277,6 @@ class TestMaStrategyLifecycle:
         assert strat.position.direction == ""
         assert strat.position.volume == 0
 
-    def test_fills_accumulate(self):
-        strat = MaStrategyCore()
-        strat.on_fill(Fill(timestamp='2024-01-25', symbol='test',
-                           action=TRADE_ACTION_BUY, price=100.0, volume=5))
-        strat.on_fill(Fill(timestamp='2024-01-30', symbol='test',
-                           action=TRADE_ACTION_SELL, price=110.0, volume=5))
-        assert len(strat.fills) == 2
-
-    def test_fills_is_copy(self):
-        """fills 返回副本，外部修改不影响内部"""
-        strat = MaStrategyCore()
-        strat.on_fill(Fill(timestamp='2024-01-25', symbol='test',
-                           action=TRADE_ACTION_BUY, price=100.0, volume=5))
-        fills = strat.fills
-        fills.clear()  # 修改副本
-        assert len(strat.fills) == 1  # 内部不变
-
     def test_reset_clears_all_state(self):
         strat = MaStrategyCore()
         strat.on_fill(Fill(timestamp='2024-01-25', symbol='test',
@@ -306,7 +285,6 @@ class TestMaStrategyLifecycle:
             strat.on_bar(_make_bar(100.0))
 
         strat.reset()
-        assert len(strat.fills) == 0
         assert strat.position.direction == ""
         assert strat.position.volume == 0
 
@@ -352,7 +330,6 @@ class TestMaStrategyIntegration:
             ))
 
         assert strat.position.direction == TRADE_DIRECTION_LONG
-        assert len(strat.fills) == 1
 
         # 阶段 2: 持仓期间, 平仓信号
         dealt = False

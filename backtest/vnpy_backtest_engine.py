@@ -27,6 +27,7 @@ from data.manager import DataManager
 from common.formatting import parse_percentage
 from common.formulas import profitable_ratio
 from common.symbol_utils import parse_contract
+from common.types import BacktestResult
 
 if TYPE_CHECKING:
     from vnpy.trader.object import BarData
@@ -139,7 +140,7 @@ class VnpyBacktestEngine:
     def run(
         self,
         pairs: list[tuple[str, pd.DataFrame, Strategy]],
-    ) -> list[dict[str, Any]]:
+    ) -> list[BacktestResult]:
         """执行多策略 × 多品种回测
 
         每个品种创建一个 vnpy engine，注册该品种的所有策略，一次回放拿到多组结果。
@@ -148,12 +149,7 @@ class VnpyBacktestEngine:
             pairs: [(symbol, DataFrame, Strategy), ...] 数据与策略的配对
 
         Returns:
-            list[dict]，每个 dict:
-              - symbol, strategy_name, strategy_version
-              - statistics, daily_results
-              - start_date, end_date
-              - engine_config
-              - success, error (如果失败)
+            list[BacktestResult]
         """
         logger.info(f"{'=' * 60}")
         logger.info(f"启动 vn.py 回测: {len(pairs)} 个配对")
@@ -170,7 +166,7 @@ class VnpyBacktestEngine:
             groups[df_id].append((sym, strategy))
             df_map[df_id] = df
 
-        results: list[dict[str, Any]] = []
+        results: list[BacktestResult] = []
         for df_id, items in groups.items():
             df = df_map[df_id]
             symbols = [sym for sym, _ in items]
@@ -186,28 +182,46 @@ class VnpyBacktestEngine:
             batch_results = self._run_backtest(df, symbol, strategies)
             for i, r in enumerate(batch_results):
                 strategy = strategies[i]
-                results.append({
-                    'success': 'error' not in r,
-                    'symbol': symbols[i] if i < len(symbols) else symbol,
-                    'strategy_name': type(strategy).__name__,
-                    'strategy_version': getattr(strategy, 'VERSION', None),
-                    'strategy_params': serialize_strategy_params(strategy),
-                    'statistics': r.get('statistics', {}),
-                    'daily_results': r.get('daily_results', []),
-                    'start_date': data_start,
-                    'end_date': data_end,
-                    'engine_config': {
-                        'initial_capital': self.initial_capital,
-                        'commission_rate': self.commission_rate,
-                        'slippage': self.slippage,
-                        'price_tick': self.price_tick,
-                        'contract_size': self.contract_size,
-                        'kline_interval': self.interval,
-                    },
-                    'error': r.get('error'),
-                })
+                stats = r.get('statistics', {})
+                daily = r.get('daily_results', [])
+                error = r.get('error')
+                sym = symbols[i] if i < len(symbols) else symbol
+                results.append(BacktestResult(
+                    symbol=sym,
+                    strategy=type(strategy).__name__,
+                    strategy_version=getattr(strategy, 'VERSION', None),
+                    strategy_params=serialize_strategy_params(strategy),
+                    success=error is None,
+                    error_message=error,
+                    start_date=data_start,
+                    end_date=data_end,
+                    total_trades=stats.get('total_trades', 0) or 0,
+                    total_return=stats.get('total_return', 0.0) or 0.0,
+                    end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
+                    annual_return=stats.get('annual_return'),
+                    win_trades=stats.get('profit_days', stats.get('win_trades', 0)) or 0,
+                    loss_trades=stats.get('loss_days', stats.get('loss_trades', 0)) or 0,
+                    win_rate=stats.get('win_rate'),
+                    max_consecutive_win=stats.get('max_consecutive_win'),
+                    max_consecutive_loss=stats.get('max_consecutive_loss'),
+                    avg_win=stats.get('average_win'),
+                    avg_loss=stats.get('average_loss'),
+                    win_loss_ratio=stats.get('win_loss_ratio'),
+                    sharpe_ratio=stats.get('sharpe_ratio'),
+                    max_drawdown=stats.get('max_drawdown'),
+                    max_drawdown_duration=stats.get('max_drawdown_duration', stats.get('max_ddpercent_duration', 0)),
+                    daily_std=stats.get('return_std', stats.get('daily_std')),
+                    return_drawdown_ratio=stats.get('return_drawdown_ratio'),
+                    initial_capital=self.initial_capital,
+                    commission_rate=self.commission_rate,
+                    slippage=self.slippage,
+                    price_tick=self.price_tick,
+                    contract_size=self.contract_size,
+                    kline_interval=self.interval,
+                    daily_results=daily if daily else [],
+                ))
 
-        succeeded = sum(1 for r in results if r['success'])
+        succeeded = sum(1 for r in results if r.success)
         logger.info(f"\n回测完成: {succeeded}/{len(results)} 成功")
         return results
 

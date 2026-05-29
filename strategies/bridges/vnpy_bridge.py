@@ -18,7 +18,7 @@ from typing import Any
 
 from vnpy_ctastrategy import CtaTemplate
 
-from strategies import Bar, Signal, Fill
+from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class VnpyStrategyBridge(CtaTemplate):
     """vn.py 策略桥接器 — 纯协议转换层
 
-    self._core (Strategy 实例) 和 self.price_tick 由
+    self._core (Strategy 实例) 由
     _InjectedStrategy (backtest_engine) 在 __init__ 后注入。
     """
 
@@ -35,32 +35,35 @@ class VnpyStrategyBridge(CtaTemplate):
     parameters = ["price_tick"]
     variables = ["pos", "entry_price"]
 
-    def __init__(self, cta_engine, strategy_name: str, vt_symbol: str, setting: dict):
-        super().__init__(cta_engine, strategy_name, vt_symbol, setting)
-        self._core: Any | None = None
-        self.price_tick = setting.get('price_tick', 1.0)
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._core: Strategy[Any] = UninitializedStrategy()
+        self._fills: list[Fill] = []
         self.entry_price: float = 0.0
-        self._strategy_name = strategy_name
+
+    @property
+    def fills(self) -> list[Fill]:
+        return list(self._fills)
 
     # ---- vnpy 生命周期 ----
 
     def on_init(self) -> None:
-        if self._core is None:
-            logger.error(f"[{self._strategy_name}] strategy 未注入，初始化跳过")
+        if self._core.name == "_uninitialized":
+            logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
             return
-        logger.info(f"[{self._strategy_name}] 桥接器初始化: {self._core.name}")
+        logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
         self.write_log(f"策略初始化: {self._core.name}")
         self.load_bar(20)
 
     def on_start(self) -> None:
-        logger.info(f"[{self._strategy_name}] 桥接器启动")
+        logger.info(f"[{self.strategy_name}] 桥接器启动")
         self.write_log("策略启动")
 
     def on_stop(self) -> None:
-        fills_count = len(self._core.fills) if self._core else 0
-        sells = len([f for f in self._core.fills if f.action == TRADE_ACTION_SELL]) if self._core else 0
+        fills_count = len(self._fills)
+        sells = len([f for f in self._fills if f.action == TRADE_ACTION_SELL])
         logger.info(
-            f"[{self._strategy_name}] 策略停止 | "
+            f"[{self.strategy_name}] 策略停止 | "
             f"fills={fills_count} sells={sells}"
         )
         self.write_log(
@@ -70,9 +73,6 @@ class VnpyStrategyBridge(CtaTemplate):
     # ---- 核心: 数据转换 → 信号获取 → 下单执行 ----
 
     def on_bar(self, bar: Any) -> None:
-        if self._core is None:
-            return
-
         standardized = self._vnpy_bar_to_bar(bar)
         signal = self._core.on_bar(standardized)
 
@@ -99,17 +99,19 @@ class VnpyStrategyBridge(CtaTemplate):
         self.buy(bar.close, volume)
         self.entry_price = bar.close
         logger.info(
-            f"[{self._strategy_name}] {bar.datetime} 买入 "
+            f"[{self.strategy_name}] {bar.datetime} 买入 "
             f"@{bar.close:.2f} x{volume}"
         )
-        self._core.on_fill(Fill(
+        fill = Fill(
             timestamp=str(bar.datetime),
             symbol=bar.symbol,
             action=TRADE_ACTION_BUY,
             price=bar.close,
             volume=volume,
             reason=signal.reason,
-        ))
+        )
+        self._fills.append(fill)
+        self._core.on_fill(fill)
 
     def _execute_sell(self, signal: Signal, bar: Bar) -> None:
         pos = abs(self.pos)
@@ -119,17 +121,19 @@ class VnpyStrategyBridge(CtaTemplate):
         profit = (bar.close - self.entry_price) * pos
         self.entry_price = 0.0
         logger.info(
-            f"[{self._strategy_name}] {bar.datetime} {signal.reason}卖出 "
+            f"[{self.strategy_name}] {bar.datetime} {signal.reason}卖出 "
             f"@{bar.close:.2f} 盈亏{profit:.2f}"
         )
-        self._core.on_fill(Fill(
+        fill = Fill(
             timestamp=str(bar.datetime),
             symbol=bar.symbol,
             action=TRADE_ACTION_SELL,
             price=bar.close,
             volume=pos,
             reason=signal.reason,
-        ))
+        )
+        self._fills.append(fill)
+        self._core.on_fill(fill)
 
     # ---- vnpy 回调 (透传) ----
 

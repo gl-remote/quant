@@ -3,6 +3,8 @@
 Strategy 产生决策 (Signal)，Bridge 转换为框架指令。
 Bridge 接收行情 (Bar)，喂给 Strategy 产生信号。
 
+volume 全部使用 float，兼容整手数（期货）和分数股（股票）场景。
+
 【类型选择说明】
 - Bar.datetime 使用 datetime 对象而非 str：策略内可直接
   bar.datetime.hour / .weekday() 做时间维度逻辑，无需自行 strptime。
@@ -45,7 +47,7 @@ class Signal:
     """
     action: TradeAction = ''        # 'buy' | 'sell' | ''
     reason: str = ""        # 'golden_cross' | 'stop_loss' | 'take_profit' | ...
-    volume: int = 0         # 策略预计算的开仓手数
+    volume: float = 0         # 策略预计算的开仓手数
 
 
 @dataclass
@@ -53,7 +55,7 @@ class StrategyPosition:
     """持仓快照"""
     direction: PositionDirection = ''        # 'long' | ''
     entry_price: float = 0.0
-    volume: int = 0
+    volume: float = 0
 
 
 @dataclass
@@ -63,5 +65,5 @@ class Fill:
     symbol: str = ""
     action: TradeAction = ''        # 'buy' | 'sell'
     price: float = 0.0
-    volume: int = 0
+    volume: float = 0
     reason: str = ""        # 触发原因

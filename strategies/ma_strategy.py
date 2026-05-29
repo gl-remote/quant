@@ -3,10 +3,10 @@
 不依赖任何外部框架。拥有:
   - SMA 计算 + 金叉/死叉检测 + 止盈止损判断
   - 仓位管理 (entry_price/position/volume)
-  - 交易记录 (fills)
   - 技术指标缓存 (_close_history)
 
 Bridge 只需: 构造 Bar → 调用 on_bar() → 拿到 Signal → 执行下单 → 回调 on_fill()
+成交记录 (fills) 由 Bridge 管理，策略只更新仓位。
 """
 
 from dataclasses import dataclass
@@ -82,7 +82,6 @@ class MaStrategyCore(Strategy[MACrossParams]):
         self._contract_size = int(contract_size) if contract_size is not None else int(DEFAULT_CONTRACT_SIZE)
 
         self._position = StrategyPosition()
-        self._fills: list[Fill] = []
         self._close_history: list[float] = []
         self._prev_sma_short: float = 0.0
         self._prev_sma_long: float = 0.0
@@ -103,15 +102,9 @@ class MaStrategyCore(Strategy[MACrossParams]):
     def position(self) -> StrategyPosition:
         return self._position
 
-    @property
-    def fills(self) -> list[Fill]:
-        """交易成交记录 (只读副本)"""
-        return list(self._fills)
-
     @override
     def reset(self) -> None:
         self._position = StrategyPosition()
-        self._fills.clear()
         self._close_history.clear()
         self._prev_sma_short = 0.0
         self._prev_sma_long = 0.0
@@ -163,7 +156,6 @@ class MaStrategyCore(Strategy[MACrossParams]):
             )
         elif fill.action == TRADE_ACTION_SELL:
             self._position = StrategyPosition()
-        self._fills.append(fill)
 
     # ---- 内部算法 ----
 

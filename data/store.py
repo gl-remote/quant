@@ -32,7 +32,7 @@ from .models import (
     TradeRecord,
 )
 import common.constants as constants
-from common.formulas import total_return as calc_total_return, win_rate as calc_win_rate
+from common.types import BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -210,74 +210,66 @@ class DataStore:
 
     def insert_backtest_detailed(
         self,
-        symbol: str,
-        strategy: str,
-        status: str,
-        error_message: str | None,
-        statistics: dict[str, object],
-        engine_config: dict[str, object],
-        params: dict[str, float] | None,
-        start_date: str | None,
-        end_date: str | None,
-        strategy_version: str | None = None,
-        git_hash: str | None = None,
+        result: BacktestResult,
         run_id: int | None = None,
         data_src: str | None = None,
     ) -> int:
         """插入完整的回测记录
-        
+
         Args:
+            result: 统一 BacktestResult 结构
+            run_id: Run 记录 ID
             data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
         """
         now = datetime.now()
 
-        total_trades: int = int(statistics.get('total_trade_count', statistics.get('total_trades', 0)) or 0)  # type: ignore[call-overload]
-        initial_capital = float(engine_config.get('initial_capital', constants.DEFAULT_INITIAL_CAPITAL))  # type: ignore[arg-type]
-        end_balance = float(statistics.get('end_balance', initial_capital))  # type: ignore[arg-type]
-        total_return = calc_total_return(initial_capital, end_balance, total_trades=total_trades)
-        win_trades_v: int = int(statistics.get('profit_days', statistics.get('win_trades', 0)) or 0)  # type: ignore[call-overload]
-        loss_trades_v: int = int(statistics.get('loss_days', statistics.get('loss_trades', 0)) or 0)  # type: ignore[call-overload]
-        win_rate_val = calc_win_rate(win_trades_v, total_trades)
+        total_trades = result.total_trades
+        initial_capital = result.initial_capital
+        end_balance = result.end_balance
+        total_return = result.total_return
+        win_trades_v = result.win_trades
+        loss_trades_v = result.loss_trades
+        win_rate_val = result.win_rate
 
         bt = Backtest.create(
             run=run_id,
-            symbol=symbol,
-            strategy=strategy,
-            strategy_version=strategy_version,
-            git_hash=git_hash,
-            status=status,
-            error_message=error_message,
-            start_date=start_date,
-            end_date=end_date,
+            symbol=result.symbol,
+            strategy=result.strategy,
+            strategy_version=result.strategy_version,
+            git_hash=result.git_hash,
+            status=result.status,
+            error_message=result.error_message,
+            start_date=result.start_date,
+            end_date=result.end_date,
             initial_capital=initial_capital,
-            commission_rate=engine_config.get('commission_rate'),
-            slippage=engine_config.get('slippage'),
-            price_tick=engine_config.get('price_tick'),
-            contract_size=engine_config.get('contract_size'),
-            kline_interval=engine_config.get('kline_interval'),
+            commission_rate=result.commission_rate,
+            slippage=result.slippage,
+            price_tick=result.price_tick,
+            contract_size=result.contract_size,
+            kline_interval=result.kline_interval,
             end_balance=end_balance,
             total_return=total_return,
-            annual_return=statistics.get('annual_return'),
+            annual_return=result.annual_return,
             total_trades=total_trades,
             win_trades=win_trades_v,
             loss_trades=loss_trades_v,
             win_rate=win_rate_val,
-            max_consecutive_win=statistics.get('max_consecutive_win'),
-            max_consecutive_loss=statistics.get('max_consecutive_loss'),
-            avg_win=statistics.get('average_win'),
-            avg_loss=statistics.get('average_loss'),
-            win_loss_ratio=statistics.get('win_loss_ratio'),
-            sharpe_ratio=statistics.get('sharpe_ratio'),
-            max_drawdown=_normalize_max_dd(float(statistics.get('max_drawdown')) if statistics.get('max_drawdown') else None),  # type: ignore[arg-type]
-            max_drawdown_duration=statistics.get('max_drawdown_duration',
-                                                 statistics.get('max_ddpercent_duration', 0)),
-            daily_std=statistics.get('return_std', statistics.get('daily_std')),
-            return_drawdown_ratio=statistics.get('return_drawdown_ratio'),
+            max_consecutive_win=result.max_consecutive_win,
+            max_consecutive_loss=result.max_consecutive_loss,
+            avg_win=result.avg_win,
+            avg_loss=result.avg_loss,
+            win_loss_ratio=result.win_loss_ratio,
+            sharpe_ratio=result.sharpe_ratio,
+            max_drawdown=_normalize_max_dd(result.max_drawdown),
+            max_drawdown_duration=result.max_drawdown_duration or 0,
+            daily_std=result.daily_std,
+            return_drawdown_ratio=result.return_drawdown_ratio,
             data_src=data_src,
             created_at=now,
             updated_at=now,
         )
         # 写入参数
+        params = result.strategy_params
         if params:
             for name, value in params.items():
                 BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
@@ -297,7 +289,7 @@ class DataStore:
                 'offset': str(trade.get('offset', 'open')).lower(),
                 'open_price': float(trade.get('open_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
                 'close_price': float(trade.get('close_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
-                'quantity': int(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[call-overload]
+                'quantity': float(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[call-overload]
                 'pnl': float(trade.get('pnl', 0.0)),  # type: ignore[arg-type]
                 'commission': float(trade.get('commission', 0.0)),  # type: ignore[arg-type]
                 'created_at': now,
@@ -531,11 +523,11 @@ class DataStore:
                 'end_date': bt['end_date'],
                 'initial_capital': bt['initial_capital'],
                 'end_balance': bt['end_balance'],
-                'total_return': bt['total_return'],
-                'sharpe_ratio': bt['sharpe_ratio'],
-                'max_drawdown': bt['max_drawdown'],
-                'win_rate': bt['win_rate'],
-                'total_trades': bt['total_trades'],
+                'total_return': float(bt['total_return'] or 0),
+                'sharpe_ratio': float(bt['sharpe_ratio'] or 0),
+                'max_drawdown': float(bt['max_drawdown'] or 0),
+                'win_rate': float(bt['win_rate'] or 0),
+                'total_trades': bt['total_trades'] or 0,
                 'data_src': bt['data_src'],
                 'kline_interval': bt['kline_interval'],
                 'strategy_version': bt['strategy_version'],

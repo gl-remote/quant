@@ -65,6 +65,7 @@ def cmd_test(args: argparse.Namespace):
 
         bar1 = Bar(symbol="TEST", datetime=datetime(2026, 1, 1),
                    open=10, high=15, low=10, close=15, volume=1000)
+        fills: list[Fill] = []
         signal1 = strategy.on_bar(bar1)
         logger.info(
             f"信号1: action={signal1.action} reason={signal1.reason} "
@@ -72,10 +73,11 @@ def cmd_test(args: argparse.Namespace):
         )
 
         if signal1.action == TRADE_ACTION_BUY:
-            strategy.on_fill(Fill(
+            fills.append(Fill(
                 timestamp=str(bar1.datetime), symbol=bar1.symbol,
                 action=TRADE_ACTION_BUY, price=bar1.close, volume=signal1.volume,
                 reason=signal1.reason))
+            strategy.on_fill(fills[-1])
 
             bar2 = Bar(symbol="TEST", datetime=datetime(2026, 1, 2),
                        open=15, high=16, low=13, close=13.5, volume=500)
@@ -83,12 +85,12 @@ def cmd_test(args: argparse.Namespace):
             logger.info(f"信号2: action={signal2.action} reason={signal2.reason}")
 
             if signal2.action == TRADE_ACTION_SELL:
-                strategy.on_fill(Fill(
+                fills.append(Fill(
                     timestamp=str(bar2.datetime), symbol=bar2.symbol,
                     action=TRADE_ACTION_SELL, price=bar2.close, volume=signal1.volume,
                     reason=signal2.reason))
+                strategy.on_fill(fills[-1])
 
-        fills = strategy.fills
         sells = [f for f in fills if f.action == TRADE_ACTION_SELL]
         logger.info(f"绩效: 交易{sells.__len__()}次")
         dm.store.log('test', f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)

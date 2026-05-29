@@ -18,6 +18,7 @@ import re
 from typing import TYPE_CHECKING
 
 from common.constants import COMMON_KLINE_INTERVALS
+from common.types import BacktestResult
 import pandas as pd
 from pathlib import Path
 
@@ -324,34 +325,16 @@ class DataManager:
 
     # ── 回测记录 ────────────────────────────────────────────
 
-    def insert_backtest(self, symbol: str, strategy: str, status: str,
-                        error_message: str | None, statistics: dict[str, object],
-                        engine_config: dict[str, object], params: dict[str, float] | None,
-                        start_date: str | None, end_date: str | None,
-                        strategy_version: str | None = None,
-                        git_hash: str | None = None,
-                        run_id: int | None = None,
+    def insert_backtest(self, result: BacktestResult, run_id: int | None = None,
                         data_src: str | None = None) -> int:
         """插入完整的回测记录
-        
+
         Args:
-            data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
+            result: 统一 BacktestResult 结构
+            run_id: Run 记录 ID
+            data_src: 数据源文件路径，用于报告生成时定位K线数据
         """
-        return self.store.insert_backtest_detailed(
-            symbol=symbol,
-            strategy=strategy,
-            status=status,
-            error_message=error_message,
-            statistics=statistics,
-            engine_config=engine_config,
-            params=params,
-            start_date=start_date,
-            end_date=end_date,
-            strategy_version=strategy_version,
-            git_hash=git_hash,
-            run_id=run_id,
-            data_src=data_src,
-        )
+        return self.store.insert_backtest_detailed(result, run_id=run_id, data_src=data_src)
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
