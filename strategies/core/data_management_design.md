@@ -215,27 +215,43 @@ class PeriodData:
 ### 3.2 DataFeed（管理类，多周期）
 
 #### 3.2.1 设计目标
-- 管理多个 PeriodData 实例
+- 管理单个品种（symbol）的所有周期数据
+- 持有该品种的元数据（symbol、数据源等）
 - 提供统一的 update_bar 入口，调度所有相关计算
 - 管理计算函数（指标计算、周期转换）
 - 行级锁并发控制
-- 提供数据访问路由
+- 提供高效的数据访问路由（通过周期名快速定位 PeriodData）
 
 #### 3.2.2 核心功能
-1. 注册周期：创建并管理 PeriodData
+1. 注册周期：创建并管理 PeriodData，通过周期名快速访问
 2. 绑定计算函数：注册指标计算函数、周期转换函数
-3. 注册指标：为指定周期注册需要计算的指标
+3. 注册指标：为指定周期注册需要计算的指标（名称+参数组合）
 4. update_bar 调度：来一根 K线后，更新对应周期，调度所有相关计算
-5. 数据访问：通过周期名获取对应的 PeriodData
+5. 数据访问：通过周期名获取对应的 PeriodData，O(1)复杂度
 
 #### 3.2.3 数据结构
 ```python
 class DataFeed:
-    _periods: Dict[str, PeriodData]  # key: 周期名+参数(如果需要)，value: PeriodData
+    # --- 元数据 ---
+    symbol: str  # 交易品种，如 "btc_usdt"
+    source: Optional[str] = None  # 数据源标识，如 "binance"
+    
+    # --- 周期数据管理 ---
+    # 高效锚定：通过周期名直接索引，O(1)访问
+    _periods: Dict[str, PeriodData]  # key: 周期名（如 "1m", "5m"），value: PeriodData
+    
+    # --- 并发控制 ---
     _lock: threading.RLock  # 全局锁，用于行级锁控制
-    _indicator_funcs: Dict[str, Callable]  # 指标名 -> 计算函数
+    _updating_time: Optional[pd.Timestamp] = None  # 正在更新的时间，用于行级锁判断
+    
+    # --- 计算函数管理 ---
+    _indicator_funcs: Dict[str, Callable]  # 指标名 -> 计算函数（如 "sma" -> sma_func）
     _period_converters: Dict[Tuple[str, str], Callable]  # (源周期, 目标周期) -> 转换函数
-    _registered_indicators: Dict[str, List[Tuple[str, dict]]]  # 周期名 -> [(指标名, 参数)]
+    
+    # --- 指标注册配置 ---
+    # 为每个周期注册需要计算的指标（指标名 + 参数）
+    # 计算时自动生成列名，如 "sma_10", "ema_20"
+    _registered_indicators: Dict[str, List[Tuple[str, dict]]]  # 周期名 -> [(指标名, 参数dict)]
 ```
 
 #### 3.2.4 并发控制
@@ -246,16 +262,22 @@ class DataFeed:
 #### 3.2.5 函数签名
 ```python
 class DataFeed:
-    def __init__(self):
+    def __init__(self, symbol: str, source: Optional[str] = None):
         """
-        初始化多周期数据管理器
+        初始化单个品种的多周期数据管理器
         
         初始化过程：
-        1. 创建空的周期字典
-        2. 初始化全局锁
-        3. 初始化指标函数和周期转换函数字典
-        4. 初始化注册指标配置
+        1. 设置 symbol 和 source 元数据
+        2. 创建空的周期字典
+        3. 初始化全局锁
+        4. 初始化指标函数和周期转换函数字典
+        5. 初始化注册指标配置
+        
+        :param symbol: 交易品种，如 "btc_usdt"
+        :param source: 数据源标识，如 "binance"（可选）
         """
+        self.symbol = symbol
+        self.source = source
         pass
 
     def register_period(self, period: str) -> PeriodData:
@@ -511,14 +533,15 @@ class PeriodDataSnapshot:
 #### 3.4.1 设计目标
 - 单例模式，全局唯一入口
 - 管理多个 DataFeed 实例
-- 根据数据源（如不同品种、不同交易所）区分不同的 DataFeed
+- 根据交易品种（symbol）区分不同的 DataFeed
+- 一个 symbol 对应一个 DataFeed
 - 支持策略测试时注入 mock 的 cache
 
 #### 3.4.2 数据结构
 ```python
 class DataFeedCache:
     _instance: Optional["DataFeedCache"] = None
-    _datafeeds: Dict[str, DataFeed]  # key: 数据源标识，value: DataFeed
+    _datafeeds: Dict[str, DataFeed]  # key: symbol（交易对），value: DataFeed
     _lock: threading.RLock
 ```
 
@@ -553,23 +576,21 @@ class DataFeedCache:
         """
         cls._instance = instance
 
-    def get_or_create(self, source_id: str) -> DataFeed:
+    def get_or_create(self, symbol: str, source: Optional[str] = None) -> DataFeed:
         """
         获取或创建DataFeed实例（线程安全）
         
-        数据源标识命名建议：
-        - 格式："{symbol}_{exchange}"，如 "btc_usdt_binance"
-        - 或："{symbol}"，如果交易所不重要
-        - 确保唯一性，避免不同数据源混淆
+        一个 symbol 对应一个 DataFeed
         
-        :param source_id: 数据源唯一标识，如 "btc_usdt_binance"
+        :param symbol: 交易品种，如 "btc_usdt"
+        :param source: 数据源标识，如 "binance"（可选）
         :return: DataFeed 实例（新创建或已存在）
         """
         pass
 
-    def update_bar(self, source_id: str, bar: Bar, period: str) -> None:
+    def update_bar(self, symbol: str, bar: Bar, period: str) -> None:
         """
-        更新指定数据源的K线（路由到对应DataFeed，线程安全）
+        更新指定品种的K线（路由到对应DataFeed，线程安全）
         
         这是Bridge或数据接收层的主要调用入口
         
@@ -578,25 +599,25 @@ class DataFeedCache:
         2. 调用DataFeed.update_bar(bar, period)
         3. 内部会自动处理周期转换和指标计算
         
-        :param source_id: 数据源标识
+        :param symbol: 交易品种，如 "btc_usdt"
         :param bar: K线数据
         :param period: 对应周期名称
         :raises KeyError: 如果需要但DataFeed的周期未注册
         """
         pass
 
-    def get_snapshot(self, source_id: str, period: str, end_time: pd.Timestamp, periods: int = 1) -> Optional[PeriodDataSnapshot]:
+    def get_snapshot(self, symbol: str, period: str, end_time: pd.Timestamp, periods: int = 1) -> Optional[PeriodDataSnapshot]:
         """
-        获取指定数据源、指定周期的快照（策略主要访问入口）
+        获取指定品种、指定周期的快照（策略主要访问入口）
         
         这是策略获取数据的主要方法
         
-        :param source_id: 数据源标识
+        :param symbol: 交易品种，如 "btc_usdt"
         :param period: 周期名称，如 "5m"
         :param end_time: 截止时间，快照只包含<=此时间的数据
         :param periods: 需要的历史周期数，默认1个（只获取end_time）
         :return: PeriodDataSnapshot只读快照
-        :raises KeyError: 如果数据源或周期未注册
+        :raises KeyError: 如果品种或周期未注册
         :raises ValueError: 如果end_time晚于最新数据时间
         """
         pass
@@ -654,8 +675,8 @@ def test_strategy():
 # 1. 获取全局 Cache
 cache = DataFeedCache.get_instance()
 
-# 2. 创建或获取 DataFeed
-data_feed = cache.get_or_create("btc_usdt")
+# 2. 创建或获取 DataFeed（按 symbol）
+data_feed = cache.get_or_create("btc_usdt", source="binance")
 
 # 3. 注册所有需要的周期
 data_feed.register_period("1m")
@@ -666,10 +687,10 @@ data_feed.bind_indicator_func("sma", sma_func)
 data_feed.bind_indicator_func("ema", ema_func)
 data_feed.bind_period_converter("1m", "5m", convert_1m_to_5m)
 
-# 5. 注册需要计算的指标
-data_feed.register_indicator("5m", "sma", period=10)
-data_feed.register_indicator("5m", "sma", period=20)
-data_feed.register_indicator("5m", "ema", period=20)
+# 5. 注册需要计算的指标（指标名 + 参数）
+data_feed.register_indicator("5m", "sma", period=10)  # 生成 "sma_10"
+data_feed.register_indicator("5m", "sma", period=20)  # 生成 "sma_20"
+data_feed.register_indicator("5m", "ema", period=20)  # 生成 "ema_20"
 
 # 6. 策略不需要绑定数据！直接用全局 Cache
 ```
@@ -732,6 +753,20 @@ for bar in realtime_bars:
     # 3. 策略直接从 Cache 读取
     snapshot = cache.get_snapshot("btc_usdt", "5m", bar.datetime)
     sma10 = snapshot.get_indicator("sma_10", -1)
+```
+
+### 5.5 数据锚定方式说明
+```
+数据访问链路（O(1)复杂度）：
+DataFeedCache（symbol → DataFeed）
+    ↓
+DataFeed（period → PeriodData）
+    ↓
+PeriodData（数据访问）
+
+使用示例：
+cache = DataFeedCache.get_instance()
+snapshot = cache.get_snapshot("btc_usdt", "5m", time)
 ```
 
 ---
