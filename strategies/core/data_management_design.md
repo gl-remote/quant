@@ -9,7 +9,7 @@
 4. 指标计算：使用成熟第三方库计算指标
 5. 事件数据管理：支持事件数据（大单成交、新闻等），与K线、指标一起管理
 6. 多策略共享：不同策略可以使用不同周期组合，共享的周期数据和指标只存一份
-7. 并发安全：行级锁，只锁正在更新的周期，之前的数据可以安全读
+7. 并发安全：基于条件变量的快照等待，只锁正在更新的周期，之前的数据可以安全读
 8. 截止周期镜像：策略只能看到指定周期及之前的数据，不受后面数据干扰
 9. 简易实现：优先考虑代码简洁、易理解
 10. 回测场景：只考虑几千个周期的回测
@@ -42,9 +42,9 @@
    - PeriodData（数据类）：纯存数据，提供截止周期镜像，不负责计算
 3. 多周期表格管理：一个 DataFeed 管理多个周期的 K线、指标、事件
 4. 周期共享：策略A用1、3、5周期，策略B用2、4、5周期，5周期数据共享
-5. 支持周期转换：可以从1分钟周期算出5分钟周期K线
-6. 计算统一调度：来一根K线后，DataFeed 调度所有相关计算，算好后才对外提供数据
-7. 行级锁并发：只在 DataFeed 级别加锁，只锁正在更新的周期，之前的数据可以安全读
+5. 支持周期转换：硬编码常见周期转换关系（1m→5m, 1m→15m, 1m→1h等），支持两种场景：从低级周期生成高级K线，跨周期指标计算
+6. 懒加载按需计算：指标第一次访问时才计算，后面策略自动复用；计算方式灵活（全量/逐行都支持），回测场景优先易用性，性能随缘
+7. 基于条件变量的快照等待：只在 DataFeed 级别加锁，读操作检查时间戳，必要时等待更新完成
 8. 截止周期镜像：提供快照功能，策略只能看到指定周期及之前的数据
 9. 指标函数模块级注册：指标计算函数在模块级注册，所有 DataFeed 共享
 10. 保持现有架构兼容，最小化改动
@@ -353,7 +353,7 @@ class PeriodDataSnapshot:
 - 管理单个品种（symbol）的所有周期数据
 - 持有该品种的元数据（symbol、数据源等）
 - 提供统一的 update_bar 入口，调度所有相关计算
-- 行级锁并发控制（只在 DataFeed 级别加锁）
+- 基于条件变量的快照等待机制（只在 DataFeed 级别加锁）
 - 提供高效的数据访问路由（通过周期名快速定位 PeriodData）
 - 统一管理 K线、指标、事件 三类数据
 - 支持周期转换（从1m数据衍生出5m数据）
@@ -380,7 +380,7 @@ class DataFeed:
 
     # --- 并发控制 ---
     _lock: threading.RLock  # 只在这里加锁，DataFeedCache不需要锁
-    _updating_time: Optional[pd.Timestamp] = None  # 正在更新的时间，用于行级锁判断
+    _updating_time: Optional[pd.Timestamp] = None  # 正在更新的时间，用于快照安全检查
 
     # --- 指标注册配置 ---
     # 为每个周期注册需要计算的指标（指标名 + 参数）
@@ -397,9 +397,18 @@ class DataFeed:
 # 模块级指标计算函数注册（所有 DataFeed 共享）
 # ==========================================
 
-_REGISTERED_INDICATOR_FUNCS: Dict[str, Callable] = {}
+class IndicatorCalcMode(Enum):
+    BATCH = "batch"  # 一次性计算所有数据（默认）
+    INCREMENTAL = "incremental"  # 逐行/增量式计算，适合 update_bar 时触发
 
-def register_indicator_func(name: str, func: Callable) -> None:
+@dataclass
+class IndicatorFuncInfo:
+    func: Callable
+    calc_mode: IndicatorCalcMode
+
+_REGISTERED_INDICATOR_FUNCS: Dict[str, IndicatorFuncInfo] = {}
+
+def register_indicator_func(name: str, func: Callable, calc_mode: IndicatorCalcMode = IndicatorCalcMode.BATCH) -> None:
     """全局注册指标计算函数，所有 DataFeed 共享
 
     指标计算函数签名要求：
@@ -407,8 +416,9 @@ def register_indicator_func(name: str, func: Callable) -> None:
 
     :param name: 指标名称
     :param func: 计算函数
+    :param calc_mode: 计算模式，BATCH（默认）一次性全量计算，INCREMENTAL适合实时增量
     """
-    _REGISTERED_INDICATOR_FUNCS[name] = func
+    _REGISTERED_INDICATOR_FUNCS[name] = IndicatorFuncInfo(func=func, calc_mode=calc_mode)
 
 
 # ==========================================
@@ -420,7 +430,11 @@ _REGISTERED_CONVERTERS: Dict[Tuple[str, str], Callable] = {}
 def register_period_converter(source_period: str, target_period: str, func: Callable) -> None:
     """全局注册周期转换函数
 
-    转换函数签名要求：
+    支持两种场景：
+    1. 从低级周期生成高级K线（1m → 5m）
+    2. 跨周期指标计算（用 1m 数据计算 5m 指标）
+
+    转换函数签名要求（K线聚合场景）：
     def converter_func(source_data: PeriodData) -> List[Bar]
 
     :param source_period: 源周期（如 "1m"）
@@ -470,7 +484,7 @@ class DataFeed:
         """
         为指定周期注册需要计算的指标
 
-        每次update_bar或calculate_all时，会自动计算所有注册的指标
+        指标不会立即计算，第一次访问时才懒加载；计算方式灵活（全量/逐行都支持）
 
         参数组合示例：
         - register_indicator("5m", "sma", period=10) -> 生成列 "sma_10"
@@ -499,16 +513,19 @@ class DataFeed:
 
     def update_bar(self, bar: Bar, period: str, events: Optional[List[Event]] = None) -> None:
         """
-        更新一根K线，调度所有相关计算（核心方法，线程安全）
+        更新一根K线，调度周期转换（核心方法，线程安全）
 
         执行流程（全程持有全局锁）：
         1. 锁定并记录当前正在更新的时间
         2. 更新对应周期的PeriodData（追加K线 + 可选事件）
-        3. 计算该周期的所有注册指标，追加到PeriodData
-        4. 检查是否触发周期转换（如1分钟累计够5根生成新的5分钟K线）
-        5. 如果触发，调用转换函数生成高级周期K线
-        6. 对生成的高级周期K线，同样计算其所有注册指标
-        7. 清除正在更新的时间标记，解锁
+        3. 检查是否触发周期转换（如1分钟累计够5根生成新的5分钟K线）
+        4. 如果触发，调用转换函数生成并追加高级周期K线
+        5. 可选：对注册为 INCREMENTAL 模式的指标，触发增量计算
+        6. 清除正在更新的时间标记，解锁
+
+        注意：
+        - BATCH模式指标不会自动计算，采用懒加载机制，第一次访问时才按需计算
+        - INCREMENTAL模式指标可以选择在 update_bar 时触发增量计算（可选）
 
         :param bar: 新K线数据
         :param period: 对应周期名称
@@ -519,13 +536,14 @@ class DataFeed:
 
     def calculate_all(self) -> None:
         """
-        批量预计算所有周期的所有指标（用于回测初始化）
+        批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）
 
         适用场景：
         - 回测开始前，所有历史数据已加载
-        - 一次性计算所有需要的指标
+        - 希望一次性预计算所有指标，避免运行时懒加载的轻微延迟
 
         注意：
+        - 不是必须调用，不调用也能用
         - 会覆盖已有的指标数据
         - 会遍历所有周期，计算所有注册指标
         """
@@ -708,10 +726,12 @@ data_feed.register_indicator("5m", "sma", period=10)  # 生成 "sma_10"
 data_feed.register_indicator("5m", "sma", period=20)  # 生成 "sma_20"
 data_feed.register_indicator("5m", "ema", period=20)  # 生成 "ema_20"
 
-# 5. 加载历史数据 + 预计算
+# 5. 加载历史数据
 data_feed.load_history_data("1m", bars_1m, events_1m)
 data_feed.load_history_data("5m", bars_5m, events_5m)
-data_feed.calculate_all()  # 一次性算完所有指标！
+
+# 6. 可选：预计算所有指标（性能优化）
+# data_feed.calculate_all()  # 也可以不调用，指标会在第一次访问时懒加载
 ```
 
 ### 5.2 回测运行阶段
@@ -752,7 +772,7 @@ snapshot = cache.get_snapshot("btc_usdt", "5m", time)
 |------|----------|
 | K线与指标分离还是合并？ | **合并**：K线+指标放一个DataFrame，索引统一，简单高效 |
 | 指标与事件如何管理？ | K线+指标合并，事件单独管理，都在PeriodData内部 |
-| 周期不同步问题？ | **回测前统一注册所有指标**，一次性预计算calculate_all() |
+| 周期不同步问题？ | **懒加载按需计算**，append-only 快照机制保障数据一致性，多策略自动复用已算好的指标 |
 | Callable是函数还是钩子类？ | **简单函数**，模块级注册，所有DataFeed共享 |
 | 数据存哪里？ | PeriodData内部统一管理，DataFeed只做调度 |
 | _indicator_funcs是否每个DataFeed注册？ | **不需要**，模块级注册一次，所有DataFeed共享 |
@@ -773,10 +793,159 @@ snapshot = cache.get_snapshot("btc_usdt", "5m", time)
 4. **周期转换**：支持从低级周期算出高级周期（1分钟→5分钟）
 5. **共享机制**：相同周期的数据和指标多策略共享，只存一份
 6. **使用成熟库**：pandas-ta，不需要自己写指标计算
-7. **避免重复计算**：指标预计算一次，多策略共享
+7. **懒加载按需计算**：指标第一次访问时才计算，后面策略自动复用；计算方式灵活（全量/逐行都支持）
 8. **指标函数模块级注册**：避免每个DataFeed重复注册
-9. **截止周期镜像**：策略只能看到指定时间点之前的数据，安全可靠
-10. **行级锁并发**：只在DataFeed级别加锁，只锁正在更新的周期，之前的数据可以安全读
-11. **代码简洁**：策略不需要维护状态，直接拿指标用
-12. **测试友好**：支持mock注入
-13. **向后兼容**：不影响现有策略
+9. **回测场景优先**：易用性第一，性能随缘，append-only 快照机制保障数据安全
+10. **截止周期镜像**：策略只能看到指定时间点之前的数据，安全可靠
+11. **基于条件变量的快照等待**：只在DataFeed级别加锁，读操作检查时间戳，必要时等待更新完成
+12. **代码简洁**：策略不需要维护状态，直接拿指标用
+13. **测试友好**：支持mock注入
+14. **向后兼容**：不影响现有策略
+
+---
+
+## 八、设计问题与思考 (QA)
+
+### Q1: 如何正确描述我们的并发机制？（修正名词误用）
+
+**之前的误用**：
+- 之前叫「行级锁」是不准确的！
+- 我们的数据是 Append-Only（只追加不修改），不需要锁定特定行
+
+**正确的术语**：
+- **标准名称**：**基于条件变量的 Append-Only 快照机制**
+- **关键技术点**：
+  1. Append-Only 数据：只追加，不修改
+  2. 条件变量（Condition Variable）：用于等待更新完成
+  3. 时间戳检查：`get_snapshot` 检查 `end_time` 是否 < `_updating_time`
+  4. 快照：提供截止时间点的一致性数据
+
+**需要明确**：
+- 如果 `end_time >= _updating_time`，`get_snapshot` 应该怎样？
+  - **方案A（推荐回测）**：抛错（回测场景单线程，理论不会发生，安全检查）
+  - **方案B（实盘）**：等待更新完成（轮询或条件变量）
+  - **方案C（灵活）**：让用户指定超时机制，可选等待
+
+**我们的推荐**：先实现简单的时间戳检查，需要等待机制可选参数
+
+---
+
+### Q2: 周期转换的机制是怎样的？
+
+**方案确定**：
+- 周期转换关系**硬编码**，支持常见组合（1m→5m, 1m→15m, 1m→1h, 5m→15m 等）
+- 支持**两种计算场景**：
+  1. **从低级周期生成高级K线**：1m 数据聚合生成 5m/15m/1h K线，追加到高级周期
+  2. **跨周期指标计算**：用 1m 数据，计算 5m 周期的指标
+- **天然对齐**：不同 PeriodData 数据按时间天然对齐，只需要按时间点正确读取
+- **追加模式**：转换后的高级周期K线总是追加，不替换已有数据
+
+**周期转换关系示例**（可扩展）：
+```
+1m ──→ 5m ──→ 15m ──→ 1h
+  └──────────────→ 1h
+```
+
+**触发条件**：
+- 当调用 `update_bar` 更新低级周期时，自动检查是否可以聚合出完整的高级周期K线
+- 如果可以，则调用周期转换函数，生成并追加到高级周期
+
+---
+
+### Q3: 指标计算机制是怎样的？
+
+**方案确定**：灵活懒加载 + 计算模式标记，回测场景优先易用性
+
+**核心思路**：
+1. 底层存储：pandas，支持高效批量计算
+2. 懒加载按需计算：某个策略第一次访问某个指标时触发，后面的策略复用
+3. 安全性保障：append-only 快照 + `_updating_time` 检查，只访问更新时间点之前的数据
+4. 计算方式灵活：既支持全量计算，也支持逐行计算，通过 `IndicatorCalcMode` 标记明确
+5. 避免重复计算：框架根据计算模式和指标是否已计算，智能决定是否触发
+
+**指标计算模式**（注册时明确）：
+- **BATCH（默认）**：一次性全量计算，适合pandas-ta这类批量计算的指标
+- **INCREMENTAL**：逐行/增量式计算，适合 `update_bar` 时实时触发的指标
+
+**指标计算触发时机**：
+- **第一次访问时**：不管什么模式，都全量计算到当前数据末尾
+- **`update_bar` 追加新K线后**：
+  - BATCH模式：不自动计算，等下次访问时重新全量算（或者按需算）
+  - INCREMENTAL模式：可以在 `update_bar` 时自动触发增量计算（可选）
+- **后续访问**：直接返回已计算好的结果
+
+**无需担心的问题**：
+- ✅ 多个策略同时访问同一个指标：因为是 append-only，就算同时触发多次，结果一致，多算几次也没关系（回测场景，性能随缘）
+- ✅ 数据一致性：有 `_updating_time` 快照机制保障
+- ✅ 增量/全量灵活：指标函数注册时标记清楚，框架自动处理
+
+**使用示例**：
+```python
+# 注册指标时明确模式
+register_indicator_func("sma", sma_func, IndicatorCalcMode.BATCH)  # 批量计算
+register_indicator_func("custom_signal", custom_func, IndicatorCalcMode.INCREMENTAL)  # 增量计算
+
+# 策略A先访问
+snapshot = cache.get_snapshot("btc_usdt", "1m", time1)
+sma10 = snapshot.get_indicator("sma_10")  # 触发全量计算
+
+# 策略B后访问
+snapshot = cache.get_snapshot("btc_usdt", "1m", time1)
+sma10 = snapshot.get_indicator("sma_10")  # 直接复用，不重复计算
+
+# 策略C访问不同时间
+snapshot = cache.get_snapshot("btc_usdt", "1m", time2)  # 只访问 time2 之前的数据，安全
+```
+
+---
+
+### Q4: 事件数据与周期的关系是怎样的？
+
+**当前设计**：
+- 第11行：事件数据与K线、指标一起管理
+- 第194-201行：`get_events_at_bar` 方法
+
+**需要明确**：
+- 事件是绑定到特定周期的（一个事件在1分钟和5分钟都可见），还是品种全局的？
+- `get_events_at_bar` 返回该K线时间范围内的所有事件，还是只有该周期级别的事件？
+- `append_event` 时，事件是追加到所有周期，还是只追加到特定周期？
+
+---
+
+### Q5: 多个策略需要不同指标组合时怎么办？
+
+**当前设计**：
+- 第707-709行：初始化阶段注册指标
+- 第659-663行：策略直接使用指标
+
+**问题场景**：
+- 策略A需要 `sma_10`，策略B需要 `sma_20`，都在同一个品种和周期
+- 是策略主动注册指标，还是上层统一注册所有策略需要的指标？
+- 会计算所有策略需要的指标，还是只计算当前策略需要的？
+
+**建议**：明确指标注册的责任方和计算策略（建议上层统一注册所有需要的指标，虽然可能多算一些，但保证共享）。
+
+---
+
+### Q6: Bar 类型用现有的还是重新定义？
+
+**当前设计**：
+- 多处使用 `Bar` 类型
+
+**问题**：
+- 现有项目 `strategies/__init__.py` 已经有 Bar 类型
+- 是直接复用，还是在 `data_feed.py` 里重新定义？
+- 如果重新定义，字段如何对齐？
+
+**建议**：直接复用项目现有 Bar 类型，保持一致性。
+
+---
+
+### Q7: 一些小的完善建议
+
+| 位置 | 内容 | 建议 |
+|------|------|------|
+| 第389行 | `_registered_indicators` 数据结构 | 建议加上注释，说明 Tuple[str, dict] 是 (指标名, 参数) |
+| 第500行 | `update_bar` 的 events 参数 | 建议说明 events 是对应这根 K线 的事件 |
+| 第717行 | 回测运行阶段 | 建议补充说明：先 update_bar，再调用策略 on_bar，保证 snapshot 包含最新数据 |
+| 第753行 | 问题解决方案表格 | 建议加上「为什么？」的解释，说明选择方案的理由 |
