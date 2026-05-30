@@ -1066,4 +1066,171 @@ sma20 = snapshot2.get_indicator("sma_20")  # 触发计算
 
 ---
 
+## 九、设计审计
+
+### 缺陷
+
+#### 缺陷1：事件归属的架构矛盾
+
+**位置**: 3.2 节 PeriodData 持有 `_events` DataFrame vs Q4
+
+PeriodData 的内部数据结构明确包含 `_events: pd.DataFrame`（第104行），快照也通过 `PeriodDataSnapshot.get_events()` 从 PeriodData 返回事件。但 Q4 说"事件在 DataFeed 级别统一管理，不绑定到特定周期"。
+
+**矛盾**: 如果事件是 DataFeed 级的，就不应该存在 PeriodData 里。两者只能选一个。实现时会产生争议——事件是跟周期走还是跟 symbol 走？
+
+**建议**: 明确选定一种方案：要么将 `_events` 移到 DataFeed，快照通过 DataFeed 聚合所有周期的事件；要么接受"事件绑定到主周期"，放弃"DataFeed 级别统一管理"的说法。
+
+---
+
+#### 缺陷2：`get_snapshot` 的 `periods` 参数语义模糊
+
+**位置**: PeriodData.get_snapshot
+
+```python
+def get_snapshot(self, end_time: pd.Timestamp, periods: int = 1) -> PeriodDataSnapshot
+```
+
+`periods` 的文档是"需要的历史周期数，从end_time往前数"。但"一个周期"是指**1根K线**还是**1个时间单位（如1分钟）**？对于1m K线，end_time=10:03, periods=3，是返回 10:01-10:03（3根K线）还是 10:00-10:03（3分钟）？这直接决定了策略能看到多少历史数据。
+
+**建议**: 明确语义，建议使用 `lookback_bars: int` 替代 `periods`，直接表达"往前多少根K线"。
+
+---
+
+#### 缺陷3：快照并发安全机制的函数签名与方案不匹配
+
+**位置**: DataFeed.get_snapshot vs Q1
+
+Q1 讨论了三种方案（回测抛错、实盘等待、可选超时），但 `get_snapshot` 的函数签名中没有体现任何等待/超时机制。Q1 说"先实现简单的时间戳检查，需要等待机制可选参数"，但函数签名根本没预留可选参数位。
+
+**建议**: 在 `get_snapshot` 签名中增加一个 `timeout: Optional[float] = None` 参数，或者至少在 docstring 中说明当前实现的行为（抛错还是等待）。
+
+---
+
+#### 缺陷4：`build_context` 函数未定义
+
+**位置**: 第777行、第821-823行
+
+多次使用 `build_context()` 作为核心数据流的关键函数，但文档中没有任何地方定义它的签名和行为。它属于哪个类？是模块级函数还是 DataFeed 的方法？它如何解析 `data_requirements()` 并映射到快照调用？
+
+这是整个数据流中最关键的编排函数，没有定义就不能正确实现回测循环。
+
+**建议**: 增加 `build_context(data_feed, requirements, current_time) -> BarContext` 的函数签名和完整定义。
+
+---
+
+#### 缺陷5：BATCH 模式指标存在重复全量计算 + 快照一致性问题
+
+**位置**: 第954-958行
+
+BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `calculate_all()` 也是全量计算，两者行为重叠且可能冲突。
+
+更关键的问题：**BATCH 指标计算的输入数据范围是什么？**
+- 如果在完整的 `PeriodData._df` 上计算（所有历史数据），然后快照截断视图——这没问题。
+- 但如果指标函数内部需要基于截止时间之前的子集计算，快照拿到的是完整数据上算好的值，可能引用了未来数据。
+
+文档没有说明指标计算是在 full DataFrame 还是 sliced DataFrame 上执行。
+
+**建议**: 明确 BATCH 模式始终在完整 DataFrame 上计算，快照只是视图截断。如果需要对子集计算，策略应在 snapshots 的范围内自行计算。
+
+---
+
+#### 缺陷6：周期转换的时间边界对齐规则未定义
+
+**位置**: 第933-935行
+
+"自动检查是否可以聚合出完整的高级周期K线"——具体检查逻辑未定义：
+- 1m → 5m，时间窗口是 `[T, T+5min)` 还是按K线根数（每5根）？
+- 如果 1m 数据的时间戳标记为周期开始时间（09:30），还是结束时间（09:31）？
+- 非标准交易时间（夜盘、节假日）如何处理？
+
+**建议**: 定义时间切片对齐规则，并说明聚合后5m K线的时间戳取什么值（起始时间还是结束时间）。
+
+---
+
+#### 缺陷7：`end_time` 类型与现有 `Bar.datetime` 类型不兼容
+
+**位置**: PeriodData.get_snapshot `end_time: pd.Timestamp` vs `Bar.datetime: datetime.datetime`
+
+`get_snapshot` 要求 `pd.Timestamp`，但回测数据流中传入的是 `bar.datetime`（`datetime.datetime` 类型）。虽然 pd.Timestamp 可以接受 datetime 构造，但这是一个隐式依赖。
+
+**建议**: 将参数类型标注为 `Union[pd.Timestamp, datetime]` 或在 docstring 中说明接受 datetime。
+
+---
+
+#### 缺陷8：指标懒加载写回机制未定义
+
+**位置**: 第954-960行
+
+当通过 `PeriodDataSnapshot.get_indicator()` 触发了指标的懒加载计算，计算结果写回哪里？
+- 回写 `PeriodData._df`（修改原始数据）→ 这需要加锁，且 snapshot 是 copy，但底层的 PeriodData 被修改了
+- 只在当前 snapshot 的 copy 上计算 → 其他策略无法复用计算结果，失去共享意义
+
+文档说"后面的策略自动复用"，暗示计算结果会持久化到 PeriodData，但这需要 snapshot 内有某种机制触犯原始对象的写操作，设计上没有体现。
+
+**建议**: 明确计算结果始终写入 `PeriodData._df`，并说明并发安全由 `_lock` 保障。或者改为：只在 DataFeed 层（而非 PeriodData 层）触发懒加载计算，snapshot 是纯读取。
+
+---
+
+### 模糊不清的问题
+
+#### 模糊1：多策略场景下的调度顺序
+
+文档设计了多策略共享 DataFeed 的机制，但没有说明两个策略的 `update_bar` / `get_snapshot` / `on_bar` 的调用顺序。单线程回测虽然不会出现竞态，但策略A更新后策略B能否正确拿到数据取决于 Engine 的实现顺序。
+
+---
+
+#### 模糊2：指标列名生成规则不完整
+
+`sma(period=10) → sma_10` 的规则只覆盖了单参数场景。对于 `bbands(period=20, std=2)` 应该生成什么列名？不同参数顺序是否影响列名？如果 `func_a(x=1, y=2)` 和 `func_a(y=2, x=1)` 生成不同列名但逻辑相同，会导致重复计算。
+
+**建议**: 定义指标列名的规范化规则（如参数按参数名排序拼接）。
+
+---
+
+#### 模糊3：事件归属K线的时间范围规则
+
+`update_bar(bar, period, events)` 的 events 是"归属于这根 K线 时间范围内的事件"。但事件可能发生在K线的任意时刻，且事件的时间戳精度可能高于K线粒度。这个"归属"的匹配规则是什么？按K线的 `[open_time, close_time)` 区间完全包含事件时间？
+
+**建议**: 明确定义事件归属的时间窗口对齐规则。
+
+---
+
+#### 模糊4：Snapshot 的 `get_indicator` 能否触发计算
+
+`PeriodData.get_indicator()` 可能触发懒加载，但 `PeriodDataSnapshot` 是只读快照。如果 snapshot 不包含某指标，调用 `snapshot.get_indicator()` 应该返回 None 还是触发计算？如果触发计算，计算写回哪里？
+
+**建议**: 明确 Snapshot 是纯只读，不触发任何计算，指标不存在就返回 None。
+
+---
+
+#### 模糊5：`data_requirements` 格式中 `"bars"` 字段的语义
+
+```python
+"5m": {"bars": 50}
+```
+
+`"bars": 50` 是什么意思？是 `get_snapshot` 的 `periods` 参数值？还是策略需要保证至少有50根K线？还是缓存大小上限？文档没有定义 `data_requirements` 的完整 schema。此外，`data_requirements` 的返回类型标注为 `dict`，过于宽泛。
+
+---
+
+#### 模糊6：`data_requirements` 中没有事件的声明入口
+
+需求分析中事件是核心需求（需求5），但 `data_requirements` 示例只有 `periods` 和 `indicators`。策略如何声明需要事件数据？是所有注册了周期的策略都自动获得事件，还是需要显式声明？
+
+---
+
+#### 模糊7：`IndicatorCalcMode.INCREMENTAL` 的输入范围
+
+INCREMENTAL 模式下，计算函数收到的输入是什么——只有最新增加的一行数据，还是整个 DataFrame 但标记了上次计算到哪一行？如果只有新增行，像 SMA 这类需要历史值的指标无法增量计算（因为没有历史上下文）。
+
+**建议**: 定义增量计算函数的输入签名，明确是否传递历史数据或计算状态。
+
+---
+
+#### 模糊8：`mock_snapshot` 测试构造缺少便利工具
+
+测试示例中直接使用了 `mock_snapshot`，但没有提供方便构造 `PeriodDataSnapshot` 的方法。直接构造需要准备完整的 DataFrame，对单测来说成本较高。建议提供一个 `SnapshotBuilder` 或 `make_snapshot(bars: List[Bar], end_time)` 辅助函数。
+
+---
+
 
