@@ -386,6 +386,9 @@ class DataFeed:
     # 为每个周期注册需要计算的指标（指标名 + 参数）
     # 计算时自动生成列名，如 "sma_10", "ema_20"
     _registered_indicators: Dict[str, List[Tuple[str, dict]]]
+    # key: 周期名，value: [(指标名, 参数字典)]
+    # 例："5m" → [("sma", {"period": 10}), ("sma", {"period": 20})]
+    # 同一指标名+不同参数算不同列（sma_10 vs sma_20）
 ```
 
 ---
@@ -529,7 +532,9 @@ class DataFeed:
 
         :param bar: 新K线数据
         :param period: 对应周期名称
-        :param events: 本次更新对应的事件（可选）
+        :param events: 归属于这根 K线 时间范围内的事件（可选）。
+            例如这根 1m K线期间发生了一次大单成交，作为 events 传入。
+            框架将它们关联到该 K线，后续可通过 get_events_at_bar(bar_idx) 查询。
         :raises KeyError: 如果周期未注册
         """
         pass
@@ -665,45 +670,114 @@ class DataFeedCache:
 
 ---
 
-## 四、Strategy 使用 DataFeedCache
+## 四、Strategy 使用 DataFeedCache（方案确定）
 
-### 4.1 Strategy 直接使用全局 Cache（无需持有成员）
+### 4.1 设计结论
+
+- **Bar**：复用现有 `strategies.Bar`，不重新定义
+- **数据访问**：声明式需求 + `ctx` 注入，策略不在 on_bar 里自行拉取数据
+- **兼容性**：直接改，不做旧签名兜底（当前只有一个 `MaStrategyCore`，改造成本可控）
+
+### 4.2 Strategy 新增接口
+
 ```python
-class Strategy:
-    # 不需要 _data_feed 成员变量了！
+class Strategy(ABC, Generic[T]):
 
-    def on_bar(self, bar: Bar):
-        # 直接从全局 Cache 获取数据
-        cache = DataFeedCache.get_instance()
-        snapshot = cache.get_snapshot("btc_usdt", "5m", bar.datetime, periods=20)
-        sma10 = snapshot.get_indicator("sma_10", -1)
-        # 获取事件
-        events = snapshot.get_events()
-        # ...
+    @abstractmethod
+    def data_requirements(self) -> dict[str, Any]:
+        """策略的数据需求声明，由 Bridge/Engine 在初始化时读取
+        框架据此注册周期、注册指标，并在 on_bar 时构造 ctx。
+        返回格式由具体策略定义，框架只读不解析。
+        """
+        ...
+
+    @abstractmethod
+    def on_bar(self, bar: Bar, ctx: BarContext) -> Signal:
+        """处理一根K线，接收已准备完毕的上下文
+        ctx 包含所有声明的跨周期数据和事件。
+        签名不再支持无 ctx 版本——旧策略需要迁移。
+        """
+        ...
 ```
 
-### 4.2 测试时注入 mock Cache
+### 4.3 BarContext 类型
+
 ```python
-# 测试代码
+@dataclass
+class BarContext:
+    """当前 bar 的策略上下文——引擎按 data_requirements 声明构造"""
+    symbol: str
+    bar: Bar
+    # 多周期数据，key=周期名，key 集合 = data_requirements 中声明的周期
+    multi: dict[str, PeriodDataSnapshot]
+    # 当前 bar 时间范围内的事件
+    events: list[Event]
+```
+
+### 4.4 PeriodDataSnapshot 访问器
+
+```python
+class PeriodDataSnapshot:
+    def bar(self, idx: int = -1) -> Bar | None: ...
+    def close(self, idx: int = -1) -> float | None: ...
+    def indicator(self, name: str, idx: int = -1) -> float | None: ...
+    def indicator_series(self, name: str) -> pd.Series: ...
+    def events(self) -> list[Event]: ...
+```
+
+### 4.5 策略示例
+
+```python
+class MaStrategyCore(Strategy[MACrossParams]):
+
+    name = STRATEGY_MA
+    VERSION = f"{CORE_VERSION}-ma1"
+
+    def data_requirements(self) -> dict:
+        return {
+            "periods": {
+                "5m": {"bars": 50},
+                "1m": {"bars": 20},
+            },
+            "indicators": {
+                "5m": [{"name": "sma", "period": 10},
+                        {"name": "sma", "period": 20}],
+            },
+        }
+
+    def on_bar(self, bar: Bar, ctx: BarContext) -> Signal:
+        sma10 = ctx.multi["5m"].indicator("sma_10", -1)
+        sma20 = ctx.multi["5m"].indicator("sma_20", -1)
+        ...
+```
+
+### 4.6 测试
+
+```python
 def test_strategy():
-    # 1. 创建 mock cache
-    mock_cache = MockDataFeedCache()
-
-    # 2. 注入到全局
-    DataFeedCache.set_instance(mock_cache)
-
-    # 3. 运行策略
-    strategy = MyStrategy()
-    strategy.on_bar(test_bar)
-
-    # 4. 清理
-    DataFeedCache.set_instance(None)
+    ctx = BarContext(symbol="m2509", bar=test_bar,
+                     multi={"5m": mock_snapshot, "1m": mock_snapshot},
+                     events=[])
+    signal = strategy.on_bar(test_bar, ctx)
+    assert signal.action == TRADE_ACTION_BUY
 ```
 
-### 4.3 应用场景说明
-- **运行时**：直接用 `DataFeedCache.get_instance()` 获取全局单例，天然共享数据
-- **测试时**：用 `DataFeedCache.set_instance()` 注入 mock 或测试用的 cache
-- Bridge 直接通过 DataFeedCache 更新数据，策略直接从 DataFeedCache 读取数据
+不需要 mock 全局 cache，不需要 set_instance，构造 BarContext 直接喂即可。
+
+### 4.7 完整数据流
+
+```
+init:
+  策略.data_requirements → Bridge/Engine 读取
+  → 注册周期、注册指标到 DataFeed
+
+回测循环:
+  for bar in bars:
+    DataFeed.update_bar(bar)          # K 线落地
+    ctx = build_context(strategy)     # 按需求声明拉快照
+    signal = strategy.on_bar(bar, ctx)  # 策略拿数据做决策
+    Bridge.execute(signal)            # 翻译为 vnpy buy/sell
+```
 
 ---
 
@@ -715,39 +789,46 @@ def test_strategy():
 cache = DataFeedCache.get_instance()
 
 # 2. 创建或获取 DataFeed（按 symbol）
-data_feed = cache.get_or_create("btc_usdt")
+data_feed = cache.get_or_create("CZCE.sr509")
 
 # 3. 注册所有需要的周期
 data_feed.register_period("1m")
 data_feed.register_period("5m")
 
-# 4. 注册需要计算的指标（指标名 + 参数）
-data_feed.register_indicator("5m", "sma", period=10)  # 生成 "sma_10"
-data_feed.register_indicator("5m", "sma", period=20)  # 生成 "sma_20"
-data_feed.register_indicator("5m", "ema", period=20)  # 生成 "ema_20"
+# 4. 读取策略声明，批量注册指标
+# data_feed.register_indicator 由 Engine 在读取 data_requirements 后统一调用
+# 策略无需手动注册
 
 # 5. 加载历史数据
 data_feed.load_history_data("1m", bars_1m, events_1m)
 data_feed.load_history_data("5m", bars_5m, events_5m)
 
 # 6. 可选：预计算所有指标（性能优化）
-# data_feed.calculate_all()  # 也可以不调用，指标会在第一次访问时懒加载
+# data_feed.calculate_all()
 ```
 
 ### 5.2 回测运行阶段
 ```python
 # Bridge 遍历主周期数据，通过 Cache 更新
 for bar, events in zip(bars_1m, event_groups):
-    cache.update_bar("btc_usdt", bar, "1m", events)
-    # 调用策略 on_bar
-    strategy.on_bar(bar)
+    # 1. K线落地到 DataFeed（必须先 update_bar，让跨周期数据就绪）
+    #    例如 1m → 5m：第 1、2、3、4 根 1m bar 不会触发聚合，
+    #    第 5 根到达时自动聚合成一根 5m bar 并写入 5m 周期的 PeriodData。
+    #    如果先调 on_bar 再 update_bar，on_bar 拿到的 snapshot 不包含最新 K线。
+    cache.update_bar("CZCE.sr509", bar, "1m", events)
 
-# 策略直接从 Cache 获取数据
-def on_bar(self, bar):
-    cache = DataFeedCache.get_instance()
-    snapshot = cache.get_snapshot("btc_usdt", "5m", bar.datetime, periods=20)
-    sma10 = snapshot.get_indicator("sma_10", -1)
-    events = snapshot.get_events()
+    # 2. 读取策略声明，构造 BarContext
+    ctx = build_context(
+        data_feed, strategy.data_requirements(), bar.datetime
+    )
+
+    # 3. 调用策略
+    signal = strategy.on_bar(bar, ctx)
+
+    # 4. 执行下单
+    bridge.execute(signal, bar)
+
+# 策略不需要自己从 cache 拿数据，ctx 里已准备完毕
 ```
 
 ### 5.3 数据锚定方式说明
@@ -757,30 +838,33 @@ DataFeedCache（symbol → DataFeed）
     ↓
 DataFeed（period → PeriodData）
     ↓
-PeriodData（数据访问）
+build_context() → BarContext（按声明裁剪）
+    ↓
+Strategy.on_bar(bar, ctx)
 
-使用示例：
-cache = DataFeedCache.get_instance()
-snapshot = cache.get_snapshot("btc_usdt", "5m", time)
+策略不再感知 DataFeedCache 的存在：
+bar, ctx → on_bar() → Signal
 ```
 
 ---
 
 ## 六、重要问题的解决方案总结
 
-| 问题 | 解决方案 |
-|------|----------|
-| K线与指标分离还是合并？ | **合并**：K线+指标放一个DataFrame，索引统一，简单高效 |
-| 指标与事件如何管理？ | K线+指标合并，事件单独管理，都在PeriodData内部 |
-| 周期不同步问题？ | **懒加载按需计算**，append-only 快照机制保障数据一致性，多策略自动复用已算好的指标 |
-| Callable是函数还是钩子类？ | **简单函数**，模块级注册，所有DataFeed共享 |
-| 数据存哪里？ | PeriodData内部统一管理，DataFeed只做调度 |
-| _indicator_funcs是否每个DataFeed注册？ | **不需要**，模块级注册一次，所有DataFeed共享 |
-| DataFeedCache需要锁吗？ | **不需要**，DataFeedCache只做路由，锁在DataFeed级别 |
-| 快照如何实现？ | **Pandas切片 + copy**，几千周期没问题，不需要复杂函数式 |
-| source参数需要吗？ | 可选，可从symbol解析（如"CZCE.sr509" → source="CZCE"） |
-| 事件数据是核心吗？ | **是**，完整支持Event类型，与K线/指标一起管理 |
-| 谁来调用DataFeedCache.update_bar？ | **Bridge或回测引擎**，策略只调用get_snapshot |
+| 问题 | 解决方案 | 为什么 |
+|------|----------|--------|
+| K线与指标分离还是合并？ | **合并**：K线+指标放一个DataFrame，索引统一 | 策略读取时通常同时需要K线值和指标值，分离意味着每次查询要 join/merge，合并后一次 `.loc` 拿到全部，简单高效 |
+| 指标与事件如何管理？ | K线+指标合并，事件单独管理，都在PeriodData内部 | 事件是稀疏数据（非每根K线都有），合并到 DataFrame 会导致大量 NaN 列。单独存用时间索引查询，天然高效 |
+| 周期不同步问题？ | **懒加载按需计算**，append-only 快照机制保障数据一致性 | 指标只算一次、多策略共享，不需要预判策略访问顺序。append-only 保证旧数据不会被修改，快照就是安全的 |
+| Callable是函数还是钩子类？ | **简单函数**，模块级注册，所有DataFeed共享 | 不涉及状态管理，函数足以描述转换逻辑。类的额外开销（构造/销毁/生命周期）在几千周期回测中毫无收益 |
+| 数据存哪里？ | PeriodData内部统一管理，DataFeed只做调度 | DataFeed 属于"调度侧"（知道什么时候该算什么），PeriodData 属于"存储侧"（知道怎么存和取），职责分离比合在一起好维护 |
+| _indicator_funcs是否每个DataFeed注册？ | **不需要**，模块级注册一次，所有DataFeed共享 | 指标函数是纯计算逻辑，与品种/周期无关。例如 sma(df, period=10) 对任何品种的计算方式一样，没必要每个 DataFeed 存一份函数引用 |
+| DataFeedCache需要锁吗？ | **不需要**，DataFeedCache只做路由，锁在DataFeed级别 | DataFeedCache 只有读操作（`get_or_create` 在缓存命中时也是读），写操作在 DataFeed.update_bar 内部，锁放在操作发生的层级更合理 |
+| 快照如何实现？ | **Pandas切片 + copy** | 几千周期数据，DataFrame copy 是纳秒级操作。为这个写函数式不可变结构徒增复杂度，没有实际回报 |
+| source参数需要吗？ | 可选，可从symbol解析 | 期货合约 `CZCE.sr509` 的 `CZCE` 就是交易所代码（source），纯 convention 就能解析。保留参数是为了覆盖无法从 symbol 推断的场景（如自定义品种） |
+| 事件数据是核心吗？ | **是**，完整支持Event类型 | 事件数据（大单/新闻/异动）在策略信号中越来越重要，尤其在多因子和 ML 策略中。在架构层面预留这个口子比后期补合算得多 |
+| 策略如何获取数据？ | **声明式需求 + ctx 注入** | 策略走全局 Cache 拉数据 → 耦合全局单例、单测需要 mock。声明式让框架在 on_bar 之前就准备好所有数据，策略只做事，不做数据获取 |
+| Bar 类型用现有的还是重新定义？ | **复用 `strategies.Bar`** | DataFrame 列名与 Bar 字段直接对齐（`open→open`，无 `open_price` 映射），零转换成本。策略从 Bridge 和从 ctx 拿到的 K线是同一类型 |
+| 旧策略兼容性怎么办？ | **不做兼容**，直接改 | 当前只有一个策略（MaStrategyCore），改造成本可忽略。为"未来可能有旧策略"做兼容垫片属于过早抽象 |
 
 ---
 
@@ -901,51 +985,85 @@ snapshot = cache.get_snapshot("btc_usdt", "1m", time2)  # 只访问 time2 之前
 
 ### Q4: 事件数据与周期的关系是怎样的？
 
-**当前设计**：
-- 第11行：事件数据与K线、指标一起管理
-- 第194-201行：`get_events_at_bar` 方法
+**方案确定**：事件与symbol绑定，DataFeed级别统一管理
 
-**需要明确**：
-- 事件是绑定到特定周期的（一个事件在1分钟和5分钟都可见），还是品种全局的？
-- `get_events_at_bar` 返回该K线时间范围内的所有事件，还是只有该周期级别的事件？
-- `append_event` 时，事件是追加到所有周期，还是只追加到特定周期？
+**核心思路**：
+1. 一个DataFeed对应一个symbol，事件在DataFeed级别统一管理，不绑定到特定周期
+2. 所有周期都可以访问该symbol的事件，通过时间范围查询
+3. `get_events_at_bar` 返回该K线时间范围内的所有事件（不限于某周期）
+
+**实现方式**：
+- 方案A：DataFeed持有一个全局的事件列表/ DataFrame
+- 方案B：选择其中一个PeriodData（如主周期）专门管理事件
+- 现阶段先选简单方案，未来需要全局事件（如主力合约事件）时再扩展
+
+**访问示例**：
+```python
+# 访问1分钟周期时，也能获取该symbol的所有事件
+snapshot = cache.get_snapshot("CZCE.sr509", "1m", time)
+events = snapshot.get_events()  # 返回该时间范围的所有事件
+
+# 访问5分钟周期时，同样的事件
+snapshot = cache.get_snapshot("CZCE.sr509", "5m", time)
+events = snapshot.get_events()  # 返回的是同样的事件
+```
 
 ---
 
 ### Q5: 多个策略需要不同指标组合时怎么办？
 
-**当前设计**：
-- 第707-709行：初始化阶段注册指标
-- 第659-663行：策略直接使用指标
+**方案确定**：上层统一注册，懒加载按需计算，自动共享
 
-**问题场景**：
-- 策略A需要 `sma_10`，策略B需要 `sma_20`，都在同一个品种和周期
-- 是策略主动注册指标，还是上层统一注册所有策略需要的指标？
-- 会计算所有策略需要的指标，还是只计算当前策略需要的？
+**核心思路**：
+1. 初始化阶段，由上层（如回测引擎）统一注册所有策略需要的指标
+2. 指标懒加载，第一次访问时才计算，避免无用计算
+3. 已经计算的指标自动共享，所有策略都能用
+4. 即使多注册了一些没用的指标，因为懒加载，也不会有额外开销
 
-**建议**：明确指标注册的责任方和计算策略（建议上层统一注册所有需要的指标，虽然可能多算一些，但保证共享）。
+**流程示例**：
+```python
+# 初始化阶段：回测引擎统一注册
+data_feed = cache.get_or_create("CZCE.sr509")
+data_feed.register_indicator("1m", "sma", period=10)  # 策略A需要
+data_feed.register_indicator("1m", "sma", period=20)  # 策略B需要
+
+# 回测阶段：
+# 策略A先访问 sma_10 → 触发计算
+snapshot1 = cache.get_snapshot("CZCE.sr509", "1m", time)
+sma10 = snapshot1.get_indicator("sma_10")
+
+# 策略B后访问 sma_10 → 直接复用
+# 策略B访问 sma_20 → 触发计算
+snapshot2 = cache.get_snapshot("CZCE.sr509", "1m", time)
+sma10 = snapshot2.get_indicator("sma_10")  # 直接用
+sma20 = snapshot2.get_indicator("sma_20")  # 触发计算
+```
+
+**优势**：
+- 简单：上层统一管理指标注册
+- 高效：懒加载按需计算，不浪费算力
+- 共享：计算一次，所有策略受益
+- 容错：多注册了也没关系，不访问就不会算
+```
 
 ---
 
-### Q6: Bar 类型用现有的还是重新定义？
+### Q6: Bar 类型用现有的还是重新定义？数据怎么给到策略？
 
-**当前设计**：
-- 多处使用 `Bar` 类型
-
-**问题**：
-- 现有项目 `strategies/__init__.py` 已经有 Bar 类型
-- 是直接复用，还是在 `data_feed.py` 里重新定义？
-- 如果重新定义，字段如何对齐？
-
-**建议**：直接复用项目现有 Bar 类型，保持一致性。
+**结论**：
+  
+1. **Bar**：复用现有 `strategies.core.types.Bar`。DataFrame 列名与 Bar 字段直接对齐，零映射成本。
+  
+2. **数据传递**：声明式需求 + `ctx` 注入，不走全局 Cache。
+   - `Strategy` 新增 `data_requirements()` 声明需要哪些周期和指标
+   - `on_bar(bar, ctx)` 直接接收已构造好的 `BarContext`
+   - `BarContext.multi` 按声明裁剪，只包含策略需要的周期
+   - 策略不再调用 `DataFeedCache.get_instance()`
+  
+3. **无兼容设计**：直接替换旧签名，当前只有一个策略（MaStrategyCore），改造成本可控。
+  
+4. **字符串指标名的静态检查缺失**：接受 Trade-off，运行时在 `build_context` 阶段校验声明与注册是否匹配，拼错提前抛错，不静默失败。
 
 ---
 
-### Q7: 一些小的完善建议
 
-| 位置 | 内容 | 建议 |
-|------|------|------|
-| 第389行 | `_registered_indicators` 数据结构 | 建议加上注释，说明 Tuple[str, dict] 是 (指标名, 参数) |
-| 第500行 | `update_bar` 的 events 参数 | 建议说明 events 是对应这根 K线 的事件 |
-| 第717行 | 回测运行阶段 | 建议补充说明：先 update_bar，再调用策略 on_bar，保证 snapshot 包含最新数据 |
-| 第753行 | 问题解决方案表格 | 建议加上「为什么？」的解释，说明选择方案的理由 |
