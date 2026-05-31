@@ -44,10 +44,20 @@
 4. 周期共享：策略A用1、3、5周期，策略B用2、4、5周期，5周期数据共享
 5. 支持周期转换：硬编码常见周期转换关系（1m→5m, 1m→15m, 1m→1h等），支持两种场景：从低级周期生成高级K线，跨周期指标计算
 6. 懒加载按需计算：指标第一次访问时才计算，后面策略自动复用；计算方式灵活（全量/逐行都支持），回测场景优先易用性，性能随缘
-7. 基于条件变量的快照等待：只在 DataFeed 级别加锁，读操作检查时间戳，必要时等待更新完成
-8. 截止周期镜像：提供快照功能，策略只能看到指定周期及之前的数据
-9. 指标函数模块级注册：指标计算函数在模块级注册，所有 DataFeed 共享
-10. 保持现有架构兼容，最小化改动
+7. 基于条件变量的时间检查机制：
+   - 只在 DataFeed 级别加锁，读操作检查时间戳，必要时等待更新完成
+   - 正在更新数据周期的读取行为等待数据更新完成以后
+   - 读已经更新的周期的数据不受影响
+8. 数据交付流程保证：
+   - 更新当前周期 K线
+   - 确保数据计算完成
+   - 最后才交付视图
+   - 策略拿到视图的时候，计算已经完成了
+   - 框架内部在 update_bar 时不使用视图操作，整个框架保证数据使用规则
+9. 截止周期镜像：提供快照功能，策略只能看到指定周期及之前的数据
+10. 指标函数模块级注册：指标计算函数在模块级注册，所有 DataFeed 共享
+11. 保持现有架构兼容，最小化改动
+12. 数据追踪：类似数据库表，记录 created_at、last_updated_at、update_count 等字段，方便追踪数据，排除问题
 
 ---
 
@@ -121,6 +131,11 @@ class PeriodData:
     _df: pd.DataFrame
     _latest_time: Optional[pd.Timestamp]  # 最新数据时间
     _period: str  # 周期名称
+    
+    # 数据追踪字段（类似数据库表）
+    _created_at: pd.Timestamp  # PeriodData 创建时间
+    _last_updated_at: pd.Timestamp  # 最后一次更新时间
+    _update_count: int  # 更新次数
 ```
 
 #### 3.2.4 函数签名
@@ -132,7 +147,7 @@ class PeriodData:
 
         初始化过程：
         1. 创建空的K线+指标DataFrame，包含datetime, open, high, low, close, volume列
-        2. 初始化状态变量
+        2. 初始化状态变量和数据追踪字段
 
         :param period: 周期名称，如 "1m", "5m", "1h", "1d" 等
         """
@@ -146,6 +161,7 @@ class PeriodData:
         1. 必须按时间升序排列
         2. 时间戳不能与已有的数据重复
         3. Append-Only：历史数据不会被修改
+        4. 更新数据追踪字段：_last_updated_at 和 _update_count
 
         :param bars: K线列表
         :raises ValueError: 如果bars为空或时间顺序不对
@@ -160,6 +176,7 @@ class PeriodData:
         1. 追加的时间戳必须晚于已有的最新时间
         2. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
         3. Append-Only：历史数据不会被修改
+        4. 更新数据追踪字段：_last_updated_at 和 _update_count
 
         :param bar: 单根K线数据
         :raises ValueError: 如果时间戳早于或等于最新数据时间
@@ -173,6 +190,9 @@ class PeriodData:
         指标DataFrame要求：
         1. 索引必须与K线的datetime对齐
         2. 列名应为指标名（如 "sma_10", "ema_20"）
+
+        注意事项：
+        1. 更新数据追踪字段：_last_updated_at 和 _update_count
 
         :param indicators: 指标DataFrame，行数应等于或小于当前K线数
         :raises ValueError: 如果索引不匹配
@@ -394,6 +414,12 @@ class DataFeed:
     # key: 周期名，value: [(指标名, 参数字典)]
     # 例："5m" → [("sma", {"period": 10}), ("sma", {"period": 20})]
     # 同一指标名+不同参数算不同列（sma_10 vs sma_20）
+
+    # --- 数据追踪字段（类似数据库表） ---
+    _created_at: pd.Timestamp  # DataFeed 创建时间
+    _last_updated_at: pd.Timestamp  # 最后一次更新时间
+    _update_count: int  # 更新次数
+    _event_count: int  # 事件数量
 ```
 
 ---
@@ -1420,7 +1446,11 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 
 #### 模糊4：数据视图的 `get_indicator` 能否触发计算
 
-`PeriodData.get_indicator()` 可能触发懒加载，但 `PeriodDataSnapshot`（应该改名为 `PeriodDataView`）是只读视图。如果视图不包含某指标，调用 `view.get_indicator()` 应该返回 None 还是触发计算？如果触发计算，计算写回哪里？
+**核心设计保证**：
+1. 数据交付流程：更新当前周期 K线 → 确保数据计算完成 → 最后才交付视图
+2. 策略拿到视图的时候，计算已经完成了
+3. 框架内部在 update_bar 时不使用视图操作，整个框架保证数据使用规则
+4. 视图是纯只读，不触发任何计算，指标不存在返回 None
 
 **建议**: 明确视图是纯只读，不触发任何计算，指标不存在就返回 None。
 
