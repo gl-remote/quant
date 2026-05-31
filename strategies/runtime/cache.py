@@ -12,6 +12,7 @@ import pandas as pd
 from .data_feed import DataFeed
 from .events import Event
 from .period import PeriodDataView
+from .requirements import DataRequirements
 from ..core.types import Bar
 
 
@@ -97,3 +98,23 @@ class DataFeedCache:
         """
         datafeed = self.get_or_create(symbol)
         return datafeed.get_data(period_name, current_time, lookback_bars, timeout)
+
+    def setup(self, symbol: str, requirements: DataRequirements) -> DataFeed:
+        """按策略的数据需求声明配置 DataFeed
+
+        回测引擎只需调用一次此方法，即可完成周期注册和指标注册。
+
+        :param symbol: 交易品种
+        :param requirements: 策略声明的数据需求
+        :return: 配置完成的 DataFeed 实例
+        """
+        datafeed = self.get_or_create(symbol)
+
+        for period_name in requirements.periods:
+            datafeed.register_period(period_name)
+
+        for period_name, indicators in requirements.indicators.items():
+            for indicator in indicators:
+                datafeed.register_indicator(period_name, indicator.name, **indicator.params)
+
+        return datafeed
