@@ -5,6 +5,14 @@
 **文档状态**: 定稿（合并 v1 + v2，同步当前实现）  
 **修订说明**: 合并前两个版本的设计决策、审计发现与修复记录，更新架构为当前实现路径
 
+> **历史版本检索**：本文档的前身是 `strategies/runtime/data_management_design.md`（v1）和
+> `strategies/runtime/data_management_design_v2.md`（v2），已在 5e25ccf 提交中删除。
+> 如需查看原始详细讨论（含 Q&A 对比分析、缺陷完整分析过程），请使用：
+> ```bash
+> git show 5e25ccf~1:strategies/runtime/data_management_design.md     # v1
+> git show 5e25ccf~1:strategies/runtime/data_management_design_v2.md  # v2
+> ```
+
 ---
 
 ## 一、概述
