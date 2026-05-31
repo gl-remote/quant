@@ -1221,29 +1221,29 @@ def get_snapshot(self, end_time: pd.Timestamp, periods: int = 1) -> PeriodDataSn
 @dataclass
 class PeriodRequirements:
     """单个周期的数据需求（类比表的查询需求）"""
-    lookback_bars: int  # 查询的历史K线数量
+    lookback_bars: int  # 查询的历史K线数量（最近N个周期）
     min_bars: Optional[int] = None  # 策略需要的最小K线数（可选，用于校验）
 
 @dataclass
 class IndicatorRequirements:
     """单个指标的计算需求"""
-    name: str  # 指标名称
+    name: str  # 指标名
     params: dict[str, Any]  # 指标参数
 
 @dataclass
 class DataRequirements:
     """策略的数据需求（类比数据库查询计划）"""
-    # 周期配置：key 是周期名称（对应 PeriodData 的 period 字段），value 是该周期的需求
+    # 周期配置：key 是周期名（对应 PeriodData 的 period 字段），value 是该周期的需求
     periods: dict[str, PeriodRequirements]
     
-    # 指标配置：key 是周期名称，value 是该周期需要的指标列表
+    # 指标配置：key 是周期名，value 是该周期需要的指标列表
     indicators: dict[str, list[IndicatorRequirements]]
     
     # 事件配置：
-    # - False: 不获取事件
-    # - True: 获取所有事件（全局+所有周期特定）
-    # - List[str|None]: 获取指定周期的事件，None 表示全局事件
-    events: Union[bool, list[Optional[str]]] = False
+    # - 空列表 []: 不获取事件
+    # - [None]: 获取全局事件
+    # - [None, "1m", "5m"]: 获取全局事件 + 1m周期特定事件 + 5m周期特定事件
+    events: list[Optional[str]] = field(default_factory=list)
 ```
 
 **DataFeed 和 PeriodData 命名说明**：
@@ -1506,24 +1506,41 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
    class DataRequirements:
        periods: dict[str, PeriodRequirements]  # key: 周期名
        indicators: dict[str, list[IndicatorRequirements]]  # key: 周期名
-       events: Union[bool, list[Optional[str]]] = False  # True: 所有事件; False: 无事件; 列表: 指定周期的事件 + 全局事件
+       events: list[Optional[str]] = field(default_factory=list)  # 空列表: 无事件; 列表元素: 周期名或 None(全局事件)
    ```
 2. 更新策略示例，展示不同场景：
    ```python
-   # 场景1: 需要所有事件
+   # 场景1: 不给事件
    def data_requirements(self) -> DataRequirements:
        return DataRequirements(
            periods={...},
            indicators={...},
-           events=True
+           events=[]  # 空列表，不给事件
        )
    
-   # 场景2: 只需要全局事件和 1m 周期的特定事件
+   # 场景2: 只需要全局事件
+   def data_requirements(self) -> DataRequirements:
+       return DataRequirements(
+           periods={...},
+           indicators={...},
+           events=[None]  # None 表示全局事件
+       )
+   
+   # 场景3: 需要全局事件和 1m 周期的特定事件
    def data_requirements(self) -> DataRequirements:
        return DataRequirements(
            periods={...},
            indicators={...},
            events=[None, "1m"]  # None 表示全局事件
+       )
+   
+   # 场景4: 需要所有事件（全局 + 所有周期特定事件）
+   def data_requirements(self) -> DataRequirements:
+       # 可以通过包含所有周期名和 None 来实现，或者框架提供特殊值（视需求而定）
+       return DataRequirements(
+           periods={...},
+           indicators={...},
+           events=[None, "1m", "5m", "15m"]  # 显式列出所有需要的周期
        )
    ```
 3. 更新 `build_context` 的行为：根据 `requirements.events` 配置筛选事件
