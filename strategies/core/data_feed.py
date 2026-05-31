@@ -24,6 +24,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 import threading
 import pandas as pd
+from pandas._libs import NaTType
 
 from .types import Bar
 
@@ -418,7 +419,7 @@ class PeriodData:
         if lookback_bars <= 0:
             raise ValueError("lookback_bars must be positive")
 
-        current_time_ts = pd.Timestamp(current_time)
+        current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
         # 检查时间是否有效
         if len(self._df) == 0:
@@ -564,6 +565,27 @@ class PeriodData:
         else:
             self._calculated_indicators.discard(name)
             self._indicator_last_calc_idx.pop(name, None)
+
+    def apply_indicator(self, func: Callable[..., pd.Series], **params: Any) -> pd.Series:
+        """对内部数据应用指标计算函数
+
+        封装对 self._df 的访问，外部调用者无需直接操作 _df。
+
+        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> pd.Series
+        :param params: 指标参数
+        :return: 计算结果 Series
+        """
+        return func(self._df, **params)
+
+    def set_indicator_column(self, name: str, series: pd.Series) -> None:
+        """将指标计算结果写入内部存储
+
+        封装对 self._df[name] = series 的访问，外部无需直接操作 _df。
+
+        :param name: 指标列名（如 "sma_10"）
+        :param series: 指标计算结果 Series
+        """
+        self._df[name] = series
 
 
 # ==================== PeriodDataView: 只读逻辑视图 ====================
@@ -779,14 +801,14 @@ class DataFeed:
 
         # 并发控制
         self._lock = threading.RLock()
-        self._updating_time: Optional[pd.Timestamp] = None
+        self._updating_time: pd.Timestamp | NaTType = pd.Timestamp(0)
         self._condition = threading.Condition(self._lock)
 
         # 指标注册配置
         self._registered_indicators: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
 
         # 周期转换配置
-        self._period_conversions: Dict[Tuple[str, str], Callable] = _REGISTERED_CONVERTERS.copy()
+        self._period_conversions: Dict[Tuple[str, str], Callable[..., List[Bar]]] = _REGISTERED_CONVERTERS.copy()
         self._derived_periods: Dict[str, str] = {}
 
         # 数据追踪字段（类似数据库表）
@@ -1028,7 +1050,7 @@ class DataFeed:
 
             finally:
                 # 清除更新时间标记
-                self._updating_time = None
+                self._updating_time = pd.Timestamp(0)
                 # 通知等待的线程
                 self._condition.notify_all()
 
@@ -1069,8 +1091,8 @@ class DataFeed:
 
             # 计算指标
             try:
-                series = func_info.func(period_data._df, **params)
-                period_data._df[col_name] = series
+                series = period_data.apply_indicator(func_info.func, **params)
+                period_data.set_indicator_column(col_name, series)
                 period_data.mark_indicator_calculated(col_name)
             except Exception:
                 # 计算失败，跳过该指标
@@ -1132,10 +1154,10 @@ class DataFeed:
             if period_name not in self._periods:
                 raise KeyError(f"Period {period_name} not registered")
 
-            current_time_ts = pd.Timestamp(current_time)
+            current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
             # 等待更新完成（如果需要）
-            if self._updating_time is not None:
+            if self._updating_time != pd.Timestamp(0):
                 if current_time_ts >= self._updating_time:
                     if timeout is None:
                         # 回测模式，直接抛错
