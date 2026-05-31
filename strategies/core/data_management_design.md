@@ -1163,7 +1163,7 @@ def get_snapshot(self, end_time: pd.Timestamp, periods: int = 1) -> PeriodDataSn
    ```python
    def build_context(
        data_feed: DataFeed,
-       requirements: dict[str, Any],
+       requirements: DataRequirements,
        current_time: Union[pd.Timestamp, datetime.datetime],
        timeout: Optional[float] = None
    ) -> BarContext
@@ -1171,9 +1171,44 @@ def get_snapshot(self, end_time: pd.Timestamp, periods: int = 1) -> PeriodDataSn
 3. 详细说明其行为：
    - 解析 `requirements` 中的 `periods` 配置
    - 对每个周期调用 `data_feed.get_data(period, current_time, lookback_bars, timeout)`
-   - 从 DataFeed 获取当前时间范围内的事件
+   - 从 DataFeed 获取当前时间范围内的事件（根据 requirements.events 配置）
    - 构造并返回 `BarContext` 对象
-4. 补充 `data_requirements` 的完整 schema 定义
+4. 补充 `data_requirements` 的完整 schema 定义：
+
+**DataRequirements 完整 Schema 定义**（类比数据库/表概念）：
+```python
+@dataclass
+class PeriodRequirements:
+    """单个周期的数据需求（类比表的查询需求）"""
+    lookback_bars: int  # 查询的历史K线数量
+    min_bars: Optional[int] = None  # 策略需要的最小K线数（可选，用于校验）
+
+@dataclass
+class IndicatorRequirements:
+    """单个指标的计算需求"""
+    name: str  # 指标名称
+    params: dict[str, Any]  # 指标参数
+
+@dataclass
+class DataRequirements:
+    """策略的数据需求（类比数据库查询计划）"""
+    # 周期配置：key 是周期名称（对应 PeriodData 的 period 字段），value 是该周期的需求
+    periods: dict[str, PeriodRequirements]
+    
+    # 指标配置：key 是周期名称，value 是该周期需要的指标列表
+    indicators: dict[str, list[IndicatorRequirements]]
+    
+    # 事件配置：
+    # - False: 不获取事件
+    # - True: 获取所有事件（全局+所有周期特定）
+    # - List[str|None]: 获取指定周期的事件，None 表示全局事件
+    events: Union[bool, list[Optional[str]]] = False
+```
+
+**DataFeed 和 PeriodData 命名说明**：
+- `DataFeed` ≈ 数据库（Database），用 `symbol` + `source` 作为唯一标识
+- `PeriodData` ≈ 数据表（Table），用 `period` 作为唯一标识（在 DataFeed 内）
+- 不需要额外的 name 字段，当前设计已经足够清晰
 
 ---
 
