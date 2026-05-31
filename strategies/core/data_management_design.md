@@ -58,8 +58,14 @@
 ```python
 @dataclass
 class Event:
-    """事件基类"""
-    timestamp: pd.Timestamp
+    """事件基类
+    
+    【设计原则】
+    - 与 Bar.datetime 保持一致，使用 datetime.datetime
+    - 策略层无需关注底层存储细节
+    - 内部实现可以自由转换为 pd.Timestamp
+    """
+    timestamp: datetime.datetime
     type: str  # 'big_trade' | 'news' | 'orderbook_imbalance' | 'custom'
     symbol: str
     period: Optional[str] = None  # None 表示全局事件，否则绑定到特定周期
@@ -1270,34 +1276,43 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 
 ---
 
-#### 缺陷7：时间类型不统一（`pd.Timestamp` vs `datetime.datetime`）
+#### 缺陷7：时间类型设计需要遵循"使用者无需关注底层数据结构"原则
 
 **位置**: 
-- `Bar.datetime: datetime.datetime`（现有架构）
-- `Event.timestamp: pd.Timestamp`（第62行）
-- `PeriodData.get_snapshot.end_time: pd.Timestamp`
-- `DataFeed.update_bar` 接收 `Bar`（含 `datetime.datetime`）
+- `Bar.datetime: datetime.datetime`（现有架构，策略使用的标准类型）
+- `Event.timestamp: pd.Timestamp`（当前设计文档选择）
+- `PeriodData.get_data.current_time: pd.Timestamp`（当前设计文档选择）
 
-**问题根源分析**：
-这是一个典型的**架构迁移时类型不统一**问题：
-1. **现有 Bar 类型**：来自现有框架（如 vnpy），使用 `datetime.datetime`，这是 Python 标准库类型
-2. **新设计的 Event 和 DataFeed**：为了方便与 Pandas 交互（DataFrame 的索引通常是 pd.Timestamp），选择了 `pd.Timestamp`
-3. **两种类型混用**：没有进行统一规划，导致在接口边界需要进行不必要的类型转换
+**问题分析**：
+从 `strategies/core/types.py` 的注释可以看出，现有架构已经遵循了清晰的设计原则：
+- **策略层**：使用 `datetime.datetime`（Python 标准库，策略可直接用 `.hour`、`.weekday()`）
+- **存储层**：内部可以自由选择（Pandas DataFrame 用 pd.Timestamp 没问题）
+- **边界**：DataFeed 作为中间层，需要做好转换
 
-**建议**：统一使用单一时间类型，**推荐统一使用 `pd.Timestamp`**，原因：
-1. Pandas 是核心依赖，内部数据存储都是 pd.Timestamp，统一类型避免转换
-2. pd.Timestamp 功能更强大（时区支持、方便的时间运算）
-3. 与 Pandas Series/DataFrame 天然兼容
-4. 可以从 datetime.datetime 轻松构造 pd.Timestamp
+**关键原则**：使用者（策略）无需关注底层数据结构！
+
+**重新建议**：保持接口层使用 `datetime.datetime`，内部实现自由选择：
+
+**设计方案**：
+1. **接口层（面向策略）**：
+   - 所有对外暴露的 API 接受和返回 `datetime.datetime`
+   - 策略调用 `data_feed.get_data(period, bar.datetime, lookback_bars)`
+   - `BarContext` 中的时间都是 `datetime.datetime`
+2. **实现层（内部）**：
+   - DataFeed/PeriodData 内部可以自由使用 `pd.Timestamp`
+   - 在 API 入口处做统一转换
+3. **Event 类型**：也保持与 Bar 一致，使用 `datetime.datetime`
 
 **修改建议**：
-1. **统一使用 pd.Timestamp 作为所有时间字段的类型**：
-   - `Bar.datetime` 类型改为 `pd.Timestamp`（需要修改现有架构）
-   - `Event.timestamp` 保持 `pd.Timestamp`（已正确）
-   - 所有方法参数（`get_data`、`get_events`、`append_event` 等）统一使用 `pd.Timestamp`
-2. **提供兼容性支持**：如果需要兼容现有代码，可以在输入时同时接受 `Union[pd.Timestamp, datetime.datetime]`，但内部统一转换为 pd.Timestamp
-3. **在 docstring 中明确说明**：推荐使用 pd.Timestamp，同时也接受 datetime.datetime
-4. **修改 Bar 类定义**：将 datetime 字段类型改为 pd.Timestamp
+1. **更新 Event 类型**：`Event.timestamp: datetime.datetime`（与 Bar 保持一致）
+2. **API 方法签名**：所有时间参数标注为 `Union[pd.Timestamp, datetime.datetime]`，但推荐用 datetime
+3. **内部转换**：DataFeed 在内部统一转换为 pd.Timestamp 处理
+4. **返回值**：PeriodDataView 返回的时间都是 datetime.datetime
+
+**优势**：
+- 策略代码无需变动，继续使用熟悉的 datetime
+- 底层实现自由选择，不影响上层接口
+- 遵循"使用者无需关注底层数据结构"的设计原则
 
 ---
 
