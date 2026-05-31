@@ -29,7 +29,6 @@ from .requirements import (
 from .data_feed import (
     DataFeed,
     build_context,
-    make_view,
 )
 from .cache import DataFeedCache
 
@@ -41,5 +40,5 @@ __all__ = [
     'BarContext',
     'DataFeed', 'DataFeedCache',
     'register_indicator_func', 'register_period_converter',
-    'build_context', 'make_view',
+    'build_context',
 ]

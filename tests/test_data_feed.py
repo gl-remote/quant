@@ -16,7 +16,7 @@ if project_root not in sys.path:
 from strategies import (
     Bar, DataFeedCache, DataFeed,
     PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
-    build_context, make_view,
+    build_context,
     MaStrategyCore,
 )
 from common.constants import (
@@ -58,6 +58,19 @@ def generate_test_bars(num_bars: int = 100) -> List[Bar]:
         ))
 
     return bars
+
+
+def make_view(
+    bars: List[Bar],
+    current_time: datetime,
+    lookback_bars: int = 10,
+) -> 'PeriodDataView':
+    """构造测试用的 PeriodDataView（测试辅助函数）"""
+    from strategies.runtime.period import PeriodData, PeriodDataView
+
+    period_data = PeriodData("test")
+    period_data.append_bars(bars)
+    return period_data.get_data(current_time, lookback_bars)
 
 
 def test_data_feed_basic():

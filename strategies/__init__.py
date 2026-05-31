@@ -214,7 +214,7 @@ from .runtime import (
     PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
     BarContext,
     register_indicator_func, register_period_converter,
-    build_context, make_view,
+    build_context,
 )
 
 # 具体策略实现
@@ -253,7 +253,7 @@ __all__ = [
     'BarContext',
     # 辅助函数
     'register_indicator_func', 'register_period_converter',
-    'build_context', 'make_view',
+    'build_context',
     # 策略实现
     'MaStrategyCore', 'MACrossParams',
     # 工具函数

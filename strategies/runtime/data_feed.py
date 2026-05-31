@@ -532,56 +532,6 @@ def build_context(
     )
 
 
-def make_view(
-    bars: List[Bar],
-    current_time: Union[pd.Timestamp, dt],
-    lookback_bars: Optional[int] = None,
-    indicators: Optional[Dict[str, List[float]]] = None,
-    events: Optional[List[Event]] = None
-) -> PeriodDataView:
-    """构造测试用的 PeriodDataView
-
-    Args:
-        bars: K线列表
-        current_time: 视图截止时间
-        lookback_bars: 往前多少根K线（None 表示全部）
-        indicators: 指标数据，key 为指标名，value 为值列表（与 bars 对齐）
-        events: 事件列表
-    """
-    # 创建临时的PeriodData
-    period_data = PeriodData("test")
-    period_data.append_bars(bars)
-
-    # 添加指标
-    if indicators:
-        bar_times = [pd.Timestamp(bar.datetime) for bar in bars]
-        indicators_df = pd.DataFrame(indicators, index=bar_times)
-        period_data.append_indicators(indicators_df)
-
-    # 构建事件DataFrame
-    events_df = None
-    if events:
-        event_dicts = []
-        for event in events:
-            event_dicts.append({
-                'datetime': pd.Timestamp(event.timestamp),
-                'type': event.type,
-                'symbol': event.symbol,
-                'reason': event.reason,
-                'period': event.period,
-                'data': event.data
-            })
-        events_df = pd.DataFrame(event_dicts)
-        events_df = events_df.set_index('datetime')
-
-    # 计算lookback_bars
-    if lookback_bars is None:
-        lookback_bars = len(bars)
-
-    # 获取视图
-    return period_data.get_data(current_time, lookback_bars, events_df)
-
-
 # ==================== 默认指标注册 ====================
 # 指标实现见 core/indicators.py
 
