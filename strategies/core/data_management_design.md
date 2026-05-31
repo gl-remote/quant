@@ -1231,6 +1231,36 @@ class IndicatorRequirements:
     params: dict[str, Any]  # 指标参数
 
 @dataclass
+class EventsRequirements:
+    """事件数据需求"""
+    # 是否需要全局事件（period=None 的事件）
+    include_global_events: bool = False
+    
+    # 需要的周期特定事件：周期名列表
+    include_period_events: list[str] = field(default_factory=list)
+    
+    # 事件类型白名单：如果为空则获取所有类型；否则只获取指定类型
+    event_types: list[str] = field(default_factory=list)
+    
+    # 便捷方法：获取所有事件（全局 + 所有周期特定事件）
+    @classmethod
+    def all_events(cls) -> 'EventsRequirements':
+        return cls(
+            include_global_events=True,
+            include_period_events=["*"],  # "*" 表示所有周期
+            event_types=[]
+        )
+    
+    # 便捷方法：不获取任何事件
+    @classmethod
+    def no_events(cls) -> 'EventsRequirements':
+        return cls(
+            include_global_events=False,
+            include_period_events=[],
+            event_types=[]
+        )
+
+@dataclass
 class DataRequirements:
     """策略的数据需求（类比数据库查询计划）"""
     # 周期配置：key 是周期名（对应 PeriodData 的 period 字段），value 是该周期的需求
@@ -1239,11 +1269,8 @@ class DataRequirements:
     # 指标配置：key 是周期名，value 是该周期需要的指标列表
     indicators: dict[str, list[IndicatorRequirements]]
     
-    # 事件配置：
-    # - 空列表 []: 不获取事件
-    # - [None]: 获取全局事件
-    # - [None, "1m", "5m"]: 获取全局事件 + 1m周期特定事件 + 5m周期特定事件
-    events: list[Optional[str]] = field(default_factory=list)
+    # 事件配置
+    events: EventsRequirements = field(default_factory=EventsRequirements.no_events)
 ```
 
 **DataFeed 和 PeriodData 命名说明**：
@@ -1500,22 +1527,15 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 需求分析中事件是核心需求（需求5），但 `data_requirements` 示例只有 `periods` 和 `indicators`。策略如何声明需要事件数据？是所有注册了周期的策略都自动获得事件，还是需要显式声明？
 
 **修改建议**:
-1. 在 `data_requirements` 的 schema 中新增 `events` 配置，支持更精细的控制：
-   ```python
-   @dataclass
-   class DataRequirements:
-       periods: dict[str, PeriodRequirements]  # key: 周期名
-       indicators: dict[str, list[IndicatorRequirements]]  # key: 周期名
-       events: list[Optional[str]] = field(default_factory=list)  # 空列表: 无事件; 列表元素: 周期名或 None(全局事件)
-   ```
+1. 在 `data_requirements` 的 schema 中新增 `events` 配置，支持更精细的控制（见缺陷4中的完整定义）
 2. 更新策略示例，展示不同场景：
    ```python
-   # 场景1: 不给事件
+   # 场景1: 不获取任何事件
    def data_requirements(self) -> DataRequirements:
        return DataRequirements(
            periods={...},
            indicators={...},
-           events=[]  # 空列表，不给事件
+           events=EventsRequirements.no_events()
        )
    
    # 场景2: 只需要全局事件
@@ -1523,7 +1543,10 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
        return DataRequirements(
            periods={...},
            indicators={...},
-           events=[None]  # None 表示全局事件
+           events=EventsRequirements(
+               include_global_events=True,
+               include_period_events=[]
+           )
        )
    
    # 场景3: 需要全局事件和 1m 周期的特定事件
@@ -1531,16 +1554,30 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
        return DataRequirements(
            periods={...},
            indicators={...},
-           events=[None, "1m"]  # None 表示全局事件
+           events=EventsRequirements(
+               include_global_events=True,
+               include_period_events=["1m"]
+           )
        )
    
    # 场景4: 需要所有事件（全局 + 所有周期特定事件）
    def data_requirements(self) -> DataRequirements:
-       # 可以通过包含所有周期名和 None 来实现，或者框架提供特殊值（视需求而定）
        return DataRequirements(
            periods={...},
            indicators={...},
-           events=[None, "1m", "5m", "15m"]  # 显式列出所有需要的周期
+           events=EventsRequirements.all_events()
+       )
+   
+   # 场景5: 只需要特定类型的事件（如大单成交）
+   def data_requirements(self) -> DataRequirements:
+       return DataRequirements(
+           periods={...},
+           indicators={...},
+           events=EventsRequirements(
+               include_global_events=True,
+               include_period_events=["1m", "5m"],
+               event_types=["big_trade"]
+           )
        )
    ```
 3. 更新 `build_context` 的行为：根据 `requirements.events` 配置筛选事件
