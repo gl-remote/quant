@@ -1270,18 +1270,34 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 
 ---
 
-#### 缺陷7：`end_time` 类型与现有 `Bar.datetime` 类型不兼容
+#### 缺陷7：时间类型不统一（`pd.Timestamp` vs `datetime.datetime`）
 
-**位置**: PeriodData.get_snapshot `end_time: pd.Timestamp` vs `Bar.datetime: datetime.datetime`
+**位置**: 
+- `Bar.datetime: datetime.datetime`（现有架构）
+- `Event.timestamp: pd.Timestamp`（第62行）
+- `PeriodData.get_snapshot.end_time: pd.Timestamp`
+- `DataFeed.update_bar` 接收 `Bar`（含 `datetime.datetime`）
 
-`get_snapshot` 要求 `pd.Timestamp`，但回测数据流中传入的是 `bar.datetime`（`datetime.datetime` 类型）。虽然 pd.Timestamp 可以接受 datetime 构造，但这是一个隐式依赖。
+**问题根源分析**：
+这是一个典型的**架构迁移时类型不统一**问题：
+1. **现有 Bar 类型**：来自现有框架（如 vnpy），使用 `datetime.datetime`，这是 Python 标准库类型
+2. **新设计的 Event 和 DataFeed**：为了方便与 Pandas 交互（DataFrame 的索引通常是 pd.Timestamp），选择了 `pd.Timestamp`
+3. **两种类型混用**：没有进行统一规划，导致在接口边界需要进行不必要的类型转换
 
-**建议**: 将参数类型标注为 `Union[pd.Timestamp, datetime]` 或在 docstring 中说明接受 datetime。
+**建议**：统一使用单一时间类型，**推荐统一使用 `pd.Timestamp`**，原因：
+1. Pandas 是核心依赖，内部数据存储都是 pd.Timestamp，统一类型避免转换
+2. pd.Timestamp 功能更强大（时区支持、方便的时间运算）
+3. 与 Pandas Series/DataFrame 天然兼容
+4. 可以从 datetime.datetime 轻松构造 pd.Timestamp
 
-**修改建议**:
-1. 将所有接受时间参数的方法（`get_snapshot`、`get_events`、`append_event` 等）的类型标注改为 `Union[pd.Timestamp, datetime.datetime]`
-2. 在 docstring 中明确说明接受 `datetime.datetime` 或 `pd.Timestamp`
-3. 在方法实现中，内部统一转换为 `pd.Timestamp` 处理
+**修改建议**：
+1. **统一使用 pd.Timestamp 作为所有时间字段的类型**：
+   - `Bar.datetime` 类型改为 `pd.Timestamp`（需要修改现有架构）
+   - `Event.timestamp` 保持 `pd.Timestamp`（已正确）
+   - 所有方法参数（`get_data`、`get_events`、`append_event` 等）统一使用 `pd.Timestamp`
+2. **提供兼容性支持**：如果需要兼容现有代码，可以在输入时同时接受 `Union[pd.Timestamp, datetime.datetime]`，但内部统一转换为 pd.Timestamp
+3. **在 docstring 中明确说明**：推荐使用 pd.Timestamp，同时也接受 datetime.datetime
+4. **修改 Bar 类定义**：将 datetime 字段类型改为 pd.Timestamp
 
 ---
 
