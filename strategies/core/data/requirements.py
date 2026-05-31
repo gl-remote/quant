@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .events import Event
-from .types import Bar
+from ..types import Bar
 
 
 @dataclass
