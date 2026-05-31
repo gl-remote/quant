@@ -96,6 +96,9 @@ class NewsEvent(Event):
 - 支持数据追加（Append-Only，历史数据不修改）
 - 底层存储使用 Pandas DataFrame
 - 高效的数据访问，通过逻辑视图实现，不复制数据
+- **两种使用场景**：
+  - 场景1：由 DataFeed 统一管理（多策略共享）
+  - 场景2：策略自己持有（策略私有数据，不共享）
 
 #### 3.2.2 核心功能
 1. 数据存储：持有该周期的 K线+指标（合并DataFrame）
@@ -1058,8 +1061,6 @@ sma20 = snapshot2.get_indicator("sma_20")  # 触发计算
   
 4. **字符串指标名的静态检查缺失**：接受 Trade-off，运行时在 `build_context` 阶段校验声明与注册是否匹配，拼错提前抛错，不静默失败。
 
----
-
 ## 九、设计审计
 
 ### 缺陷
@@ -1326,16 +1327,23 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 
 文档说"后面的策略自动复用"，暗示计算结果会持久化到 PeriodData，但设计上没有明确触发点。
 
-**建议**: 明确懒加载计算只在 DataFeed 层触发，视图是纯只读，不持有对 PeriodData 的引用。
+**重要补充观察**：PeriodData 有两种使用场景：
+1. **由 DataFeed 统一管理**（多策略共享）
+2. **策略自己持有**（策略私有数据，不共享）
+
+对于场景2（策略自己持有），策略可以自由管理计算逻辑，不需要受懒加载机制限制。
+
+**建议**: 明确懒加载计算只在 DataFeed 层触发（用于场景1），视图是纯只读，不持有对 PeriodData 的引用；策略自己持有的 PeriodData（场景2）不受此限制。
 
 **修改建议**:
-1. 选择方案：**懒加载计算只在 DataFeed 层触发，PeriodDataView 是纯只读逻辑视图**
+1. 选择方案：**懒加载计算只在 DataFeed 层触发（用于共享场景），PeriodDataView 是纯只读逻辑视图**
 2. 修改 Q3 说明：
    - 指标计算的触发点是 `DataFeed.get_data()`（或 `build_context()`），而非 `PeriodDataView.get_indicator()`
    - `PeriodDataView` 是纯只读对象，不持有对 PeriodData 的引用，不触发任何计算
    - 当调用 `DataFeed.get_data()` 时，先检查该周期的所有注册指标是否已计算，未计算的先计算并写入 `PeriodData._df`
    - 计算过程受 `DataFeed._lock` 保护，保证并发安全
    - PeriodDataView 是逻辑视图，通过时间戳/索引范围访问原始数据，不复制数据
+   - **策略自己持有的 PeriodData（私有数据）**：策略可以自由管理计算逻辑，不受懒加载机制限制
 3. 修改 `PeriodDataView.get_indicator()` 的 docstring，明确说明如果指标不存在返回 None
 4. 在 `PeriodDataView` 中保存对原始 DataFrame 的引用和视图范围信息，而不是复制数据
 5. 因为是 Append-Only 数据，历史数据不会被修改，逻辑视图是安全的
