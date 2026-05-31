@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Generic, Optional, TypeVar
 
 from .types import Bar, Signal, Fill, StrategyPosition
-from .data_feed import DataRequirements, BarContext
+from .requirements import DataRequirements, BarContext
 
 T = TypeVar('T')
 

@@ -10,7 +10,10 @@
 子模块:
   - base: Strategy ABC 基类
   - types: Bar, Signal, Fill, StrategyPosition 标准化数据类型
-  - data_feed: 数据管理系统（DataFeed, DataFeedCache, Event等）
+  - events: 事件类型 + 指标/周期转换注册体系
+  - period: PeriodData + PeriodDataView 数据容器
+  - requirements: 数据需求类型定义
+  - data_feed: DataFeed + DataFeedCache 多周期数据管理
 
 【推荐导入方式】
   from strategies import Strategy, Bar, Signal  # 从顶层统一入口导入
@@ -38,22 +41,25 @@ from .types import Bar, Signal, Fill, StrategyPosition
 # ============================================================
 # 数据管理模块
 # ============================================================
-from .data_feed import (
+from .events import (
     Event,
     BigTradeEvent,
     NewsEvent,
     IndicatorCalcMode,
-    PeriodData,
-    PeriodDataView,
-    DataFeed,
-    DataFeedCache,
+    register_indicator_func,
+    register_period_converter,
+)
+from .period import PeriodData, PeriodDataView
+from .requirements import (
     PeriodRequirements,
     IndicatorRequirements,
     EventsRequirements,
     DataRequirements,
     BarContext,
-    register_indicator_func,
-    register_period_converter,
+)
+from .data_feed import (
+    DataFeed,
+    DataFeedCache,
     build_context,
     make_view,
 )
