@@ -1,19 +1,22 @@
 """均线交叉策略 — 完整的自包含策略核心
 
-不依赖任何外部框架。拥有:
-  - SMA 计算 + 金叉/死叉检测 + 止盈止损判断
-  - 仓位管理 (entry_price/position/volume)
-  - 技术指标缓存 (_close_history)
+支持两种模式:
+  1. 兼容模式（默认）: 使用内部 _close_history 缓存
+  2. 新数据管理模式: 通过 data_requirements() 声明需求，使用 BarContext
 
 Bridge 只需: 构造 Bar → 调用 on_bar() → 拿到 Signal → 执行下单 → 回调 on_fill()
 成交记录 (fills) 由 Bridge 管理，策略只更新仓位。
 """
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, cast
 from typing_extensions import override
 
-from strategies import CORE_VERSION, Strategy, Bar, Signal, Fill, StrategyPosition
+from strategies import (
+    CORE_VERSION, Strategy, Bar, Signal, Fill, StrategyPosition,
+    DataRequirements, PeriodRequirements, IndicatorRequirements, EventsRequirements,
+    BarContext,
+)
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -52,6 +55,7 @@ class MACrossParams:
     stop_loss_ratio: float = DEFAULT_STOP_LOSS_RATIO
     take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
     position_ratio: float = DEFAULT_POSITION_RATIO
+    use_data_feed: bool = False  # 是否使用新的数据管理系统
 
 
 class MaStrategyCore(Strategy[MACrossParams]):
@@ -63,7 +67,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
     """
 
     name: str = STRATEGY_MA
-    VERSION: str = f"{CORE_VERSION}-ma1"
+    VERSION: str = f"{CORE_VERSION}-ma2"  # 更新版本号以反映新功能
 
     def __init__(self, strategy_params: dict[str, Any] | None = None,
                  capital: float | None = None,
@@ -75,6 +79,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
                 stop_loss_ratio=strategy_params.get('stop_loss_ratio', DEFAULT_STOP_LOSS_RATIO),
                 take_profit_ratio=strategy_params.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO),
                 position_ratio=strategy_params.get('position_ratio', DEFAULT_POSITION_RATIO),
+                use_data_feed=strategy_params.get('use_data_feed', False),
             )
         else:
             self._config = MACrossParams()
@@ -82,11 +87,35 @@ class MaStrategyCore(Strategy[MACrossParams]):
         self._contract_size = int(contract_size) if contract_size is not None else int(DEFAULT_CONTRACT_SIZE)
 
         self._position = StrategyPosition()
+        # 兼容模式的状态
         self._close_history: list[float] = []
         self._prev_sma_short: float = 0.0
         self._prev_sma_long: float = 0.0
 
     # ---- Strategy 接口 ----
+
+    @override
+    def data_requirements(self) -> Optional[DataRequirements]:
+        """策略的数据需求声明 — 新数据管理模式
+
+        只有当 use_data_feed=True 时才返回需求声明，否则保持兼容模式。
+        """
+        if not self._config.use_data_feed:
+            return None
+
+        # 声明所需的周期、指标和事件
+        return DataRequirements(
+            periods={
+                "1m": PeriodRequirements(lookback_bars=max(self._config.sma_short, self._config.sma_long) + 1),
+            },
+            indicators={
+                "1m": [
+                    IndicatorRequirements(name="sma", params={"period": self._config.sma_short}),
+                    IndicatorRequirements(name="sma", params={"period": self._config.sma_long}),
+                ],
+            },
+            events=EventsRequirements.no_events(),
+        )
 
     @property
     @override
@@ -94,7 +123,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
         return self._config
 
     @config.setter
-    def config(self, value: MACrossParams):
+    def config(self, value: MACrossParams) -> None:
         self._config = value
 
     @property
@@ -110,15 +139,28 @@ class MaStrategyCore(Strategy[MACrossParams]):
         self._prev_sma_long = 0.0
 
     @override
-    def on_bar(self, bar: Bar) -> Signal:
+    def on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal:
         """处理一根K线 — 策略决策中枢
 
+        支持两种模式:
+          1. 兼容模式 (ctx 为 None): 使用内部 _close_history 缓存
+          2. 新数据管理模式 (ctx 不为 None): 使用预计算的指标
+
         步骤:
-          1. 更新收盘价缓存
-          2. 计算双均线 + 交叉检测
+          1. 获取 SMA 值（从 ctx 或内部计算）
+          2. 交叉检测
           3. 风控检查 (持仓时的止损/止盈)
           4. 生成完整 Signal (含预计算手数)
         """
+        if self._config.use_data_feed and ctx is not None:
+            # 使用新数据管理系统
+            return self._on_bar_with_data_feed(bar, ctx)
+        else:
+            # 兼容模式
+            return self._on_bar_compatible(bar)
+
+    def _on_bar_compatible(self, bar: Bar) -> Signal:
+        """兼容模式的 on_bar 实现"""
         self._close_history.append(bar.close)
 
         cur_short = self._calc_sma(self._config.sma_short)
@@ -128,21 +170,53 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         if self._position.direction == TRADE_DIRECTION_LONG:
             if self._check_stop_loss(bar.close):
-                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_STOP_LOSS,
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
                                 volume=self._position.volume)
             elif self._check_take_profit(bar.close):
-                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_TAKE_PROFIT,
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_TAKE_PROFIT,
                                 volume=self._position.volume)
             elif self._is_death_cross(cur_short, cur_long):
-                signal = Signal(action=TRADE_ACTION_SELL, reason=SIGNAL_DEATH_CROSS,
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_DEATH_CROSS,
                                 volume=self._position.volume)
         else:
             if self._is_golden_cross(cur_short, cur_long):
                 vol = self._calc_position_size(bar.close)
-                signal = Signal(action=TRADE_ACTION_BUY, reason=SIGNAL_GOLDEN_CROSS, volume=vol)
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_GOLDEN_CROSS, volume=vol)
 
         self._prev_sma_short = cur_short
         self._prev_sma_long = cur_long
+        return signal
+
+    def _on_bar_with_data_feed(self, bar: Bar, ctx: BarContext) -> Signal:
+        """新数据管理模式的 on_bar 实现"""
+        # 从 ctx 获取预计算的指标
+        view = ctx.multi["1m"]
+        sma_short_col = f"sma_{self._config.sma_short}"
+        sma_long_col = f"sma_{self._config.sma_long}"
+
+        # 获取当前和前一个值
+        cur_short = view.indicator(sma_short_col, -1) or 0.0
+        cur_long = view.indicator(sma_long_col, -1) or 0.0
+        prev_short = view.indicator(sma_short_col, -2) or 0.0
+        prev_long = view.indicator(sma_long_col, -2) or 0.0
+
+        signal = Signal()
+
+        if self._position.direction == TRADE_DIRECTION_LONG:
+            if self._check_stop_loss(bar.close):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
+                                volume=self._position.volume)
+            elif self._check_take_profit(bar.close):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_TAKE_PROFIT,
+                                volume=self._position.volume)
+            elif self._is_death_cross(cur_short, cur_long, prev_short, prev_long):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_DEATH_CROSS,
+                                volume=self._position.volume)
+        else:
+            if self._is_golden_cross(cur_short, cur_long, prev_short, prev_long):
+                vol = self._calc_position_size(bar.close)
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_GOLDEN_CROSS, volume=vol)
+
         return signal
 
     @override
@@ -150,7 +224,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
         """成交回执 — Bridge 在下单成交后调用"""
         if fill.action == TRADE_ACTION_BUY:
             self._position = StrategyPosition(
-                direction=TRADE_DIRECTION_LONG,
+                direction=cast(Any, TRADE_DIRECTION_LONG),
                 entry_price=fill.price,
                 volume=fill.volume,
             )
@@ -160,15 +234,32 @@ class MaStrategyCore(Strategy[MACrossParams]):
     # ---- 内部算法 ----
 
     def _calc_sma(self, period: int) -> float:
+        """兼容模式的 SMA 计算"""
         return simple_moving_average(self._close_history, period)
 
-    def _is_golden_cross(self, cur_short: float, cur_long: float) -> bool:
-        return golden_cross(self._prev_sma_short, self._prev_sma_long,
-                            cur_short, cur_long)
+    def _is_golden_cross(self, cur_short: float, cur_long: float,
+                        prev_short: Optional[float] = None, prev_long: Optional[float] = None) -> bool:
+        """金叉检测 — 支持两种模式
 
-    def _is_death_cross(self, cur_short: float, cur_long: float) -> bool:
-        return death_cross(self._prev_sma_short, self._prev_sma_long,
-                           cur_short, cur_long)
+        兼容模式: 使用内部 _prev_sma_short/_prev_sma_long
+        新数据模式: 使用传入的 prev_short/prev_long
+        """
+        if prev_short is None:
+            prev_short = self._prev_sma_short
+        if prev_long is None:
+            prev_long = self._prev_sma_long
+
+        return golden_cross(prev_short, prev_long, cur_short, cur_long)
+
+    def _is_death_cross(self, cur_short: float, cur_long: float,
+                        prev_short: Optional[float] = None, prev_long: Optional[float] = None) -> bool:
+        """死叉检测 — 支持两种模式"""
+        if prev_short is None:
+            prev_short = self._prev_sma_short
+        if prev_long is None:
+            prev_long = self._prev_sma_long
+
+        return death_cross(prev_short, prev_long, cur_short, cur_long)
 
     def _check_stop_loss(self, current_price: float) -> bool:
         return stop_loss_triggered(self._position.entry_price, current_price,

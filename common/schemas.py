@@ -1,12 +1,34 @@
 # -*- coding: utf-8 -*-
 """全局统一的 Pandera Schema 定义
 
-集中管理所有 DataFrame 验证规则，供整个项目复用。
-所有 Schema 都继承自 pandera.DataFrameModel，提供运行时验证能力。
+【文件职责】
+1. Pandera Schema：继承自 pandera.DataFrameModel 的数据验证规则
+2. DataFrame 类型别名：使用 pandera.typing.DataFrame 定义的类型别名
 
-注意：以下 pyright ignore 是针对 pandera 库的类型系统限制：
+【不包含的内容】
+- 通用类型别名（请使用 common/types.py）
+- 数据容器 dataclass（请使用 common/types.py）
+- Protocol 接口定义（请使用 common/types.py）
+
+【原则】
+- 集中管理所有 DataFrame 验证规则，供整个项目复用
+- 所有 Schema 都继承自 pandera.DataFrameModel，提供运行时验证能力
+- DataFrame 类型别名使用 pandera.typing.DataFrame[Schema] 格式
+
+【注意】
+以下 pyright ignore 是针对 pandera 库的类型系统限制：
   - pandera 的 Series/Field 声明使用复杂的泛型叠加，静态分析器无法准确推断
   - 这是 pandera 的类型存根缺失导致的已知问题，非代码逻辑缺陷
+
+【使用方式】
+    from common.schemas import KlineDataFrame, KlineSchema
+
+    # 类型注解
+    def process_kline(data: KlineDataFrame) -> KlineDataFrame:
+        ...
+
+    # 运行时验证
+    validated_data = KlineSchema.validate(raw_data)
 """
 
 # pyright: reportAny=false

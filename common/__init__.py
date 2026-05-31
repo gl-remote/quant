@@ -26,7 +26,10 @@ from .schemas import (
     DailyReturnDataFrame,
 )
 from .symbol_utils import parse_contract, resolve_date_range
-from .types import TradeAction, PositionDirection, BacktestResult
+from .types import (
+    TradeAction, PositionDirection, BacktestResult,
+    IndicatorCalcMode, IndicatorFuncInfo, IndicatorFunction
+)
 
 __all__ = [
     'calculate_fifo_profit',
@@ -49,6 +52,9 @@ __all__ = [
     # 类型别名
     'TradeAction',
     'PositionDirection',
+    'IndicatorCalcMode',
     # 数据结构
     'BacktestResult',
+    'IndicatorFuncInfo',
+    'IndicatorFunction',
 ]

@@ -9,9 +9,10 @@ Strategy 是交易决策的中枢，拥有完整的状态和绩效数据。
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from .types import Bar, Signal, Fill, StrategyPosition
+from .data_feed import DataRequirements, BarContext
 
 T = TypeVar('T')
 
@@ -35,23 +36,41 @@ class Strategy(ABC, Generic[T]):
     （如 Strategy[MACrossParams]），使调用方访问 strategy.config
     时静态类型检查能自动推断出具体字段，无需手动 cast。
 
-    【指标缓存不在 core】
-    core 只提供抽象接口和通信协议，不涉及具体指标实现。
-    指标缓存应放在独立模块（如 strategies/indicators/），
-    在 3 个以上策略共享计算时引入。
+    【数据需求声明】
+    策略可以选择实现 data_requirements() 方法来声明所需的数据和指标，
+    这样框架可以在回测前统一预计算并在 on_bar 时通过 BarContext 注入。
+
+    【向后兼容】
+    对于未实现 data_requirements() 的老策略，ctx 参数为 None，
+    保持原有的 on_bar 签名兼容。
     """
 
     name: str = "base"
     VERSION: str = "v0.0.0"
 
+    # ---- 数据需求声明 ----
+
+    def data_requirements(self) -> Optional[DataRequirements]:
+        """策略的数据需求声明，由 Bridge/Engine 在初始化时读取
+
+        框架据此注册周期、注册指标，并在 on_bar 时构造 ctx。
+        返回 None 表示策略不使用新的数据管理系统（向后兼容）。
+        """
+        return None
+
     # ---- 核心交易接口 ----
 
     @abstractmethod
-    def on_bar(self, bar: Bar) -> Signal:
-        """处理一根K线，返回完整交易决策
+    def on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal:
+        """处理一根K线，接收已准备完毕的上下文，返回完整交易决策
+
+        ctx 包含所有声明的跨周期数据和事件。
+        ctx 参数可选：
+          - 如果策略实现了 data_requirements()，ctx 会被注入
+          - 如果策略没有实现 data_requirements()，ctx 为 None（向后兼容）
 
         Bridge 调用此方法获取信号，包括预计算的手数。
-        Strategy 内部维护所需的技术指标缓存。
+        Strategy 内部维护所需的技术指标缓存（或使用 ctx 中的预计算数据）。
 
         Returns:
             Signal: action='buy'/'sell'/'', 含预计算 volume 和 reason
@@ -100,7 +119,7 @@ class UninitializedStrategy(Strategy[Any]):
     name = "_uninitialized"
     VERSION = ""
 
-    def on_bar(self, bar: Bar) -> Signal:
+    def on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal:
         raise RuntimeError("Strategy core not yet injected into bridge")
 
     def on_fill(self, fill: Fill) -> None:

@@ -201,7 +201,18 @@
 
 
 # 策略核心与类型（来自 core）
-from .core import Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION
+from .core import (
+    Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION,
+    # 数据管理模块
+    Event, BigTradeEvent, NewsEvent,
+    IndicatorCalcMode,
+    PeriodData, PeriodDataView,
+    DataFeed, DataFeedCache,
+    PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
+    BarContext,
+    register_indicator_func, register_period_converter,
+    build_context, make_view,
+)
 
 # 具体策略实现
 from .ma_strategy import MaStrategyCore, MACrossParams
@@ -230,6 +241,16 @@ __all__ = [
     'CORE_VERSION',
     # 核心类型
     'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    # 数据管理类型
+    'Event', 'BigTradeEvent', 'NewsEvent',
+    'IndicatorCalcMode',
+    'PeriodData', 'PeriodDataView',
+    'DataFeed', 'DataFeedCache',
+    'PeriodRequirements', 'IndicatorRequirements', 'EventsRequirements', 'DataRequirements',
+    'BarContext',
+    # 辅助函数
+    'register_indicator_func', 'register_period_converter',
+    'build_context', 'make_view',
     # 策略实现
     'MaStrategyCore', 'MACrossParams',
     # 工具函数

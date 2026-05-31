@@ -1,21 +1,32 @@
 """
 通用类型别名 — 全项目共享的类型定义
 
-本文件遵循 common/ 零依赖原则：纯类型定义，不 import 任何业务模块。
-所有类型别名仅供静态类型检查使用，零运行时开销。
-BacktestResult dataclass 例外 — 它是跨层传递的数据容器，有运行时行为。
+【文件职责】
+1. 通用类型别名：Literal 类型、类型别名等，供全项目共享
+2. 数据容器：跨层传递的 dataclass（如 BacktestResult、IndicatorFuncInfo）
+3. Protocol：接口定义（如 IndicatorFunction）
 
-使用方式:
-    from common.types import TradeAction, PositionDirection
+【不包含的内容】
+- Pandera Schema 定义（请使用 common/schemas.py）
+- DataFrame 类型别名（请使用 common/schemas.py）
+
+【原则】
+- 遵循 common/ 零依赖原则：纯类型定义，不 import 任何业务模块
+- 所有类型别名仅供静态类型检查使用，零运行时开销
+- BacktestResult 等 dataclass 例外 — 它们是跨层传递的数据容器，有运行时行为
+
+【使用方式】
+    from common.types import TradeAction, PositionDirection, IndicatorCalcMode
 
     signal = Signal(action='buy')  # type checker validates 'buy' | 'sell' | ''
 
-单一事实来源：全项目（core、strategies、bridges）共享同一组 Literal 类型。
-与 common/constants.py 中同名运行时常量同源，修改时同步更新。
+【单一事实来源】
+- 全项目（core、strategies、bridges）共享同一组 Literal 类型
+- 与 common/constants.py 中同名运行时常量同源，修改时同步更新
 """
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, Callable, Any, Protocol, Optional
 
 from .constants import STATUS_FAILED
 
@@ -24,6 +35,29 @@ TradeAction = Literal['buy', 'sell', '']
 
 PositionDirection = Literal['long', '']
 """持仓方向: 'long' (多头) | '' (空仓)"""
+
+
+# 技术指标计算相关类型
+IndicatorCalcMode = Literal['batch', 'incremental']
+"""指标计算模式: 'batch'（批量计算） | 'incremental'（增量计算）"""
+
+
+@dataclass
+class IndicatorFuncInfo:
+    """指标函数信息
+    用于注册和管理技术指标计算函数。
+    """
+    func: Callable[..., Any]  # 指标计算函数
+    calc_mode: IndicatorCalcMode  # 计算模式
+    name: str  # 指标名称
+    description: Optional[str] = None  # 指标描述
+
+
+class IndicatorFunction(Protocol):
+    """指标计算函数协议
+    定义技术指标计算函数的标准接口。
+    """
+    def __call__(self, data: Any, **params: Any) -> Any: ...
 
 
 @dataclass

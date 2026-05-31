@@ -1,14 +1,16 @@
 """策略核心模块
-提供策略基类、标准化数据类型定义、版本管理。
+提供策略基类、标准化数据类型定义、版本管理、数据管理系统。
 
 设计原则:
   - Strategy ABC: 框架无关的策略抽象
-  - 标准化类型: Bar, Signal, Fill, StrategyPosition
+  - 标准化类型: Bar, Signal, Fill, StrategyPosition, Event, BarContext
+  - 数据管理: DataFeed, DataFeedCache, PeriodData, PeriodDataView
   - 版本追踪: CORE_VERSION + 策略自身版本，确保回测可追溯
 
 子模块:
   - base: Strategy ABC 基类
   - types: Bar, Signal, Fill, StrategyPosition 标准化数据类型
+  - data_feed: 数据管理系统（DataFeed, DataFeedCache, Event等）
 
 【推荐导入方式】
   from strategies import Strategy, Bar, Signal  # 从顶层统一入口导入
@@ -25,7 +27,7 @@
 # ============================================================
 # 核心版本号
 # ============================================================
-CORE_VERSION = "v1.0.0"
+CORE_VERSION = "v2.0.0"
 
 # ============================================================
 # 核心基类和类型
@@ -33,9 +35,42 @@ CORE_VERSION = "v1.0.0"
 from .base import Strategy, UninitializedStrategy
 from .types import Bar, Signal, Fill, StrategyPosition
 
+# ============================================================
+# 数据管理模块
+# ============================================================
+from .data_feed import (
+    Event,
+    BigTradeEvent,
+    NewsEvent,
+    IndicatorCalcMode,
+    PeriodData,
+    PeriodDataView,
+    DataFeed,
+    DataFeedCache,
+    PeriodRequirements,
+    IndicatorRequirements,
+    EventsRequirements,
+    DataRequirements,
+    BarContext,
+    register_indicator_func,
+    register_period_converter,
+    build_context,
+    make_view,
+)
+
 __all__ = [
     # 版本号
     'CORE_VERSION',
     # 核心基类和类型
     'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    # 数据管理类型
+    'Event', 'BigTradeEvent', 'NewsEvent',
+    'IndicatorCalcMode',
+    'PeriodData', 'PeriodDataView',
+    'DataFeed', 'DataFeedCache',
+    'PeriodRequirements', 'IndicatorRequirements', 'EventsRequirements', 'DataRequirements',
+    'BarContext',
+    # 辅助函数
+    'register_indicator_func', 'register_period_converter',
+    'build_context', 'make_view',
 ]
