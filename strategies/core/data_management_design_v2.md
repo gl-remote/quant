@@ -33,7 +33,31 @@
 ## 二、总体架构设计
 
 ### 2.1 核心组件
-只需新增一个文件：`strategies/core/data_feed.py`
+
+数据管理模块已从单文件拆分为多文件子包，与 `core/` 平级：
+
+```
+strategies/
+├── core/                     # 策略核心（Strategy ABC + 数据类型）
+│   ├── __init__.py
+│   ├── base.py               # Strategy 抽象基类
+│   └── types.py              # Bar, Signal, Fill, StrategyPosition
+├── runtime/                  # 运行时数据管理（与 core/ 平级）
+│   ├── __init__.py
+│   ├── events.py             # Event 类型 + 指标/周期转换注册体系
+│   ├── period.py             # PeriodData + PeriodDataView 数据容器
+│   ├── requirements.py       # 数据需求类型定义
+│   └── data_feed.py          # DataFeed + DataFeedCache 多周期调度
+├── bridges/                  # 框架桥接器
+├── utils/                    # 工具函数
+└── ma_strategy.py            # 策略实现
+```
+
+**与 `core/` 分离的原因**：
+- `runtime/` 只负责运行时内存数据编排（DataFeed/PeriodData/Event）
+- `core/` 保持最小化，只包含 Strategy ABC 和标准化类型
+- 避免与根目录 `data/`（离线存储层）混淆
+- 无循环依赖：`runtime/` → `core/types.py`（单向）
 
 核心类：
 1. `PeriodData`（数据类）：单个周期的表格，纯存数据（K线+指标），提供截止时间逻辑视图
@@ -1471,12 +1495,15 @@ Engine 按以下顺序执行：
 
 ### 可实施性结论
 
-**总体结论**：✅ 方案设计完整、架构清晰、问题已修复，**可以进入实施阶段**
+**总体结论**：✅ 方案设计完整、架构清晰、问题已修复，**已完成实施**
 
-**建议实施顺序**：
-1. **阶段 1（核心基础设施）**：实现 `PeriodData` + `PeriodDataView` + `DataFeed` 基础功能
-2. **阶段 2（策略集成）**：修改 `Strategy` 基类，实现 `DataRequirements` + `BarContext` + `build_context`
-3. **阶段 3（高级功能）**：实现周期转换、事件管理
+**实施情况**：
+- ✅ **已完成** `PeriodData` + `PeriodDataView` + `DataFeed` 基础功能
+- ✅ **已完成** `DataRequirements` + `BarContext` + `build_context` 策略集成
+- ✅ **已完成** 事件管理、模块级指标/周期转换注册体系
+- ✅ **已完成** 单文件（1425行）拆分为 4 个子模块，移入 `runtime/` 子包
+- ✅ **已完成** `_updating_time` 类型修正（NaTType + 哨兵值）
+- ✅ **已完成** `_df` 访问封装（apply_indicator / set_indicator_column）
 
 ---
 

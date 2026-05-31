@@ -203,7 +203,10 @@
 # 策略核心与类型（来自 core）
 from .core import (
     Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION,
-    # 数据管理模块
+)
+
+# 运行时数据管理（来自 runtime，与 core 同级）
+from .runtime import (
     Event, BigTradeEvent, NewsEvent,
     IndicatorCalcMode,
     PeriodData, PeriodDataView,

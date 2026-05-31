@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from ..types import Bar
+from ..core.types import Bar
 
 
 # ==================== 事件类型定义 ====================

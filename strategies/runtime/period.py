@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Union, cast
 import pandas as pd
 
 from .events import Event
-from ..types import Bar
+from ..core.types import Bar
 
 
 class PeriodData:

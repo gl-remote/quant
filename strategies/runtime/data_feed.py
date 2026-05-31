@@ -32,7 +32,7 @@ from .events import (
 )
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
-from ..types import Bar
+from ..core.types import Bar
 
 
 def _parse_source_from_symbol(symbol: str) -> Optional[str]:

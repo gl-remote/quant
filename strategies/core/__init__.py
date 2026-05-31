@@ -1,20 +1,20 @@
 """策略核心模块
-提供策略基类、标准化数据类型定义、版本管理、数据管理系统。
+提供策略基类、标准化数据类型定义、版本管理。
 
 设计原则:
   - Strategy ABC: 框架无关的策略抽象
-  - 标准化类型: Bar, Signal, Fill, StrategyPosition, Event, BarContext
-  - 数据管理: DataFeed, DataFeedCache, PeriodData, PeriodDataView
+  - 标准化类型: Bar, Signal, Fill, StrategyPosition
   - 版本追踪: CORE_VERSION + 策略自身版本，确保回测可追溯
 
 子模块:
   - base: Strategy ABC 基类
   - types: Bar, Signal, Fill, StrategyPosition 标准化数据类型
-  - data/: 数据管理子模块（events, period, requirements, data_feed）
+  - runtime（同级）：运行时数据管理（DataFeed, PeriodData, Event 等）
 
 【推荐导入方式】
   from strategies import Strategy, Bar, Signal  # 从顶层统一入口导入
   from strategies import CORE_VERSION             # 版本号常量
+  from strategies import DataFeed, PeriodData     # 运行时数据管理
   包内模块推荐从 strategies 顶层导入，避免依赖内部目录结构。
 
 【版本号规则】
@@ -35,45 +35,9 @@ CORE_VERSION = "v2.0.0"
 from .base import Strategy, UninitializedStrategy
 from .types import Bar, Signal, Fill, StrategyPosition
 
-# ============================================================
-# 数据管理模块
-# ============================================================
-from .data.events import (
-    Event,
-    BigTradeEvent,
-    NewsEvent,
-    IndicatorCalcMode,
-    register_indicator_func,
-    register_period_converter,
-)
-from .data.period import PeriodData, PeriodDataView
-from .data.requirements import (
-    PeriodRequirements,
-    IndicatorRequirements,
-    EventsRequirements,
-    DataRequirements,
-    BarContext,
-)
-from .data.data_feed import (
-    DataFeed,
-    DataFeedCache,
-    build_context,
-    make_view,
-)
-
 __all__ = [
     # 版本号
     'CORE_VERSION',
     # 核心基类和类型
     'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
-    # 数据管理类型
-    'Event', 'BigTradeEvent', 'NewsEvent',
-    'IndicatorCalcMode',
-    'PeriodData', 'PeriodDataView',
-    'DataFeed', 'DataFeedCache',
-    'PeriodRequirements', 'IndicatorRequirements', 'EventsRequirements', 'DataRequirements',
-    'BarContext',
-    # 辅助函数
-    'register_indicator_func', 'register_period_converter',
-    'build_context', 'make_view',
 ]
