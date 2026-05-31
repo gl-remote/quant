@@ -9,17 +9,17 @@ from typing import cast
 import pandas as pd
 
 
-def _sma_func(df: pd.DataFrame, period: int) -> pd.Series:
+def sma_func(df: pd.DataFrame, period: int) -> pd.Series:
     """SMA指标计算函数 - 内置实现"""
     return cast(pd.Series, df['close'].rolling(window=period).mean())
 
 
-def _ema_func(df: pd.DataFrame, period: int) -> pd.Series:
+def ema_func(df: pd.DataFrame, period: int) -> pd.Series:
     """EMA指标计算函数 - 内置实现"""
     return cast(pd.Series, df['close'].ewm(span=period, adjust=False).mean())
 
 
-def _rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
+def rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """RSI指标计算函数 - 内置实现"""
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()

@@ -33,7 +33,7 @@ from .events import (
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from ..core.types import Bar
-from ..core.indicators import _sma_func, _ema_func, _rsi_func
+from ..core.indicators import sma_func, ema_func, rsi_func
 
 
 def _parse_source_from_symbol(symbol: str) -> Optional[str]:
@@ -533,24 +533,24 @@ def build_context(
 
 
 # ==================== 默认指标注册 ====================
-# 指标实现见 core/indicators.py
+# 指标实现见 core/indicators.py（sma_func, ema_func, rsi_func）
 
 # 注册默认指标
 register_indicator_func(
     'sma',
-    _sma_func,
+    sma_func,
     IndicatorCalcMode.BATCH,
     description='简单移动平均线 (Simple Moving Average)'
 )
 register_indicator_func(
     'ema',
-    _ema_func,
+    ema_func,
     IndicatorCalcMode.BATCH,
     description='指数移动平均线 (Exponential Moving Average)'
 )
 register_indicator_func(
     'rsi',
-    _rsi_func,
+    rsi_func,
     IndicatorCalcMode.BATCH,
     description='相对强弱指标 (Relative Strength Index)'
 )
