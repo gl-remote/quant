@@ -1378,13 +1378,16 @@ BATCH 模式指标"第一次访问时全量计算到当前数据末尾"，但 `c
 **修改建议**:
 1. 在 3.5 节中新增"指标列名生成规则"小节，详细说明：
    - 列名格式：`{indicator_name}_{param1_value}_{param2_value}_...`
-   - 参数按参数名字母顺序排序后拼接（原因：确保相同的参数名和值，不管传入顺序如何，都生成相同的列名，避免重复计算）
+   - 参数按函数定义时的参数列表顺序排列
    - 参数值使用字符串表示，特殊字符转义
    - 示例：
-     - `sma(period=10)` → `sma_10`
-     - `bbands(period=20, std=2)` → `bbands_20_2`
-     - `func_a(y=2, x=1)` → `func_a_1_2`（因为 x 按字母顺序在 y 前面）
+     - 假设函数定义为 `def sma(df, period): ...`
+       - `sma(period=10)` → `sma_10`
+     - 假设函数定义为 `def bbands(df, period, std): ...`
+       - `bbands(period=20, std=2)` → `bbands_20_2`
+       - `bbands(std=2, period=20)` → `bbands_20_2`（同样按函数定义顺序）
 2. 在 `register_indicator` 的 docstring 中引用此规则
+3. 实现时需在注册指标函数时记录参数顺序
 
 ---
 
