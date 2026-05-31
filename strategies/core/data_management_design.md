@@ -75,6 +75,7 @@ class Event:
     timestamp: datetime.datetime  # 事件发生的时间
     type: str  # 'big_trade' | 'news' | 'orderbook_imbalance' | 'custom'
     symbol: str  # 交易品种
+    reason: str = ""  # 事件原因/描述，类似 Signal.reason
     period: Optional[str] = None  # None 表示全局事件，否则绑定到特定周期
     data: Any = None
 
