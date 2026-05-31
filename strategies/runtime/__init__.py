@@ -4,7 +4,7 @@
 - 事件类型 + 指标/周期转换注册体系
 - PeriodData + PeriodDataView 数据容器
 - 数据需求类型
-- DataFeed + DataFeedCache 多周期数据调度
+- DataFeed + DataFeedCache 多周期数据调度 + 缓存
 
 从 strategies/ 顶层导入即可，无需直接引用此子模块。
 """
@@ -28,10 +28,10 @@ from .requirements import (
 )
 from .data_feed import (
     DataFeed,
-    DataFeedCache,
     build_context,
     make_view,
 )
+from .cache import DataFeedCache
 
 __all__ = [
     'Event', 'BigTradeEvent', 'NewsEvent',
