@@ -64,10 +64,17 @@ class Event:
     - 与 Bar.datetime 保持一致，使用 datetime.datetime
     - 策略层无需关注底层存储细节
     - 内部实现可以自由转换为 pd.Timestamp
+    
+    【事件时间作用范围说明】
+    - 事件时间戳表示事件发生的具体时间
+    - 事件归属：根据时间戳，归属于时间区间包含该时间的 K线
+    - period 字段作用：
+      - None：全局事件，所有周期的 K线都可以看到该事件
+      - "1m"：周期特定事件，只在 1m 周期的 K线中可见
     """
-    timestamp: datetime.datetime
+    timestamp: datetime.datetime  # 事件发生的时间
     type: str  # 'big_trade' | 'news' | 'orderbook_imbalance' | 'custom'
-    symbol: str
+    symbol: str  # 交易品种
     period: Optional[str] = None  # None 表示全局事件，否则绑定到特定周期
     data: Any = None
 
