@@ -70,7 +70,7 @@ class IndicatorFuncInfo:
     description: Optional[str] = None
 
 
-_REGISTERED_INDICATOR_FUNCS: Dict[str, IndicatorFuncInfo] = {}
+REGISTERED_INDICATOR_FUNCS: Dict[str, IndicatorFuncInfo] = {}
 
 
 def register_indicator_func(name: str, func: Callable[..., pd.Series],
@@ -97,7 +97,7 @@ def register_indicator_func(name: str, func: Callable[..., pd.Series],
     :param calc_mode: 计算模式，BATCH（默认）一次性全量计算，INCREMENTAL适合实时增量
     :param description: 指标描述（可选）
     """
-    _REGISTERED_INDICATOR_FUNCS[name] = IndicatorFuncInfo(
+    REGISTERED_INDICATOR_FUNCS[name] = IndicatorFuncInfo(
         func=func,
         calc_mode=calc_mode,
         name=name,
@@ -105,7 +105,7 @@ def register_indicator_func(name: str, func: Callable[..., pd.Series],
     )
 
 
-def _generate_indicator_column_name(name: str, params: Dict[str, Any]) -> str:
+def generate_indicator_column_name(name: str, params: Dict[str, Any]) -> str:
     """生成指标列名
 
     【参数顺序】
@@ -120,7 +120,7 @@ def _generate_indicator_column_name(name: str, params: Dict[str, Any]) -> str:
 
 # ==================== 模块级周期转换函数注册 ====================
 
-_REGISTERED_CONVERTERS: Dict[Tuple[str, str], Callable[..., List[Bar]]] = {}
+REGISTERED_CONVERTERS: Dict[Tuple[str, str], Callable[..., List[Bar]]] = {}
 
 
 def register_period_converter(source_period: str, target_period: str, func: Callable[..., List[Bar]]) -> None:
@@ -137,4 +137,4 @@ def register_period_converter(source_period: str, target_period: str, func: Call
     :param target_period: 目标周期（如 "5m"）
     :param func: 转换函数
     """
-    _REGISTERED_CONVERTERS[(source_period, target_period)] = func
+    REGISTERED_CONVERTERS[(source_period, target_period)] = func

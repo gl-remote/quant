@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .events import Event
+from .period import PeriodDataView
 from ..core.types import Bar
 
 
@@ -80,6 +81,6 @@ class BarContext:
     symbol: str
     bar: Bar
     # 多周期数据，key=周期名，key 集合 = data_requirements 中声明的周期
-    multi: Dict[str, 'PeriodDataView']
+    multi: Dict[str, PeriodDataView]
     # 当前 bar 时间范围内的事件
     events: List[Event]

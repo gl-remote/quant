@@ -16,7 +16,7 @@
 """
 
 from datetime import datetime as dt
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import threading
 import pandas as pd
@@ -25,14 +25,15 @@ from pandas._libs import NaTType
 from .events import (
     Event,
     IndicatorCalcMode,
-    _REGISTERED_CONVERTERS,
-    _REGISTERED_INDICATOR_FUNCS,
-    _generate_indicator_column_name,
+    REGISTERED_CONVERTERS,
+    REGISTERED_INDICATOR_FUNCS,
+    generate_indicator_column_name,
     register_indicator_func,
 )
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from ..core.types import Bar
+from ..core.indicators import _sma_func, _ema_func, _rsi_func
 
 
 def _parse_source_from_symbol(symbol: str) -> Optional[str]:
@@ -93,7 +94,7 @@ class DataFeed:
         self._registered_indicators: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
 
         # 周期转换配置
-        self._period_conversions: Dict[Tuple[str, str], Callable[..., List[Bar]]] = _REGISTERED_CONVERTERS.copy()
+        self._period_conversions: Dict[Tuple[str, str], Callable[..., List[Bar]]] = REGISTERED_CONVERTERS.copy()
         self._derived_periods: Dict[str, str] = {}
 
         # 数据追踪字段（类似数据库表）
@@ -137,7 +138,7 @@ class DataFeed:
         if period_name not in self._periods:
             raise KeyError(f"Period {period_name} not registered")
 
-        if indicator_name not in _REGISTERED_INDICATOR_FUNCS:
+        if indicator_name not in REGISTERED_INDICATOR_FUNCS:
             raise KeyError(f"Indicator function {indicator_name} not registered")
 
         if period_name not in self._registered_indicators:
@@ -363,14 +364,14 @@ class DataFeed:
             return
 
         for indicator_name, params in self._registered_indicators[period_name]:
-            col_name = _generate_indicator_column_name(indicator_name, params)
+            col_name = generate_indicator_column_name(indicator_name, params)
 
             # 检查是否已计算
             if period_data.is_indicator_calculated(col_name):
                 continue
 
             # 获取指标函数信息
-            func_info = _REGISTERED_INDICATOR_FUNCS.get(indicator_name)
+            func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
             if func_info is None:
                 continue
 
@@ -668,25 +669,7 @@ def make_view(
 
 
 # ==================== 默认指标注册 ====================
-
-def _sma_func(df: pd.DataFrame, period: int) -> pd.Series:
-    """SMA指标计算函数 - 内置实现"""
-    return cast(pd.Series, df['close'].rolling(window=period).mean())
-
-
-def _ema_func(df: pd.DataFrame, period: int) -> pd.Series:
-    """EMA指标计算函数 - 内置实现"""
-    return cast(pd.Series, df['close'].ewm(span=period, adjust=False).mean())
-
-
-def _rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """RSI指标计算函数 - 内置实现"""
-    delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return cast(pd.Series, 100 - (100 / (1 + rs)))
-
+# 指标实现见 core/indicators.py
 
 # 注册默认指标
 register_indicator_func(
