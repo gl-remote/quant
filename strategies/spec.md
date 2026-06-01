@@ -198,6 +198,10 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - **修改**：`on_bar()` 签名：
   - 当前签名：`on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal`
   - 新签名：`on_bar(self, state: State[T], ctx: BarContext) -> Signal`
+  - 变更点：
+    - 移除了单独的 `bar` 参数（`ctx` 里已经包含了 `ctx.bar`）
+    - `ctx` 不再是 Optional，总是存在（移除兼容模式）
+    - 新增 `state` 参数包含所有运行时数据
   - 理由：
     - `ctx` 里已经包含了当前的 `bar`（`ctx.bar`）
     - `state` 保存策略的配置、持仓、交易记录等所有运行时数据
