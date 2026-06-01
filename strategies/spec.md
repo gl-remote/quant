@@ -108,32 +108,41 @@ MaStrategyCore (仅使用 ctx 模式)
 
 ## State 数据结构
 
-定义一个 `State` dataclass，用于传递运行时配置和关键数据：
+定义一个 `State` dataclass，用于传递运行时配置和关键数据，支持泛型以适配不同策略的配置类型：
 
 ```python
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, TypeVar, Generic
 from strategies import StrategyPosition, Fill
+
+T = TypeVar('T')
 
 
 @dataclass
-class State:
-    """运行时配置和状态，用于 Bridge 初始化和策略运行"""
+class State(Generic[T]):
+    """运行时配置和状态，用于 Bridge 初始化和策略运行
+
+    职责划分:
+    - State: 保存策略配置、环境配置、持仓、交易记录（所有运行时数据）
+    - Strategy: 纯决策逻辑，不持有任何状态，通过 State 获取所有数据
+    - BarContext: 保存行情数据、多周期数据、指标、事件（动态行情数据）
+    - Bridge: 负责从 vnpy 获取交易状态，更新 State
+    """
     # 基本配置
     symbol: str
     period: str
-    
-    # 策略配置（可选，可与 Strategy.config 配合使用）
-    strategy_config: Dict[str, Any] = field(default_factory=dict)
-    
+
+    # 策略配置（泛型，支持不同策略的配置类型）
+    strategy_config: T
+
     # 环境配置
     capital: float = 0.0
     contract_size: int = 1
-    
-    # 运行时状态（可选，用于初始化时恢复）
-    initial_position: StrategyPosition = field(default_factory=StrategyPosition)
-    initial_fills: List[Fill] = field(default_factory=list)
-    
+
+    # 运行时状态（由 Bridge 更新）
+    position: StrategyPosition = field(default_factory=StrategyPosition)
+    fills: List[Fill] = field(default_factory=list)
+
     # 其他扩展字段
     extra: Dict[str, Any] = field(default_factory=dict)
 ```
@@ -166,54 +175,88 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 ```
 
 ### 2. VnpyStrategyBridge
-- 新增 `setup(state: State)` 方法，在该方法中：
-  - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(config)` 完成 DataFeed 的配置
+- 持有并管理 `State` 实例：保存策略配置、环境信息、持仓、交易记录
+- 新增 `setup(state: State[T])` 方法，在该方法中：
+  - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(state.strategy_config)` 完成 DataFeed 的配置
   - 加载历史数据
 - 在 `on_bar` 中：
   - 调用 `DataFeed.update_bar()` 更新单根 K 线
   - 通过 `build_context()` 构造 BarContext
-  - 调用 `strategy.on_bar(state, ctx)`
+  - 调用 `strategy.on_bar(self._state, ctx)`
+- 从 vnpy 同步交易状态：
+  - 在成交时更新 `State` 中的 `position` 和 `fills`
+  - 确保 State 里的数据和 vnpy 引擎里的一致
 
-### 3. MaStrategyCore
+### 3. Strategy 基类接口变更
+- **移除**：`config` 属性（策略配置从 State 里获取）
+- **移除**：`position` 属性（持仓从 State 里获取）
+- **保留**：`on_fill(fill: Fill)` 回调（成交通知，策略可能需要触发逻辑）
+- **保留**：`reset()` 重置方法
+- **修改**：`data_requirements()` 签名：
+  - 当前签名：`data_requirements(self) -> Optional[DataRequirements]`
+  - 新签名：`data_requirements(self, config: T) -> Optional[DataRequirements]`
+- **修改**：`on_bar()` 签名：
+  - 当前签名：`on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal`
+  - 新签名：`on_bar(self, state: State[T], ctx: BarContext) -> Signal`
+  - 理由：
+    - `ctx` 里已经包含了当前的 `bar`（`ctx.bar`）
+    - `state` 保存策略的配置、持仓、交易记录等所有运行时数据
+    - `ctx` 保存行情数据、多周期数据、指标、事件等动态行情数据
+    - 两个参数，职责清晰
+
+**说明**：
+- State 里的 `position` 和 `fills` 由 Bridge 同步和管理
+- Strategy 通过 `on_fill` 获得成交通知，但不自己管理这些状态
+- State 是唯一真实的数据来源
+
+### 4. MaStrategyCore
 - 移除兼容模式代码
 - 仅保留 runtime 模式
-- 修改 `data_requirements()` 签名，增加 config 参数
-- 修改 `on_bar()` 签名，bar 参数改为 state
+- 实现新的接口签名
 
 ---
 
+## 已确定的问题
+
+### 1. ✅ data_requirements() 签名变更
+- **确定**：`data_requirements(self, config: T) -> Optional[DataRequirements]`
+
+### 2. ✅ on_bar() 签名变更
+- **确定**：`on_bar(self, state: State[T], ctx: BarContext) -> Signal`
+- 原因：
+  - `ctx` 里已经包含了 `bar`
+  - 职责清晰
+
+### 3. ✅ State 命名和职责
+- **确定**：叫 `State`，支持泛型 `State[T]`
+- 职责：保存策略配置、环境配置、持仓、交易记录（所有运行时数据）
+
+### 4. ✅ 持仓管理
+- **确定**：持仓和交易记录都在 `State` 里，由 Bridge 负责更新
+- 好处：多个策略可以共享 vnpy 的交易状态
+
+### 5. ✅ Strategy 的纯粹性
+- **确定**：Strategy 不持有配置和持仓状态，只做纯决策逻辑，所有数据从 State 和 BarContext 获取
+
+### 6. ✅ on_fill 回调
+- **确定**：保留 `on_fill(fill: Fill)` 回调
+- 用途：策略可以在成交时触发一些逻辑
+- 注意：State 是唯一真实的数据来源，on_fill 只是通知，不改变数据
+
 ## 需要进一步讨论的问题
 
-### 1. data_requirements() 签名变更
-- 当前签名：`data_requirements(self) -> Optional[DataRequirements]`
-- 提议签名：`data_requirements(self, config: T) -> Optional[DataRequirements]`
-- **问题**：这个变更需要修改 Strategy 基类，影响所有策略，是否值得？
-
-### 2. on_bar() 签名变更
-- 当前签名：`on_bar(self, bar: Bar, ctx: Optional[BarContext] = None) -> Signal`
-- 提议签名：把 `bar: Bar` 改成某种 State
-- **问题**：
-  - 这个 State 是什么？是 RuntimeState？还是一个新的类型？
-  - State 和 BarContext 的职责边界在哪里？
-  - 如果改成 State，如何保持向后兼容？
-
-### 3. RuntimeSetup / RuntimeState 命名
-- 当前用了 `RuntimeSetup`
-- 提议改成某种 State
-- **问题**：这个类型的作用主要是 setup 时传递信息，还是在整个运行时都在更新？
-
-### 4. 历史数据获取问题
+### 1. 历史数据获取问题
 - Bridge 如何获取完整的历史数据来调用 `DataFeed.load_history_data()`？
 - 需要考虑是从 Engine 传递一份副本过来，还是 Bridge 自己从 vnpy 引擎获取？
 
-### 5. 初始化时机问题
+### 2. 初始化时机问题
 - 应该在什么时候调用 bridge.setup()？
 - 在 vnpy 的 on_init() 之前？之后？需要考虑 vnpy 的生命周期
 
-### 6. 数据一致性问题
+### 3. 数据一致性问题
 - vnpy 回测引擎回放的数据，和我们传给 DataFeed 的历史数据，是否完全一致？
 - 需要确保两边的数据是相同的，避免策略看到的数据和实际回放的数据不一致
 
-### 7. 多策略回测时的 DataFeed 共享
+### 4. 多策略回测时的 DataFeed 共享
 - 同一品种多个策略时，是否共享同一个 DataFeed？
 - DataFeedCache 已经是单例，应该能处理这个问题，但需要验证
