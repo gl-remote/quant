@@ -182,7 +182,7 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 在 `on_bar` 中：
   - 将 vnpy Bar 转换为标准 Bar
   - 调用 `DataFeed.update_bar()` 更新单根 K 线
-  - 通过 `build_context(data_feed, requirements, current_time)` 构造 BarContext
+  - 通过 `build_context(data_feed, requirements, current_time, bar)` 构造 BarContext（直接传入标准 Bar，不需要从 DataFeed 里获取）
   - 调用 `strategy.on_bar(self._state, ctx)`
 - 从 vnpy 同步交易状态：
   - 在成交时更新 `State` 中的 `position` 和 `fills`
@@ -300,3 +300,9 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 ### 10. 实盘与回测的一致性验证
 - 我们现在设计的是回测场景，实盘时这个架构（vnpy 同步 State）是否也适用？
 - 应该是适用的，因为 Bridge 的设计就是为了适配不同的运行时
+
+### 11. build_context 函数签名变更
+- **当前签名**：`build_context(data_feed, requirements, current_time)`
+- **新签名**：`build_context(data_feed, requirements, current_time, bar)`
+- **原因**：我们已经从 vnpy on_bar 拿到了标准化的 Bar，可以直接传给 build_context，不需要再从 DataFeed 里获取
+- **好处**：避免了"从 DataFeed 第一个周期获取 Bar"的 hack，更清晰
