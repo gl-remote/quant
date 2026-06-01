@@ -7,7 +7,7 @@
 ## 目标
 
 1. **State 解耦**：定义 `State[T]` dataclass，将策略配置、持仓、交易记录从 Strategy 迁移到 State，使 Strategy 成为纯决策逻辑
-2. **Runtime 集成**：VnpyStrategyBridge 集成 DataFeedCache，通过 setup/load_history_data/update_bar/build_context 完整接入 runtime 数据管理架构
+2. **Runtime 集成**：VnpyStrategyBridge 集成 DataFeedCache，通过 on_init 完成 DataFeed 初始化、on_bar 中通过 update_bar/build_context 完整接入 runtime 数据管理架构
 3. **移除兼容模式**：MaStrategyCore 移除 `use_data_feed` 开关和 `_on_bar_compatible` 代码，仅保留 ctx 模式
 4. **接口统一**：Strategy 基类接口变更（`on_bar(state, ctx)`、`data_requirements(config)`），移除 `config`/`position` 属性，`reset()` 退化为空方法
 
@@ -93,8 +93,7 @@ VnpyBacktestEngine
 vnpy.BacktestingEngine
     ↓ (回测回放，调用 bridge.on_bar)
 VnpyStrategyBridge (新增 runtime 接入)
-    ├─→ 初始化时：setup DataFeed（通过 DataFeedCache）
-    ├─→ on_init 时：load_history_data
+    ├─→ on_init 时：注册 DataFeed + 加载多周期历史数据 + 预计算指标
     ├─→ on_bar 时：
     │   ├─→ update_bar(标准 Bar)
     │   ├─→ build_context 构造 BarContext
@@ -155,35 +154,45 @@ class State(Generic[T]):
 ### 1. VnpyBacktestEngine
 - 仍然需要提供历史数据给 vnpy 回测引擎（这是 vnpy 的要求）
 - 修改 `_wrap_injected_strategy()` 方法，新增 `state: State` 参数
-- 在 `_InjectedStrategy` 的 `__init__` 中调用 bridge 的 `setup()` 方法
 
 **实现示意**：
 ```python
 def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
     from strategies.bridges import VnpyStrategyBridge
-    
+
     _captured_strategy = strategy
     _captured_state = state
-    
+
     class _InjectedStrategy(VnpyStrategyBridge):
+
         def _load_default_core(self, _setting: object | None = None) -> None:
             pass
-            
+
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self._core = _captured_strategy
-            self.setup(_captured_state)  # 在这里调用 setup()
-            
+            self._state = _captured_state
+            # on_init() 继承自 VnpyStrategyBridge，
+            # 按 requirements.periods 从 data 模块加载所需周期数据
+
     return _InjectedStrategy
 ```
 
 ### 2. VnpyStrategyBridge
-- 持有并管理 `State` 实例：保存策略配置、环境信息、持仓、交易记录
-- 新增 `setup(state: State[T])` 方法，在该方法中：
-  - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(state.strategy_config)` 完成 DataFeed 的配置（周期注册、指标注册）
-- 新增 `load_history_data(bars: list[Bar])` 方法（在 `on_init` 中调用），在该方法中：
-  - 将历史 K 线数据加载到 DataFeed（`DataFeed.load_history_data()`）
-  - 预计算所有注册指标（`DataFeed.calculate_all()`）
+- `on_init()` 中完成 DataFeed 初始化（注册周期/指标、按 requirements 加载**非主周期**数据、预计算指标）
+  ```python
+  def on_init(self) -> None:
+      requirements = self._core.data_requirements(self._state.strategy_config)
+      self._requirements = requirements
+      data_feed = DataFeedCache.get_or_create(self._state.symbol)
+      data_feed.setup(requirements)
+      # 主周期（1m）由 vnpy 引擎通过 on_bar 逐根喂入，不在此处预加载
+      # 非主周期（5m、15m 等）按 requirements 从 data模块 加载   
+      # 代码实现略
+      data_feed.calculate_all()
+      self._data_feed = data_feed
+  ```
+- **注意**：主周期（`state.period`，如 1m）的 bar 由 vnpy 引擎通过 `on_bar` 逐根回放，不需要预加载
 - 在 `on_bar` 中：
   - 将 vnpy Bar 转换为标准 Bar
   - 调用 `DataFeed.update_bar()` 更新单根 K 线
@@ -270,14 +279,13 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 注意：State 是唯一真实的数据来源，on_fill 只是通知，不改变数据
 
 ### 7. ✅ 历史数据获取方式
-- **确定**：Engine 中的 DataFrame 在 `_run_backtest` 中转换为标准 Bar 列表，在 `on_init` 时通过 Bridge 的 `load_history_data(bars)` 传入 DataFeed
-- 流程：DataFrame → 标准 Bar 列表 → `DataFeed.load_history_data(period, bars)` → `DataFeed.calculate_all()`
-- 说明：流程图中已明确在 `on_init` 时加载，`load_history_data` 接收标准 Bar 列表而非 DataFrame
+- **确定**：Engine 只负责将 DataFrame 转换为 vnpy BarData 供回放（`df_to_vnpy_datalines`），不参与 DataFeed 的数据加载。非主周期数据由 Bridge 在 `on_init` 中按 `requirements.periods` 从 data 模块自行加载
+- 流程：Bridge.on_init → 读取 requirements.periods → 排除主周期 → 从 data 模块获取非主周期数据 → `DataFeed.load_history_data(period, bars)` → `DataFeed.calculate_all()`
+- 主周期 bar 由 vnpy 引擎通过 `on_bar` 逐根回放，无需预加载
 
 ### 8. ✅ 初始化时机
-- **确定**：DataFeed 的周期/指标注册在 `__init__` 中（调用 `setup()`），历史数据加载在 `on_init` 中（调用 `load_history_data()`）
-- 原因：`__init__` 阶段 vnpy engine 尚未注入 history_data，只能做不依赖数据的注册操作
-- 对应流程图第 93 行（`初始化时：setup DataFeed`）和第 94 行（`on_init 时：load_history_data`）
+- **确定**：所有初始化（DataFeed 周期/指标注册、多周期历史数据加载、指标预计算）统一在 `on_init()` 中完成
+- 原因：`on_init` 时 `_state` 已通过 `__init__` 注入到 Bridge，且 vnpy 引擎保证 `on_init` 在 `on_bar` 回放前调用。非主周期数据由 Bridge 在 `on_init` 中通过 requirements 从 data 模块加载
 
 ### 9. ✅ 数据一致性
 - **确定**：vnpy 回测引擎和 DataFeed 使用同一份 DataFrame 作为数据源，数据值完全一致
@@ -301,7 +309,7 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - vnpy BarData 与标准 Bar 的转换已在 `_vnpy_bar_to_bar()` 中实现（字段映射 + float 转换）
 
 ### 13. ✅ data_requirements 缓存策略
-- **确定**：在 `setup()` 时调用 `data_requirements(state.strategy_config)` 一次并缓存结果
+- **确定**：在 `on_init()` 时调用 `data_requirements(state.strategy_config)` 一次并缓存结果
 - 原因：策略配置在运行期间不会动态变化
 - Bridge 将缓存的 requirements 用于后续每次 `on_bar` 中的 `build_context()` 调用
 
@@ -359,8 +367,10 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 ### 22. ✅ UninitializedStrategy 同步更新
 - **确定**：随 Strategy ABC 一起更新，移除 `config`/`position` 属性，`reset()` 改为空方法
 
-### 23. ✅ load_history_data 幂等实现
-- **确定**：按 spec #5 节方案实现，支持基于时间范围的全量替换/增量追加/跳过逻辑
+### 23. ✅ DataFeed.load_history_data() 幂等实现
+- **确定**：`DataFeed.load_history_data(period, bars)` 内部按数据范围智能处理，调用方无需关心
+- 逻辑：起始和截止时间相同 → 跳过；起始相同、结束不同 → 增量追加；起始不同 → 清空该 period 缓存，全量加载
+- Bridge 的 `load_history_data()` 在 `on_init` 中调用，`data_requirements()` 也在 `on_init` 中调用
 
 ### 24. ✅ build_context 签名变更
 - **确定**：改为 `build_context(data_feed, requirements, current_time, bar)`，移除从 `multi[first_period].get_bar(-1)` 提取 bar 的 hack 代码
@@ -392,3 +402,8 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - `self._position` → `state.position`，`self._config` → `state.strategy_config`
 - `self._capital`/`self._contract_size` → `state.capital`/`state.contract_size`（通过 `_calc_position_size` 参数传入）
 - `__init__` 不再接收 `capital`/`contract_size` 参数
+
+### 30. ✅ DataFeed.update_bar() 时间戳幂等检查
+- **确定**：`DataFeed.update_bar(bar, period)` 调用时，检查该 period 中是否已存在相同时间戳的 bar，存在则跳过（不做重复追加）
+- 原因：主周期（1m）的数据通过 `on_bar` 逐根喂入，而 `on_init` 只预加载非主周期（5m/15m），两者不会冲突。但加幂等检查可以防止意外重复调用导致数据错乱
+- 实现：`PeriodData.append_bar()` 中检查 bar 的 `datetime` 是否已存在于 `_df` 的 timestamp 列中
