@@ -60,7 +60,7 @@ MaStrategyCore
 - **责任**：
   - vnpy BarData → 标准 Bar ([`_vnpy_bar_to_bar`](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/vnpy_bridge.py#L84-L93))
   - 集成 runtime 架构：DataFeed setup、数据加载、BarContext 构造
-  - 调用 strategy.on_bar(bar, ctx) 获取 Signal
+  - 调用 strategy.on_bar(state, ctx) 获取 Signal
   - Signal → vnpy buy/sell ([`_execute_buy`](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/vnpy_bridge.py#L95-L114), [`_execute_sell`](file:///Users/REDACTED_API_KEY/Documents/src/quant/strategies/bridges/vnpy_bridge.py#L116-L136))
   - 成交后构造 Fill 并回调 strategy.on_fill(fill)
 - **原则**：不持有任何交易状态，所有状态由 Strategy 管理
@@ -98,7 +98,7 @@ VnpyStrategyBridge (新增 runtime 接入)
     ├─→ on_bar 时：
     │   ├─→ update_bar(标准 Bar)
     │   ├─→ build_context 构造 BarContext
-    │   └─→ 调用 strategy.on_bar(bar, ctx)
+    │   └─→ 调用 strategy.on_bar(state, ctx)
     ↓
 MaStrategyCore (仅使用 ctx 模式)
 ```
@@ -232,7 +232,7 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 `DataFeed` 的 `load_history_data()` 和 `calculate_all()` 在多轮流回测中可能被重复调用，需确保数据正确性：
 
 1. **幂等加载**：`load_history_data(period, bars)` 重复调用时按数据范围智能处理：
-   - 起始时间相同 → 数据一致，跳过加载
+   - 起始和截止时间相同 → 数据一致，跳过加载
    - 起始时间相同，结束时间不同 → 仅追加新 bars（增量加载）
    - 起始时间不同 → 清空该 period 的缓存，重新加载全量数据
 2. **幂等计算**：`calculate_all()` 重复调用时，已计算的指标应跳过
@@ -350,3 +350,45 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
   - 多次调用 `_run_backtest`（如 Walk-Forward）时，DataFeed 需要正确处理数据刷新 — 这是 `load_history_data()` 的实现要求：**重复调用时应替换而非追加数据**
   - 如果出现数据混乱，属于 DataFeed 实现层面的 bug，不是设计问题
 - `DataFeedCache` 不需要 `clear()` 方法，`load_history_data()` 实现幂等替换即可
+
+### 21. ✅ apply_strategy_config 与 serialize_strategy_params 适配
+- **确定**：两个函数从接收 Strategy 改为接收 `strategy_config` dataclass 实例
+- `apply_strategy_config(config, config_manager)`：直接操作 config dataclass
+- `serialize_strategy_params(strategy_config)`：从 config dataclass 读取字段。调用点 `_run_backtest:193` 传入 `state.strategy_config`
+
+### 22. ✅ UninitializedStrategy 同步更新
+- **确定**：随 Strategy ABC 一起更新，移除 `config`/`position` 属性，`reset()` 改为空方法
+
+### 23. ✅ load_history_data 幂等实现
+- **确定**：按 spec #5 节方案实现，支持基于时间范围的全量替换/增量追加/跳过逻辑
+
+### 24. ✅ build_context 签名变更
+- **确定**：改为 `build_context(data_feed, requirements, current_time, bar)`，移除从 `multi[first_period].get_bar(-1)` 提取 bar 的 hack 代码
+
+### 25. ✅ Bridge 交易流程拆分
+- **确定**：`on_bar` 仅发单（`self.buy()`/`self.sell()`），不构造 Fill；成交处理移至 `on_trade`
+- `_execute_buy`/`_execute_sell` 简化为纯发单 + 日志
+- `self.entry_price` 移除，log 中改用 `self._state.position.entry_price`
+- profit 等统计由 vnpy 统一计算
+
+### 26. ✅ self.pos 与 State.position 的关系
+- **确定**：两者数据同源（vnpy 引擎），`self._state.position` 在 `on_trade` 中用 vnpy 成交数据填充
+- `self.pos`（int）：vnpy CtaTemplate 内置，正=多头、负=空头、0=无持仓。Bridge 的 `on_bar` 用它判断能否下单（`self.pos == 0` / `self.pos > 0`）
+- `self._state.position`（`StrategyPosition`）：含 `direction` / `entry_price` / `volume`，供 Strategy 在 `on_bar(state, ctx)` 中读取
+  - `volume = abs(self.pos)`，`direction` 从 `trade.direction` 推导
+  - 用显式的 `direction` 而非正负号约定编码方向，避免歧义
+
+### 27. ✅ _run_backtest 构造 State
+- **确定**：`_run_backtest` 循环内为每个 strategy 构造 `State(symbol, period, strategy_config, capital, contract_size)`，传入 `_wrap_injected_strategy(strategy, state)`
+- `run_walk_forward` 自动适配（因调用 `_run_backtest` 内部构造）
+- 优化器无需修改（`run(pairs)` 接口不变）
+
+### 28. ✅ State 文件位置与导出
+- **确定**：新增 `strategies/core/state.py` 存放 `State[T]`
+- 在 `strategies/core/__init__.py` 和 `strategies/__init__.py` 中导出
+
+### 29. ✅ MaStrategyCore 内部清理
+- **确定**：移除 `MACrossParams.use_data_feed`、`_close_history`、`_prev_sma_short`、`_prev_sma_long`、兼容模式方法
+- `self._position` → `state.position`，`self._config` → `state.strategy_config`
+- `self._capital`/`self._contract_size` → `state.capital`/`state.contract_size`（通过 `_calc_position_size` 参数传入）
+- `__init__` 不再接收 `capital`/`contract_size` 参数
