@@ -10,6 +10,7 @@
 
 strategy 由 backtest_engine 通过 _InjectedStrategy 在构造后注入。
 vn.py 为强制依赖。
+采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例。
 """
 
 import logging
@@ -138,10 +139,34 @@ class VnpyStrategyBridge(CtaTemplate):
     # ---- vnpy 回调 (透传) ----
 
     def on_tick(self, tick: Any) -> None:
+        """vn.py Tick数据回调（当前未使用，预留接口）
+        
+        本策略基于K线级别运行，不处理逐笔Tick数据。
+        
+        Args:
+            tick: vn.py TickData对象，包含逐笔行情数据
+        """
         pass
 
     def on_order(self, order: Any) -> None:
+        """vn.py 订单状态变化回调（透传父类实现）
+        
+        当订单状态发生变化（如部分成交、全部成交、撤销等）时被调用。
+        当前实现直接调用父类方法，不做额外处理。
+        
+        Args:
+            order: vn.py OrderData对象，包含订单最新状态信息
+        """
         super().on_order(order)
 
     def on_trade(self, trade: Any) -> None:
+        """vn.py 成交回报回调（透传父类实现）
+        
+        当订单发生成交时被调用。注意：本策略的成交记录是在
+        _execute_buy/_execute_sell 中手动构造并通知策略的，
+        而非通过此回调，以保证回测和实盘逻辑一致。
+        
+        Args:
+            trade: vn.py TradeData对象，包含成交明细信息
+        """
         super().on_trade(trade)
