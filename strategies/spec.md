@@ -268,7 +268,19 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
 ### 5. State 的可变性与并发安全
 - State 是可变的 dataclass，多个策略共享同一个 State（如同一交易账号）时，是否有并发问题？
-- 回测是单线程的问题不大，但实盘可能需要考虑
+- **回测场景**：单线程，问题不大
+- **实盘场景**：可能需要考虑并发安全，但 vnpy 实盘也是单线程的事件驱动，可能也没问题
+
+### 5a. 回测 vs 实盘的数据来源
+- **回测**：历史数据可以从 DataManager 加载为 DataFrame，然后同时提供给 vnpy 和 DataFeed
+- **实盘**：vnpy 的 on_bar() 是唯一的数据来源，Bridge 需要同时：
+  - 将 vnpy Bar 转换为标准 Bar
+  - 更新 DataFeed
+  - 构造 BarContext
+  - 调用 strategy.on_bar()
+- **vnpy BarData 与标准 Bar 的区别**：
+  - vnpy 字段名是 open_price, high_price, close_price，我们是 open, high, close
+  - 我们把所有数值转换为 float
 
 ### 6. Strategy[T] 与 State[T] 的类型关联
 - Strategy 基类是泛型 `Strategy[T]`，State 也是 `State[T]`，如何明确这两个 T 的关联？
