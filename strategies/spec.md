@@ -6,7 +6,10 @@
 
 ## 目标
 
-待定
+1. **State 解耦**：定义 `State[T]` dataclass，将策略配置、持仓、交易记录从 Strategy 迁移到 State，使 Strategy 成为纯决策逻辑
+2. **Runtime 集成**：VnpyStrategyBridge 集成 DataFeedCache，通过 setup/load_history_data/update_bar/build_context 完整接入 runtime 数据管理架构
+3. **移除兼容模式**：MaStrategyCore 移除 `use_data_feed` 开关和 `_on_bar_compatible` 代码，仅保留 ctx 模式
+4. **接口统一**：Strategy 基类接口变更（`on_bar(state, ctx)`、`data_requirements(config)`），移除 `config`/`position` 属性，`reset()` 退化为空方法
 
 ## 现状分析：数据管线与责任边界
 
@@ -177,16 +180,22 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 ### 2. VnpyStrategyBridge
 - 持有并管理 `State` 实例：保存策略配置、环境信息、持仓、交易记录
 - 新增 `setup(state: State[T])` 方法，在该方法中：
-  - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(state.strategy_config)` 完成 DataFeed 的配置
-  - 加载历史数据
+  - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(state.strategy_config)` 完成 DataFeed 的配置（周期注册、指标注册）
+- 新增 `load_history_data(bars: list[Bar])` 方法（在 `on_init` 中调用），在该方法中：
+  - 将历史 K 线数据加载到 DataFeed（`DataFeed.load_history_data()`）
+  - 预计算所有注册指标（`DataFeed.calculate_all()`）
 - 在 `on_bar` 中：
   - 将 vnpy Bar 转换为标准 Bar
   - 调用 `DataFeed.update_bar()` 更新单根 K 线
-  - 通过 `build_context(data_feed, requirements, current_time, bar)` 构造 BarContext（直接传入标准 Bar，不需要从 DataFeed 里获取）
-  - 调用 `strategy.on_bar(self._state, ctx)`
-- 从 vnpy 同步交易状态：
-  - 在成交时更新 `State` 中的 `position` 和 `fills`
-  - 确保 State 里的数据和 vnpy 引擎里的一致
+  - 通过 `build_context(data_feed, requirements, current_time, bar)` 构造 BarContext
+  - 调用 `strategy.on_bar(self._state, ctx)` 获取 Signal
+  - 根据 Signal 下单：`self.buy()` / `self.sell()`（仅下单，不构造 Fill）
+- 从 vnpy 同步交易状态（通过 vnpy 原生回调）：
+  - **`on_trade(trade)`**：vnpy 在成交后回调，此时才更新 State：
+    - 更新 `self._state.position`
+    - 用 vnpy 的实际成交数据构造 `Fill`，追加到 `self._state.fills`
+    - 回调 `self._core.on_fill(fill)`
+  - profit 等统计信息由 vnpy `BacktestingEngine.calculate_statistics()` 统一计算，Bridge 不做手动计算
 
 ### 3. Strategy 基类接口变更
 - **移除**：`config` 属性（策略配置从 State 里获取）
@@ -219,6 +228,18 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 仅保留 runtime 模式
 - 实现新的接口签名
 
+### 5. DataFeed 加载保障机制
+`DataFeed` 的 `load_history_data()` 和 `calculate_all()` 在多轮流回测中可能被重复调用，需确保数据正确性：
+
+1. **幂等加载**：`load_history_data(period, bars)` 重复调用时按数据范围智能处理：
+   - 起始时间相同 → 数据一致，跳过加载
+   - 起始时间相同，结束时间不同 → 仅追加新 bars（增量加载）
+   - 起始时间不同 → 清空该 period 的缓存，重新加载全量数据
+2. **幂等计算**：`calculate_all()` 重复调用时，已计算的指标应跳过
+   - 增量加载场景：仅新追加的 bars 需要计算指标，已有 bars 的指标结果保留
+   - 全量替换场景：清空计算标记，重新计算所有指标
+3. **DataFeedCache.setup()** 多次注册相同指标应幂等（当前已有重复注册检查，`data_feed.py:148-150`）
+
 ---
 
 ## 已确定的问题
@@ -248,61 +269,84 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 用途：策略可以在成交时触发一些逻辑
 - 注意：State 是唯一真实的数据来源，on_fill 只是通知，不改变数据
 
-## 需要进一步讨论的问题
+### 7. ✅ 历史数据获取方式
+- **确定**：Engine 中的 DataFrame 在 `_run_backtest` 中转换为标准 Bar 列表，在 `on_init` 时通过 Bridge 的 `load_history_data(bars)` 传入 DataFeed
+- 流程：DataFrame → 标准 Bar 列表 → `DataFeed.load_history_data(period, bars)` → `DataFeed.calculate_all()`
+- 说明：流程图中已明确在 `on_init` 时加载，`load_history_data` 接收标准 Bar 列表而非 DataFrame
 
-### 1. 历史数据获取问题
-- Bridge 如何获取完整的历史数据来调用 `DataFeed.load_history_data()`？
-- 需要考虑是从 Engine 传递一份副本过来，还是 Bridge 自己从 vnpy 引擎获取？
+### 8. ✅ 初始化时机
+- **确定**：DataFeed 的周期/指标注册在 `__init__` 中（调用 `setup()`），历史数据加载在 `on_init` 中（调用 `load_history_data()`）
+- 原因：`__init__` 阶段 vnpy engine 尚未注入 history_data，只能做不依赖数据的注册操作
+- 对应流程图第 93 行（`初始化时：setup DataFeed`）和第 94 行（`on_init 时：load_history_data`）
 
-### 2. 初始化时机问题
-- 应该在什么时候调用 bridge.setup()？
-- 在 vnpy 的 on_init() 之前？之后？需要考虑 vnpy 的生命周期
+### 9. ✅ 数据一致性
+- **确定**：vnpy 回测引擎和 DataFeed 使用同一份 DataFrame 作为数据源，数据值完全一致
+- vnpy 侧：DataFrame → `df_to_vnpy_datalines()` → vnpy BarData
+- DataFeed 侧：DataFrame → 标准 Bar 列表 → `DataFeed.load_history_data()`
+- 差异仅在于包装类型（vnpy BarData vs 标准 Bar），数值一致
 
-### 3. 数据一致性问题
-- vnpy 回测引擎回放的数据，和我们传给 DataFeed 的历史数据，是否完全一致？
-- 需要确保两边的数据是相同的，避免策略看到的数据和实际回放的数据不一致
+### 10. ✅ 多策略 DataFeed 共享
+- **确定**：同一品种多个策略共享同一个 DataFeed 实例，通过 `DataFeedCache` 单例实现
+- 机制：`DataFeedCache.get_or_create(symbol)` 保证一个 symbol 对应一个 DataFeed
+- 注意：多策略共享 DataFeed 时，指标仅需计算一次，但 DataFeed 的生命周期管理需单独处理
 
-### 4. 多策略回测时的 DataFeed 共享
-- 同一品种多个策略时，是否共享同一个 DataFeed？
-- DataFeedCache 已经是单例，应该能处理这个问题，但需要验证
+### 11. ✅ State 并发安全
+- **确定**：回测场景（单线程）和实盘场景（vnpy 单线程事件驱动）均无需额外并发保护
+- State 作为可变 dataclass 在单线程环境下使用，无需加锁
 
-### 5. State 的可变性与并发安全
-- State 是可变的 dataclass，多个策略共享同一个 State（如同一交易账号）时，是否有并发问题？
-- **回测场景**：单线程，问题不大
-- **实盘场景**：可能需要考虑并发安全，但 vnpy 实盘也是单线程的事件驱动，可能也没问题
+### 12. ✅ 回测与实盘的数据来源
+- **确定**：
+  - **回测**：DataManager 加载 DataFrame → 同时提供给 vnpy（`df_to_vnpy_datalines`）和 DataFeed（标准 Bar 列表）
+  - **实盘**：vnpy `on_bar` 是唯一数据来源，Bridge 在 `on_bar` 中同时完成：转换标准 Bar → `DataFeed.update_bar()` → `build_context()` → `strategy.on_bar(state, ctx)`
+- vnpy BarData 与标准 Bar 的转换已在 `_vnpy_bar_to_bar()` 中实现（字段映射 + float 转换）
 
-### 5a. 回测 vs 实盘的数据来源
-- **回测**：历史数据可以从 DataManager 加载为 DataFrame，然后同时提供给 vnpy 和 DataFeed
-- **实盘**：vnpy 的 on_bar() 是唯一的数据来源，Bridge 需要同时：
-  - 将 vnpy Bar 转换为标准 Bar
-  - 更新 DataFeed
-  - 构造 BarContext
-  - 调用 strategy.on_bar()
-- **vnpy BarData 与标准 Bar 的区别**：
-  - vnpy 字段名是 open_price, high_price, close_price，我们是 open, high, close
-  - 我们把所有数值转换为 float
+### 13. ✅ data_requirements 缓存策略
+- **确定**：在 `setup()` 时调用 `data_requirements(state.strategy_config)` 一次并缓存结果
+- 原因：策略配置在运行期间不会动态变化
+- Bridge 将缓存的 requirements 用于后续每次 `on_bar` 中的 `build_context()` 调用
 
-### 6. Strategy[T] 与 State[T] 的类型关联
-- Strategy 基类是泛型 `Strategy[T]`，State 也是 `State[T]`，如何明确这两个 T 的关联？
+### 14. ✅ 实盘与回测架构一致性
+- **确定**：同一套 Bridge + State + DataFeed 架构同时适用于回测和实盘
+- 区别仅在于数据来源：回测由 Engine 注入历史数据，实盘由 vnpy `on_bar` 实时推送
+- Bridge 的设计目标就是适配不同运行时，无需为实盘做特殊改造
 
-### 7. reset() 方法的职责变化
-- 之前 Strategy.reset() 会重置自身状态，现在状态都在 State 里了，那 reset() 方法应该做什么？
-- 需要明确 reset() 的新职责
+### 15. ✅ build_context 签名变更
+- **确定**：`build_context(data_feed, requirements, current_time, bar)`
+- 旧签名：`build_context(data_feed, requirements, current_time)` — 从 DataFeed 第一个周期提取 bar（hack）
+- 新签名新增 `bar` 参数，直接传入当前标准 Bar，避免 hack
 
-### 8. data_requirements 的缓存策略
-- `data_requirements(config)` 是在 setup() 时调用一次并缓存，还是每次 on_bar() 都调用？
-- 建议在 setup() 时调用一次并保存，因为策略配置一般不会动态变化
+### 16. ✅ config 传递链路
+- **确定**：Engine 在 `_run_backtest` 中构造 `State`，`strategy_config` 由 Engine 从优化器/CLI 传入的参数直接构造
+- 当前链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 调用 `_wrap_injected_strategy(strategy)`
+- 新链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 构造 State → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 State → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
+- Engine 已有全部 State 构造所需信息：`symbol`（从 pairs）、`period`（`self.interval`）、`capital`/`contract_size`（Engine 自身配置）、`strategy_config`（优化器/CLI 传入，独立于 Strategy 实例）
 
-### 9. 历史数据加载的具体实现方式
-- spec.md 提到 Bridge 需要加载历史数据，但没有明确是通过 Engine 传递 DataFrame，还是通过其他方式
-- Engine 里已经有完整的 DataFrame，可以传递给 Bridge
+### 17. ✅ Strategy[T] 与 State[T] 的类型关联
+- **确定**：`Strategy[T]` 和 `State[T]` 使用同一个 `T`，即策略的配置类型（如 `MACrossParams`）
+- `class MaStrategyCore(Strategy[MACrossParams])` → `State[MACrossParams]`
+- Bridge 同时持有 `Strategy[T]` 和 `State[T]`，两者通过泛型参数 `T` 自然关联
+- 调用方（Engine/CLI）明确知道 `T` 的具体类型，构造 State 时传入同类型的 `strategy_config`
 
-### 10. 实盘与回测的一致性验证
-- 我们现在设计的是回测场景，实盘时这个架构（vnpy 同步 State）是否也适用？
-- 应该是适用的，因为 Bridge 的设计就是为了适配不同的运行时
+### 18. ✅ reset() 方法的职责变化
+- **确定**：`reset()` 退化为空方法。Strategy 不再持有任何状态，无需重置
+- 状态迁移路径：Strategy 的 `_position`、`_fills` → State 的 `position`、`fills`
+- State 在 `_run_backtest` 循环中为每个 strategy 创建全新实例（`State(symbol, period, strategy_config, capital, contract_size)`），`position`/`fills` 自然初始化为空
+- Bridge 也由 vnpy 在每次 `add_strategy` 时创建全新实例，无需单独 reset
+- `_run_backtest` 中原有的 `strategy.reset()` 调用可保留（空实现，不报错）或移除
 
-### 11. build_context 函数签名变更
-- **当前签名**：`build_context(data_feed, requirements, current_time)`
-- **新签名**：`build_context(data_feed, requirements, current_time, bar)`
-- **原因**：我们已经从 vnpy on_bar 拿到了标准化的 Bar，可以直接传给 build_context，不需要再从 DataFeed 里获取
-- **好处**：避免了"从 DataFeed 第一个周期获取 Bar"的 hack，更清晰
+### 19. ✅ Bridge 同步 State.position 的时机和方式
+- **确定**：不使用手动构造 Fill 的方式，而是通过 vnpy 原生 `on_trade(trade)` 回调同步成交状态
+- 时机：`_execute_buy`/`_execute_sell` 只负责发单，不更新 position。vnpy 在成交后调用 `on_trade`，此时才：
+  - 根据 `trade.direction` 更新 `self._state.position`（买入设持仓，卖出清空）
+  - 用 vnpy 的实际成交数据（price、volume、datetime）构造 `Fill`
+  - 追加到 `self._state.fills`
+  - 回调 `self._core.on_fill(fill)`
+- profit 等统计由 vnpy `BacktestingEngine.calculate_statistics()` 统一计算，Bridge 不做手动统计
+
+### 20. ✅ DataFeedCache 生命周期管理
+- **确定**：DataFeedCache 全局单例是正确的设计，DataFeed 存的是行情+衍生数据而非策略状态，同 symbol 共享自然成立
+- 多轮回测/多策略场景下：
+  - 同一 symbol 的多个策略共享同一个 DataFeed — **正确行为**（相同指标只算一次）
+  - 多次调用 `_run_backtest`（如 Walk-Forward）时，DataFeed 需要正确处理数据刷新 — 这是 `load_history_data()` 的实现要求：**重复调用时应替换而非追加数据**
+  - 如果出现数据混乱，属于 DataFeed 实现层面的 bug，不是设计问题
+- `DataFeedCache` 不需要 `clear()` 方法，`load_history_data()` 实现幂等替换即可
