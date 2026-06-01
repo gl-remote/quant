@@ -180,8 +180,9 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
   - 通过 `DataFeedCache.setup()` 方法，根据 strategy 的 `data_requirements(state.strategy_config)` 完成 DataFeed 的配置
   - 加载历史数据
 - 在 `on_bar` 中：
+  - 将 vnpy Bar 转换为标准 Bar
   - 调用 `DataFeed.update_bar()` 更新单根 K 线
-  - 通过 `build_context()` 构造 BarContext
+  - 通过 `build_context(data_feed, requirements, current_time)` 构造 BarContext
   - 调用 `strategy.on_bar(self._state, ctx)`
 - 从 vnpy 同步交易状态：
   - 在成交时更新 `State` 中的 `position` 和 `fills`
@@ -264,3 +265,26 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 ### 4. 多策略回测时的 DataFeed 共享
 - 同一品种多个策略时，是否共享同一个 DataFeed？
 - DataFeedCache 已经是单例，应该能处理这个问题，但需要验证
+
+### 5. State 的可变性与并发安全
+- State 是可变的 dataclass，多个策略共享同一个 State（如同一交易账号）时，是否有并发问题？
+- 回测是单线程的问题不大，但实盘可能需要考虑
+
+### 6. Strategy[T] 与 State[T] 的类型关联
+- Strategy 基类是泛型 `Strategy[T]`，State 也是 `State[T]`，如何明确这两个 T 的关联？
+
+### 7. reset() 方法的职责变化
+- 之前 Strategy.reset() 会重置自身状态，现在状态都在 State 里了，那 reset() 方法应该做什么？
+- 需要明确 reset() 的新职责
+
+### 8. data_requirements 的缓存策略
+- `data_requirements(config)` 是在 setup() 时调用一次并缓存，还是每次 on_bar() 都调用？
+- 建议在 setup() 时调用一次并保存，因为策略配置一般不会动态变化
+
+### 9. 历史数据加载的具体实现方式
+- spec.md 提到 Bridge 需要加载历史数据，但没有明确是通过 Engine 传递 DataFrame，还是通过其他方式
+- Engine 里已经有完整的 DataFrame，可以传递给 Bridge
+
+### 10. 实盘与回测的一致性验证
+- 我们现在设计的是回测场景，实盘时这个架构（vnpy 同步 State）是否也适用？
+- 应该是适用的，因为 Bridge 的设计就是为了适配不同的运行时
