@@ -180,6 +180,8 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
 ### 2. VnpyStrategyBridge
 - `on_init()` 中完成 DataFeed 初始化（注册周期/指标、按 requirements 加载**非主周期**数据、预计算指标）
+- Bridge 通过 `self._state: State[T]` 持有所有运行时数据，config 通过 `self._state.strategy_config` 访问，Bridge 自身不挂 config 字段不读 `self._core.config`
+
   ```python
   def on_init(self) -> None:
       requirements = self._core.data_requirements(self._state.strategy_config)
