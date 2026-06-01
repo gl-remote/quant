@@ -326,9 +326,10 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 新签名新增 `bar` 参数，直接传入当前标准 Bar，避免 hack
 
 ### 16. ✅ config 传递链路
-- **确定**：config 全程显式传递，不依赖 Strategy 的 config 属性
-- 链路：调用方（CLI/优化器/WF）持有 `strategy_config: T` → `run(pairs, strategy_configs)` → `_run_backtest(df, symbol, strategies, strategy_configs)` → 构造 `State(strategy_config=strategy_configs[i], ...)` → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 `state` → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
-- `serialize_strategy_params` 改为接收 config dataclass 而非 Strategy 实例
+- **确定**：Engine 在 `_run_backtest` 中构造 `State`，`strategy_config` 由 Engine 从优化器/CLI 传入的参数直接构造
+- 当前链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 调用 `_wrap_injected_strategy(strategy)`
+- 新链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 构造 State → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 State → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
+- Engine 已有全部 State 构造所需信息：`symbol`（从 pairs）、`period`（`self.interval`）、`capital`/`contract_size`（Engine 自身配置）、`strategy_config`（优化器/CLI 传入，独立于 Strategy 实例）
 
 ### 17. ✅ Strategy[T] 与 State[T] 的类型关联
 - **确定**：`Strategy[T]` 和 `State[T]` 使用同一个 `T`，即策略的配置类型（如 `MACrossParams`）
@@ -391,8 +392,8 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
 ### 27. ✅ _run_backtest 构造 State
 - **确定**：`_run_backtest` 循环内为每个 strategy 构造 `State(symbol, period, strategy_config, capital, contract_size)`，传入 `_wrap_injected_strategy(strategy, state)`
-- `run_walk_forward` 同步传入 strategy_config（因内部调用 `_run_backtest`）
-- 优化器需同步传入 `strategy_configs`（`run(pairs, strategy_configs)` 接口变更）
+- `run_walk_forward` 自动适配（因调用 `_run_backtest` 内部构造）
+- 优化器无需修改（`run(pairs)` 接口不变）
 
 ### 28. ✅ State 文件位置与导出
 - **确定**：新增 `strategies/core/state.py` 存放 `State[T]`
