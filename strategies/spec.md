@@ -290,9 +290,9 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 原因：`on_init` 时 `_state` 已通过 `__init__` 注入到 Bridge，且 vnpy 引擎保证 `on_init` 在 `on_bar` 回放前调用。非主周期数据由 Bridge 在 `on_init` 中通过 requirements 从 data 模块加载
 
 ### 9. ✅ 数据一致性
-- **确定**：vnpy 回测引擎和 DataFeed 使用同一份 DataFrame 作为数据源，数据值完全一致
-- vnpy 侧：DataFrame → `df_to_vnpy_datalines()` → vnpy BarData
-- DataFeed 侧：DataFrame → 标准 Bar 列表 → `DataFeed.load_history_data()`
+- **确定**：vnpy 回测引擎和 DataFeed 来自同一数据源（DataManager），数值完全一致
+- vnpy 侧：`df_to_vnpy_datalines()` → vnpy BarData
+- DataFeed 侧：Bridge 在 `on_init` 中从 data 模块加载 → 标准 Bar 列表 → `DataFeed.load_history_data()`
 - 差异仅在于包装类型（vnpy BarData vs 标准 Bar），数值一致
 
 ### 10. ✅ 多策略 DataFeed 共享
@@ -326,10 +326,9 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - 新签名新增 `bar` 参数，直接传入当前标准 Bar，避免 hack
 
 ### 16. ✅ config 传递链路
-- **确定**：Engine 在 `_run_backtest` 中构造 `State`，`strategy_config` 由 Engine 从优化器/CLI 传入的参数直接构造
-- 当前链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 调用 `_wrap_injected_strategy(strategy)`
-- 新链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 构造 State → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 State → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
-- Engine 已有全部 State 构造所需信息：`symbol`（从 pairs）、`period`（`self.interval`）、`capital`/`contract_size`（Engine 自身配置）、`strategy_config`（优化器/CLI 传入，独立于 Strategy 实例）
+- **确定**：config 全程显式传递，不依赖 Strategy 的 config 属性
+- 链路：调用方（CLI/优化器/WF）持有 `strategy_config: T` → `run(pairs, strategy_configs)` → `_run_backtest(df, symbol, strategies, strategy_configs)` → 构造 `State(strategy_config=strategy_configs[i], ...)` → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 `state` → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
+- `serialize_strategy_params` 改为接收 config dataclass 而非 Strategy 实例
 
 ### 17. ✅ Strategy[T] 与 State[T] 的类型关联
 - **确定**：`Strategy[T]` 和 `State[T]` 使用同一个 `T`，即策略的配置类型（如 `MACrossParams`）
@@ -392,8 +391,8 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
 ### 27. ✅ _run_backtest 构造 State
 - **确定**：`_run_backtest` 循环内为每个 strategy 构造 `State(symbol, period, strategy_config, capital, contract_size)`，传入 `_wrap_injected_strategy(strategy, state)`
-- `run_walk_forward` 自动适配（因调用 `_run_backtest` 内部构造）
-- 优化器无需修改（`run(pairs)` 接口不变）
+- `run_walk_forward` 同步传入 strategy_config（因内部调用 `_run_backtest`）
+- 优化器需同步传入 `strategy_configs`（`run(pairs, strategy_configs)` 接口变更）
 
 ### 28. ✅ State 文件位置与导出
 - **确定**：新增 `strategies/core/state.py` 存放 `State[T]`
