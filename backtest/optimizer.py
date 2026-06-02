@@ -50,40 +50,7 @@ from loguru import logger
 from common.constants import DEFAULT_N_JOBS
 from common.log_config import get_stderr_sink_id
 
-# 线程/协程隔离的 trial 日志缓冲区
-# 8 线程并发回测时，每条日志按 trial 分组缓冲，完毕一次性输出，避免交错
-_trial_buffer: ContextVar[io.StringIO | None] = ContextVar('_trial_buffer', default=None)
-_trial_number: ContextVar[int | None] = ContextVar('_trial_number', default=None)
 
-
-def _trial_log_sink(message: Any) -> None:
-    """loguru sink：
-    - trial 进行中：写入线程私有的 ContextVar buffer（不刷屏）
-    - trial 之外：正常输出到 stderr
-    """
-    buf = _trial_buffer.get()
-    if buf is not None:
-        buf.write(str(message))
-    else:
-        print(message, end='', file=sys.stderr)
-
-
-def _start_trial(trial_number: int) -> None:
-    """为当前线程开启日志缓冲区"""
-    _trial_buffer.set(io.StringIO())
-    _trial_number.set(trial_number)
-
-
-def _end_trial() -> None:
-    """结束缓冲，整体输出该 trial 的完整日志块，然后清空"""
-    buf = _trial_buffer.get()
-    num = _trial_number.get()
-    if buf is not None:
-        logs = buf.getvalue()
-        if logs:
-            print(f"\n{'='*60}\n[Trial {num}] Logs:\n{'='*60}\n{logs}", end='')
-    _trial_buffer.set(None)
-    _trial_number.set(None)
 
 
 @dataclass
@@ -228,47 +195,44 @@ class OptunaOptimizer:
 
         def objective(trial: optuna.trial.Trial) -> float:
             nonlocal completed_count
-            _start_trial(trial.number)
-            try:
-                params = self._suggest_params(trial)
-                merged_params = {**self._strategy_params, **params}
+            params = self._suggest_params(trial)
+            merged_params = {**self._strategy_params, **params}
 
-                pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
-                engine_results = self._engine.run(pairs)
+            pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
+            engine_results = self._engine.run(pairs)
 
-                sharpes = [
-                    r.sharpe_ratio or 0
-                    for r in engine_results if r.success
-                ]
-                if not sharpes:
-                    score = -999.0
-                else:
-                    score = float(sum(sharpes) / len(sharpes))
+            sharpes = [
+                r.sharpe_ratio or 0
+                for r in engine_results if r.success
+            ]
+            if not sharpes:
+                score = -999.0
+            else:
+                score = float(sum(sharpes) / len(sharpes))
 
-                with trial_index_lock:
-                    trial_index.append({
-                        'search_params': params,
-                        'value': score,
-                        'engine_results': engine_results,
-                        'strategy_params': merged_params,
-                        'strategy_name': self._strategy_name,
-                    })
+            with trial_index_lock:
+                trial_index.append({
+                    'search_params': params,
+                    'value': score,
+                    'engine_results': engine_results,
+                    'strategy_params': merged_params,
+                    'strategy_name': self._strategy_name,
+                })
 
-                logger.debug(
-                    "Trial %3d | score=%.4f | %s",
-                    trial.number, score,
-                    {k: v for k, v in params.items()},
-                )
-                return score
-            finally:
-                _end_trial()
-                with progress_lock:
-                    completed_count += 1
-                    # 多线程进度：print 直接写 stderr，不走 trial buffer
-                    if self._n_jobs > 1:
-                        print(f"\r  [{completed_count}/{n_trials}]",
-                              end="" if completed_count < n_trials else "\n",
-                              file=sys.stderr, flush=True)
+            logger.debug(
+                "Trial {:3d} | score={:.4f} | {}",
+                trial.number, score,
+                {k: v for k, v in params.items()},
+            )
+
+            with progress_lock:
+                completed_count += 1
+                if self._n_jobs > 1:
+                    print(f"\r  [{completed_count}/{n_trials}]",
+                          end="" if completed_count < n_trials else "\n",
+                          file=sys.stderr, flush=True)
+
+            return score
 
         # 抑制 optuna 默认日志（INFO → WARNING）
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -314,31 +278,12 @@ class OptunaOptimizer:
             load_if_exists=True,
         )
 
-        # 安装 trial 日志缓冲 sink：
-        # - trial 期间：日志写入线程私有的 ContextVar buffer，不输出到 stderr
-        # - 非 trial 期间：正常输出到 stderr
-        _trial_sink_id = logger.add(
-            _trial_log_sink,
-            level="INFO",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        )
-        # 只移除 stderr，保留文件 sink（remove(None) 会清掉所有 handler）
-        _stderr_id = get_stderr_sink_id()
-        if _stderr_id is not None:
-            logger.remove(_stderr_id)
-
+        # stderr 已由 caller（backtest.py）关闭，全部日志走文件 sink
         try:
             study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs,
                           show_progress_bar=(self._n_jobs <= 1))
         finally:
-            logger.remove(_trial_sink_id)
-            # 恢复默认 stderr 输出
-            logger.add(
-                sys.stderr,
-                level="INFO",
-                format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-                colorize=True,
-            )
+            pass  # caller 负责恢复 stderr
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0

@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from loguru import logger
 import subprocess
 from datetime import datetime
@@ -330,8 +331,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         engine._run_id = run_id
 
         # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
-        # 不入队（enqueue=False），保证立即写盘，支持 tail -f 实时查看
-        # loguru 内部有锁，多线程安全
+        # 同时关闭 stderr，全部输出走文件，tail -f 实时查看
         _sink_ids.clear()
         logs_dir = Path("output") / f"r{run_id}" / "data"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -342,6 +342,10 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             level="DEBUG",
             format=_fmt,
         ))
+        from common.log_config import get_stderr_sink_id
+        _stderr_id = get_stderr_sink_id()
+        if _stderr_id is not None:
+            logger.remove(_stderr_id)
 
         # ── 步骤 5: 根据模式执行相应工作流 ──
         if mode == "walk-forward":
@@ -424,9 +428,15 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
-        # 移除实时日志 sink，转 JSON 供前端
+        # 移除实时日志 sink，恢复 stderr，转 JSON 供前端
         for sid in _sink_ids:
             logger.remove(sid)
+        logger.add(
+            sys.stderr,
+            level="INFO",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+            colorize=True,
+        )
         # run.log（纯文本）→ logs.json（JSON 数组，dashboard 用）
         if run_id > 0:
             log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
