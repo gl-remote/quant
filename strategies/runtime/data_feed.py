@@ -381,7 +381,9 @@ class DataFeed:
         if period not in self._periods:
             raise KeyError(f"Period {period} not registered")
 
-        self._periods[period].append_bar(bar)
+        # DataFrame 写入非原子，最小化锁仅保护写操作
+        with self._lock:
+            self._periods[period].append_bar(bar)
 
         if events:
             self.append_events(events)
