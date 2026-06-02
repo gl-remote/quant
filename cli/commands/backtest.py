@@ -299,7 +299,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             mode_label = MODE_BATCH
 
         mode_name = "参数搜索" if mode == "search" else "Walk-Forward"
-        logger.info("%s回测: %d 个品种 strategy=%s mode=%s",
+        logger.info("{}回测: {} 个品种 strategy={} mode={}",
                     "批量" if mode_label == MODE_BATCH else "单品种",
                     len(symbol_list), strategy_name, mode_name)
 

@@ -111,7 +111,7 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
         study_name=study_name,
     )
 
-    logger.info("%s 完成: best=%.4f params=%s trials=%d",
+    logger.info("{} 完成: best={:.4f} params={} trials={}",
                 run_engine, result.best_value, result.best_params,
                 result.n_trials)
 
