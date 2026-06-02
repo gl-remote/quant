@@ -321,8 +321,8 @@ class OptunaOptimizer:
             level="INFO",
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
         )
-        # 移除 stderr sink，避免 trial 期间日志交错
-        logger.remove(None)  # remove all default sinks, keep trial sink
+        # 只移除 stderr（id=0），保留文件 sink（loguru remove(None) 会清掉所有 handler）
+        logger.remove(0)
 
         try:
             study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs,
