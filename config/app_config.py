@@ -51,6 +51,7 @@ from common.constants import (
     DEFAULT_PRICE_TICK,
     DEFAULT_CONTRACT_SIZE,
     DEFAULT_KLINE_PERIOD,
+    DEFAULT_N_JOBS,
     KLINE_INTERVAL_1MIN,
     STRATEGY_MA,
     DEFAULT_STOP_LOSS_RATIO,
@@ -119,6 +120,7 @@ class OptimizerConfig(BaseModel):
     enabled: bool = False
     engine: str = "grid"  # grid | bayesian
     n_trials: int = 50
+    n_jobs: int = DEFAULT_N_JOBS  # 并行 trial 数，>1 使用 threading 并发
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
 

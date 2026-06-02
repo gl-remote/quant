@@ -109,6 +109,7 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
         contract_size=contract_size,
         n_trials=n_trials,
         search_type=run_engine,
+        n_jobs=optimizer_cfg.n_jobs,
         study_db_path=optuna_db_url,
         study_name=study_name,
     )

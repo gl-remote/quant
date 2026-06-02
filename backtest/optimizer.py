@@ -34,8 +34,10 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -43,8 +45,47 @@ from typing import Any
 import pandas as pd
 
 import optuna
+from common.constants import DEFAULT_N_JOBS
 
 logger = logging.getLogger(__name__)
+
+
+# ==================== 并发日志缓冲 ====================
+
+class _TrialLogHandler(logging.Handler):
+    """线程私有日志缓冲：每个 trial 独立缓冲，结束后一次性输出。
+
+    解决 multi-thread 回测时日志交错混乱的问题：
+    - 全局添加一次 handler
+    - 每个线程调 start_trial/end_trial 控制缓冲区间
+    - end_trial 时原子输出该 trial 的完整日志块
+    """
+
+    def __init__(self, fmt: str | None = None) -> None:
+        super().__init__()
+        self.setFormatter(logging.Formatter(
+            fmt or '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        ))
+        self._local = threading.local()
+
+    def start_trial(self, trial_number: int) -> None:
+        self._local.buffer = io.StringIO()
+        self._local.trial_number = trial_number
+
+    def end_trial(self) -> None:
+        buf: io.StringIO | None = getattr(self._local, 'buffer', None)
+        num: int | None = getattr(self._local, 'trial_number', None)
+        if buf is not None:
+            logs = buf.getvalue()
+            self._local.buffer = None  # type: ignore[attr-defined]
+            self._local.trial_number = None  # type: ignore[attr-defined]
+            if logs:
+                print(f"\n{'='*60}\n[Trial {num}] Logs:\n{'='*60}\n{logs}", end='')
+
+    def emit(self, record: logging.LogRecord) -> None:
+        buf: io.StringIO | None = getattr(self._local, 'buffer', None)
+        if buf is not None:
+            buf.write(self.format(record) + '\n')
 
 
 @dataclass
@@ -115,6 +156,7 @@ class OptunaOptimizer:
         capital: float | None = None,
         contract_size: int | None = None,
         n_trials: int = 50,
+        n_jobs: int = DEFAULT_N_JOBS,
         study_db_path: str = "",
         search_type: str = "bayesian",
         study_name: str = "",
@@ -129,6 +171,7 @@ class OptunaOptimizer:
             capital: 初始资金
             contract_size: 合约乘数
             n_trials: 最大试验次数
+            n_jobs: 并行 trial 数，>1 使用 threading 并发
             study_db_path: Optuna study SQLite 存储路径，为空则仅内存
             search_type: 搜索类型："bayesian" (TPESampler) 或 "grid" (GridSampler)
             study_name: 自定义 study 名称，为空则自动生成
@@ -141,6 +184,7 @@ class OptunaOptimizer:
         self._capital = capital
         self._contract_size = contract_size
         self._n_trials = n_trials
+        self._n_jobs = n_jobs
         self._study_db_path = study_db_path
         self._search_type = search_type
 
@@ -180,37 +224,43 @@ class OptunaOptimizer:
         """
         result = OptunaResult()
         trial_index: list[dict[str, Any]] = []
+        trial_index_lock = threading.Lock()
 
         def objective(trial: optuna.trial.Trial) -> float:
-            params = self._suggest_params(trial)
-            merged_params = {**self._strategy_params, **params}
+            _trial_handler.start_trial(trial.number)
+            try:
+                params = self._suggest_params(trial)
+                merged_params = {**self._strategy_params, **params}
 
-            pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
-            engine_results = self._engine.run(pairs)
+                pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
+                engine_results = self._engine.run(pairs)
 
-            sharpes = [
-                r.sharpe_ratio or 0
-                for r in engine_results if r.success
-            ]
-            if not sharpes:
-                score = -999.0
-            else:
-                score = float(sum(sharpes) / len(sharpes))
+                sharpes = [
+                    r.sharpe_ratio or 0
+                    for r in engine_results if r.success
+                ]
+                if not sharpes:
+                    score = -999.0
+                else:
+                    score = float(sum(sharpes) / len(sharpes))
 
-            trial_index.append({
-                'search_params': params,
-                'value': score,
-                'engine_results': engine_results,
-                'strategy_params': merged_params,
-                'strategy_name': self._strategy_name,
-            })
+                with trial_index_lock:
+                    trial_index.append({
+                        'search_params': params,
+                        'value': score,
+                        'engine_results': engine_results,
+                        'strategy_params': merged_params,
+                        'strategy_name': self._strategy_name,
+                    })
 
-            logger.info(
-                "Trial %3d | score=%.4f | %s",
-                trial.number, score,
-                {k: v for k, v in params.items()},
-            )
-            return score
+                logger.info(
+                    "Trial %3d | score=%.4f | %s",
+                    trial.number, score,
+                    {k: v for k, v in params.items()},
+                )
+                return score
+            finally:
+                _trial_handler.end_trial()
 
         # 抑制 optuna 默认日志（INFO → WARNING）
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -255,7 +305,21 @@ class OptunaOptimizer:
             sampler=sampler,
             load_if_exists=True,
         )
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+
+        # 安装线程私有日志缓冲 handler（并发回测时避免日志交错）
+        _trial_handler = _TrialLogHandler()
+        _target_loggers = [
+            logging.getLogger('backtest'),
+            logging.getLogger('strategies'),
+        ]
+        for lg in _target_loggers:
+            lg.addHandler(_trial_handler)
+
+        try:
+            study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs, show_progress_bar=True)
+        finally:
+            for lg in _target_loggers:
+                lg.removeHandler(_trial_handler)
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0
@@ -306,6 +370,7 @@ def run_param_search(
     contract_size: int,
     n_trials: int,
     search_type: str,
+    n_jobs: int = DEFAULT_N_JOBS,
     study_db_path: str = "",
     study_name: str = "",
 ) -> SearchResult:
@@ -336,6 +401,7 @@ def run_param_search(
         capital=capital,
         contract_size=contract_size,
         n_trials=n_trials,
+        n_jobs=n_jobs,
         study_db_path=study_db_path,
         search_type=search_type,
         study_name=study_name,
