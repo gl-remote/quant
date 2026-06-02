@@ -339,7 +339,8 @@ class VnpyBacktestEngine:
             engine.history_data = bars
 
             try:
-                engine.run_backtesting()
+                with logger.contextualize(bt_id=f"|bt{bt_id}"):
+                    engine.run_backtesting()
                 daily_results = engine.calculate_result()
                 statistics = engine.calculate_statistics()
             except Exception as e:

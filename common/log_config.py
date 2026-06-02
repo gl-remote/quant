@@ -37,6 +37,8 @@ def setup_logging(level: str = "INFO", log_format: str | None = None) -> None:
     """
     global _stderr_sink_id
     logger.remove()
+    # 设置默认 extra，{extra[bt_id]} 在非回测场景为空字符串
+    logger.configure(extra={"bt_id": ""})
     _stderr_sink_id = logger.add(
         sys.stderr,
         level=level,

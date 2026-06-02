@@ -335,7 +335,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         _sink_ids.clear()
         logs_dir = Path("output") / f"r{run_id}" / "data"
         logs_dir.mkdir(parents=True, exist_ok=True)
-        _fmt = (f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}] "
+        _fmt = (f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
                 "{level: <8} | {name}:{function}:{line} | {message}")
         _sink_ids.append(logger.add(
             logs_dir / "run.log",
