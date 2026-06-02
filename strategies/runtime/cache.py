@@ -104,17 +104,20 @@ class DataFeedCache:
 
         回测引擎只需调用一次此方法，即可完成周期注册和指标注册。
 
+        并发安全：全程持有 cache 锁，防止多线程同时配置同一 DataFeed。
+
         :param symbol: 交易品种
         :param requirements: 策略声明的数据需求
         :return: 配置完成的 DataFeed 实例
         """
-        datafeed = self.get_or_create(symbol)
+        with self._lock:
+            datafeed = self.get_or_create(symbol)
 
-        for period_name in requirements.periods:
-            datafeed.register_period(period_name)
+            for period_name in requirements.periods:
+                datafeed.register_period(period_name)
 
-        for period_name, indicators in requirements.indicators.items():
-            for indicator in indicators:
-                datafeed.register_indicator(period_name, indicator.name, **indicator.params)
+            for period_name, indicators in requirements.indicators.items():
+                for indicator in indicators:
+                    datafeed.register_indicator(period_name, indicator.name, **indicator.params)
 
-        return datafeed
+            return datafeed

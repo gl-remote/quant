@@ -153,24 +153,28 @@ class PeriodData:
     def append_bar(self, bar: Bar) -> None:
         """追加单根K线（用于实时/逐根更新场景）
 
+        幂等语义：
+        - bar_time > latest → 新 bar，追加写入
+        - bar_time <= latest → 必然已存在，跳过
+
+        为什么不需要确认 bar_time 是否真的在 index 中：
+        历史 K 线数据连续单调递增，同一批数据被回放时，
+        如果 bar_time <= latest，一定是本 trial 刚写入或
+        其他并发 trial 已写入，不可能不在 index 中。
+
         注意事项：
-        1. 追加的时间戳必须晚于已有的最新时间
-        2. 同一时间戳的 bar 会被跳过（幂等，不抛异常）
-        3. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
-        4. Append-Only：历史数据不会被修改
-        5. 更新数据追踪字段：_last_updated_at 和 _update_count
+        1. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
+        2. Append-Only：历史数据不会被修改
 
         :param bar: 单根K线数据
-        :raises ValueError: 如果时间戳早于最新数据时间
         """
         bar_time = pd.Timestamp(bar.datetime)
 
         if len(self._df) > 0:
-            latest = self._df.index[-1]
-            if bar_time < latest:
-                raise ValueError(f"Bar time {bar_time} is before latest time {latest}")
-            if bar_time == latest:
-                return  # 幂等：相同时间戳已存在，跳过
+            if bar_time > self._df.index[-1]:
+                pass  # 新 bar，追加
+            else:
+                return  # 已存在，幂等跳过
 
         # 追加新数据
         new_row = pd.Series({

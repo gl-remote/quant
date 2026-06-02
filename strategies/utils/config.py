@@ -26,12 +26,16 @@ def apply_strategy_config(config: Any, config_manager: Any) -> None:
     try:
         valid_keys = {f.name for f in dataclasses.fields(config)}
     except TypeError:
-        for key, value in sc.model_dump(exclude={"name", "enabled"}).items():
+        for key, value in sc.model_dump(
+            exclude={"name", "enabled", "kline_period", "search_space"}
+        ).items():
             if hasattr(config, key):
                 setattr(config, key, value)
         return
 
-    for key, value in sc.model_dump(exclude={"name", "enabled"}).items():
+    for key, value in sc.model_dump(
+        exclude={"name", "enabled", "kline_period", "search_space"}
+    ).items():
         if key in valid_keys:
             setattr(config, key, value)
         else:

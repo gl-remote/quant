@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import typing
+from dataclasses import fields as dc_fields, is_dataclass
 from typing import TYPE_CHECKING, Any
 
 from strategies import Strategy, State
@@ -115,6 +116,30 @@ class StrategyFactory:
         )
 
     @staticmethod
+    def _filter_params_to_config(strategy_params: dict[str, Any], config_cls: type) -> dict[str, Any]:
+        """过滤 strategy_params，只保留 config_cls 接受的字段
+
+        【为什么需要这个方法】
+        strategy_params 来自 StrategyItemConfig.model_dump()，包含策略参数
+        (如 sma_short/sma_long) 和配置元数据 (如 kline_period/search_space)。
+        直接 ** 拆包传给 config_cls() 会导致 TypeError。
+
+        本方法根据 config_cls 的实际 dataclass 字段进行过滤，确保只传入合法字段。
+        对于非 dataclass 的 config_cls，直接透传（不做过滤）。
+
+        Args:
+            strategy_params: 原始参数字典（可能包含多余字段）
+            config_cls: 目标配置类型（如 MACrossParams）
+
+        Returns:
+            过滤后的参数字典（仅包含 config_cls 接受的字段）
+        """
+        if not is_dataclass(config_cls):
+            return dict(strategy_params)
+        valid_keys = {f.name for f in dc_fields(config_cls)}
+        return {k: v for k, v in strategy_params.items() if k in valid_keys}
+
+    @staticmethod
     def create_injected_strategy_class(
         strategy_name: str,
         strategy_params: dict[str, Any],
@@ -154,9 +179,12 @@ class StrategyFactory:
         strategy_instance = load_strategy(strategy_name)
         strategy_cls: type[Strategy[Any]] = type(strategy_instance)
 
-        # 步骤2: 提取配置类型并构造配置对象
+        # 步骤2: 提取配置类型并构造配置对象（过滤非策略参数）
         config_cls = StrategyFactory.extract_config_type(strategy_cls)
-        strategy_config = config_cls(**strategy_params)
+        filtered_params = StrategyFactory._filter_params_to_config(
+            strategy_params, config_cls
+        )
+        strategy_config = config_cls(**filtered_params)
 
         # 步骤3: 动态创建注入子类
         class _InjectedStrategy(VnpyStrategyBridge):
@@ -220,5 +248,6 @@ def load_strategy_and_config(
     strategy_instance = load_strategy(strategy_name)
     strategy_cls: type[Strategy[Any]] = type(strategy_instance)
     config_cls = StrategyFactory.extract_config_type(strategy_cls)
-    strategy_config = config_cls(**strategy_params)
+    filtered_params = StrategyFactory._filter_params_to_config(strategy_params, config_cls)  # pyright: ignore[reportPrivateUsage]
+    strategy_config = config_cls(**filtered_params)
     return (strategy_cls, strategy_config)

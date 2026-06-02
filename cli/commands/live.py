@@ -59,14 +59,8 @@ def cmd_live(args: argparse.Namespace):
             sys.exit(1)
         auth = tqsdk.TqAuth(account.api_key, account.api_secret)
         sc = cm.get_trading_config(args.strategy)
-        strategy_params = sc.model_dump(exclude={"name", "enabled"})
         bc = cm.get_backtest_config()
-        strategy = load_strategy(
-            args.strategy,
-            strategy_params=strategy_params,
-            capital=bc.initial_capital,
-            contract_size=bc.contract_size,
-        )
+        strategy = load_strategy(args.strategy)
         strategy_cls = get_strategy_class_name(strategy)
 
         bridge = TqsdkStrategyBridge(strategy=strategy, symbol=args.symbol)\

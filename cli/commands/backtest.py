@@ -147,14 +147,8 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         sc = cm.get_trading_config(strategy)
         account = cm.get_account_info()
         bc = cm.get_backtest_config()
-        strategy_params = sc.model_dump(exclude={"name", "enabled"})
         capital = capital_arg if capital_arg else bc.initial_capital
-        strategy_core = load_strategy(
-            strategy,
-            strategy_params=strategy_params,
-            capital=capital,
-            contract_size=bc.contract_size,
-        )
+        strategy_core = load_strategy(strategy)
         strategy_cls = get_strategy_class_name(strategy_core)
 
         bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=symbol)
@@ -315,7 +309,10 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
 
         # ── 步骤 3: 加载策略配置 ──
         sc = cm.get_trading_config(strategy_name)
-        strategy_params = sc.model_dump(exclude={"name", "enabled"})
+        # 注意: kline_period 和 search_space 不是策略参数，是数据/优化器配置
+        strategy_params = sc.model_dump(
+            exclude={"name", "enabled", "kline_period", "search_space"}
+        )
         capital = capital_arg if capital_arg else bc.initial_capital
         contract_size = contract_size_arg if contract_size_arg else bc.contract_size
 

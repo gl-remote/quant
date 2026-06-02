@@ -201,6 +201,8 @@ class DataFeed:
         - 起始时间相同，结束时间更新 → 仅追加增量行
         - 起始时间不同 → 清空该周期数据，全量加载
 
+        并发安全：全程持有 DataFeed 锁，防止多线程 check-then-write 竞态。
+
         注意：
         1. 不会自动计算指标，需调用calculate_all()
         2. DataFrame 要求索引为 datetime
@@ -209,33 +211,34 @@ class DataFeed:
         :param df: K线 DataFrame，索引为 datetime
         :param events: 历史事件列表（可选）
         """
-        if period not in self._periods:
-            self.register_period(period)
+        with self._lock:
+            if period not in self._periods:
+                self.register_period(period)
 
-        if len(df) == 0:
-            return
+            if len(df) == 0:
+                return
 
-        new_start = df.index[0]
-        new_end = df.index[-1]
-        period_data = self._periods[period]
+            new_start = df.index[0]
+            new_end = df.index[-1]
+            period_data = self._periods[period]
 
-        if period_data.length > 0:
-            existing_start = period_data.first_time
-            existing_end = period_data.latest_time
+            if period_data.length > 0:
+                existing_start = period_data.first_time
+                existing_end = period_data.latest_time
 
-            if new_start == existing_start and new_end <= existing_end:
-                return  # 数据已包含，跳过
-            elif new_start == existing_start and new_end > existing_end:
-                append_df = df.loc[df.index > existing_end]
-                if len(append_df) > 0:
-                    period_data.load_df(append_df, replace=False)
+                if new_start == existing_start and new_end <= existing_end:
+                    return  # 数据已包含，跳过
+                elif new_start == existing_start and new_end > existing_end:
+                    append_df = df.loc[df.index > existing_end]
+                    if len(append_df) > 0:
+                        period_data.load_df(append_df, replace=False)
+                else:
+                    period_data.load_df(df, replace=True)
             else:
-                period_data.load_df(df, replace=True)
-        else:
-            period_data.load_df(df, replace=False)
+                period_data.load_df(df, replace=False)
 
-        if events:
-            self.append_events(events)
+            if events:
+                self.append_events(events)
 
     def append_event(self, event: Event) -> None:
         """追加事件数据
@@ -570,32 +573,32 @@ def build_context(
         if view is not None:
             multi[period] = view
 
-    # 获取事件
+    # 获取事件（不需要事件时直接跳过，节省锁和 DataFrame 操作）
     events: List[Event] = []
     events_req = requirements.events
 
-    # 先获取所有事件，然后按需求筛选
-    all_events = data_feed.get_events(end_time=current_time)
+    if events_req.include_global_events or events_req.include_period_events:
+        all_events = data_feed.get_events(end_time=current_time)
 
-    for event in all_events:
-        include = False
+        for event in all_events:
+            include = False
 
-        # 检查全局事件
-        if events_req.include_global_events and event.period is None:
-            include = True
-
-        # 检查周期特定事件
-        if not include and events_req.include_period_events:
-            if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
+            # 检查全局事件
+            if events_req.include_global_events and event.period is None:
                 include = True
 
-        # 检查事件类型白名单
-        if include and events_req.event_types:
-            if event.type not in events_req.event_types:
-                include = False
+            # 检查周期特定事件
+            if not include and events_req.include_period_events:
+                if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
+                    include = True
 
-        if include:
-            events.append(event)
+            # 检查事件类型白名单
+            if include and events_req.event_types:
+                if event.type not in events_req.event_types:
+                    include = False
+
+            if include:
+                events.append(event)
 
     # 使用传入的 bar，不再从 multi 中提取
     bar.symbol = data_feed.symbol
