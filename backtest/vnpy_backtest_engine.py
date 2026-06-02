@@ -302,13 +302,15 @@ class VnpyBacktestEngine:
             )
 
             engine = BacktestingEngine()
-            # vnpy print → loguru，加 symbol/strategy 上下文，丢进度条
+            # vnpy print → loguru，加上下文，丢进度条
             _ctx = f"{symbol}/{strategy_name}"
+            _params_summary = ", ".join(f"{k}={v}" for k, v in strategy_params.items())
             def _vnpy_output(msg: str, _ctx: str = _ctx) -> None:
                 if "回放进度" in msg:
                     return
                 logger.debug(f"[vnpy|{_ctx}] {msg}")
             engine.output = _vnpy_output
+            logger.debug(f"[vnpy|{_ctx}] 参数: {_params_summary}")
             engine.set_parameters(
                 vt_symbol=vt_symbol,
                 interval=interval,
