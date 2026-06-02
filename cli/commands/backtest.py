@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import threading
 from loguru import logger
 import subprocess
 from datetime import datetime
@@ -282,7 +281,6 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
     try:
         run_id = 0
         _sink_ids: list[int] = []
-        _log_lines: list[str] = []
         bc = cm.get_backtest_config()
 
         # ── 步骤 1: 确定品种列表 ──
@@ -330,21 +328,11 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             symbols=len(datasets),
         )
 
-        # 挂日志收集器：DEBUG 全量
-        _log_lines.clear()
+        # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
         _sink_ids.clear()
-        _log_lock = threading.Lock()
-
-        def _log_collector(message) -> None:  # type: ignore[no-untyped-def]
-            with _log_lock:
-                _log_lines.append(str(message).rstrip('\n'))
-
-        _fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
-        # 内存收集（前端 JSON）
-        _sink_ids.append(logger.add(_log_collector, level="DEBUG", format=_fmt))
-        # 实时文件（运行中可 tail -f 查看）
         logs_dir = Path("output") / f"r{run_id}" / "data"
         logs_dir.mkdir(parents=True, exist_ok=True)
+        _fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
         _sink_ids.append(logger.add(
             logs_dir / "run.log",
             level="DEBUG",
@@ -433,14 +421,17 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
-        # 移除所有日志 sink，写入前端 JSON
+        # 移除日志 sink
         for sid in _sink_ids:
             logger.remove(sid)
-        if run_id > 0 and _log_lines:
-            logs_dir = Path("output") / f"r{run_id}" / "data"
-            logs_dir.mkdir(parents=True, exist_ok=True)
-            with open(logs_dir / "logs.json", "w", encoding="utf-8") as f:
-                json.dump(_log_lines, f, ensure_ascii=False)
+        # run.log → logs.json（前端用）
+        if run_id > 0:
+            log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
+            if log_file.exists():
+                with open(log_file, encoding="utf-8") as f:
+                    lines = [line.rstrip('\n') for line in f]
+                with open(log_file.with_suffix(".json"), "w", encoding="utf-8") as f:
+                    json.dump(lines, f, ensure_ascii=False)
 
 
 def _persist_search_results(
