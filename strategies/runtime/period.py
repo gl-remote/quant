@@ -41,7 +41,7 @@ class PeriodData:
         self.period = period
 
         # K线数据（OHLCV） + 指标数据（合并在一起，索引统一为datetime）
-        self._df = pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
+        self._df: pd.DataFrame = pd.DataFrame(columns=['datetime', 'open', 'high', 'low', 'close', 'volume'])
         self._df = self._df.astype({
             'open': 'float64',
             'high': 'float64',
@@ -58,6 +58,13 @@ class PeriodData:
         # 指标计算状态跟踪
         self._calculated_indicators: Set[str] = set()
         self._indicator_last_calc_idx: Dict[str, int] = {}
+
+    @property
+    def first_time(self) -> Optional[pd.Timestamp]:
+        """获取最早数据时间戳"""
+        if len(self._df) == 0:
+            return None
+        return cast(pd.Timestamp, self._df.index[0])
 
     @property
     def latest_time(self) -> Optional[pd.Timestamp]:
@@ -230,8 +237,9 @@ class PeriodData:
         if len(self._df) == 0:
             raise ValueError("No data available")
 
-        if current_time_ts > self._df.index[-1]:
-            raise ValueError(f"current_time {current_time_ts} is after latest data time {self._df.index[-1]}")
+        assert self.latest_time is not None  # 上一步已确保有数据
+        if current_time_ts > self.latest_time:
+            raise ValueError(f"current_time {current_time_ts} is after latest data time {self.latest_time}")
 
         # 找到截止时间对应的索引
         end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method='ffill')[0]

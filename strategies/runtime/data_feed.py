@@ -177,8 +177,8 @@ class DataFeed:
         period_data = self._periods[period]
 
         if period_data.length > 0:
-            existing_start = period_data._df.index[0]
-            existing_end = period_data._df.index[-1]
+            existing_start = period_data.first_time
+            existing_end = period_data.latest_time
 
             if new_start == existing_start and new_end <= existing_end:
                 return  # 数据已包含，跳过
@@ -220,13 +220,13 @@ class DataFeed:
         period_data = self._periods[period]
 
         if period_data.length > 0:
-            existing_start = period_data._df.index[0]
-            existing_end = period_data._df.index[-1]
+            existing_start = period_data.first_time
+            existing_end = period_data.latest_time
 
             if new_start == existing_start and new_end <= existing_end:
                 return  # 数据已包含，跳过
             elif new_start == existing_start and new_end > existing_end:
-                append_df = df[df.index > existing_end]
+                append_df = df.loc[df.index > existing_end]
                 if len(append_df) > 0:
                     period_data.load_df(append_df, replace=False)
             else:
