@@ -246,7 +246,7 @@ class OptunaOptimizer:
                         'strategy_name': self._strategy_name,
                     })
 
-                logger.info(
+                logger.debug(
                     "Trial %3d | score=%.4f | %s",
                     trial.number, score,
                     {k: v for k, v in params.items()},
@@ -327,7 +327,7 @@ class OptunaOptimizer:
         result.trial_data = trial_index
         result.study = study
 
-        logger.info(
+        logger.debug(
             "Optuna 优化完成: best_value=%.4f best_params=%s study=%s",
             result.best_value, result.best_params, self._study_name,
         )

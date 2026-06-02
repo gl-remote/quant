@@ -262,7 +262,7 @@ class VnpyStrategyBridge(CtaTemplate):
             return
         self.buy(bar.close, volume)
         self.entry_price = bar.close
-        logger.info(
+        logger.debug(
             f"[{self.strategy_name}] {bar.datetime} 买入 "
             f"@{bar.close:.2f} x{volume}"
         )
@@ -282,7 +282,7 @@ class VnpyStrategyBridge(CtaTemplate):
             return
         self.sell(bar.close, pos)
         self.entry_price = 0.0
-        logger.info(
+        logger.debug(
             f"[{self.strategy_name}] {bar.datetime} {signal.reason}卖出 "
             f"@{bar.close:.2f}"
         )

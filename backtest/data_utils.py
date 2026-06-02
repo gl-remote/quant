@@ -97,5 +97,5 @@ def df_to_vnpy_datalines(
         for row in df.to_dict(orient='records')
     ]
 
-    logger.info(f"转换完成: {len(bars)} 条 BarData")
+    logger.debug(f"转换完成: {len(bars)} 条 BarData")
     return bars

@@ -121,7 +121,7 @@ def export_csv(
             dm.store.log("export", msg, symbol=symbol, status="WARNING")
             return False
 
-        logger.info(f"从 {ds.name} 获取 {len(new_df)} 条K线")
+        logger.debug(f"从 {ds.name} 获取 {len(new_df)} 条K线")
 
         # 合并已有数据
         meta = dm.store.get_metadata(symbol)
@@ -131,7 +131,7 @@ def export_csv(
         elif _should_merge(meta, output_path):
             assert meta is not None  # pyright 类型收窄
             filepath = str(meta["filepath"])
-            logger.info(
+            logger.debug(
                 f"发现已有数据: {filepath} ({meta['total_rows']}条, "
                 f"{meta['min_dt']}~{meta['max_dt']})"
             )
@@ -142,7 +142,7 @@ def export_csv(
                 combined = combined.drop_duplicates(subset="datetime", keep="last")
                 combined = combined.sort_values("datetime").reset_index(drop=True)
                 after = len(combined)
-                logger.info(
+                logger.debug(
                     f"合并: 已有{before}条 + 新增{len(new_df)}条 → 去重后{after}条 "
                     f"(删除{before + len(new_df) - after}条重复)"
                 )
@@ -154,7 +154,7 @@ def export_csv(
             logger.info("未发现已有数据或文件不匹配，新建导出")
 
         new_df.to_csv(output_path, index=False)
-        logger.info(f"已写入: {output_path} ({len(new_df)}行)")
+logger.debug(f"已写入: {output_path} ({len(new_df)}行)")
 
         min_dt = str(new_df["datetime"].min())
         max_dt = str(new_df["datetime"].max())

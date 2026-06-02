@@ -325,6 +325,17 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             symbols=len(datasets),
         )
 
+        # 挂文件 sink：DEBUG 全量日志 → output/r{run_id}/data/logs.jsonl
+        logs_dir = Path("output") / f"r{run_id}" / "data"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        _sink_id = logger.add(
+            logs_dir / "logs.jsonl",
+            level="DEBUG",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+            enqueue=True,
+            serialize=True,
+        )
+
         # ── 步骤 5: 根据模式执行相应工作流 ──
         if mode == "walk-forward":
             wf_result, strategy, sym = execute_walk_forward(
@@ -405,6 +416,10 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         dm.store.log('backtest', f"失败: {e}",
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
+    finally:
+        # 移除文件 sink，确保日志完整写入
+        if '_sink_id' in locals():
+            logger.remove(_sink_id)
 
 
 def _persist_search_results(

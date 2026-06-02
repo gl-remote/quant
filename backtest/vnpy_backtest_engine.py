@@ -116,7 +116,7 @@ class VnpyBacktestEngine:
 
             data_start = str(df['datetime'].iloc[0])[:10]
             data_end = str(df['datetime'].iloc[-1])[:10]
-            logger.info(f"数据: {len(df)} 条, {data_start} ~ {data_end}")
+            logger.debug(f"数据: {len(df)} 条, {data_start} ~ {data_end}")
 
             batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list)
             for i, r in enumerate(batch_results):
@@ -205,7 +205,7 @@ class VnpyBacktestEngine:
 
         window_results = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
-            logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
+            logger.debug(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
             train_results = self._run_backtest(
                 train_df, symbol, [strategy_name], [strategy_params],
             )

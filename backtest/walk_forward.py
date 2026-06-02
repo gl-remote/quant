@@ -65,7 +65,7 @@ def validate_window_params(
 
     if step < 1:
         step = max(1, test_size // 2)
-        logger.info(f"step 自动调整为 {step}")
+        logger.debug(f"step 自动调整为 {step}")
 
     if train_size < 1:
         raise ValueError(f"train_size 必须 >= 1，当前: {train_size}")

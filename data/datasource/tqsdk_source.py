@@ -88,7 +88,7 @@ class TqSdkDataSource(BaseDataSource):
             # 偏移 = 期望天数超出覆盖天数的部分，把 preload 窗口往后推
             offset_days = range_days - est_coverage_days
             adjusted_start = start_dt + timedelta(days=offset_days)
-            logger.info(
+            logger.debug(
                 f"tqsdk 日期调整: {start_date} → {adjusted_start.strftime('%Y-%m-%d')} "
                 f"(期望 {range_days}d > preload ~{est_coverage_days}d，后移 {offset_days}d)"
             )

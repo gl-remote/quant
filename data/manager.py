@@ -317,7 +317,7 @@ class DataManager:
 
             df = cast(KlineDataFrame, df)
             self._data_cache[cache_key] = df
-            logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+            logger.debug(f"加载K线数据: {symbol}, 共 {len(df)} 条")
             results.append((symbol, df, data_src))
 
         return results

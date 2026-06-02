@@ -71,7 +71,7 @@ class AkShareDataSource(BaseDataSource):
             )
 
         akshare_symbol = self._to_akshare_symbol(symbol)
-        logger.info(
+        logger.debug(
             f"AkShare 拉取: {symbol} → {akshare_symbol}, "
             f"{start_date} ~ {end_date}, interval={interval}"
         )

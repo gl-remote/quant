@@ -175,10 +175,10 @@ class TqsdkStrategyBridge(Generic[T]):
             log_msg = f"开始运行策略: {symbol}，按Ctrl+C停止"
             if web_gui:
                 log_msg += "，浏览器访问 http://127.0.0.1:9876"
-            logger.info(log_msg)
+            logger.debug(log_msg)
             self._watch_klines(api, klines, symbol)
         except KeyboardInterrupt:
-            logger.info("策略已停止")
+            logger.debug("策略已停止")
         except Exception as e:
             logger.exception(f"策略运行错误: {e}")
         finally:
@@ -186,7 +186,7 @@ class TqsdkStrategyBridge(Generic[T]):
                 self.api.close()
             fills_count = len(self._state.fills)
             sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
-            logger.info(
+            logger.debug(
                 f"策略停止: fills={fills_count} sells={sells}"
             )
 
