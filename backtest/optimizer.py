@@ -272,7 +272,7 @@ class OptunaOptimizer:
                 if db_dir:
                     os.makedirs(db_dir, exist_ok=True)
                 storage = f"sqlite:///{db_path}"
-            logger.info("Optuna study 存储: %s (%s)", self._study_name, storage)
+            logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
 
         # 根据搜索类型选择 sampler
         if self._search_type == "grid":
@@ -286,7 +286,7 @@ class OptunaOptimizer:
                 for values in grid_space.values():
                     n_combinations *= len(values)
                 n_trials = min(self._n_trials, n_combinations)
-            logger.info("Grid Search: 搜索空间=%s, 计划试验=%d", grid_space, n_trials)
+            logger.info("Grid Search: 搜索空间={}, 计划试验={}", grid_space, n_trials)
         else:
             sampler = optuna.samplers.TPESampler()  # type: ignore[assignment]
             n_trials = self._n_trials
@@ -328,7 +328,7 @@ class OptunaOptimizer:
         result.study = study
 
         logger.debug(
-            "Optuna 优化完成: best_value=%.4f best_params=%s study=%s",
+            "Optuna 优化完成: best_value={:.4f} best_params={} study={}",
             result.best_value, result.best_params, self._study_name,
         )
         return result
