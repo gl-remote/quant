@@ -18,7 +18,6 @@
 from datetime import datetime as dt
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import threading
 import pandas as pd
 from pandas._libs import NaTType
 
@@ -86,9 +85,6 @@ class DataFeed:
         })
 
         # 并发控制
-        self._lock = threading.RLock()
-        self._updating_time: pd.Timestamp | NaTType = pd.Timestamp(0)
-        self._condition = threading.Condition(self._lock)
 
         # 指标注册配置
         self._registered_indicators: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
@@ -211,88 +207,85 @@ class DataFeed:
         :param df: K线 DataFrame，索引为 datetime
         :param events: 历史事件列表（可选）
         """
-        with self._lock:
-            if period not in self._periods:
-                self.register_period(period)
+        if period not in self._periods:
+            self.register_period(period)
 
-            if len(df) == 0:
-                return
+        if len(df) == 0:
+            return
 
-            new_start = df.index[0]
-            new_end = df.index[-1]
-            period_data = self._periods[period]
+        new_start = df.index[0]
+        new_end = df.index[-1]
+        period_data = self._periods[period]
 
-            if period_data.length > 0:
-                existing_start = period_data.first_time
-                existing_end = period_data.latest_time
+        if period_data.length > 0:
+            existing_start = period_data.first_time
+            existing_end = period_data.latest_time
 
-                if new_start == existing_start and new_end <= existing_end:
-                    return  # 数据已包含，跳过
-                elif new_start == existing_start and new_end > existing_end:
-                    append_df = df.loc[df.index > existing_end]
-                    if len(append_df) > 0:
-                        period_data.load_df(append_df, replace=False)
-                else:
-                    period_data.load_df(df, replace=True)
+            if new_start == existing_start and new_end <= existing_end:
+                return  # 数据已包含，跳过
+            elif new_start == existing_start and new_end > existing_end:
+                append_df = df.loc[df.index > existing_end]
+                if len(append_df) > 0:
+                    period_data.load_df(append_df, replace=False)
             else:
-                period_data.load_df(df, replace=False)
+                period_data.load_df(df, replace=True)
+        else:
+            period_data.load_df(df, replace=False)
 
-            if events:
-                self.append_events(events)
+        if events:
+            self.append_events(events)
 
     def append_event(self, event: Event) -> None:
         """追加事件数据
 
         :param event: 事件对象
         """
-        with self._lock:
-            event_time = pd.Timestamp(event.timestamp)
-            new_row = pd.Series({
-                'type': event.type,
-                'symbol': event.symbol,
-                'reason': event.reason,
-                'period': event.period,
-                'data': event.data
-            }, name=event_time)
+        event_time = pd.Timestamp(event.timestamp)
+        new_row = pd.Series({
+            'type': event.type,
+            'symbol': event.symbol,
+            'reason': event.reason,
+            'period': event.period,
+            'data': event.data
+        }, name=event_time)
 
-            if len(self._events) == 0:
-                self._events = new_row.to_frame().T
-            else:
-                self._events = pd.concat([self._events, new_row.to_frame().T])
+        if len(self._events) == 0:
+            self._events = new_row.to_frame().T
+        else:
+            self._events = pd.concat([self._events, new_row.to_frame().T])
 
-            self._event_count += 1
-            self._last_updated_at = pd.Timestamp.now()
+        self._event_count += 1
+        self._last_updated_at = pd.Timestamp.now()
 
     def append_events(self, events: List[Event]) -> None:
         """批量追加事件数据
 
         :param events: 事件列表
         """
-        with self._lock:
-            if not events:
-                return
+        if not events:
+            return
 
-            event_dicts = []
-            for event in events:
-                event_dicts.append({
-                    'datetime': pd.Timestamp(event.timestamp),
-                    'type': event.type,
-                    'symbol': event.symbol,
-                    'reason': event.reason,
-                    'period': event.period,
-                    'data': event.data
-                })
+        event_dicts = []
+        for event in events:
+            event_dicts.append({
+                'datetime': pd.Timestamp(event.timestamp),
+                'type': event.type,
+                'symbol': event.symbol,
+                'reason': event.reason,
+                'period': event.period,
+                'data': event.data
+            })
 
-            new_df = pd.DataFrame(event_dicts)
-            new_df = new_df.set_index('datetime')
+        new_df = pd.DataFrame(event_dicts)
+        new_df = new_df.set_index('datetime')
 
-            if len(self._events) == 0:
-                self._events = new_df
-            else:
-                self._events = pd.concat([self._events, new_df])
+        if len(self._events) == 0:
+            self._events = new_df
+        else:
+            self._events = pd.concat([self._events, new_df])
 
-            self._event_count += len(events)
-            self._last_updated_at = pd.Timestamp.now()
+        self._event_count += len(events)
+        self._last_updated_at = pd.Timestamp.now()
 
     def get_events(self, start_time: Optional[Union[pd.Timestamp, dt]] = None,
                    end_time: Optional[Union[pd.Timestamp, dt]] = None,
@@ -306,39 +299,38 @@ class DataFeed:
         :param period: 周期名称筛选（可选，None表示所有事件）
         :return: 事件列表
         """
-        with self._lock:
-            if len(self._events) == 0:
-                return []
+        if len(self._events) == 0:
+            return []
 
-            mask = pd.Series([True] * len(self._events), index=self._events.index)
+        mask = pd.Series([True] * len(self._events), index=self._events.index)
 
-            if start_time is not None:
-                mask &= (self._events.index >= pd.Timestamp(start_time))
+        if start_time is not None:
+            mask &= (self._events.index >= pd.Timestamp(start_time))
 
-            if end_time is not None:
-                mask &= (self._events.index <= pd.Timestamp(end_time))
+        if end_time is not None:
+            mask &= (self._events.index <= pd.Timestamp(end_time))
 
-            if event_type is not None:
-                mask &= (self._events['type'] == event_type)
+        if event_type is not None:
+            mask &= (self._events['type'] == event_type)
 
-            if period is not None:
-                mask &= ((self._events['period'] == period) | (self._events['period'].isna()))
+        if period is not None:
+            mask &= ((self._events['period'] == period) | (self._events['period'].isna()))
 
-            events_df = self._events[mask]
+        events_df = self._events[mask]
 
-            events = []
-            for _, row in events_df.iterrows():
-                event = Event(
-                    timestamp=row.name.to_pydatetime(),
-                    type=row['type'],
-                    symbol=row['symbol'],
-                    reason=row.get('reason', ''),
-                    period=row.get('period'),
-                    data=row.get('data')
-                )
-                events.append(event)
+        events = []
+        for _, row in events_df.iterrows():
+            event = Event(
+                timestamp=row.name.to_pydatetime(),
+                type=row['type'],
+                symbol=row['symbol'],
+                reason=row.get('reason', ''),
+                period=row.get('period'),
+                data=row.get('data')
+            )
+            events.append(event)
 
-            return events
+        return events
 
     def get_events_at_bar(self, bar_time: Union[pd.Timestamp, dt], period: str) -> List[Event]:
         """获取指定K线时间范围内的所有事件（包括全局事件和该周期的特定事件）
@@ -382,8 +374,7 @@ class DataFeed:
             raise KeyError(f"Period {period} not registered")
 
         # DataFrame 写入非原子，最小化锁仅保护写操作
-        with self._lock:
-            self._periods[period].append_bar(bar)
+        self._periods[period].append_bar(bar)
 
         if events:
             self.append_events(events)
@@ -447,9 +438,8 @@ class DataFeed:
         - 会遍历所有周期，计算所有注册指标
         - 如果某个指标已经计算过，会跳过该指标
         """
-        with self._lock:
-            for period_name in self._periods:
-                self._calculate_indicators_for_period(period_name)
+        for period_name in self._periods:
+            self._calculate_indicators_for_period(period_name)
 
     def get_period(self, period_name: str) -> Optional[PeriodData]:
         """获取指定周期的PeriodData实例（高级用法）

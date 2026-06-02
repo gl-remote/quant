@@ -151,30 +151,11 @@ class PeriodData:
         self._update_count += 1
 
     def append_bar(self, bar: Bar) -> None:
-        """追加单根K线（用于实时/逐根更新场景）
-
-        幂等语义：
-        - bar_time > latest → 新 bar，追加写入
-        - bar_time <= latest → 必然已存在，跳过
-
-        为什么不需要确认 bar_time 是否真的在 index 中：
-        历史 K 线数据连续单调递增，同一批数据被回放时，
-        如果 bar_time <= latest，一定是本 trial 刚写入或
-        其他并发 trial 已写入，不可能不在 index 中。
-
-        注意事项：
-        1. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
-        2. Append-Only：历史数据不会被修改
+        """追加单根K线（每个 PeriodData 独立，无并发，无需幂等检查）
 
         :param bar: 单根K线数据
         """
         bar_time = pd.Timestamp(bar.datetime)
-
-        if len(self._df) > 0:
-            if bar_time > self._df.index[-1]:
-                pass  # 新 bar，追加
-            else:
-                return  # 已存在，幂等跳过
 
         # 追加新数据，新 bar 使已有指标过期，清除缓存触发懒重算
         self.clear_indicator_calculation()

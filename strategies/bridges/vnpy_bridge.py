@@ -27,7 +27,7 @@ from vnpy_ctastrategy import CtaTemplate
 
 from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy, State
 from strategies.core.types import StrategyPosition
-from strategies.runtime import DataFeedCache, build_context, DataRequirements
+from strategies.runtime import DataFeed, build_context, DataRequirements
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
@@ -113,9 +113,13 @@ class VnpyStrategyBridge(CtaTemplate):
             self.load_bar(20)
             return
 
-        # 初始化 DataFeed（从缓存获取或创建新的）
-        cache = DataFeedCache.get_instance()
-        data_feed = cache.setup(self._state.symbol, self._requirements)
+        # 每个 bridge 创建自己的 DataFeed，不共享，无需缓存/锁
+        data_feed = DataFeed(symbol=self._state.symbol)
+        for period_name in self._requirements.periods:
+            data_feed.register_period(period_name)
+        for period_name, indicators in self._requirements.indicators.items():
+            for indicator in indicators:
+                data_feed.register_indicator(period_name, indicator.name, **indicator.params)
 
         # 加载非主周期的历史数据
         self._load_non_main_periods(data_feed)
