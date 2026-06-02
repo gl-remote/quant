@@ -281,7 +281,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
 
     try:
         run_id = 0
-        _sink_id = None
+        _sink_ids: list[int] = []
         _log_lines: list[str] = []
         bc = cm.get_backtest_config()
 
@@ -330,19 +330,27 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             symbols=len(datasets),
         )
 
-        # 挂日志收集器：DEBUG 全量 → output/r{run_id}/data/logs.json
+        # 挂日志收集器：DEBUG 全量
         _log_lines.clear()
+        _sink_ids.clear()
         _log_lock = threading.Lock()
 
         def _log_collector(message) -> None:  # type: ignore[no-untyped-def]
             with _log_lock:
                 _log_lines.append(str(message).rstrip('\n'))
 
-        _sink_id = logger.add(
-            _log_collector,
+        _fmt = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
+        # 内存收集（前端 JSON）
+        _sink_ids.append(logger.add(_log_collector, level="DEBUG", format=_fmt))
+        # 实时文件（运行中可 tail -f 查看）
+        logs_dir = Path("output") / f"r{run_id}" / "data"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        _sink_ids.append(logger.add(
+            logs_dir / "run.log",
             level="DEBUG",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        )
+            format=_fmt,
+            enqueue=True,
+        ))
 
         # ── 步骤 5: 根据模式执行相应工作流 ──
         if mode == "walk-forward":
@@ -425,9 +433,9 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
-        # 移除日志收集器，写入 JSON 数组
-        if _sink_id is not None:
-            logger.remove(_sink_id)
+        # 移除所有日志 sink，写入前端 JSON
+        for sid in _sink_ids:
+            logger.remove(sid)
         if run_id > 0 and _log_lines:
             logs_dir = Path("output") / f"r{run_id}" / "data"
             logs_dir.mkdir(parents=True, exist_ok=True)
