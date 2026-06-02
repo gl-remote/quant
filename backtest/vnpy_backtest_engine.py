@@ -302,11 +302,12 @@ class VnpyBacktestEngine:
             )
 
             engine = BacktestingEngine()
-            # vnpy print → loguru，进度条直接丢弃
-            def _vnpy_output(msg: str) -> None:
+            # vnpy print → loguru，加 symbol/strategy 上下文，丢进度条
+            _ctx = f"{symbol}/{strategy_name}"
+            def _vnpy_output(msg: str, _ctx: str = _ctx) -> None:
                 if "回放进度" in msg:
                     return
-                logger.debug(f"[vnpy] {msg}")
+                logger.debug(f"[vnpy|{_ctx}] {msg}")
             engine.output = _vnpy_output
             engine.set_parameters(
                 vt_symbol=vt_symbol,
