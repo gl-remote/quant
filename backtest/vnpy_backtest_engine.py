@@ -14,16 +14,17 @@ vn.py 回测引擎 (纯执行器)
 from __future__ import annotations
 
 import logging
-import typing
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
-from strategies import Strategy, State
-from strategies.utils import load_strategy, serialize_strategy_params
+from strategies import State
+from strategies.utils import serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
+
+from .strategy_factory import create_strategy_class
 
 from common.formatting import parse_percentage
 from common.formulas import profitable_ratio
@@ -357,54 +358,6 @@ class VnpyBacktestEngine:
 
     # ── 内部方法 ──────────────────────────────────────────────
 
-    def _wrap_injected_strategy(
-        self, strategy_name: str, strategy_params: dict[str, Any], symbol: str,
-    ) -> type:
-        """创建注入了策略实例和 State 的桥接器策略类
-
-        Bridge 在 __init__ 中构造 Strategy 和 State。
-        """
-        from strategies.bridges import VnpyStrategyBridge
-
-        _captured_name = strategy_name
-        _captured_params = strategy_params
-        _captured_symbol = symbol
-        _captured_period = self.interval
-        _captured_capital = self.initial_capital
-        _captured_contract_size = self.contract_size
-
-        class _InjectedStrategy(VnpyStrategyBridge):
-
-            def _load_default_core(self, _setting: object | None = None) -> None:
-                pass
-
-            def __init__(self, *args: Any, **kwargs: Any) -> None:
-                super().__init__(*args, **kwargs)
-                self._core = load_strategy(_captured_name)
-                config_cls: type | None = None
-                for base in getattr(type(self._core), '__orig_bases__', []):
-                    origin = typing.get_origin(base)
-                    if origin is not None and issubclass(origin, Strategy):
-                        args = typing.get_args(base)
-                        if args:
-                            config_cls = args[0]
-                            break
-                if config_cls is None:
-                    raise TypeError(
-                        f"无法从 {type(self._core).__name__} 提取策略配置类型，"
-                        f"请确保策略类继承自 Strategy[ConfigType]"
-                    )
-                strategy_config = config_cls(**_captured_params)
-                self._state = State(
-                    symbol=_captured_symbol,
-                    period=_captured_period,
-                    strategy_config=strategy_config,
-                    capital=_captured_capital,
-                    contract_size=_captured_contract_size,
-                )
-
-        return _InjectedStrategy
-
     def _run_backtest(
         self,
         df: pd.DataFrame,
@@ -449,7 +402,14 @@ class VnpyBacktestEngine:
 
         results: list[dict[str, Any]] = []
         for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
-            strategy_cls = self._wrap_injected_strategy(strategy_name, strategy_params, symbol)
+            strategy_cls = create_strategy_class(
+                strategy_name=strategy_name,
+                strategy_params=strategy_params,
+                symbol=symbol,
+                period=self.interval,
+                capital=self.initial_capital,
+                contract_size=self.contract_size,
+            )
 
             engine = BacktestingEngine()
             engine.set_parameters(
