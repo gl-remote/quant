@@ -4,11 +4,8 @@
 如果 tqsdk 版本升级导致 API 变动，只需更新此文件。
 """
 
-import logging
+from loguru import logger
 from typing import Any
-
-logger = logging.getLogger(__name__)
-
 
 class TqsdkImports:
     """天勤 SDK 延迟导入管理器 — 单例使用

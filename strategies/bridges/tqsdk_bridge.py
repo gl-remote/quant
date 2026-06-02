@@ -8,7 +8,7 @@
 所有交易状态由 State 管理，Bridge 通过 notify_fill 同步。
 """
 
-import logging
+from loguru import logger
 from datetime import datetime
 from typing import Any, cast, TypeVar, Generic
 
@@ -21,9 +21,6 @@ from common.types import PositionDirection
 from common.schemas import KlineDataFrame
 from common.typing import check_types
 from common.tqsdk_imports import tqsdk
-
-logger = logging.getLogger(__name__)
-
 
 def _to_datetime(raw_dt: int) -> datetime:
     """将 tqsdk kline_serial 的 datetime 转为 Python datetime
@@ -82,7 +79,7 @@ class TqsdkStrategyBridge(Generic[T]):
         try:
             last_close = float(kline_data.close.iloc[idx])
         except Exception as e:
-            logger.error(f"获取价格数据失败: {e}", exc_info=True)
+            logger.exception(f"获取价格数据失败: {e}")
             return Signal()
 
         bar = Bar(
@@ -183,7 +180,7 @@ class TqsdkStrategyBridge(Generic[T]):
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except Exception as e:
-            logger.error(f"策略运行错误: {e}", exc_info=True)
+            logger.exception(f"策略运行错误: {e}")
         finally:
             if self.api:
                 self.api.close()

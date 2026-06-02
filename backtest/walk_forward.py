@@ -7,15 +7,11 @@
   - walk_forward_split_by_ratio: WF 窗口划分 (按比例)
 """
 
-import logging
+from loguru import logger
 from dataclasses import dataclass
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
-
-# ============================================================
 # 参数验证
 # ============================================================
 

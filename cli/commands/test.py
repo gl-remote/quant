@@ -11,7 +11,7 @@
 """
 
 import argparse
-import logging
+from loguru import logger
 from datetime import datetime
 
 from config import ConfigManager
@@ -29,9 +29,6 @@ from common.constants import (
     DEFAULT_STOP_LOSS_RATIO,
     DEFAULT_TAKE_PROFIT_RATIO,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def cmd_test(args: argparse.Namespace):
     """执行策略测试命令

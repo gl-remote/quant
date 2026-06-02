@@ -12,25 +12,22 @@ CLI 主入口模块
 
 import sys
 import argparse
-import logging
+
+from loguru import logger
 
 from config import ConfigManager
+from common.log_config import setup_logging
 
 # 配置日志（必须在导入其他模块之前）
 cm = ConfigManager()
 log_cfg = cm.get_system_logging_config()
-logging.basicConfig(
-    level=getattr(logging, log_cfg.level, logging.INFO),
-    format=log_cfg.format,
-)
+setup_logging(level=log_cfg.level, log_format=log_cfg.format)
 
 from cli.commands.export import cmd_export  # noqa: E402
 from cli.commands.test import cmd_test  # noqa: E402
 from cli.commands.backtest import cmd_backtest  # noqa: E402
 from cli.commands.live import cmd_live  # noqa: E402
 from cli.commands.report import cmd_report  # noqa: E402
-
-logger = logging.getLogger(__name__)
 
 
 def main() -> None:

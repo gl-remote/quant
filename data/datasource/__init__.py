@@ -19,7 +19,7 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import TYPE_CHECKING
 
 from .base import BaseDataSource
@@ -29,9 +29,6 @@ from .akshare_source import AkShareDataSource
 if TYPE_CHECKING:
     from config.app_config import ConfigManager
 
-logger = logging.getLogger(__name__)
-
-# 数据源注册表: provider_name → DataSource class
 _REGISTRY: dict[str, type[BaseDataSource]] = {
     "tqsdk": TqSdkDataSource,
     "akshare": AkShareDataSource,

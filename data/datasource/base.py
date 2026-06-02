@@ -6,16 +6,13 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import time
 from abc import ABC, abstractmethod
 from typing import Callable, ClassVar
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
-# Qlib 标准 CSV 列顺序
 # amount = 成交额，源数据有则保留原始值，无则留空字符串
 Qlib_COLUMNS: list[str] = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'amount']
 

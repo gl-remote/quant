@@ -110,7 +110,8 @@ modules = []               # 未来可扩展：
 
 [system.logging]
 level = "INFO"
-format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+# loguru 格式: {time}, {level}, {name}, {function}, {line}, {message}
+format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
 
 # ============================================================
 # 参数优化器配置

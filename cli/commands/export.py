@@ -12,13 +12,10 @@
 
 import argparse
 import sys
-import logging
+from loguru import logger
 
 from config import ConfigManager
 from data import DataManager, export_csv
-
-logger = logging.getLogger(__name__)
-
 
 def cmd_export(args: argparse.Namespace):
     """执行数据导出命令

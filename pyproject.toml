@@ -30,6 +30,7 @@ dependencies = [
     "typing-extensions>=4.0",
     "optuna>=3.0",
     "akshare>=1.16",
+    "loguru>=0.7",
 ]
 
 [project.optional-dependencies]

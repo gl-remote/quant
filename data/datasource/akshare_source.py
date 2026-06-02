@@ -13,16 +13,13 @@ from __future__ import annotations
 # pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingImports=false
 # 注：akshare 第三方库缺少类型存根
 
-import logging
+from loguru import logger
 from typing import ClassVar, Any
 
 import pandas as pd
 
 from .base import BaseDataSource, Qlib_COLUMNS
 
-logger = logging.getLogger(__name__)
-
-# interval → (akshare API, period 参数)
 # 分钟线接口: futures_zh_minute_sina(symbol, period)
 # 日线接口:   futures_zh_daily_sina(symbol)
 _MINUTE_PERIOD_MAP: dict[str, str] = {

@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import pandas as pd
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -18,9 +18,6 @@ from .datasource import get_data_source
 
 if TYPE_CHECKING:
     from config.app_config import ConfigManager
-
-logger = logging.getLogger(__name__)
-
 
 def _build_output_path(
     symbol: str,

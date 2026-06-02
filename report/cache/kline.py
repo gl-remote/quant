@@ -10,12 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
+from loguru import logger
 import os
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
-
 
 class KlineCache:
     """K 线数据转换缓存

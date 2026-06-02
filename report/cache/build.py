@@ -22,13 +22,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
+from loguru import logger
 import os
 from pathlib import Path
 from typing import Any
-
-logger = logging.getLogger(__name__)
-
 
 class BuildCache:
     """统一增量构建缓存管理器"""

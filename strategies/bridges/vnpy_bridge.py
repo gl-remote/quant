@@ -19,7 +19,7 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
-import logging
+from loguru import logger
 from datetime import datetime
 from typing import Any, Optional, cast
 
@@ -31,9 +31,6 @@ from strategies.runtime import DataFeedCache, build_context, DataRequirements
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
-
-logger = logging.getLogger(__name__)
-
 
 class VnpyStrategyBridge(CtaTemplate):
     """vn.py 策略桥接器 — 集成 runtime 数据管理架构

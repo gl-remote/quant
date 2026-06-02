@@ -30,7 +30,7 @@
 from __future__ import annotations
 
 import argparse
-import logging
+from loguru import logger
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -65,9 +65,6 @@ from report import build_all as build_dashboard
 from common.formulas import calculate_fifo_profit
 from common.types import BacktestResult
 from common.schemas import KlineDataFrame
-
-logger = logging.getLogger(__name__)
-
 
 def get_git_hash() -> str | None:
     """获取当前 Git 提交的短哈希值（7位）
@@ -241,7 +238,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
             except tqsdk.BacktestFinished:
                 pass
     except Exception as e:
-        logger.error(f"回测执行失败: {e}", exc_info=True)
+        logger.exception(f"回测执行失败: {e}")
         dm.store.log('backtest', f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
         _ = dm.insert_backtest(BacktestResult(
             symbol=symbol,
@@ -404,7 +401,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                 )
 
     except Exception as e:
-        logger.error(f"回测执行失败: {e}", exc_info=True)
+        logger.exception(f"回测执行失败: {e}")
         dm.store.log('backtest', f"失败: {e}",
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise

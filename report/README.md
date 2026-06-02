@@ -151,8 +151,10 @@ build_all(output_dir, run_id)
 ### 6.4 调试
 
 ```python
-import logging
-logging.getLogger("report").setLevel(logging.DEBUG)
+from loguru import logger
+# report 模块的日志通过全局 loguru logger 控制
+logger.remove()
+logger.add(sys.stderr, level="DEBUG")
 ```
 
 ---

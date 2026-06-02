@@ -3,16 +3,13 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from datetime import datetime
 from typing import ClassVar
 
 import pandas as pd
 
 from .base import BaseDataSource, Qlib_COLUMNS
-
-logger = logging.getLogger(__name__)
-
 
 class TqSdkDataSource(BaseDataSource):
     """天勤量化 (TqSdk) 数据源

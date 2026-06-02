@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import TYPE_CHECKING
 
 import pandas as pd
@@ -16,8 +16,6 @@ import pandas as pd
 if TYPE_CHECKING:
     from vnpy.trader.constant import Interval
     from vnpy.trader.object import BarData
-
-logger = logging.getLogger(__name__)
 
 INTERVAL_MAP: dict[str, Interval] = {}
 

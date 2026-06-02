@@ -12,14 +12,11 @@
 
 import argparse
 import sys
-import logging
+from loguru import logger
 
 from config import ConfigManager
 from data import DataManager
 from report import format_single_report, format_summary_report
-
-logger = logging.getLogger(__name__)
-
 
 def cmd_report(args: argparse.Namespace):
     """回测数据管理入口
@@ -44,7 +41,7 @@ def cmd_report(args: argparse.Namespace):
             _cmd_list(dm, args.symbol, args.strategy, args.limit or 20)
 
     except Exception as e:
-        logger.error(f"report 命令执行失败: {e}", exc_info=True)
+        logger.exception(f"report 命令执行失败: {e}")
         sys.exit(1)
 
 

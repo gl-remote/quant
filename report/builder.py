@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import hashlib  # 用于计算文件哈希
 import json  # 用于JSON序列化
-import logging  # 用于日志记录
+from loguru import logger  # 用于日志记录
 import os  # 用于操作系统相关操作
 import subprocess  # 用于执行子进程
 from pathlib import Path  # 用于路径操作
@@ -31,7 +31,6 @@ from .writer import (  # 导入数据写入模块
     write_nav_json,
 )
 
-logger = logging.getLogger(__name__)  # 获取当前模块的日志记录器
 
 _data_manager: DataManager | None = None
 

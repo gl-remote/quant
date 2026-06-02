@@ -12,7 +12,7 @@
 
 import argparse
 import sys
-import logging
+from loguru import logger
 
 from config import ConfigManager
 from data import DataManager
@@ -26,9 +26,6 @@ from common.constants import (
     LOG_STATUS_SUCCESS,
     LOG_STATUS_ERROR,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def cmd_live(args: argparse.Namespace):
     """执行实盘/模拟交易命令
@@ -73,6 +70,6 @@ def cmd_live(args: argparse.Namespace):
 
         dm.store.log('live', f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
     except Exception as e:
-        logger.error(f"实盘交易失败: {e}", exc_info=True)
+        logger.exception(f"实盘交易失败: {e}")
         dm.store.log('live', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
         raise

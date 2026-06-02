@@ -35,9 +35,10 @@
 from __future__ import annotations
 
 import io
-import logging
 import os
+import sys
 import threading
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -45,47 +46,39 @@ from typing import Any
 import pandas as pd
 
 import optuna
+from loguru import logger
 from common.constants import DEFAULT_N_JOBS
 
-logger = logging.getLogger(__name__)
+# 线程/协程隔离的 trial 日志缓冲区
+_trial_buffer: ContextVar[io.StringIO | None] = ContextVar('_trial_buffer', default=None)
+_trial_number: ContextVar[int | None] = ContextVar('_trial_number', default=None)
 
 
-# ==================== 并发日志缓冲 ====================
+def _trial_log_sink(message: Any) -> None:
+    """loguru sink：trial 期间缓冲到线程私有 buffer，否则输出到 stderr。"""
+    buf = _trial_buffer.get()
+    if buf is not None:
+        buf.write(str(message))
+    else:
+        print(message, end='', file=sys.stderr)
 
-class _TrialLogHandler(logging.Handler):
-    """线程私有日志缓冲：每个 trial 独立缓冲，结束后一次性输出。
 
-    解决 multi-thread 回测时日志交错混乱的问题：
-    - 全局添加一次 handler
-    - 每个线程调 start_trial/end_trial 控制缓冲区间
-    - end_trial 时原子输出该 trial 的完整日志块
-    """
+def _start_trial(trial_number: int) -> None:
+    """开始缓冲当前线程的日志"""
+    _trial_buffer.set(io.StringIO())
+    _trial_number.set(trial_number)
 
-    def __init__(self, fmt: str | None = None) -> None:
-        super().__init__()
-        self.setFormatter(logging.Formatter(
-            fmt or '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        ))
-        self._local = threading.local()
 
-    def start_trial(self, trial_number: int) -> None:
-        self._local.buffer = io.StringIO()
-        self._local.trial_number = trial_number
-
-    def end_trial(self) -> None:
-        buf: io.StringIO | None = getattr(self._local, 'buffer', None)
-        num: int | None = getattr(self._local, 'trial_number', None)
-        if buf is not None:
-            logs = buf.getvalue()
-            self._local.buffer = None  # type: ignore[attr-defined]
-            self._local.trial_number = None  # type: ignore[attr-defined]
-            if logs:
-                print(f"\n{'='*60}\n[Trial {num}] Logs:\n{'='*60}\n{logs}", end='')
-
-    def emit(self, record: logging.LogRecord) -> None:
-        buf: io.StringIO | None = getattr(self._local, 'buffer', None)
-        if buf is not None:
-            buf.write(self.format(record) + '\n')
+def _end_trial() -> None:
+    """结束缓冲，输出该 trial 的全部日志"""
+    buf = _trial_buffer.get()
+    num = _trial_number.get()
+    if buf is not None:
+        logs = buf.getvalue()
+        if logs:
+            print(f"\n{'='*60}\n[Trial {num}] Logs:\n{'='*60}\n{logs}", end='')
+    _trial_buffer.set(None)
+    _trial_number.set(None)
 
 
 @dataclass
@@ -227,7 +220,7 @@ class OptunaOptimizer:
         trial_index_lock = threading.Lock()
 
         def objective(trial: optuna.trial.Trial) -> float:
-            _trial_handler.start_trial(trial.number)
+            _start_trial(trial.number)
             try:
                 params = self._suggest_params(trial)
                 merged_params = {**self._strategy_params, **params}
@@ -260,7 +253,7 @@ class OptunaOptimizer:
                 )
                 return score
             finally:
-                _trial_handler.end_trial()
+                _end_trial()
 
         # 抑制 optuna 默认日志（INFO → WARNING）
         optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -306,20 +299,28 @@ class OptunaOptimizer:
             load_if_exists=True,
         )
 
-        # 安装线程私有日志缓冲 handler（并发回测时避免日志交错）
-        _trial_handler = _TrialLogHandler()
-        _target_loggers = [
-            logging.getLogger('backtest'),
-            logging.getLogger('strategies'),
-        ]
-        for lg in _target_loggers:
-            lg.addHandler(_trial_handler)
+        # 安装 trial 日志缓冲 sink：
+        # - trial 期间：日志写入线程私有的 ContextVar buffer，不输出到 stderr
+        # - 非 trial 期间：正常输出到 stderr
+        _trial_sink_id = logger.add(
+            _trial_log_sink,
+            level="INFO",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        )
+        # 移除 stderr sink，避免 trial 期间日志交错
+        logger.remove(None)  # remove all default sinks, keep trial sink
 
         try:
             study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs, show_progress_bar=True)
         finally:
-            for lg in _target_loggers:
-                lg.removeHandler(_trial_handler)
+            logger.remove(_trial_sink_id)
+            # 恢复默认 stderr 输出
+            logger.add(
+                sys.stderr,
+                level="INFO",
+                format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+                colorize=True,
+            )
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0

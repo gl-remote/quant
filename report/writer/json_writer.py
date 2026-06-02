@@ -4,7 +4,7 @@
 """
 
 import json
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Any
 import numpy as np
@@ -22,9 +22,6 @@ def get_data_manager() -> DataManager:
     if _data_manager is None:
         _data_manager = DataManager()
     return _data_manager
-
-logger = logging.getLogger(__name__)
-
 
 def export_run_json(output_dir: str, run_id: int) -> None:
     """

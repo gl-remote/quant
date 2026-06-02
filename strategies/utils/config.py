@@ -6,11 +6,8 @@
 """
 
 import dataclasses
-import logging
+from loguru import logger
 from typing import Any
-
-logger = logging.getLogger(__name__)
-
 
 def apply_strategy_config(config: Any, config_manager: Any) -> None:
     """将配置文件中的策略参数应用到策略配置 dataclass 上

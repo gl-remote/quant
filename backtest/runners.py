@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import Any, TYPE_CHECKING
 
 from common.schemas import KlineDataFrame
@@ -19,9 +19,6 @@ from .optimizer import run_param_search, SearchResult
 
 if TYPE_CHECKING:
     from .vnpy_backtest_engine import VnpyBacktestEngine
-
-logger = logging.getLogger(__name__)
-
 
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],

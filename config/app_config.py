@@ -189,7 +189,7 @@ class DataConfig(BaseModel):
 
 class LoggingConfig(BaseModel):
     level: str = "INFO"
-    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format: str = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{line} | {message}"
 
 
 class SystemConfig(BaseModel):

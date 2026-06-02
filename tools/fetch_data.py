@@ -11,8 +11,9 @@ from __future__ import annotations
 
 import sys
 import time
-import logging
 from pathlib import Path
+
+from loguru import logger
 
 # 确保项目根在 sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -21,8 +22,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config import ConfigManager
 from data import DataManager, export_csv
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 # ── 推荐品种：多合约覆盖不同时段 ──────────────────────────
 #  start/end 为 None 时由 parse_contract 自动推算默认日期范围
@@ -125,10 +124,8 @@ def fetch_all(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
 
     import argparse
     parser = argparse.ArgumentParser(description="一键拉取近期适配数据")

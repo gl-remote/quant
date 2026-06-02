@@ -15,7 +15,7 @@ vn.py 回测引擎 (纯执行器)
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
@@ -34,9 +34,6 @@ from common.types import BacktestResult
 if TYPE_CHECKING:
     from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
-
-logger = logging.getLogger(__name__)
-
 
 class VnpyBacktestEngine:
     """vn.py 回测引擎 (纯执行器)
@@ -324,9 +321,8 @@ class VnpyBacktestEngine:
                 daily_results = engine.calculate_result()
                 statistics = engine.calculate_statistics()
             except Exception as e:
-                logger.error(
+                logger.exception(
                     f"回测执行异常 [{symbol}][{strategy_name}]: {e}",
-                    exc_info=True,
                 )
                 results.append({
                     'statistics': {},

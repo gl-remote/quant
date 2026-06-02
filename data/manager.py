@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 import re
 from typing import TYPE_CHECKING, cast
 
@@ -38,9 +38,6 @@ from .models import (
 
 if TYPE_CHECKING:
     from config import ConfigManager
-
-logger = logging.getLogger(__name__)
-
 
 class DataManager:
     """数据管理器（单例）
@@ -263,7 +260,7 @@ class DataManager:
             logger.error(f"数据验证失败 [{filepath}]: {e}")
             return None
         except Exception as e:
-            logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
+            logger.exception(f"加载CSV失败 [{filepath}]: {e}")
             return None
 
     def load_kline(self, symbols: list[str], start_date: str | None = None,

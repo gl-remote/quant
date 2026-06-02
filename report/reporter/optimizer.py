@@ -7,13 +7,10 @@
 
 from __future__ import annotations
 
-import logging
+from loguru import logger
 from typing import Any
 
 import optuna
-
-logger = logging.getLogger(__name__)
-
 
 def build_optuna_spec(
     study_db_url: str,

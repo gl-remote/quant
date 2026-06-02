@@ -13,7 +13,7 @@ from __future__ import annotations
 # 注：以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
 # 字段描述符访问、`dict[str, object]` 查询返回值都会产生误报。
 
-import logging
+from loguru import logger
 from pathlib import Path
 from datetime import datetime
 
@@ -33,9 +33,6 @@ from .models import (
 )
 import common.constants as constants
 from common.types import BacktestResult
-
-logger = logging.getLogger(__name__)
-
 
 def _normalize_max_dd(raw_value: float | None) -> float:
     """将vnpy返回的max_drawdown归一化为比值"""
