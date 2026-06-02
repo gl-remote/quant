@@ -364,52 +364,30 @@ class DataFeed:
     def update_bar(self, bar: Bar, period: str, events: Optional[List[Event]] = None) -> None:
         """更新一根K线，调度周期转换（核心方法，线程安全）
 
-        执行流程（全程持有全局锁）：
-        1. 锁定并记录当前正在更新的时间
-        2. 更新对应周期的PeriodData（追加K线 + 可选事件）
-        3. 检查是否触发周期转换（如1分钟累计够5根生成新的5分钟K线）
-        4. 如果触发，调用转换函数生成并追加高级周期K线
-        5. 可选：对注册为 INCREMENTAL 模式的指标，触发增量计算
-        6. 清除正在更新的时间标记，解锁
-
-        注意：
-        - BATCH模式指标不会自动计算，采用懒加载机制，第一次访问时才按需计算
-        - INCREMENTAL模式指标可以选择在 update_bar 时触发增量计算（可选）
+        幂等快路径：bar 已存在 → 不进锁直接返回
 
         :param bar: 新K线数据
         :param period: 对应周期名称
         :param events: 归属于这根 K线 时间范围内的事件（可选）。
-            例如这根 1m K线期间发生了一次大单成交，作为 events 传入。
-            框架将它们关联到该 K线，后续可通过 get_events_at_bar(bar_idx) 查询。
         :raises KeyError: 如果周期未注册
         """
+        # 幂等快路径：bar 已在 index 中，不进锁，直接跳过
+        # 安全：DataFrame append-only，读 latest_time 无锁安全
+        period_data = self._periods.get(period)
+        bar_time = pd.Timestamp(bar.datetime)
+        if period_data is not None and period_data.length > 0 and bar_time <= period_data.latest_time:  # type: ignore[union-attr]
+            return
+
         with self._lock:
-            # 记录正在更新的时间
-            self._updating_time = pd.Timestamp(bar.datetime)
+            if period not in self._periods:
+                raise KeyError(f"Period {period} not registered")
 
-            try:
-                if period not in self._periods:
-                    raise KeyError(f"Period {period} not registered")
+            self._periods[period].append_bar(bar)
 
-                # 更新K线
-                self._periods[period].append_bar(bar)
+            if events:
+                self.append_events(events)
 
-                # 追加事件
-                if events:
-                    self.append_events(events)
-
-                # 检查周期转换
-                self._check_period_conversion(period)
-
-                # 更新数据追踪字段
-                self._update_count += 1
-                self._last_updated_at = pd.Timestamp.now()
-
-            finally:
-                # 清除更新时间标记
-                self._updating_time = pd.Timestamp(0)
-                # 通知等待的线程
-                self._condition.notify_all()
+            self._check_period_conversion(period)
 
     def _check_period_conversion(self, source_period: str) -> None:
         """检查是否触发周期转换（内部方法）
