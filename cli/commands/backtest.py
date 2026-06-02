@@ -330,6 +330,8 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         engine._run_id = run_id
 
         # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
+        # 不入队（enqueue=False），保证立即写盘，支持 tail -f 实时查看
+        # loguru 内部有锁，多线程安全
         _sink_ids.clear()
         logs_dir = Path("output") / f"r{run_id}" / "data"
         logs_dir.mkdir(parents=True, exist_ok=True)
@@ -422,10 +424,10 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
-        # 移除日志 sink
+        # 移除实时日志 sink，转 JSON 供前端
         for sid in _sink_ids:
             logger.remove(sid)
-        # run.log → logs.json（前端用）
+        # run.log（纯文本）→ logs.json（JSON 数组，dashboard 用）
         if run_id > 0:
             log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
             if log_file.exists():

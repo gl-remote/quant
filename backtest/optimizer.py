@@ -50,12 +50,16 @@ from loguru import logger
 from common.constants import DEFAULT_N_JOBS
 
 # 线程/协程隔离的 trial 日志缓冲区
+# 8 线程并发回测时，每条日志按 trial 分组缓冲，完毕一次性输出，避免交错
 _trial_buffer: ContextVar[io.StringIO | None] = ContextVar('_trial_buffer', default=None)
 _trial_number: ContextVar[int | None] = ContextVar('_trial_number', default=None)
 
 
 def _trial_log_sink(message: Any) -> None:
-    """loguru sink：trial 期间缓冲到线程私有 buffer，否则输出到 stderr。"""
+    """loguru sink：
+    - trial 进行中：写入线程私有的 ContextVar buffer（不刷屏）
+    - trial 之外：正常输出到 stderr
+    """
     buf = _trial_buffer.get()
     if buf is not None:
         buf.write(str(message))
@@ -64,13 +68,13 @@ def _trial_log_sink(message: Any) -> None:
 
 
 def _start_trial(trial_number: int) -> None:
-    """开始缓冲当前线程的日志"""
+    """为当前线程开启日志缓冲区"""
     _trial_buffer.set(io.StringIO())
     _trial_number.set(trial_number)
 
 
 def _end_trial() -> None:
-    """结束缓冲，输出该 trial 的全部日志"""
+    """结束缓冲，整体输出该 trial 的完整日志块，然后清空"""
     buf = _trial_buffer.get()
     num = _trial_number.get()
     if buf is not None:
