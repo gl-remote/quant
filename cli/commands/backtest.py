@@ -338,7 +338,6 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             logs_dir / "run.log",
             level="DEBUG",
             format=_fmt,
-            enqueue=True,
         ))
 
         # ── 步骤 5: 根据模式执行相应工作流 ──
