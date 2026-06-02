@@ -437,14 +437,15 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
             colorize=True,
         )
-        # run.log（纯文本）→ logs.json（JSON 数组，dashboard 用）
+        # run.log 整读 → logs.json 单字符串（dashboard 用）
         if run_id > 0:
             log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
             if log_file.exists():
                 with open(log_file, encoding="utf-8") as f:
-                    lines = [line.rstrip('\n') for line in f]
-                with open(log_file.with_suffix(".json"), "w", encoding="utf-8") as f:
-                    json.dump(lines, f, ensure_ascii=False)
+                    text = f.read()
+                json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
+                with open(json_file, "w", encoding="utf-8") as f:
+                    json.dump(text, f, ensure_ascii=False)
 
 
 def _persist_search_results(
