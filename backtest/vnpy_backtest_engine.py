@@ -302,7 +302,12 @@ class VnpyBacktestEngine:
             )
 
             engine = BacktestingEngine()
-            engine.output = lambda msg: logger.debug(f"[vnpy] {msg}")  # 重定向 print 到 loguru
+            # vnpy print → loguru，进度条直接丢弃
+            def _vnpy_output(msg: str) -> None:
+                if "回放进度" in msg:
+                    return
+                logger.debug(f"[vnpy] {msg}")
+            engine.output = _vnpy_output
             engine.set_parameters(
                 vt_symbol=vt_symbol,
                 interval=interval,
