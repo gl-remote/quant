@@ -121,7 +121,7 @@ class PeriodData:
         if len(self._df) == 0:
             self._df = new_df
         else:
-            self._df = pd.concat([self._df, new_df])
+            self._df.loc[new_df.index] = new_df
 
         # 更新数据追踪字段
         self._last_updated_at = pd.Timestamp.now()
@@ -143,9 +143,9 @@ class PeriodData:
             if len(self._df) == 0:
                 self._df = df.copy()
             else:
-                new_rows = df[~df.index.isin(self._df.index)]
+                new_rows = df.loc[~df.index.isin(self._df.index)]
                 if len(new_rows) > 0:
-                    self._df = pd.concat([self._df, new_rows])
+                    self._df.loc[new_rows.index] = new_rows
 
         self._last_updated_at = pd.Timestamp.now()
         self._update_count += 1
@@ -181,7 +181,7 @@ class PeriodData:
             'volume': bar.volume
         }, name=bar_time)
 
-        self._df = pd.concat([self._df, new_row.to_frame().T])
+        self._df.loc[bar_time] = new_row
 
         # 更新数据追踪字段
         self._last_updated_at = pd.Timestamp.now()
