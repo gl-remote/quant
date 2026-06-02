@@ -10,9 +10,11 @@
 
 import logging
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, cast, TypeVar, Generic
 
 from strategies import Strategy, Bar, Signal, Fill, State
+
+T = TypeVar('T')
 from strategies.runtime import BarContext
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.types import PositionDirection
@@ -35,24 +37,26 @@ def _to_datetime(raw_dt: int) -> datetime:
     return datetime.fromtimestamp(raw_dt / 1_000_000_000)
 
 
-class TqsdkStrategyBridge:
+class TqsdkStrategyBridge(Generic[T]):
     """天勤策略桥接器 — 纯协议转换层
 
     调用流程:
       signal = bridge.on_bar(kline_data)  # DataFrame → Bar → Strategy → Signal
       caller 根据 signal 执行下单 → bridge.notify_fill(fill)
+
+    类型参数 T: 策略配置的具体类型，与 Strategy[T] 和 State[T] 保持一致
     """
 
-    def __init__(self, strategy: Strategy[Any], state: State):
-        self._strategy: Strategy[Any] = strategy
-        self._state: State = state
+    def __init__(self, strategy: Strategy[T], state: State[T]):
+        self._strategy: Strategy[T] = strategy
+        self._state: State[T] = state
         self.symbol: str = state.symbol
 
         self.api: Any = None
         self.account: Any = None
 
     @property
-    def strategy(self) -> Strategy[Any]:
+    def strategy(self) -> Strategy[T]:
         return self._strategy
 
     @property
