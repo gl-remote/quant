@@ -354,26 +354,16 @@ class DataFeed:
         return self.get_events(end_time=bar_time)
 
     def update_bar(self, bar: Bar, period: str, events: Optional[List[Event]] = None) -> None:
-        """更新一根K线，调度周期转换（核心方法，线程安全）
-
-        幂等快路径：bar 已存在 → 不进锁直接返回
+        """更新一根K线
 
         :param bar: 新K线数据
-        :param period: 对应周期名称
+        :param period: 周期名称
         :param events: 归属于这根 K线 时间范围内的事件（可选）。
         :raises KeyError: 如果周期未注册
         """
-        # 幂等快路径：bar 已在 index 中，不进锁，直接跳过
-        # 安全：DataFrame append-only，读 latest_time 无锁安全
-        period_data = self._periods.get(period)
-        bar_time = pd.Timestamp(bar.datetime)
-        if period_data is not None and period_data.length > 0 and bar_time <= period_data.latest_time:  # type: ignore[union-attr]
-            return
-
         if period not in self._periods:
             raise KeyError(f"Period {period} not registered")
 
-        # DataFrame 写入非原子，最小化锁仅保护写操作
         self._periods[period].append_bar(bar)
 
         if events:
@@ -451,21 +441,9 @@ class DataFeed:
 
     def get_data(self, period_name: str, current_time: Union[pd.Timestamp, dt], lookback_bars: int = 1,
                  timeout: Optional[float] = None) -> Optional[PeriodDataView]:
-        """获取指定周期截止指定时间的逻辑视图（策略主要访问入口）
+        """获取指定周期截止指定时间的逻辑视图
 
-        并发安全机制（基于条件变量的时间检查）：
-        1. 检查是否有正在进行的update_bar
-        2. 如果有，检查current_time是否 < _updating_time
-        3. 如果安全（无更新或current_time在更新时间之前），返回视图
-        4. 如果timeout不为None，按timeout规则处理：
-           - timeout=None（默认）：采用回测场景行为，如果current_time >= _updating_time，直接抛出 ValueError
-           - timeout>0：采用实盘场景行为，等待最多timeout秒，直到更新完成或超时
-           - timeout=0：采用非阻塞行为，立即返回或抛出异常
-
-        【懒加载计算触发点】
-        指标计算的触发点是 DataFeed.get_data()（或 build_context()），而非 PeriodDataView.get_indicator()
-        当调用此方法时，先检查该周期的所有注册指标是否已计算，未计算的先计算并写入 PeriodData._df
-        计算过程受 DataFeed._lock 保护，保证并发安全
+        指标懒加载：首次调用时自动计算注册指标，后续复用缓存。
 
         :param period_name: 周期名称
         :param current_time: 当前时间，视图只包含<=此时间的数据
