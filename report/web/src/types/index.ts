@@ -165,3 +165,10 @@ export interface OptunaData {
 }
 
 export type { EChartsOption };
+
+/**
+ * 运行日志
+ * 
+ * 每行一条格式化的日志消息
+ */
+export type RunLogs = string[];

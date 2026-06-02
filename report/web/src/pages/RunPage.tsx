@@ -8,6 +8,7 @@ import type {
   KlineData,
   EquityData,
   OptunaData,
+  RunLogs,
 } from "@/types";
 import MetricCards from "@/components/MetricCards";
 import SymbolTable from "@/components/SymbolTable";
@@ -15,8 +16,9 @@ import KlineChart from "@/components/KlineChart";
 import EquityChart from "@/components/EquityChart";
 import BacktestDetail from "@/components/BacktestDetail";
 import OptunaCharts from "@/components/OptunaCharts";
+import LogViewer from "@/components/RunLogs";
 
-type TabId = "backtest" | "params";
+type TabId = "backtest" | "params" | "logs";
 
 export default function RunPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,6 +40,10 @@ export default function RunPage() {
   );
   const { data: optuna } = useFetchJson<OptunaData | null>(
     "optuna.json",
+    runId
+  );
+  const { data: runLogs } = useFetchJson<RunLogs>(
+    "logs.json",
     runId
   );
 
@@ -155,6 +161,19 @@ export default function RunPage() {
           >
             参数优化
           </button>
+          <button
+            role="tab"
+            id="tab-logs"
+            aria-selected={activeTab === "logs"}
+            aria-controls="panel-logs"
+            tabIndex={activeTab === "logs" ? 0 : -1}
+            data-ql-id="RUN-PG-TAB-LOGS"
+            onClick={() => switchTab("logs")}
+            onKeyDown={(e) => handleTabKeyDown(e, "logs")}
+            className={`${tabBtn} ${activeTab === "logs" ? tabActive : tabInactive}`}
+          >
+            运行日志
+          </button>
         </div>
       </div>
 
@@ -207,6 +226,18 @@ export default function RunPage() {
                 <p className="text-sm text-slate-400 m-0">该 run 无优化数据</p>
               </div>
             )}
+          </div>
+        </div>
+
+        <div
+          key={`logs-${animKey}`}
+          id="panel-logs"
+          role="tabpanel"
+          aria-labelledby="tab-logs"
+          className={activeTab === "logs" ? "block" : "hidden"}
+        >
+          <div style={activeTab === "logs" ? { animation: "tabFadeIn 0.25s ease-out" } : undefined}>
+            <LogViewer logs={runLogs ?? null} />
           </div>
         </div>
       </div>

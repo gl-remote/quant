@@ -30,6 +30,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import threading
 from loguru import logger
 import subprocess
 from datetime import datetime
@@ -325,15 +327,18 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             symbols=len(datasets),
         )
 
-        # 挂文件 sink：DEBUG 全量日志 → output/r{run_id}/data/logs.jsonl
-        logs_dir = Path("output") / f"r{run_id}" / "data"
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        # 挂日志收集器：DEBUG 全量 → output/r{run_id}/data/logs.json
+        _log_lines: list[str] = []
+        _log_lock = threading.Lock()
+
+        def _log_collector(message: "loguru.Message") -> None:
+            with _log_lock:
+                _log_lines.append(str(message).rstrip('\n'))
+
         _sink_id = logger.add(
-            logs_dir / "logs.jsonl",
+            _log_collector,
             level="DEBUG",
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-            enqueue=True,
-            serialize=True,
         )
 
         # ── 步骤 5: 根据模式执行相应工作流 ──
@@ -417,9 +422,14 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                      symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
-        # 移除文件 sink，确保日志完整写入
+        # 移除日志收集器，写入 JSON 数组
         if '_sink_id' in locals():
             logger.remove(_sink_id)
+        if '_log_lines' in locals() and _log_lines:
+            logs_dir = Path("output") / f"r{run_id}" / "data"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            with open(logs_dir / "logs.json", "w", encoding="utf-8") as f:
+                json.dump(_log_lines, f, ensure_ascii=False)
 
 
 def _persist_search_results(
