@@ -120,24 +120,50 @@ class PeriodData:
         self._last_updated_at = pd.Timestamp.now()
         self._update_count += len(bars)
 
+    def load_df(self, df: pd.DataFrame, replace: bool = False) -> None:
+        """从 DataFrame 直接加载数据，避免 Bar 转换开销
+
+        DataFrame 要求索引为 datetime，包含 open/high/low/close/volume 列。
+
+        :param df: K线 DataFrame，索引为 datetime
+        :param replace: True 时清空已有数据后加载，False 时追加
+        """
+        if replace:
+            self._df = df.copy()
+            self._calculated_indicators.clear()
+            self._indicator_last_calc_idx.clear()
+        else:
+            if len(self._df) == 0:
+                self._df = df.copy()
+            else:
+                new_rows = df[~df.index.isin(self._df.index)]
+                if len(new_rows) > 0:
+                    self._df = pd.concat([self._df, new_rows])
+
+        self._last_updated_at = pd.Timestamp.now()
+        self._update_count += 1
+
     def append_bar(self, bar: Bar) -> None:
         """追加单根K线（用于实时/逐根更新场景）
 
         注意事项：
         1. 追加的时间戳必须晚于已有的最新时间
-        2. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
-        3. Append-Only：历史数据不会被修改
-        4. 更新数据追踪字段：_last_updated_at 和 _update_count
+        2. 同一时间戳的 bar 会被跳过（幂等，不抛异常）
+        3. 通常被DataFeed.update_bar调用，策略不应直接调用此方法
+        4. Append-Only：历史数据不会被修改
+        5. 更新数据追踪字段：_last_updated_at 和 _update_count
 
         :param bar: 单根K线数据
-        :raises ValueError: 如果时间戳早于或等于最新数据时间
+        :raises ValueError: 如果时间戳早于最新数据时间
         """
         bar_time = pd.Timestamp(bar.datetime)
 
         if len(self._df) > 0:
             latest = self._df.index[-1]
-            if bar_time <= latest:
-                raise ValueError(f"Bar time {bar_time} is not after latest time {latest}")
+            if bar_time < latest:
+                raise ValueError(f"Bar time {bar_time} is before latest time {latest}")
+            if bar_time == latest:
+                return  # 幂等：相同时间戳已存在，跳过
 
         # 追加新数据
         new_row = pd.Series({

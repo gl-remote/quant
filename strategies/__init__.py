@@ -202,7 +202,8 @@
 
 # 策略核心与类型（来自 core）
 from .core import (
-    Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, CORE_VERSION,
+    Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, State,
+    CORE_VERSION,
 )
 
 # 运行时数据管理（来自 runtime，与 core 同级）
@@ -232,18 +233,18 @@ from .utils import (
 try:
     from .bridges import VnpyStrategyBridge
 except ImportError:
-    VnpyStrategyBridge = None
+    VnpyStrategyBridge = None  # type: ignore[assignment, misc]
 
 try:
     from .bridges import TqsdkStrategyBridge
 except ImportError:
-    TqsdkStrategyBridge = None
+    TqsdkStrategyBridge = None  # type: ignore[assignment, misc]
 
 __all__ = [
     # 版本号
     'CORE_VERSION',
     # 核心类型
-    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition', 'State',
     # 数据管理类型
     'Event', 'BigTradeEvent', 'NewsEvent',
     'IndicatorCalcMode',

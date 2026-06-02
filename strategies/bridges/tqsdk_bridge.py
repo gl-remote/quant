@@ -1,21 +1,21 @@
 """tqsdk 桥接器 — 将 Strategy 接口桥接到天勤SDK
 
-桥接器仅负责:
+桥接器负责:
   1. 天勤 kline_serial DataFrame → 标准 Bar 的数据转换
-  2. 调用 strategy.on_bar(bar) 获取 Signal → 返回给调用方
+  2. 调用 strategy.on_bar(state, ctx) 获取 Signal → 返回给调用方
   3. 天勤 API 连接/认证/图形界面
 
-所有交易状态由 Strategy 管理。on_bar() 是无状态方法，直接返回 Signal。
-
-调用方通过 strategy.position 获取状态。
+所有交易状态由 State 管理，Bridge 通过 notify_fill 同步。
 """
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
-from strategies import Strategy, Bar, Signal, Fill
-from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
+from strategies import Strategy, Bar, Signal, Fill, State
+from strategies.runtime import BarContext
+from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
+from common.types import PositionDirection
 from common.schemas import KlineDataFrame
 from common.typing import check_types
 from common.tqsdk_imports import tqsdk
@@ -40,13 +40,13 @@ class TqsdkStrategyBridge:
 
     调用流程:
       signal = bridge.on_bar(kline_data)  # DataFrame → Bar → Strategy → Signal
-      caller 根据 signal 执行下单 → strategy.on_fill(fill)
+      caller 根据 signal 执行下单 → bridge.notify_fill(fill)
     """
 
-    def __init__(self, strategy: Strategy[Any], symbol: str):
+    def __init__(self, strategy: Strategy[Any], state: State):
         self._strategy: Strategy[Any] = strategy
-        self._fills: list[Fill] = []
-        self.symbol: str = symbol
+        self._state: State = state
+        self.symbol: str = state.symbol
 
         self.api: Any = None
         self.account: Any = None
@@ -57,9 +57,9 @@ class TqsdkStrategyBridge:
 
     @property
     def fills(self) -> list[Fill]:
-        return list(self._fills)
+        return list(self._state.fills)
 
-    def initialize(self, api: Any | None = None):
+    def initialize(self, api: Any | None = None) -> None:
         self.api = api
         if api:
             self.account = api.get_account()
@@ -91,10 +91,13 @@ class TqsdkStrategyBridge:
             volume=float(kline_data.volume.iloc[idx]),
         )
 
-        return self._strategy.on_bar(bar)
+        ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
+        return self._strategy.on_bar(self._state, ctx)
 
     def notify_fill(self, signal: Signal, fill_price: float) -> None:
-        """通知 Strategy 订单成交"""
+        """通知 Strategy 订单成交，同步更新 State"""
+        from strategies.core.types import StrategyPosition
+
         fill = Fill(
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             symbol=self.symbol,
@@ -103,7 +106,17 @@ class TqsdkStrategyBridge:
             volume=signal.volume,
             reason=signal.reason,
         )
-        self._fills.append(fill)
+        self._state.fills.append(fill)
+
+        if signal.action == TRADE_ACTION_BUY:
+            self._state.position = StrategyPosition(
+                direction=cast(PositionDirection, TRADE_DIRECTION_LONG),
+                entry_price=fill_price,
+                volume=signal.volume,
+            )
+        elif signal.action == TRADE_ACTION_SELL:
+            self._state.position = StrategyPosition()
+
         self._strategy.on_fill(fill)
 
     # ---- 实盘/模拟运行 ----
@@ -148,7 +161,7 @@ class TqsdkStrategyBridge:
                         self.notify_fill(signal, float(klines.close.iloc[i]))
                 prev_kline_len = current_len
 
-    def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False):
+    def _run_loop(self, symbol: str, auth: Any, web_gui: bool = False) -> None:
         """实盘/模拟主循环 — 初始化 API 后委托 _watch_klines 驱动策略"""
         if not tqsdk.ensure():
             logger.error("天勤量化API未安装，请运行: pip install tqsdk")
@@ -170,16 +183,16 @@ class TqsdkStrategyBridge:
         finally:
             if self.api:
                 self.api.close()
-            fills_count = len(self._fills)
-            sells = len([f for f in self._fills if f.action == TRADE_ACTION_SELL])
+            fills_count = len(self._state.fills)
+            sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
             logger.info(
                 f"策略停止: fills={fills_count} sells={sells}"
             )
 
-    def run(self, symbol: str | None = None, auth: Any | None = None):
+    def run(self, symbol: str | None = None, auth: Any | None = None) -> None:
         auth = self._ensure_auth(auth, symbol or "")
         self._run_loop(symbol or self.symbol, auth, web_gui=False)
 
-    def run_with_gui(self, symbol: str | None = None, auth: Any | None = None):
+    def run_with_gui(self, symbol: str | None = None, auth: Any | None = None) -> None:
         auth = self._ensure_auth(auth, symbol or "")
         self._run_loop(symbol or self.symbol, auth, web_gui=True)

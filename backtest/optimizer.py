@@ -44,9 +44,6 @@ import pandas as pd
 
 import optuna
 
-from strategies.utils import load_strategy
-from strategies.utils import serialize_strategy_params
-
 logger = logging.getLogger(__name__)
 
 
@@ -186,18 +183,11 @@ class OptunaOptimizer:
 
         def objective(trial: optuna.trial.Trial) -> float:
             params = self._suggest_params(trial)
-            strategy = load_strategy(
-                self._strategy_name,
-                strategy_params={**self._strategy_params, **params},
-                capital=self._capital,
-                contract_size=self._contract_size,
-            )
+            merged_params = {**self._strategy_params, **params}
 
-            # 对全部品种跑回测
-            pairs = [(sym, df, strategy) for sym, df in self._datasets]
+            pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
             engine_results = self._engine.run(pairs)
 
-            # 聚合得分：取各品种夏普均值
             sharpes = [
                 r.sharpe_ratio or 0
                 for r in engine_results if r.success
@@ -211,9 +201,8 @@ class OptunaOptimizer:
                 'search_params': params,
                 'value': score,
                 'engine_results': engine_results,
-                'strategy_params': serialize_strategy_params(strategy),
-                'strategy_name': type(strategy).__name__,
-                'strategy_version': getattr(strategy, 'VERSION', None),
+                'strategy_params': merged_params,
+                'strategy_name': self._strategy_name,
             })
 
             logger.info(
@@ -256,7 +245,7 @@ class OptunaOptimizer:
                 n_trials = min(self._n_trials, n_combinations)
             logger.info("Grid Search: 搜索空间=%s, 计划试验=%d", grid_space, n_trials)
         else:
-            sampler = optuna.samplers.TPESampler()
+            sampler = optuna.samplers.TPESampler()  # type: ignore[assignment]
             n_trials = self._n_trials
 
         study = optuna.create_study(

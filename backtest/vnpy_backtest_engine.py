@@ -2,25 +2,26 @@
 """
 vn.py 回测引擎 (纯执行器)
 
-基于 vnpy_ctastrategy.backtesting.BacktestingEngine，接收 DataFrame + Strategy，
+基于 vnpy_ctastrategy.backtesting.BacktestingEngine，接收 DataFrame + 策略参数，
 返回结构化回测结果。不负责数据加载和策略创建。
 
 职责明确：
   - data 层负责数据加载
-  - optimizer 层负责策略创建/参数搜索
+  - optimizer 层负责参数搜索
   - backtest 层仅调用 vnpy 执行回测
 """
 
 from __future__ import annotations
 
 import logging
+import typing
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
 
-from strategies import Strategy
-from strategies.utils import serialize_strategy_params
+from strategies import Strategy, State
+from strategies.utils import load_strategy, serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
 
@@ -67,9 +68,6 @@ def df_to_vnpy_datalines(
     if missing:
         raise ValueError(f"数据缺少必要列: {missing}")
 
-    # CSV 列名 `open/high/low/close` 直接映射到 BarData 的 `open_price/high_price/...`
-    # 无需 rename，避免丢失 KlineDataFrame 类型信息
-
     exchange: Exchange = Exchange(exchange_code)
     bar_interval: Interval = interval if interval is not None else Interval.DAILY
 
@@ -77,7 +75,7 @@ def df_to_vnpy_datalines(
         BarData(
             symbol=pure_symbol,
             exchange=exchange,
-            datetime=pd.Timestamp(row['datetime']).to_pydatetime(),  # pyright: ignore[reportArgumentType]  # KlineSchema 保证有效
+            datetime=pd.Timestamp(row['datetime']).to_pydatetime(),
             interval=bar_interval,
             open_price=row['open'],
             high_price=row['high'],
@@ -99,14 +97,14 @@ def df_to_vnpy_datalines(
 class VnpyBacktestEngine:
     """vn.py 回测引擎 (纯执行器)
 
-    接收 DataFrame + Strategy 列表，调用 vnpy BacktestingEngine 执行回测，
-    返回结构化结果字典。不关心数据从哪来、策略怎么创建。
+    接收 DataFrame + 策略名称参数，调用 vnpy BacktestingEngine 执行回测，
+    返回结构化结果字典。
 
     使用方式:
         engine = VnpyBacktestEngine(backtest_config, data_manager)
         results = engine.run(pairs)             # 多策略 × 多品种
         wf_result = engine.run_walk_forward(    # 单策略 Walk-Forward
-            data, strategy, ...
+            data, symbol, strategy_name, strategy_params, ...
         )
     """
 
@@ -139,14 +137,14 @@ class VnpyBacktestEngine:
 
     def run(
         self,
-        pairs: list[tuple[str, pd.DataFrame, Strategy[Any]]],
+        pairs: list[tuple[str, pd.DataFrame, str, dict[str, Any]]],
     ) -> list[BacktestResult]:
         """执行多策略 × 多品种回测
 
         每个品种创建一个 vnpy engine，注册该品种的所有策略，一次回放拿到多组结果。
 
         Args:
-            pairs: [(symbol, DataFrame, Strategy), ...] 数据与策略的配对
+            pairs: [(symbol, DataFrame, strategy_name, strategy_params), ...]
 
         Returns:
             list[BacktestResult]
@@ -157,40 +155,40 @@ class VnpyBacktestEngine:
                     f"费率={self.commission_rate:.4%} 滑点={self.slippage}")
         logger.info(f"{'=' * 60}")
 
-        # 按 DataFrame 分组，同一份数据共用一个 vnpy engine
         from collections import defaultdict
-        groups: dict[int, list[tuple[str, Strategy[Any]]]] = defaultdict(list)
+        groups: dict[int, list[tuple[str, str, dict[str, Any]]]] = defaultdict(list)
         df_map: dict[int, pd.DataFrame] = {}
-        for sym, df, strategy in pairs:
+        for sym, df, strategy_name, strategy_params in pairs:
             df_id = id(df)
-            groups[df_id].append((sym, strategy))
+            groups[df_id].append((sym, strategy_name, strategy_params))
             df_map[df_id] = df
 
         results: list[BacktestResult] = []
         for df_id, items in groups.items():
             df = df_map[df_id]
-            symbols = [sym for sym, _ in items]
-            strategies = [s for _, s in items]
-            symbol = symbols[0]  # 用第一个 symbol 作为主标识
+            symbols = [sym for sym, _, _ in items]
+            strategy_names = [name for _, name, _ in items]
+            strategy_params_list = [params for _, _, params in items]
+            symbol = symbols[0]
 
-            logger.info(f"\n>>> 品种: {symbol} ({len(strategies)} 个策略)")
+            logger.info(f"\n>>> 品种: {symbol} ({len(strategy_names)} 个策略)")
 
             data_start = str(df['datetime'].iloc[0])[:10]
             data_end = str(df['datetime'].iloc[-1])[:10]
             logger.info(f"数据: {len(df)} 条, {data_start} ~ {data_end}")
 
-            batch_results = self._run_backtest(df, symbol, strategies)
+            batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list)
             for i, r in enumerate(batch_results):
-                strategy = strategies[i]
                 stats = r.get('statistics', {})
                 daily = r.get('daily_results', [])
                 error = r.get('error')
                 sym = symbols[i] if i < len(symbols) else symbol
+                strategy_config = r.get('strategy_config')
                 results.append(BacktestResult(
                     symbol=sym,
-                    strategy=type(strategy).__name__,
-                    strategy_version=getattr(strategy, 'VERSION', None),
-                    strategy_params=serialize_strategy_params(strategy),
+                    strategy=strategy_names[i] if i < len(strategy_names) else "unknown",
+                    strategy_version=r.get('strategy_version'),
+                    strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
                     success=error is None,
                     error_message=error,
                     start_date=data_start,
@@ -229,7 +227,8 @@ class VnpyBacktestEngine:
         self,
         data: pd.DataFrame | None,
         symbol: str,
-        strategy: Strategy[Any],
+        strategy_name: str,
+        strategy_params: dict[str, Any],
         train_size: int | None = None,
         val_size: int | None = None,
         test_size: int | None = None,
@@ -237,19 +236,15 @@ class VnpyBacktestEngine:
     ) -> dict[str, Any]:
         """执行 Walk-Forward 时间序列验证回测
 
-        对数据滚动产生多个窗口，每个窗口在训练集(in-sample)和测试集
-        (out-of-sample)上分别回测，最后汇总 OOS 平均表现。
-
         Args:
             data: K 线数据 (已由调用方加载和日期过滤)
             symbol: 合约代码
-            strategy: 策略实例
-            train_size/val_size/test_size/step: 窗口参数，
-                为 None 时按比例自动计算 (60%/20%/20%, step=10%)
+            strategy_name: 策略名称
+            strategy_params: 策略参数字典
+            train_size/val_size/test_size/step: 窗口参数
 
         Returns:
-            walk_forward 结果字典:
-              - windows, window_results, aggregate
+            walk_forward 结果字典
         """
         from .walk_forward import walk_forward_split_by_ratio, walk_forward_split
 
@@ -270,8 +265,12 @@ class VnpyBacktestEngine:
         window_results = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
             logger.info(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
-            train_results = self._run_backtest(train_df, symbol, [strategy])
-            test_results = self._run_backtest(test_df, symbol, [strategy])
+            train_results = self._run_backtest(
+                train_df, symbol, [strategy_name], [strategy_params],
+            )
+            test_results = self._run_backtest(
+                test_df, symbol, [strategy_name], [strategy_params],
+            )
 
             train_result = train_results[0] if train_results else {}
             test_result = test_results[0] if test_results else {}
@@ -297,7 +296,6 @@ class VnpyBacktestEngine:
                 'statistics_is': train_result.get('statistics', {}),
             })
 
-        # 聚合所有窗口的 OOS/IS 指标
         returns: list[float] = []
         sharpes: list[float] = []
         drawdowns: list[float] = []
@@ -360,26 +358,50 @@ class VnpyBacktestEngine:
     # ── 内部方法 ──────────────────────────────────────────────
 
     def _wrap_injected_strategy(
-        self, strategy: Strategy[Any],
+        self, strategy_name: str, strategy_params: dict[str, Any], symbol: str,
     ) -> type:
-        """创建注入了策略实例的桥接器策略类
+        """创建注入了策略实例和 State 的桥接器策略类
 
-        _InjectedStrategy 覆写 _load_default_core 为 no-op，
-        在 __init__ 返回后直接注入 _core。
-        price_tick 由 vnpy setting dict 传入 VnpyStrategyBridge.__init__。
+        Bridge 在 __init__ 中构造 Strategy 和 State。
         """
         from strategies.bridges import VnpyStrategyBridge
 
-        _captured = strategy  # 闭包按值捕获，避免循环中的最后策略引用
+        _captured_name = strategy_name
+        _captured_params = strategy_params
+        _captured_symbol = symbol
+        _captured_period = self.interval
+        _captured_capital = self.initial_capital
+        _captured_contract_size = self.contract_size
 
-        class _InjectedStrategy(VnpyStrategyBridge):  # pyright: ignore[reportUnknownVariableType]
+        class _InjectedStrategy(VnpyStrategyBridge):
 
             def _load_default_core(self, _setting: object | None = None) -> None:
                 pass
 
             def __init__(self, *args: Any, **kwargs: Any) -> None:
                 super().__init__(*args, **kwargs)
-                self._core = _captured
+                self._core = load_strategy(_captured_name)
+                config_cls: type | None = None
+                for base in getattr(type(self._core), '__orig_bases__', []):
+                    origin = typing.get_origin(base)
+                    if origin is not None and issubclass(origin, Strategy):
+                        args = typing.get_args(base)
+                        if args:
+                            config_cls = args[0]
+                            break
+                if config_cls is None:
+                    raise TypeError(
+                        f"无法从 {type(self._core).__name__} 提取策略配置类型，"
+                        f"请确保策略类继承自 Strategy[ConfigType]"
+                    )
+                strategy_config = config_cls(**_captured_params)
+                self._state = State(
+                    symbol=_captured_symbol,
+                    period=_captured_period,
+                    strategy_config=strategy_config,
+                    capital=_captured_capital,
+                    contract_size=_captured_contract_size,
+                )
 
         return _InjectedStrategy
 
@@ -387,21 +409,20 @@ class VnpyBacktestEngine:
         self,
         df: pd.DataFrame,
         symbol: str,
-        strategies: list[Strategy[Any]],
+        strategy_names: list[str],
+        strategy_params_list: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """在单个数据集上执行 vnpy 回测
-
-        创建一个 vnpy BacktestingEngine，注册所有策略，一次回放拿到所有结果。
-        每个策略运行前自动 reset()。
 
         Args:
             df: K 线数据
             symbol: 品种代码
-            strategies: 策略实例列表
+            strategy_names: 策略名称列表
+            strategy_params_list: 策略参数列表
 
         Returns:
             list[dict]，每个 dict:
-              - statistics, daily_results
+              - statistics, daily_results, strategy_config, strategy_version
               - error (如果失败)
         """
         from vnpy_ctastrategy.backtesting import BacktestingEngine
@@ -427,9 +448,8 @@ class VnpyBacktestEngine:
         bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
 
         results: list[dict[str, Any]] = []
-        for strategy in strategies:
-            strategy.reset()
-            strategy_cls = self._wrap_injected_strategy(strategy)
+        for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
+            strategy_cls = self._wrap_injected_strategy(strategy_name, strategy_params, symbol)
 
             engine = BacktestingEngine()
             engine.set_parameters(
@@ -452,13 +472,15 @@ class VnpyBacktestEngine:
                 statistics = engine.calculate_statistics()
             except Exception as e:
                 logger.error(
-                    f"回测执行异常 [{symbol}][{type(strategy).__name__}]: {e}",
+                    f"回测执行异常 [{symbol}][{strategy_name}]: {e}",
                     exc_info=True,
                 )
                 results.append({
                     'statistics': {},
                     'daily_results': [],
                     'error': str(e),
+                    'strategy_config': None,
+                    'strategy_version': '',
                 })
                 continue
 
@@ -466,9 +488,11 @@ class VnpyBacktestEngine:
                 'statistics': statistics,
                 'daily_results': (
                     daily_results.reset_index().to_dict('records')
-                    if daily_results is not None  # pyright: ignore[reportUnnecessaryComparison]
+                    if daily_results is not None
                     else []
                 ),
+                'strategy_config': None,
+                'strategy_version': '',
             })
 
         return results

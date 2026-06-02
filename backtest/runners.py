@@ -13,7 +13,6 @@ from typing import Any, TYPE_CHECKING
 
 from common.schemas import KlineDataFrame
 
-from strategies.utils import load_strategy
 from config import ConfigManager
 from data import DataManager
 from .optimizer import run_param_search, SearchResult
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 def execute_walk_forward(engine: "VnpyBacktestEngine",
                         strategy_name: str, strategy_params: dict[str, Any],
                         capital: float, contract_size: int,
-                        datasets: list[tuple[str, KlineDataFrame, str]]) -> tuple[dict[str, Any], Any, str]:
+                        datasets: list[tuple[str, KlineDataFrame, str]]) -> tuple[dict[str, Any], str, str]:
     """执行 Walk-Forward 滚动验证
 
     Args:
@@ -39,19 +38,16 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
         datasets: 数据集列表
 
     Returns:
-        (wf_result, strategy, symbol) 元组，用于 CLI 层持久化
+        (wf_result, strategy_name, symbol) 元组，用于 CLI 层持久化
     """
-    strategy = load_strategy(
-        strategy_name,
-        strategy_params=strategy_params,
-        capital=capital,
-        contract_size=contract_size,
-    )
     sym = datasets[0][0]
     df = datasets[0][1]
-    wf_result = engine.run_walk_forward(data=df, symbol=sym, strategy=strategy)
+    wf_result = engine.run_walk_forward(
+        data=df, symbol=sym,
+        strategy_name=strategy_name, strategy_params=strategy_params,
+    )
 
-    return wf_result, strategy, sym
+    return wf_result, strategy_name, sym
 
 
 def execute_parameter_search(engine: "VnpyBacktestEngine",

@@ -289,7 +289,7 @@ class DataStore:
                 'offset': str(trade.get('offset', 'open')).lower(),
                 'open_price': float(trade.get('open_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
                 'close_price': float(trade.get('close_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
-                'quantity': float(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[call-overload]
+                'quantity': float(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[arg-type]
                 'pnl': float(trade.get('pnl', 0.0)),  # type: ignore[arg-type]
                 'commission': float(trade.get('commission', 0.0)),  # type: ignore[arg-type]
                 'created_at': now,

@@ -154,6 +154,11 @@ class DataFeed:
     def load_history_data(self, period: str, bars: List[Bar], events: Optional[List[Event]] = None) -> None:
         """批量加载历史数据（用于回测初始化）
 
+        幂等加载：按数据范围智能处理重复调用
+        - 时间范围一致 → 跳过
+        - 起始时间相同，结束时间更新 → 仅追加增量
+        - 起始时间不同 → 清空该周期数据，全量加载
+
         注意：
         1. 不会自动计算指标，需调用calculate_all()
 
@@ -164,7 +169,70 @@ class DataFeed:
         if period not in self._periods:
             self.register_period(period)
 
-        self._periods[period].append_bars(bars)
+        if not bars:
+            return
+
+        new_start = pd.Timestamp(bars[0].datetime)
+        new_end = pd.Timestamp(bars[-1].datetime)
+        period_data = self._periods[period]
+
+        if period_data.length > 0:
+            existing_start = period_data._df.index[0]
+            existing_end = period_data._df.index[-1]
+
+            if new_start == existing_start and new_end <= existing_end:
+                return  # 数据已包含，跳过
+            elif new_start == existing_start and new_end > existing_end:
+                append_bars = [b for b in bars if pd.Timestamp(b.datetime) > existing_end]
+                period_data.append_bars(append_bars)
+            else:
+                period_data.load_df(_bars_to_df(bars), replace=True)
+        else:
+            period_data.load_df(_bars_to_df(bars), replace=False)
+
+        if events:
+            self.append_events(events)
+
+    def load_history_df(self, period: str, df: pd.DataFrame, events: Optional[List[Event]] = None) -> None:
+        """从 DataFrame 直接加载历史数据（避免 Bar 转换开销）
+
+        幂等加载：按数据范围智能处理重复调用
+        - 时间范围一致 → 跳过
+        - 起始时间相同，结束时间更新 → 仅追加增量行
+        - 起始时间不同 → 清空该周期数据，全量加载
+
+        注意：
+        1. 不会自动计算指标，需调用calculate_all()
+        2. DataFrame 要求索引为 datetime
+
+        :param period: 周期名称
+        :param df: K线 DataFrame，索引为 datetime
+        :param events: 历史事件列表（可选）
+        """
+        if period not in self._periods:
+            self.register_period(period)
+
+        if len(df) == 0:
+            return
+
+        new_start = df.index[0]
+        new_end = df.index[-1]
+        period_data = self._periods[period]
+
+        if period_data.length > 0:
+            existing_start = period_data._df.index[0]
+            existing_end = period_data._df.index[-1]
+
+            if new_start == existing_start and new_end <= existing_end:
+                return  # 数据已包含，跳过
+            elif new_start == existing_start and new_end > existing_end:
+                append_df = df[df.index > existing_end]
+                if len(append_df) > 0:
+                    period_data.load_df(append_df, replace=False)
+            else:
+                period_data.load_df(df, replace=True)
+        else:
+            period_data.load_df(df, replace=False)
 
         if events:
             self.append_events(events)
@@ -466,10 +534,24 @@ class DataFeed:
 
 # ==================== 辅助函数 ====================
 
+def _bars_to_df(bars: List[Bar]) -> pd.DataFrame:
+    """将 Bar 列表转为 DataFrame，索引为 datetime"""
+    data = {
+        'open': [b.open for b in bars],
+        'high': [b.high for b in bars],
+        'low': [b.low for b in bars],
+        'close': [b.close for b in bars],
+        'volume': [b.volume for b in bars],
+    }
+    df = pd.DataFrame(data, index=[pd.Timestamp(b.datetime) for b in bars])
+    return df
+
+
 def build_context(
     data_feed: DataFeed,
     requirements: DataRequirements,
     current_time: Union[pd.Timestamp, dt],
+    bar: Bar,
     timeout: Optional[float] = None
 ) -> BarContext:
     """构造 BarContext 上下文对象
@@ -515,14 +597,8 @@ def build_context(
         if include:
             events.append(event)
 
-    # 获取当前Bar（简单实现，使用第一个周期的最新Bar）
-    bar = Bar()
-    if multi:
-        first_period = list(multi.keys())[0]
-        maybe_bar = multi[first_period].get_bar(-1)
-        if maybe_bar is not None:
-            bar = maybe_bar
-            bar.symbol = data_feed.symbol
+    # 使用传入的 bar，不再从 multi 中提取
+    bar.symbol = data_feed.symbol
 
     return BarContext(
         symbol=data_feed.symbol,

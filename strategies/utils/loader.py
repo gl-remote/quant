@@ -7,13 +7,14 @@
 
 import importlib
 from pathlib import Path
+from typing import Any
 
 from strategies import Strategy
 from common.constants import STRATEGY_MA
 
 
 def load_strategy(strategy_name: str | None = None,
-                  **strategy_kwargs) -> Strategy:
+                  **strategy_kwargs: Any) -> Strategy:
     """根据名称动态加载策略实例
 
     支持三种传入方式:

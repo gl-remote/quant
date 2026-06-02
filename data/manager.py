@@ -43,14 +43,15 @@ logger = logging.getLogger(__name__)
 
 
 class DataManager:
-    """数据管理器 - 统一数据访问入口（单例模式）
+    """数据管理器（单例）
 
     提供数据加载、保存、查询等高层接口，对外隐藏数据库实现细节。
     所有 DataFrame 数据都经过 Pandera Schema 验证。
     """
     _instance: DataManager | None = None
+    _initialized: bool = False
 
-    def __new__(cls, config_manager: ConfigManager | None = None):
+    def __new__(cls, config_manager: ConfigManager | None = None) -> DataManager:
         """单例模式，保证全局只有一个实例"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)

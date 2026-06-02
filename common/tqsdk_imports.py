@@ -19,7 +19,7 @@ tqsdk = TqsdkImports()
             api = tqsdk.TqApi(...)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._loaded: bool = False
         self.TqApi: Any = None
         self.TqAuth: Any = None
