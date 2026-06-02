@@ -56,6 +56,7 @@ class VnpyBacktestEngine:
             dm: 数据管理器，提供数据加载能力
         """
         self._dm = dm
+        self._run_id: int | None = None
         self.initial_capital: float = float(backtest_config.initial_capital)
         self.commission_rate: float = float(backtest_config.commission_rate)
         self.slippage: float = float(backtest_config.slippage)
@@ -127,6 +128,7 @@ class VnpyBacktestEngine:
                 strategy_config = r.get('strategy_config')
                 results.append(BacktestResult(
                     symbol=sym,
+                    backtest_id=r.get('bt_id'),
                     strategy=strategy_names[i] if i < len(strategy_names) else "unknown",
                     strategy_version=r.get('strategy_version'),
                     strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
@@ -292,6 +294,17 @@ class VnpyBacktestEngine:
 
         results: list[dict[str, Any]] = []
         for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
+            # 创建占位记录，拿 backtest_id 用于日志追踪
+            from data.models import Backtest as BTModel
+            bt_placeholder = BTModel.create(
+                run=self._run_id,
+                symbol=symbol,
+                strategy=strategy_name,
+                status="running",
+                initial_capital=self.initial_capital,
+            )
+            bt_id = bt_placeholder.id
+
             strategy_cls = create_strategy_class(
                 strategy_name=strategy_name,
                 strategy_params=strategy_params,
@@ -303,7 +316,7 @@ class VnpyBacktestEngine:
 
             engine = BacktestingEngine()
             # vnpy print → loguru，加上下文，丢进度条
-            _ctx = f"{symbol}/{strategy_name}"
+            _ctx = f"bt{bt_id}/{symbol}/{strategy_name}"
             _params_summary = ", ".join(f"{k}={v}" for k, v in strategy_params.items())
             def _vnpy_output(msg: str, _ctx: str = _ctx) -> None:
                 if "回放进度" in msg:
@@ -334,6 +347,7 @@ class VnpyBacktestEngine:
                     f"回测执行异常 [{symbol}][{strategy_name}]: {e}",
                 )
                 results.append({
+                    'bt_id': bt_id,
                     'statistics': {},
                     'daily_results': [],
                     'error': str(e),
@@ -343,6 +357,7 @@ class VnpyBacktestEngine:
                 continue
 
             results.append({
+                'bt_id': bt_id,
                 'statistics': statistics,
                 'daily_results': (
                     daily_results.reset_index().to_dict('records')

@@ -327,6 +327,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             engine=run_engine if mode == "search" else "walk-forward",
             symbols=len(datasets),
         )
+        engine._run_id = run_id
 
         # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
         _sink_ids.clear()

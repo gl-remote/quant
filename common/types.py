@@ -70,6 +70,7 @@ class BacktestResult:
     symbol: str
     strategy: str
     strategy_version: str | None = None
+    backtest_id: int | None = None  # 占位后可更新，不新建
     # 状态
     status: str = STATUS_FAILED
     error_message: str | None = None
