@@ -48,6 +48,7 @@ import pandas as pd
 import optuna
 from loguru import logger
 from common.constants import DEFAULT_N_JOBS
+from common.log_config import get_stderr_sink_id
 
 # 线程/协程隔离的 trial 日志缓冲区
 # 8 线程并发回测时，每条日志按 trial 分组缓冲，完毕一次性输出，避免交错
@@ -321,8 +322,10 @@ class OptunaOptimizer:
             level="INFO",
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
         )
-        # 只移除 stderr（id=0），保留文件 sink（loguru remove(None) 会清掉所有 handler）
-        logger.remove(0)
+        # 只移除 stderr，保留文件 sink（remove(None) 会清掉所有 handler）
+        _stderr_id = get_stderr_sink_id()
+        if _stderr_id is not None:
+            logger.remove(_stderr_id)
 
         try:
             study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs,

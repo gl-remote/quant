@@ -17,6 +17,14 @@ from loguru import logger
 
 from common.constants import DEFAULT_LOG_FORMAT
 
+# setup_logging() 调用后保存 stderr handler id，供需要精确移除的场景使用
+_stderr_sink_id: int | None = None
+
+
+def get_stderr_sink_id() -> int | None:
+    """返回 setup_logging 创建的 stderr handler id，未初始化则返回 None"""
+    return _stderr_sink_id
+
 
 def setup_logging(level: str = "INFO", log_format: str | None = None) -> None:
     """初始化 loguru 全局配置
@@ -27,8 +35,9 @@ def setup_logging(level: str = "INFO", log_format: str | None = None) -> None:
     :param level: 日志级别，如 "INFO", "DEBUG", "WARNING"
     :param log_format: loguru 格式字符串，默认使用 DEFAULT_LOG_FORMAT
     """
+    global _stderr_sink_id
     logger.remove()
-    logger.add(
+    _stderr_sink_id = logger.add(
         sys.stderr,
         level=level,
         format=log_format or DEFAULT_LOG_FORMAT,
