@@ -23,11 +23,14 @@ from loguru import logger
 from datetime import datetime
 from typing import Any, Optional, cast
 
+import pandas as pd
 from vnpy_ctastrategy import CtaTemplate
 
 from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy, State
 from strategies.core.types import StrategyPosition
-from strategies.runtime import DataFeed, build_context, DataRequirements
+from strategies.runtime import DataFeed, DataRequirements
+from strategies.runtime.requirements import BarContext
+from strategies.runtime.period import PeriodDataView
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
@@ -73,6 +76,7 @@ class VnpyStrategyBridge(CtaTemplate):
         self._state: State[Any] = State(symbol="", period="", strategy_config=None)
         self._requirements: Optional[DataRequirements] = None
         self._data_feed: Any = None
+        self._ctx_cache: dict[pd.Timestamp, BarContext] = {}
         self.entry_price: float = 0.0
 
     def is_initialized(self) -> bool:
@@ -85,19 +89,9 @@ class VnpyStrategyBridge(CtaTemplate):
     # ---- vnpy 生命周期 ----
 
     def on_init(self) -> None:
-        """vnpy 初始化回调 — 在这里完成 DataFeed 初始化
+        """vnpy 初始化回调 — 预加载数据、预计算指标、预构造上下文
 
-        【初始化流程】
-        步骤 1: 检查是否已注入 Strategy
-        步骤 2: 调用 strategy.data_requirements(config) 获取数据需求
-        步骤 3: 从 DataFeedCache 获取或创建 DataFeed
-        步骤 4: 加载非主周期的历史数据（DataManager → DataFeed）
-        步骤 5: 预计算所有指标
-        步骤 6: 调用 vnpy 的 load_bar 加载主周期数据
-
-        【为什么主周期不预加载】
-        主周期数据由 vnpy 引擎通过 on_bar 逐根回放，不需要预加载。
-        非主周期数据需要预加载，因为 vnpy 引擎不会回放。
+        on_bar 中只做 O(1) 的 dict 查找，零重算、零时间戳搜索。
         """
         if not self.is_initialized():
             logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
@@ -105,15 +99,13 @@ class VnpyStrategyBridge(CtaTemplate):
 
         logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
 
-        # 获取策略的数据需求
         self._requirements = self._core.data_requirements(self._state.strategy_config)
         if self._requirements is None:
-            logger.warning(f"[{self.strategy_name}] 策略未声明数据需求")
             self.write_log(f"策略初始化: {self._core.name}")
             self.load_bar(20)
             return
 
-        # 每个 bridge 创建自己的 DataFeed，不共享，无需缓存/锁
+        # 创建 DataFeed，注册周期和指标
         data_feed = DataFeed(symbol=self._state.symbol)
         for period_name in self._requirements.periods:
             data_feed.register_period(period_name)
@@ -121,43 +113,72 @@ class VnpyStrategyBridge(CtaTemplate):
             for indicator in indicators:
                 data_feed.register_indicator(period_name, indicator.name, **indicator.params)
 
-        # 加载非主周期的历史数据
-        self._load_non_main_periods(data_feed)
-
-        # 指标不预计算（主周期此时为空），由 get_data 懒加载首次触发
+        # 加载全部数据并预计算指标（一次性完成）
+        self._load_all_periods(data_feed)
+        data_feed.calculate_all()
         self._data_feed = data_feed
+
+        # 预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
+        main_period = self._state.period
+        main_pd = data_feed.get_period(main_period)
+        if main_pd is not None:
+            main_df: pd.DataFrame = main_pd._df  # pyright: ignore[reportPrivateUsage]
+            for idx in range(len(main_df)):
+                ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
+                row = main_df.iloc[idx]
+                bar = Bar(
+                    symbol=self._state.symbol,
+                    datetime=cast(datetime, ts.to_pydatetime()),
+                    open=float(row['open']),
+                    high=float(row['high']),
+                    low=float(row['low']),
+                    close=float(row['close']),
+                    volume=float(row['volume']),
+                )
+                multi: dict[str, PeriodDataView] = {}
+                for period, req in self._requirements.periods.items():
+                    pd_obj = data_feed.get_period(period)
+                    if pd_obj is None:
+                        continue
+                    pdf: pd.DataFrame = pd_obj._df  # pyright: ignore[reportPrivateUsage]
+                    end_idx = int(pdf.index.get_indexer(
+                        pd.Index([ts]), method='ffill')[0])
+                    if end_idx < 0:
+                        end_idx = 0
+                    start_idx = max(0, end_idx - req.lookback_bars + 1)
+                    multi[period] = PeriodDataView(
+                        df_ref=pdf,
+                        events_ref=None,
+                        start_idx=start_idx,
+                        end_idx=end_idx,
+                        current_time=ts,
+                        period=period,
+                    )
+                self._ctx_cache[ts] = BarContext(
+                    symbol=self._state.symbol,
+                    bar=bar,
+                    multi=multi,
+                    events=[],
+                )
 
         self.write_log(f"策略初始化: {self._core.name}")
         self.load_bar(20)
 
-    def _load_non_main_periods(self, data_feed: Any) -> None:
-        """加载非主周期的历史数据
+    def _load_all_periods(self, data_feed: Any) -> None:
+        """加载所有周期的历史数据（包括主周期）
 
-        【数据来源】
-        从 DataManager（单例）加载，DataManager 已经有缓存，不需要重复加载。
-
-        【为什么非主周期需要预加载】
-        - 主周期：由 vnpy 引擎通过 on_bar 逐根回放
-        - 非主周期：vnpy 引擎不会回放，所以需要 Bridge 自己预加载
-
-        【优化】
-        使用 data_feed.load_history_df() 直接加载 DataFrame，避免 Bar 转换的开销。
+        从 DataManager 一次性加载所有周期的完整数据集到 DataFeed，
+        用于预计算指标，避免在 vnpy 逐根回放时重复计算。
         """
         if self._requirements is None:
             return
 
-        main_period = self._state.period
         dm = DataManager()
 
         for period in self._requirements.periods:
-            if period == main_period:
-                continue  # 主周期由 vnpy 引擎通过 on_bar 回放，不需要预加载
-
-            # 从 DataManager 加载非主周期数据
             results = dm.load_kline([self._state.symbol], interval=period)
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
-                    # 直接加载 DataFrame 到 DataFeed（避免 Bar 转换开销）
                     df_indexed = df.set_index('datetime')
                     data_feed.load_history_df(period, df_indexed)
 
@@ -183,112 +204,47 @@ class VnpyStrategyBridge(CtaTemplate):
     # ---- 核心: 数据转换 → 信号获取 → 下单执行 ----
 
     def on_bar(self, bar: Any) -> None:
-        """vnpy K线回调 — 核心决策流程
+        """vnpy K线回调 — 从预构造缓存中 O(1) 获取上下文
 
-        【处理流程】
-        步骤 1: 将 vnpy BarData → 标准 Bar
-        步骤 2: 调用 DataFeed.update_bar() 更新主周期数据
-        步骤 3: 调用 build_context() 构造 BarContext
-        步骤 4: 调用 strategy.on_bar(state, ctx) 获取 Signal
-        步骤 5: 根据 Signal 执行下单（buy/sell）
-
-        【为什么 build_context 需要传入 bar】
-        ctx.bar 就是当前这根 K线，但 build_context 需要显式传入是为了：
-        - 明确当前处理的是哪根 K线
-        - 避免歧义
+        所有重活（数据加载、指标计算、上下文构造）已在 on_init 完成，
+        此处仅做 dict 查找 + 策略调用 + 下单。
         """
-        # 将 vnpy BarData 转换为标准 Bar
-        standardized = self._vnpy_bar_to_bar(bar)
+        raw_dt: Any = getattr(bar, 'datetime', None)
+        if raw_dt is None:
+            return
+        bar_time = cast(pd.Timestamp, pd.Timestamp(raw_dt))
 
-        if self._data_feed is not None and self._requirements is not None:
-            # 更新 DataFeed（主周期数据）
-            self._data_feed.update_bar(standardized, self._state.period)
-
-            # 构造 BarContext
-            ctx = build_context(
-                self._data_feed,
-                self._requirements,
-                standardized.datetime,  # 直接传 datetime 对象，不需要转换
-                standardized  # 显式传入当前 bar
-            )
-
-            # 调用策略决策
+        ctx = self._ctx_cache.get(bar_time)
+        if ctx is not None:
             signal = self._core.on_bar(self._state, ctx)
         else:
             signal = Signal()
 
-        # 执行下单
+        close_price = float(getattr(bar, 'close_price', 0))
         if signal.action == TRADE_ACTION_BUY and self.pos == 0:
-            self._execute_buy(signal, standardized)
+            self._execute_buy(signal, close_price, bar_time)
         elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
-            self._execute_sell(signal, standardized)
+            self._execute_sell(signal, close_price, bar_time)
 
-    def _vnpy_bar_to_bar(self, vnpy_bar: Any) -> Bar:
-        """vnpy BarData → 标准 Bar 的数据转换
-
-        【字段映射】
-        vnpy 的 open_price → 标准 Bar 的 open
-        vnpy 的 high_price → 标准 Bar 的 high
-        vnpy 的 low_price → 标准 Bar 的 low
-        vnpy 的 close_price → 标准 Bar 的 close
-        vnpy 的 volume → 标准 Bar 的 volume
-
-        【为什么需要转换】
-        因为我们的 Strategy 接口使用标准 Bar，不依赖 vnpy 的具体实现。
-        这样可以方便地适配其他引擎（如 Tqsdk）。
-
-        :param vnpy_bar: vnpy 的 BarData 对象
-        :return: 标准 Bar 对象
-        """
-        return Bar(
-            symbol=getattr(vnpy_bar, 'symbol', ''),
-            datetime=getattr(vnpy_bar, 'datetime', datetime.min),
-            open=float(getattr(vnpy_bar, 'open_price', 0)),
-            high=float(getattr(vnpy_bar, 'high_price', 0)),
-            low=float(getattr(vnpy_bar, 'low_price', 0)),
-            close=float(getattr(vnpy_bar, 'close_price', 0)),
-            volume=float(getattr(vnpy_bar, 'volume', 0)),
-        )
-
-    def _execute_buy(self, signal: Signal, bar: Bar) -> None:
-        """执行买入 — 调用 vnpy 的 buy()
-
-        【为什么先检查 self.pos】
-        vnpy 的 pos 是 vnpy 引擎的持仓（我们只读，用于检查）
-        避免重复下单。
-
-        :param signal: 交易信号
-        :param bar: 当前 K线
-        """
+    def _execute_buy(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> None:
+        """执行买入"""
         volume = signal.volume
         if volume <= 0:
             return
-        self.buy(bar.close, volume)
-        self.entry_price = bar.close
+        self.buy(price, volume)
+        self.entry_price = price
         logger.debug(
-            f"[{self.strategy_name}] {bar.datetime} 买入 "
-            f"@{bar.close:.2f} x{volume}"
-        )
+            f"[{self.strategy_name}] {bar_time} 买入 @{price:.2f} x{volume}")
 
-    def _execute_sell(self, signal: Signal, bar: Bar) -> None:
-        """执行卖出 — 调用 vnpy 的 sell()
-
-        【为什么用 self.pos 而不是 state.position】
-        self.pos 是 vnpy 引擎的持仓，是最准确的。
-        state.position 会在 on_trade 中更新，但 on_trade 在成交后才调用。
-
-        :param signal: 交易信号
-        :param bar: 当前 K线
-        """
+    def _execute_sell(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> None:
+        """执行卖出"""
         pos = abs(self.pos)
         if pos <= 0:
             return
-        self.sell(bar.close, pos)
+        self.sell(price, pos)
         self.entry_price = 0.0
         logger.debug(
-            f"[{self.strategy_name}] {bar.datetime} {signal.reason}卖出 "
-            f"@{bar.close:.2f}"
-        )
+            f"[{self.strategy_name}] {bar_time} {signal.reason}卖出 @{price:.2f}")
 
     # ---- vnpy 回调 ----
 

@@ -34,11 +34,7 @@
 
 from __future__ import annotations
 
-import io
 import os
-import sys
-import threading
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -47,8 +43,6 @@ import pandas as pd
 
 import optuna
 from loguru import logger
-from common.constants import DEFAULT_N_JOBS
-from common.log_config import get_stderr_sink_id
 
 
 
@@ -92,23 +86,16 @@ class SearchResult:
 
 
 class OptunaOptimizer:
-    """基于 Optuna 的参数优化器
+    """基于 Optuna 的参数优化器（严格单线程）
 
     支持两种搜索模式：
       1. **Grid Search** (网格)：穷举搜索空间的所有组合
       2. **Bayesian Search** (贝叶斯)：使用 TPESampler 进行智能采样
 
-    核心功能：
-      - 定义搜索空间并通过 Optuna suggest API 采样
-      - 每个 trial 创建策略，调用 engine.run，聚合多品种得分
-      - 管理 trial 间数据流向
-      - 支持 SQLite 持久化 study（便于恢复和可视化）
+    注意：本优化器强制单线程执行，因为底层 vnpy BacktestingEngine 
+    非线程安全，SQLite 也不支持多线程并发写入。
 
     目标函数：最大化夏普比率平均值（取各品种夏普的均值）
-
-    不负责：
-      - 持久化回测结果到数据库（由 CLI 层处理）
-      - 生成可视化报告（由 report/ 模块处理）
     """
 
     def __init__(
@@ -121,26 +108,10 @@ class OptunaOptimizer:
         capital: float | None = None,
         contract_size: int | None = None,
         n_trials: int = 50,
-        n_jobs: int = DEFAULT_N_JOBS,
         study_db_path: str = "",
         search_type: str = "bayesian",
         study_name: str = "",
     ) -> None:
-        """
-        Args:
-            engine: VnpyBacktestEngine 实例
-            datasets: [(symbol, DataFrame), ...] 多品种数据
-            strategy_name: 策略名称 (e.g. "ma")
-            search_space: Optuna 搜索空间定义
-            strategy_params: 非搜索字段的默认值
-            capital: 初始资金
-            contract_size: 合约乘数
-            n_trials: 最大试验次数
-            n_jobs: 并行 trial 数，>1 使用 threading 并发
-            study_db_path: Optuna study SQLite 存储路径，为空则仅内存
-            search_type: 搜索类型："bayesian" (TPESampler) 或 "grid" (GridSampler)
-            study_name: 自定义 study 名称，为空则自动生成
-        """
         self._engine = engine
         self._datasets = datasets
         self._strategy_name = strategy_name
@@ -149,7 +120,6 @@ class OptunaOptimizer:
         self._capital = capital
         self._contract_size = contract_size
         self._n_trials = n_trials
-        self._n_jobs = n_jobs
         self._study_db_path = study_db_path
         self._search_type = search_type
 
@@ -182,19 +152,15 @@ class OptunaOptimizer:
         return grid_space
 
     def optimize(self) -> OptunaResult:
-        """执行 Optuna 优化
+        """执行 Optuna 优化（严格单线程）
 
         Returns:
             OptunaResult 包含最优参数、全部试验数据、study 实例
         """
         result = OptunaResult()
         trial_index: list[dict[str, Any]] = []
-        trial_index_lock = threading.Lock()
-        completed_count = 0
-        progress_lock = threading.Lock()
 
         def objective(trial: optuna.trial.Trial) -> float:
-            nonlocal completed_count
             params = self._suggest_params(trial)
             merged_params = {**self._strategy_params, **params}
 
@@ -205,51 +171,35 @@ class OptunaOptimizer:
                 r.sharpe_ratio or 0
                 for r in engine_results if r.success
             ]
-            if not sharpes:
-                score = -999.0
-            else:
-                score = float(sum(sharpes) / len(sharpes))
+            score = float(sum(sharpes) / len(sharpes)) if sharpes else -999.0
 
-            with trial_index_lock:
-                trial_index.append({
-                    'search_params': params,
-                    'value': score,
-                    'engine_results': engine_results,
-                    'strategy_params': merged_params,
-                    'strategy_name': self._strategy_name,
-                })
+            trial_index.append({
+                'search_params': params,
+                'value': score,
+                'engine_results': engine_results,
+                'strategy_params': merged_params,
+                'strategy_name': self._strategy_name,
+            })
 
-            logger.debug(
-                "Trial {:3d} | score={:.4f} | {}",
-                trial.number, score,
+            logger.info(
+                "Trial {:3d}/{} | score={:.4f} | {}",
+                trial.number + 1, n_trials, score,
                 {k: v for k, v in params.items()},
             )
 
-            with progress_lock:
-                completed_count += 1
-                if self._n_jobs > 1:
-                    print(f"\r  [{completed_count}/{n_trials}]",
-                          end="" if completed_count < n_trials else "\n",
-                          file=sys.stderr, flush=True)
-
             return score
 
-        # 抑制 optuna 默认日志（INFO → WARNING）
+        # 抑制 optuna 默认日志
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-        # 创建 study（持久化 → SQLite，否则仅内存）
-        # 支持两种格式：
-        #   1. 文件路径: "optuna_studies.db" → 转换为 sqlite:///optuna_studies.db
-        #   2. SQLite URL: "sqlite:///path/to/db.db"
+        # 创建 study（SQLite 持久化 或 仅内存）
         storage: str | None = None
         if self._study_db_path:
             if self._study_db_path.startswith('sqlite:///'):
                 storage = self._study_db_path
             else:
                 db_path = os.path.abspath(self._study_db_path)
-                db_dir = os.path.dirname(db_path)
-                if db_dir:
-                    os.makedirs(db_dir, exist_ok=True)
+                os.makedirs(os.path.dirname(db_path), exist_ok=True)
                 storage = f"sqlite:///{db_path}"
             logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
 
@@ -257,7 +207,6 @@ class OptunaOptimizer:
         if self._search_type == "grid":
             grid_space = self._create_grid_space()
             sampler = optuna.samplers.GridSampler(grid_space)
-            # 网格搜索的 trial 数等于组合数
             if not grid_space:
                 n_trials = 0
             else:
@@ -278,19 +227,16 @@ class OptunaOptimizer:
             load_if_exists=True,
         )
 
-        # stderr 已由 caller（backtest.py）关闭，全部日志走文件 sink
-        try:
-            study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs,
-                          show_progress_bar=(self._n_jobs <= 1))
-        finally:
-            pass  # caller 负责恢复 stderr
+        # 严格单线程：n_jobs=1, show_progress_bar=False
+        study.optimize(objective, n_trials=n_trials, n_jobs=1,
+                      show_progress_bar=False)
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0
         result.trial_data = trial_index
         result.study = study
 
-        logger.debug(
+        logger.info(
             "Optuna 优化完成: best_value={:.4f} best_params={} study={}",
             result.best_value, result.best_params, self._study_name,
         )
@@ -334,11 +280,10 @@ def run_param_search(
     contract_size: int,
     n_trials: int,
     search_type: str,
-    n_jobs: int = DEFAULT_N_JOBS,
     study_db_path: str = "",
     study_name: str = "",
 ) -> SearchResult:
-    """执行参数搜索（网格或贝叶斯）
+    """执行参数搜索（网格或贝叶斯，严格单线程）
 
     Args:
         engine: 回测引擎实例
@@ -365,7 +310,6 @@ def run_param_search(
         capital=capital,
         contract_size=contract_size,
         n_trials=n_trials,
-        n_jobs=n_jobs,
         study_db_path=study_db_path,
         search_type=search_type,
         study_name=study_name,

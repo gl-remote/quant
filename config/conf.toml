@@ -120,3 +120,4 @@ format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line
 enabled = true
 engine = "grid"                 # grid: 穷举搜索 | bayesian: 贝叶斯优化
 n_trials = 50                   # optuna 最大试验次数
+# 注意: n_jobs 已永久固定为 1，vnpy 引擎非线程安全，不支持并行。

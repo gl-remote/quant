@@ -129,11 +129,6 @@ DEFAULT_EXPORT_DIR = '.quant_shared_data/csv'          # CSV 导出目录
 DEFAULT_DB_PATH = '.quant_shared_data/quant_shared.db'  # SQLite 数据库路径
 
 
-# ============================================================================
-# 参数优化并发 (Parameter Optimization Concurrency)
-# ============================================================================
-
-DEFAULT_N_JOBS = 8  # Optuna 并行 trial 线程数
 
 
 # ============================================================================

@@ -51,7 +51,6 @@ from common.constants import (
     DEFAULT_PRICE_TICK,
     DEFAULT_CONTRACT_SIZE,
     DEFAULT_KLINE_PERIOD,
-    DEFAULT_N_JOBS,
     KLINE_INTERVAL_1MIN,
     STRATEGY_MA,
     DEFAULT_STOP_LOSS_RATIO,
@@ -110,9 +109,8 @@ class OptimizerConfig(BaseModel):
     - engine: "grid" — 使用 GridSampler 穷举搜索
     - engine: "bayesian" — 使用 TPESampler 贝叶斯优化
 
-    search_space: 搜索空间定义，{param: {type, low, high, step}}
-    n_trials: 最大试验次数
-    strategy_spaces: 按策略组织的搜索空间，{strategy_name: search_space}
+    注意：本优化器强制单线程执行（n_jobs=1），
+    因为 vnpy BacktestingEngine 非线程安全。
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
@@ -120,7 +118,6 @@ class OptimizerConfig(BaseModel):
     enabled: bool = False
     engine: str = "grid"  # grid | bayesian
     n_trials: int = 50
-    n_jobs: int = DEFAULT_N_JOBS  # 并行 trial 数，>1 使用 threading 并发
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
 

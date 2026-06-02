@@ -153,11 +153,15 @@ class PeriodData:
     def append_bar(self, bar: Bar) -> None:
         """追加单根K线（每个 PeriodData 独立，无并发，无需幂等检查）
 
+        注意：此方法会清除已计算指标缓存，触发下次 get_data 时全量重算。
+        回测场景请先在 on_init 中预加载全部数据 + calculate_all()，
+        避免在逐根回放中调用此方法导致 O(N²) 性能退化。
+
         :param bar: 单根K线数据
         """
         bar_time = pd.Timestamp(bar.datetime)
 
-        # 追加新数据，新 bar 使已有指标过期，清除缓存触发懒重算
+        # 清除指标缓存（新 bar 使已有指标值不完整）
         self.clear_indicator_calculation()
 
         new_row = pd.Series({
