@@ -43,21 +43,35 @@ logger = logging.getLogger(__name__)
 
 
 class DataManager:
-    """数据管理器 - 统一数据访问入口
+    """数据管理器 - 统一数据访问入口（单例模式）
 
     提供数据加载、保存、查询等高层接口，对外隐藏数据库实现细节。
     所有 DataFrame 数据都经过 Pandera Schema 验证。
     """
+    _instance: DataManager | None = None
+
+    def __new__(cls, config_manager: ConfigManager | None = None):
+        """单例模式，保证全局只有一个实例"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            # 初始化只执行一次
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self, config_manager: ConfigManager | None = None):
         """
         Args:
             config_manager: ConfigManager实例（可选）
         """
+        # 只在第一次初始化时执行
+        if self._initialized:
+            return
+        
         self._config: ConfigManager | None = config_manager
         self._store: DataStore | None = None
         self._data_cache: dict[str, KlineDataFrame] = {}
         self._default_config: ConfigManager | None = None
+        self._initialized = True
 
     def _get_config(self) -> ConfigManager:
         """获取配置管理器（延迟初始化默认配置）"""

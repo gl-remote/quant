@@ -243,13 +243,273 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 `DataFeed` 的 `load_history_data()` 和 `calculate_all()` 在多轮流回测中可能被重复调用，需确保数据正确性：
 
 1. **幂等加载**：`load_history_data(period, bars)` 重复调用时按数据范围智能处理：
-   - 起始和截止时间相同 → 数据一致，跳过加载
-   - 起始时间相同，结束时间不同 → 仅追加新 bars（增量加载）
+   - 起始时间相同，且新结束时间 ≤ 现有结束时间 → 数据已包含或一致，跳过加载
+   - 起始时间相同，且新结束时间 > 现有结束时间 → 仅追加增量部分
    - 起始时间不同 → 清空该 period 的缓存，重新加载全量数据
 2. **幂等计算**：`calculate_all()` 重复调用时，已计算的指标应跳过
    - 增量加载场景：仅新追加的 bars 需要计算指标，已有 bars 的指标结果保留
    - 全量替换场景：清空计算标记，重新计算所有指标
 3. **DataFeedCache.setup()** 多次注册相同指标应幂等（当前已有重复注册检查，`data_feed.py:148-150`）
+
+#### DataFeed.load_history_data() 实现建议
+```python
+def load_history_data(self, period: str, bars: List[Bar], events: Optional[List[Event]] = None) -> None:
+    if period not in self._periods:
+        self.register_period(period)
+    
+    period_data = self._periods[period]
+    
+    if not bars:
+        return
+    
+    new_start = pd.Timestamp(bars[0].datetime)
+    new_end = pd.Timestamp(bars[-1].datetime)
+    
+    if period_data.length > 0:
+        existing_start = period_data._df.index[0]
+        existing_end = period_data._df.index[-1]
+        
+        if new_start == existing_start and new_end <= existing_end:
+            # 数据已包含或范围一致，跳过
+            return
+        elif new_start == existing_start and new_end > existing_end:
+            # 起始时间相同，新数据范围更大，仅追加增量部分
+            incremental_bars = [bar for bar in bars if pd.Timestamp(bar.datetime) > existing_end]
+            if incremental_bars:
+                period_data.append_bars(incremental_bars)
+        else:
+            # 起始时间不同，清空并重新加载
+            self._periods[period] = PeriodData(period)
+            period_data = self._periods[period]
+            period_data.append_bars(bars)
+            # 清空指标计算状态
+            period_data.clear_indicator_calculation()
+    else:
+        # 首次加载
+        period_data.append_bars(bars)
+    
+    if events:
+        self.append_events(events)
+```
+
+#### PeriodData.append_bar() 幂等检查实现建议
+```python
+def append_bar(self, bar: Bar) -> None:
+    bar_time = pd.Timestamp(bar.datetime)
+
+    if len(self._df) > 0:
+        latest = self._df.index[-1]
+        if bar_time <= latest:
+            # 时间戳已存在，跳过
+            if bar_time in self._df.index:
+                return
+            raise ValueError(f"Bar time {bar_time} is not after latest data time {latest}")
+
+    new_row = pd.Series({
+        'open': bar.open,
+        'high': bar.high,
+        'low': bar.low,
+        'close': bar.close,
+        'volume': bar.volume
+    }, name=bar_time)
+
+    self._df = pd.concat([self._df, new_row.to_frame().T])
+    self._last_updated_at = pd.Timestamp.now()
+    self._update_count += 1
+```
+
+### 6. DataFeed 直接支持从 DataFrame 加载（推荐方案）
+
+**设计原则**：避免不必要的全量转换，让 DataFeed 直接支持从 DataFrame 加载，而不是先转成 Bar 列表再加载。
+
+#### 方案 A：为 DataFeed 添加直接加载 DataFrame 的方法（推荐）
+
+```python
+# 在 strategies/runtime/data_feed.py 中添加
+def load_history_df(self, period: str, df: pd.DataFrame, events: Optional[List[Event]] = None) -> None:
+    """直接从 DataFrame 加载历史数据，避免全量转换"""
+    if period not in self._periods:
+        self.register_period(period)
+    
+    period_data = self._periods[period]
+    
+    if df.empty:
+        return
+    
+    new_start = df['datetime'].iloc[0]
+    new_end = df['datetime'].iloc[-1]
+    
+    if period_data.length > 0:
+        existing_start = period_data._df.index[0]
+        existing_end = period_data._df.index[-1]
+        
+        if new_start == existing_start and new_end <= existing_end:
+            return
+        elif new_start == existing_start and new_end > existing_end:
+            # 增量加载
+            incremental_df = df[df['datetime'] > existing_end].copy()
+            if not incremental_df.empty:
+                period_data.append_df(incremental_df)
+        else:
+            # 全量替换
+            self._periods[period] = PeriodData(period)
+            period_data = self._periods[period]
+            period_data.load_df(df)
+            period_data.clear_indicator_calculation()
+    else:
+        # 首次加载
+        period_data.load_df(df)
+    
+    if events:
+        self.append_events(events)
+```
+
+```python
+# 在 strategies/runtime/period.py 中添加
+def load_df(self, df: pd.DataFrame) -> None:
+    """直接从 DataFrame 加载数据，不经过 Bar 转换"""
+    new_df = df.set_index('datetime').copy()
+    # 确保列名正确
+    expected_cols = ['open', 'high', 'low', 'close', 'volume']
+    for col in expected_cols:
+        if col not in new_df.columns:
+            new_df[col] = 0.0
+        else:
+            new_df[col] = new_df[col].astype(float)
+    
+    self._df = new_df[expected_cols]
+    self._last_updated_at = pd.Timestamp.now()
+    self._update_count += len(df)
+
+def append_df(self, df: pd.DataFrame) -> None:
+    """直接从 DataFrame 追加数据"""
+    new_df = df.set_index('datetime').copy()
+    expected_cols = ['open', 'high', 'low', 'close', 'volume']
+    for col in expected_cols:
+        if col not in new_df.columns:
+            new_df[col] = 0.0
+        else:
+            new_df[col] = new_df[col].astype(float)
+    
+    self._df = pd.concat([self._df, new_df[expected_cols]])
+    self._last_updated_at = pd.Timestamp.now()
+    self._update_count += len(df)
+```
+
+#### 方案 B：提供单行转换函数（备用方案）
+
+如果确实需要逐行转换，提供一个轻量的单行转换函数：
+
+```python
+# 在 strategies/utils/loader.py 中
+from typing import Optional
+import pandas as pd
+from strategies.core.types import Bar
+
+def row_to_bar(row: pd.Series) -> Bar:
+    """将单行数据转换为 Bar（按需调用，避免全量转换）"""
+    return Bar(
+        symbol='',
+        datetime=row['datetime'],
+        open=float(row['open']),
+        high=float(row['high']),
+        low=float(row['low']),
+        close=float(row['close']),
+        volume=float(row['volume'])
+    )
+```
+
+#### VnpyStrategyBridge.on_init() 完整实现（使用方案 A）
+
+```python
+def on_init(self) -> None:
+    if self._core.name == "_uninitialized":
+        logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
+        return
+    
+    logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
+    self.write_log(f"策略初始化: {self._core.name}")
+    
+    # 获取数据需求
+    requirements = self._core.data_requirements(self._state.strategy_config)
+    self._requirements = requirements
+    
+    # 初始化 DataFeed
+    data_feed = DataFeedCache.get_or_create(self._state.symbol)
+    data_feed.setup(requirements)
+    
+    # 加载非主周期历史数据
+    if requirements:
+        # 注意：这里需要通过某种方式获取 DataManager 实例
+        # 可以通过 State.extra 或全局单例等方式
+        # 实际实现需要与现有 data 模块集成
+        for period in requirements.periods:
+            if period == self._state.period:
+                continue
+                
+            # 从 data 模块加载非主周期 DataFrame，直接加载到 DataFeed
+            # df = data_manager.load_data(self._state.symbol, period)
+            # data_feed.load_history_df(period, df)
+    
+    # 预计算指标
+    data_feed.calculate_all()
+    self._data_feed = data_feed
+```
+
+**优化要点**：
+1. **推荐使用 **方案 A**：DataFeed 直接支持 DataFrame 加载，避免全量 Bar 转换
+2. **只在必要时**使用单行转换，避免不必要的循环转换
+3. **保持接口一致性**：主周期数据依然通过 on_bar 逐根喂入，非主周期数据直接加载 DataFrame
+
+### 7. build_context() 签名变更实现
+修改 `build_context()` 函数签名，新增 `bar` 参数：
+
+```python
+def build_context(
+    data_feed: DataFeed,
+    requirements: DataRequirements,
+    current_time: Union[pd.Timestamp, dt],
+    bar: Bar,
+    timeout: Optional[float] = None
+) -> BarContext:
+    multi: Dict[str, PeriodDataView] = {}
+
+    # 获取多周期数据
+    for period, req in requirements.periods.items():
+        view = data_feed.get_data(period, current_time, req.lookback_bars, timeout)
+        if view is not None:
+            multi[period] = view
+
+    # 获取事件
+    events: List[Event] = []
+    events_req = requirements.events
+
+    # 先获取所有事件，然后按需求筛选
+    all_events = data_feed.get_events(end_time=current_time)
+
+    for event in all_events:
+        include = False
+        # 检查全局事件
+        if events_req.include_global_events and event.period is None:
+            include = True
+        # 检查周期特定事件
+        if not include and events_req.include_period_events:
+            if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
+                include = True
+        # 检查事件类型白名单
+        if include and events_req.event_types:
+            if event.type not in events_req.event_types:
+                include = True
+        if include:
+            events.append(event)
+
+    return BarContext(
+        symbol=data_feed.symbol,
+        bar=bar,
+        multi=multi,
+        events=events
+    )
+```
 
 ---
 
@@ -409,3 +669,138 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 - **确定**：`DataFeed.update_bar(bar, period)` 调用时，检查该 period 中是否已存在相同时间戳的 bar，存在则跳过（不做重复追加）
 - 原因：主周期（1m）的数据通过 `on_bar` 逐根喂入，而 `on_init` 只预加载非主周期（5m/15m），两者不会冲突。但加幂等检查可以防止意外重复调用导致数据错乱
 - 实现：`PeriodData.append_bar()` 中检查 bar 的 `datetime` 是否已存在于 `_df` 的 timestamp 列中
+
+---
+
+## 文档中未提及的问题与建议
+
+### 问题 1：VnpyBacktestEngine.run() 接口调整
+
+**现状**：
+- `VnpyBacktestEngine.run()` 主要在优化器中使用（`/Users/REDACTED_API_KEY/Documents/src/quant/backtest/optimizer.py:198`）
+- 当前：优化器构造 `pairs = [(sym, df, strategy)]`，调用 `engine.run(pairs)`
+- 问题：重构后需要构造 State，strategy_config 需要从外部传入
+
+**最终方案**：Bridge 自己持有 State 和构造 Strategy
+
+**修改内容**：
+
+1. **Engine `run()` 接口**：
+   ```python
+   # 旧：list[tuple[str, pd.DataFrame, Strategy[Any]]]
+   # 新：list[tuple[str, pd.DataFrame, str, dict[str, Any]]]
+   # 参数：(symbol, df, strategy_name, strategy_params)
+   ```
+
+2. **Engine `_run_backtest()` 接口**：
+   ```python
+   # 旧：strategies: list[Strategy[Any]]
+   # 新：strategy_names: list[str], strategy_params_list: list[dict[str, Any]]
+   ```
+
+3. **`_wrap_injected_strategy()` 修改**：
+   - 接收：`strategy_name`, `strategy_params`, `symbol`
+   - Bridge `__init__` 中：
+     - 调用 `load_strategy()` 构造 Strategy
+     - 构造 State
+     - Bridge 持有 `self._core` 和 `self._state`
+
+4. **优化器修改**：
+   - 不再构造 Strategy 实例
+   - 直接传 `(sym, df, strategy_name, strategy_params)` 给 Engine
+
+**取舍说明**：
+
+**为什么选这个方案**：
+1. **Engine 已有全部必要信息** - capital/contract_size/interval 都在 Engine 配置里，不需要额外传递
+2. **Bridge 是策略容器的自然归属** - Bridge 本身就是连接 Strategy 和 vnpy 的层，持有 State 和 Strategy 最合理
+3. **职责分离清晰** - 优化器只负责参数搜索，Engine 负责回测执行，Bridge 负责策略和状态管理
+
+**为什么不选其他方案**：
+- ❌ **不选直接传 Strategy 实例**：Strategy 不再持有 config，无法通过它获取 strategy_config
+- ❌ **不选传 Bridge 实例**：vnpy 需要的是策略类（class），不是实例，vnpy 会自己调用 `add_strategy()` 创建实例
+- ❌ **不选 Engine 构造 Strategy 再传 Bridge**：多此一举，Bridge 自己构造更直接
+- ❌ **不选更激进的简化（去掉 _wrap_injected_strategy()）**：保留 `_wrap_injected_strategy()` 可以保持代码结构清晰，方便维护
+
+**优势**：
+- Engine 已有全部必要信息（capital/contract_size/interval）
+- Bridge 作为策略容器，自然持有 State 和 Strategy
+- 逻辑清晰，职责分离
+
+### 问题 2：tqsdk_bridge.py 同步更新
+**问题描述**：
+文档只提到了 `vnpy_bridge.py` 的更新，但 `tqsdk_bridge.py` 也需要同步更新以保持架构一致性。
+
+**建议方案**：
+- tqsdk_bridge.py 同样需要：
+  1. 集成 State 机制
+  2. 集成 DataFeed 架构
+  3. 实现 on_trade 回调更新 State
+  4. 适配新的 Strategy 接口
+
+### 问题 3：实盘场景下非主周期数据获取方式不明确
+**状态**：暂不考虑，实现时再处理
+
+**说明**：
+- 本次重构先聚焦回测场景
+- 实盘场景可在后续实现时：
+  - 区分回测/实盘模式走不同逻辑分支
+  - 或重新写一个适配 vnpy 实盘的桥
+
+### 问题 4：DataManager 实例如何传递给 Bridge
+**状态**：已确认方案（DataManager 已改为单例）
+
+**分析**：
+- DataManager 已改为单例模式，全局共享一个实例
+- 可以直接使用 `DataManager()` 获取单例，无需传递
+- `_data_cache` 可以在多次回测间复用，减少 IO
+
+**最终方案**：Bridge 在 `on_init()` 中直接获取 DataManager 单例
+```python
+# 在 VnpyStrategyBridge.on_init() 中
+def on_init(self):
+    # ... 其他代码 ...
+    
+    # 直接获取 DataManager 单例加载非主周期数据
+    from data.manager import DataManager
+    dm = DataManager()  # 获取单例，多次调用返回同一个实例
+    # 加载非主周期数据
+    # ...
+```
+
+**为什么选这个方案**：
+- 最简单直接，不需要传递任何东西
+- DataManager 单例可以复用数据缓存，性能更好
+- 回测场景是单线程，不会有并发问题
+
+### 问题 5：策略创建方式需要调整
+**问题描述**：
+当前策略创建可能还依赖 config 属性，重构后 Strategy 不再持有 config，需要调整策略创建方式。
+
+**状态**：已在问题1中覆盖
+
+**说明**：
+- 此问题已在问题1的方案中处理：Bridge 在 `__init__` 中调用 `load_strategy()` 构造 Strategy，同时构造 State 并持有 `strategy_config`
+- Strategy 不再持有 config，而是通过 `data_requirements(config)` 和 `on_bar(state, ctx)` 接收配置
+
+**建议方案**（同问题1）：
+- 策略构造函数不再接收 strategy_params（由 Bridge 内部处理）
+- strategy_config 由调用方（Engine/CLI）通过参数传递，最终由 Bridge 放入 State
+- Strategy 类通过 data_requirements(config) 和 on_bar(state, ctx) 接收配置
+
+### 问题 6：与现有优化器/CLI 的集成
+**状态**：已分析，仅需改优化器→Engine 层
+
+**分析**：
+- **CLI 不需要改** - 现有 `--strategy` 参数传递策略名称、通过配置文件读取策略参数的方式很合理
+- **仅需改优化器到 Engine 这一层** - 具体链路：
+  1. `_run_batch_backtest` → `execute_parameter_search` / `execute_walk_forward`：已传递 `strategy_name` 和 `strategy_params` ✓
+  2. `execute_parameter_search` → `run_param_search`：已传递 `strategy_name` 和 `strategy_params` ✓
+  3. `run_param_search` / `OptunaOptimizer`：当前构造 Strategy 实例然后传给 Engine，需改
+  4. `VnpyBacktestEngine.run`：需从接收 `(symbol, df, strategy)` 改为接收 `(symbol, df, strategy_name, strategy_params)`
+
+**修改点**（同问题1）：
+- `OptunaOptimizer.objective`：不构造 Strategy 实例，直接传递 `strategy_name` 和 `strategy_params`
+- `VnpyBacktestEngine.run`：接口改为接收 `(symbol, df, strategy_name, strategy_params)`
+- `VnpyBacktestEngine._wrap_injected_strategy`：接收 `strategy_name` 和 `strategy_params`，在内部构造 Strategy 和 State
+- `apply_strategy_config` 和 `serialize_strategy_params`：可能需要适配，视具体实现而定
