@@ -153,15 +153,26 @@ class State(Generic[T]):
 
 ### 1. VnpyBacktestEngine
 - 仍然需要提供历史数据给 vnpy 回测引擎（这是 vnpy 的要求）
-- 修改 `_wrap_injected_strategy()` 方法，新增 `state: State` 参数
+- 修改 `_wrap_injected_strategy()` 方法，接收 `strategy_name`, `strategy_params`, `symbol`，内部构造 Strategy 和 State
 
 **实现示意**：
 ```python
-def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
+def _wrap_injected_strategy(
+    self, 
+    strategy_name: str, 
+    strategy_params: dict[str, Any],
+    symbol: str
+) -> type:
     from strategies.bridges import VnpyStrategyBridge
+    from strategies.utils.loader import load_strategy
+    from strategies.core.state import State
 
-    _captured_strategy = strategy
-    _captured_state = state
+    _captured_strategy_name = strategy_name
+    _captured_strategy_params = strategy_params
+    _captured_symbol = symbol
+    _captured_period = self.interval
+    _captured_capital = self.initial_capital
+    _captured_contract_size = self.contract_size
 
     class _InjectedStrategy(VnpyStrategyBridge):
 
@@ -170,8 +181,23 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
-            self._core = _captured_strategy
-            self._state = _captured_state
+            
+            # Bridge 内部构造 Strategy 和 State
+            self._core = load_strategy(
+                _captured_strategy_name,
+                strategy_params=_captured_strategy_params
+            )
+            
+            # 构造 State
+            # 这里假设策略有 create_config 方法，或者直接用 strategy_params
+            # 实际实现需要与策略的 config 类型适配
+            self._state = State(
+                symbol=_captured_symbol,
+                period=_captured_period,
+                strategy_config=_captured_strategy_params,  # 视情况转换为具体类型
+                capital=_captured_capital,
+                contract_size=_captured_contract_size
+            )
             # on_init() 继承自 VnpyStrategyBridge，
             # 按 requirements.periods 从 data 模块加载所需周期数据
 
@@ -184,13 +210,36 @@ def _wrap_injected_strategy(self, strategy: Strategy, state: State) -> type:
 
   ```python
   def on_init(self) -> None:
+      if self._core.name == "_uninitialized":
+          logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
+          return
+      
+      logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
+      self.write_log(f"策略初始化: {self._core.name}")
+      
+      # 获取数据需求
       requirements = self._core.data_requirements(self._state.strategy_config)
       self._requirements = requirements
+      
+      # 初始化 DataFeed
       data_feed = DataFeedCache.get_or_create(self._state.symbol)
       data_feed.setup(requirements)
-      # 主周期（1m）由 vnpy 引擎通过 on_bar 逐根喂入，不在此处预加载
-      # 非主周期（5m、15m 等）按 requirements 从 data模块 加载   
-      # 代码实现略
+      
+      # 加载非主周期历史数据（DataManager 已是单例，直接获取）
+      if requirements:
+          from data.manager import DataManager
+          dm = DataManager()  # 直接获取单例
+          
+          for period in requirements.periods:
+              if period == self._state.period:
+                  continue  # 主周期数据由 vnpy 引擎通过 on_bar 逐根喂入
+                  
+              # 从 data 模块加载非主周期 DataFrame，直接加载到 DataFeed
+              # 使用 DataFeed.load_history_df() 避免全量转换
+              # df = dm.load_kline([self._state.symbol], period=period)[0][1]
+              # data_feed.load_history_df(period, df)
+      
+      # 预计算指标
       data_feed.calculate_all()
       self._data_feed = data_feed
   ```
@@ -580,31 +629,28 @@ def build_context(
 - 区别仅在于数据来源：回测由 Engine 注入历史数据，实盘由 vnpy `on_bar` 实时推送
 - Bridge 的设计目标就是适配不同运行时，无需为实盘做特殊改造
 
-### 15. ✅ build_context 签名变更
-- **确定**：`build_context(data_feed, requirements, current_time, bar)`
-- 旧签名：`build_context(data_feed, requirements, current_time)` — 从 DataFeed 第一个周期提取 bar（hack）
-- 新签名新增 `bar` 参数，直接传入当前标准 Bar，避免 hack
 
-### 16. ✅ config 传递链路
-- **确定**：Engine 在 `_run_backtest` 中构造 `State`，`strategy_config` 由 Engine 从优化器/CLI 传入的参数直接构造
+
+### 15. ✅ config 传递链路
+- **确定**：Bridge 在 `__init__` 中构造 Strategy 和 State，`strategy_config` 由 Engine 从优化器/CLI 传入的参数传递给 Bridge
 - 当前链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 调用 `_wrap_injected_strategy(strategy)`
-- 新链路：`run(pairs)` 接收 Strategy 实例 → `_run_backtest` 构造 State → `_wrap_injected_strategy(strategy, state)` → Bridge 持有 State → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
-- Engine 已有全部 State 构造所需信息：`symbol`（从 pairs）、`period`（`self.interval`）、`capital`/`contract_size`（Engine 自身配置）、`strategy_config`（优化器/CLI 传入，独立于 Strategy 实例）
+- 新链路：`run(pairs)` 接收 `(symbol, df, strategy_name, strategy_params)` → `_wrap_injected_strategy(strategy_name, strategy_params, symbol)` → Bridge 内部构造 Strategy 和 State → `on_bar(state, ctx)` → Strategy 读取 `state.strategy_config`
+- Engine 已有全部 State 构造所需信息：`symbol`（从 pairs）、`period`（`self.interval`）、`capital`/`contract_size`（Engine 自身配置）、`strategy_params`（优化器/CLI 传入，转换为 strategy_config）
 
-### 17. ✅ Strategy[T] 与 State[T] 的类型关联
+### 16. ✅ Strategy[T] 与 State[T] 的类型关联
 - **确定**：`Strategy[T]` 和 `State[T]` 使用同一个 `T`，即策略的配置类型（如 `MACrossParams`）
 - `class MaStrategyCore(Strategy[MACrossParams])` → `State[MACrossParams]`
 - Bridge 同时持有 `Strategy[T]` 和 `State[T]`，两者通过泛型参数 `T` 自然关联
 - 调用方（Engine/CLI）明确知道 `T` 的具体类型，构造 State 时传入同类型的 `strategy_config`
 
-### 18. ✅ reset() 方法的职责变化
+### 17. ✅ reset() 方法的职责变化
 - **确定**：`reset()` 退化为空方法。Strategy 不再持有任何状态，无需重置
 - 状态迁移路径：Strategy 的 `_position`、`_fills` → State 的 `position`、`fills`
 - State 在 `_run_backtest` 循环中为每个 strategy 创建全新实例（`State(symbol, period, strategy_config, capital, contract_size)`），`position`/`fills` 自然初始化为空
 - Bridge 也由 vnpy 在每次 `add_strategy` 时创建全新实例，无需单独 reset
 - `_run_backtest` 中原有的 `strategy.reset()` 调用可保留（空实现，不报错）或移除
 
-### 19. ✅ Bridge 同步 State.position 的时机和方式
+### 18. ✅ Bridge 同步 State.position 的时机和方式
 - **确定**：不使用手动构造 Fill 的方式，而是通过 vnpy 原生 `on_trade(trade)` 回调同步成交状态
 - 时机：`_execute_buy`/`_execute_sell` 只负责发单，不更新 position。vnpy 在成交后调用 `on_trade`，此时才：
   - 根据 `trade.direction` 更新 `self._state.position`（买入设持仓，卖出清空）
@@ -613,7 +659,7 @@ def build_context(
   - 回调 `self._core.on_fill(fill)`
 - profit 等统计由 vnpy `BacktestingEngine.calculate_statistics()` 统一计算，Bridge 不做手动统计
 
-### 20. ✅ DataFeedCache 生命周期管理
+### 19. ✅ DataFeedCache 生命周期管理
 - **确定**：DataFeedCache 全局单例是正确的设计，DataFeed 存的是行情+衍生数据而非策略状态，同 symbol 共享自然成立
 - 多轮回测/多策略场景下：
   - 同一 symbol 的多个策略共享同一个 DataFeed — **正确行为**（相同指标只算一次）
@@ -621,54 +667,55 @@ def build_context(
   - 如果出现数据混乱，属于 DataFeed 实现层面的 bug，不是设计问题
 - `DataFeedCache` 不需要 `clear()` 方法，`load_history_data()` 实现幂等替换即可
 
-### 21. ✅ apply_strategy_config 与 serialize_strategy_params 适配
+### 20. ✅ apply_strategy_config 与 serialize_strategy_params 适配
 - **确定**：两个函数从接收 Strategy 改为接收 `strategy_config` dataclass 实例
 - `apply_strategy_config(config, config_manager)`：直接操作 config dataclass
 - `serialize_strategy_params(strategy_config)`：从 config dataclass 读取字段。调用点 `_run_backtest:193` 传入 `state.strategy_config`
 
-### 22. ✅ UninitializedStrategy 同步更新
+### 21. ✅ UninitializedStrategy 同步更新
 - **确定**：随 Strategy ABC 一起更新，移除 `config`/`position` 属性，`reset()` 改为空方法
 
-### 23. ✅ DataFeed.load_history_data() 幂等实现
+### 22. ✅ DataFeed.load_history_data() 幂等实现
 - **确定**：`DataFeed.load_history_data(period, bars)` 内部按数据范围智能处理，调用方无需关心
 - 逻辑：起始和截止时间相同 → 跳过；起始相同、结束不同 → 增量追加；起始不同 → 清空该 period 缓存，全量加载
 - Bridge 的 `load_history_data()` 在 `on_init` 中调用，`data_requirements()` 也在 `on_init` 中调用
 
-### 24. ✅ build_context 签名变更
-- **确定**：改为 `build_context(data_feed, requirements, current_time, bar)`，移除从 `multi[first_period].get_bar(-1)` 提取 bar 的 hack 代码
-
-### 25. ✅ Bridge 交易流程拆分
+### 23. ✅ Bridge 交易流程拆分
 - **确定**：`on_bar` 仅发单（`self.buy()`/`self.sell()`），不构造 Fill；成交处理移至 `on_trade`
 - `_execute_buy`/`_execute_sell` 简化为纯发单 + 日志
 - `self.entry_price` 移除，log 中改用 `self._state.position.entry_price`
 - profit 等统计由 vnpy 统一计算
 
-### 26. ✅ self.pos 与 State.position 的关系
+### 24. ✅ self.pos 与 State.position 的关系
 - **确定**：两者数据同源（vnpy 引擎），`self._state.position` 在 `on_trade` 中用 vnpy 成交数据填充
 - `self.pos`（int）：vnpy CtaTemplate 内置，正=多头、负=空头、0=无持仓。Bridge 的 `on_bar` 用它判断能否下单（`self.pos == 0` / `self.pos > 0`）
 - `self._state.position`（`StrategyPosition`）：含 `direction` / `entry_price` / `volume`，供 Strategy 在 `on_bar(state, ctx)` 中读取
   - `volume = abs(self.pos)`，`direction` 从 `trade.direction` 推导
   - 用显式的 `direction` 而非正负号约定编码方向，避免歧义
 
-### 27. ✅ _run_backtest 构造 State
-- **确定**：`_run_backtest` 循环内为每个 strategy 构造 `State(symbol, period, strategy_config, capital, contract_size)`，传入 `_wrap_injected_strategy(strategy, state)`
-- `run_walk_forward` 自动适配（因调用 `_run_backtest` 内部构造）
-- 优化器无需修改（`run(pairs)` 接口不变）
+### 25. ✅ _wrap_injected_strategy 内部构造 State
+- **确定**：`_wrap_injected_strategy` 内部构造 Strategy 和 State，不再由 `_run_backtest` 构造 State
+- `_run_backtest` 接收 `strategy_names` 和 `strategy_params_list`，调用 `_wrap_injected_strategy(strategy_name, strategy_params, symbol)`
+- `run_walk_forward` 自动适配（因调用 `_run_backtest`）
+- 优化器需要修改（`run(pairs)` 接口改为 `(symbol, df, strategy_name, strategy_params)`）
 
-### 28. ✅ State 文件位置与导出
+### 26. ✅ State 文件位置与导出
 - **确定**：新增 `strategies/core/state.py` 存放 `State[T]`
 - 在 `strategies/core/__init__.py` 和 `strategies/__init__.py` 中导出
 
-### 29. ✅ MaStrategyCore 内部清理
+### 27. ✅ MaStrategyCore 内部清理
 - **确定**：移除 `MACrossParams.use_data_feed`、`_close_history`、`_prev_sma_short`、`_prev_sma_long`、兼容模式方法
 - `self._position` → `state.position`，`self._config` → `state.strategy_config`
 - `self._capital`/`self._contract_size` → `state.capital`/`state.contract_size`（通过 `_calc_position_size` 参数传入）
 - `__init__` 不再接收 `capital`/`contract_size` 参数
 
-### 30. ✅ DataFeed.update_bar() 时间戳幂等检查
+### 28. ✅ DataFeed.update_bar() 时间戳幂等检查
 - **确定**：`DataFeed.update_bar(bar, period)` 调用时，检查该 period 中是否已存在相同时间戳的 bar，存在则跳过（不做重复追加）
 - 原因：主周期（1m）的数据通过 `on_bar` 逐根喂入，而 `on_init` 只预加载非主周期（5m/15m），两者不会冲突。但加幂等检查可以防止意外重复调用导致数据错乱
 - 实现：`PeriodData.append_bar()` 中检查 bar 的 `datetime` 是否已存在于 `_df` 的 timestamp 列中
+
+### 29. ✅ build_context 实现（已在第7节详细说明）
+- 说明：`build_context(data_feed, requirements, current_time, bar)` 签名与实现在第7节有详细代码示例
 
 ---
 
@@ -728,15 +775,11 @@ def build_context(
 - 逻辑清晰，职责分离
 
 ### 问题 2：tqsdk_bridge.py 同步更新
-**问题描述**：
-文档只提到了 `vnpy_bridge.py` 的更新，但 `tqsdk_bridge.py` 也需要同步更新以保持架构一致性。
+**状态**：暂不考虑，不在本期处理
 
-**建议方案**：
-- tqsdk_bridge.py 同样需要：
-  1. 集成 State 机制
-  2. 集成 DataFeed 架构
-  3. 实现 on_trade 回调更新 State
-  4. 适配新的 Strategy 接口
+**说明**：
+- 本次重构先聚焦 vnpy 回测场景
+- tqsdk 相关更新可在后续需要时再处理
 
 ### 问题 3：实盘场景下非主周期数据获取方式不明确
 **状态**：暂不考虑，实现时再处理
