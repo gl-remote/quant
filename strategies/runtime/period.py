@@ -176,7 +176,9 @@ class PeriodData:
             else:
                 return  # 已存在，幂等跳过
 
-        # 追加新数据
+        # 追加新数据，新 bar 使已有指标过期，清除缓存触发懒重算
+        self.clear_indicator_calculation()
+
         new_row = pd.Series({
             'open': bar.open,
             'high': bar.high,

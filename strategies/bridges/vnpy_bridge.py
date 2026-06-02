@@ -120,8 +120,7 @@ class VnpyStrategyBridge(CtaTemplate):
         # 加载非主周期的历史数据
         self._load_non_main_periods(data_feed)
 
-        # 预计算所有指标
-        data_feed.calculate_all()
+        # 指标不预计算（主周期此时为空），由 get_data 懒加载首次触发
         self._data_feed = data_feed
 
         self.write_log(f"策略初始化: {self._core.name}")
