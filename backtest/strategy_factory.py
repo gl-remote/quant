@@ -28,7 +28,7 @@ class StrategyFactory:
     """
 
     @staticmethod
-    def extract_config_type(strategy_cls: type[Strategy]) -> type:
+    def extract_config_type(strategy_cls: type[Strategy[Any]]) -> type:
         """从策略类提取配置类型
 
         Args:
@@ -62,19 +62,7 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
-    ) -> State:
-        """创建 State 对象
-
-        Args:
-            strategy_config: 策略配置对象
-            symbol: 品种代码
-            period: K线周期
-            capital: 初始资金
-            contract_size: 合约乘数
-
-        Returns:
-            State 实例
-        """
+    ) -> State[Any]:
         return State(
             symbol=symbol,
             period=period,
@@ -107,8 +95,8 @@ class StrategyFactory:
         """
         from strategies.bridges import VnpyStrategyBridge
 
-        # 提前加载策略类（可选，也可以在 __init__ 中懒加载）
-        strategy_cls = load_strategy(strategy_name)
+        strategy_instance = load_strategy(strategy_name)
+        strategy_cls: type[Strategy[Any]] = type(strategy_instance)
         config_cls = StrategyFactory.extract_config_type(strategy_cls)
         strategy_config = config_cls(**strategy_params)
 
@@ -139,19 +127,7 @@ def create_strategy_class(
     capital: float,
     contract_size: int,
 ) -> type[VnpyStrategyBridge]:
-    """便捷函数：直接创建注入的策略桥接类
-
-    Args:
-        strategy_name: 策略名称
-        strategy_params: 策略参数字典
-        symbol: 品种代码
-        period: K线周期
-        capital: 初始资金
-        contract_size: 合约乘数
-
-    Returns:
-        继承自 VnpyStrategyBridge 的类
-    """
+    """便捷函数：直接创建注入的策略桥接类"""
     return StrategyFactory.create_injected_strategy_class(
         strategy_name=strategy_name,
         strategy_params=strategy_params,
@@ -165,17 +141,10 @@ def create_strategy_class(
 def load_strategy_and_config(
     strategy_name: str,
     strategy_params: dict[str, Any],
-) -> tuple[type[Strategy], object]:
-    """加载策略类并构造配置对象
-
-    Args:
-        strategy_name: 策略名称
-        strategy_params: 策略参数字典
-
-    Returns:
-        (strategy_cls, strategy_config) 元组
-    """
-    strategy_cls = load_strategy(strategy_name)
+) -> tuple[type[Strategy[Any]], object]:
+    """加载策略类并构造配置对象"""
+    strategy_instance = load_strategy(strategy_name)
+    strategy_cls: type[Strategy[Any]] = type(strategy_instance)
     config_cls = StrategyFactory.extract_config_type(strategy_cls)
     strategy_config = config_cls(**strategy_params)
     return (strategy_cls, strategy_config)

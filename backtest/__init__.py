@@ -2,11 +2,14 @@
 """
 回测模块
 
-提供批量回测流水线:
-  - VnpyBacktestEngine: 批量回测引擎 (纯执行器)
-  - walk_forward_split / walk_forward_split_by_ratio: Walk-Forward 窗口划分
-  - runners: 批量回测编排器 (数据加载、Walk-Forward、参数搜索编排)
-  - optimizer: 参数优化引擎 (Optuna 网格/贝叶斯搜索)
+模块职责:
+  - vnpy_backtest_engine: vn.py 回测引擎 (纯执行器)
+  - strategy_factory:     策略工厂与桥接器集成
+  - data_utils:           数据转换工具 (df_to_vnpy_datalines, resolve_interval)
+  - results:              结果聚合与统计 (Walk-Forward 聚合)
+  - walk_forward:         Walk-Forward 窗口划分
+  - runners:              批量回测编排器 (数据加载、Walk-Forward、参数搜索编排)
+  - optimizer:            参数优化引擎 (Optuna 网格/贝叶斯搜索)
 
 注意: 单标的 TQ 回测已由 cli/commands/backtest.py:_run_tq_backtest 直接实现。
      报告生成已迁移至顶层 report/ 包。
@@ -15,14 +18,31 @@
 """
 
 from .vnpy_backtest_engine import VnpyBacktestEngine
-from .walk_forward import walk_forward_split, walk_forward_split_by_ratio
+from .strategy_factory import StrategyFactory, create_strategy_class, load_strategy_and_config
+from .data_utils import df_to_vnpy_datalines, resolve_interval
+from .results import aggregate_walk_forward, WalkForwardAggregate
+from .walk_forward import (
+    walk_forward_split,
+    walk_forward_split_by_ratio,
+    validate_window_params,
+    WindowParams,
+)
 from .runners import execute_walk_forward, execute_parameter_search
 from .optimizer import run_param_search, OptunaOptimizer, OptunaResult, SearchResult
 
 __all__ = [
     'VnpyBacktestEngine',
+    'StrategyFactory',
+    'create_strategy_class',
+    'load_strategy_and_config',
+    'df_to_vnpy_datalines',
+    'resolve_interval',
+    'aggregate_walk_forward',
+    'WalkForwardAggregate',
     'walk_forward_split',
     'walk_forward_split_by_ratio',
+    'validate_window_params',
+    'WindowParams',
     'execute_walk_forward',
     'execute_parameter_search',
     'run_param_search',

@@ -1,11 +1,14 @@
 """Walk-Forward 时间序列交叉验证工具
 
 提供:
-  - walk_forward_split:         WF 窗口划分 (按行数)
+  - validate_window_params:      验证窗口参数合法性
+  - WindowParams:                窗口参数 dataclass
+  - walk_forward_split:          WF 窗口划分 (按行数)
   - walk_forward_split_by_ratio: WF 窗口划分 (按比例)
 """
 
 import logging
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -13,8 +16,78 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================
+# 参数验证
+# ============================================================
+
+
+@dataclass
+class WindowParams:
+    """Walk-Forward 窗口参数
+
+    Attributes:
+        train_size: 训练集行数
+        val_size: 验证集行数
+        test_size: 测试集行数
+        step: 滑动步长
+    """
+    train_size: int
+    val_size: int
+    test_size: int
+    step: int
+
+
+def validate_window_params(
+    df_len: int,
+    train_size: int,
+    val_size: int,
+    test_size: int,
+    step: int,
+) -> WindowParams:
+    """验证并规范化 Walk-Forward 窗口参数
+
+    Args:
+        df_len: 数据总行数
+        train_size: 训练集行数
+        val_size: 验证集行数
+        test_size: 测试集行数
+        step: 滑动步长
+
+    Returns:
+        WindowParams 规范化后的参数
+
+    Raises:
+        ValueError: 参数不合法
+    """
+    if df_len < 1:
+        raise ValueError("数据量为 0，无法创建窗口")
+
+    min_required = train_size + val_size + test_size
+    if df_len < min_required:
+        raise ValueError(
+            f"数据量不足：需要至少 {min_required} 行，当前 {df_len} 行"
+        )
+
+    if step < 1:
+        step = max(1, test_size // 2)
+        logger.info(f"step 自动调整为 {step}")
+
+    if train_size < 1:
+        raise ValueError(f"train_size 必须 >= 1，当前: {train_size}")
+    if test_size < 1:
+        raise ValueError(f"test_size 必须 >= 1，当前: {test_size}")
+
+    return WindowParams(
+        train_size=train_size,
+        val_size=val_size,
+        test_size=test_size,
+        step=step,
+    )
+
+
+# ============================================================
 # Walk-Forward 时间序列交叉验证
 # ============================================================
+
 
 def walk_forward_split(
     df: pd.DataFrame,
@@ -39,30 +112,26 @@ def walk_forward_split(
         [(train_df, val_df, test_df), ...] 按时间顺序排列的窗口列表
     """
     n = len(df)
-    min_required = train_size + val_size + test_size
-    if n < min_required:
-        raise ValueError(
-            f"数据量不足：需要至少 {min_required} 行，当前 {n} 行"
-        )
+    params = validate_window_params(n, train_size, val_size, test_size, step)
 
     windows = []
     start = 0
-    while start + min_required <= n:
-        train_end = start + train_size
-        val_end = train_end + val_size
-        test_end = val_end + test_size
+    while start + params.train_size + params.val_size + params.test_size <= n:
+        train_end = start + params.train_size
+        val_end = train_end + params.val_size
+        test_end = val_end + params.test_size
 
         train_df = df.iloc[start:train_end].reset_index(drop=True)
         val_df = df.iloc[train_end:val_end].reset_index(drop=True)
         test_df = df.iloc[val_end:test_end].reset_index(drop=True)
 
         windows.append((train_df, val_df, test_df))
-        start += step
+        start += params.step
 
     logger.info(
         f"Walk-Forward 划分: {len(windows)} 个窗口 "
-        f"(train={train_size}, val={val_size}, test={test_size}, step={step}, "
-        f"数据量={n})"
+        f"(train={params.train_size}, val={params.val_size}, "
+        f"test={params.test_size}, step={params.step}, 数据量={n})"
     )
     return windows
 
@@ -121,8 +190,6 @@ def walk_forward_split_by_ratio(
     effective_ratio = step_ratio
     train_size, val_size, test_size, step = _calc_sizes(effective_ratio)
 
-    # 逐步缩小窗口，直到窗口数达标或窗口过小无法继续
-    # range(max_attempts) 提供兜底的死循环防护，最多重试 10 次
     max_attempts = 10
     for _ in range(max_attempts):
         actual_windows = _count_windows(train_size, val_size, test_size, step)

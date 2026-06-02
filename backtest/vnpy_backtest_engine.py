@@ -6,8 +6,10 @@ vn.py 回测引擎 (纯执行器)
 返回结构化回测结果。不负责数据加载和策略创建。
 
 职责明确：
-  - data 层负责数据加载
-  - optimizer 层负责参数搜索
+  - data_utils 负责数据转换
+  - strategy_factory 负责策略创建
+  - results 负责结果聚合
+  - optimizer 负责参数搜索
   - backtest 层仅调用 vnpy 执行回测
 """
 
@@ -16,18 +18,16 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
 import pandas as pd
 
-from strategies import State
 from strategies.utils import serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
 
+from .data_utils import df_to_vnpy_datalines, resolve_interval
+from .results import aggregate_walk_forward
 from .strategy_factory import create_strategy_class
 
-from common.formatting import parse_percentage
-from common.formulas import profitable_ratio
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
 
@@ -36,63 +36,6 @@ if TYPE_CHECKING:
     from vnpy.trader.constant import Exchange, Interval
 
 logger = logging.getLogger(__name__)
-
-
-# ── 符号解析 & BarData 转换 ───────────────────────────────
-
-
-def df_to_vnpy_datalines(
-    df: pd.DataFrame,
-    pure_symbol: str,
-    exchange_code: str,
-    interval: Interval | None = None,
-) -> list[BarData]:
-    """将 DataFrame 转换为 vn.py 回测引擎可用的 BarData 列表
-
-    将 K 线 CSV (datetime, open, high, low, close, volume) 转换为
-    vnpy BarData 对象列表，可直接注入 BacktestingEngine.history_data
-
-    Args:
-        df: K 线数据
-        pure_symbol: 纯品种代号 (e.g. m2509)
-        exchange_code: 交易所代码 (e.g. DCE)
-        interval: vnpy Interval 枚举，None 时回退到 Interval.DAILY
-
-    Returns:
-        vnpy BarData 对象列表
-    """
-    from vnpy.trader.object import BarData
-    from vnpy.trader.constant import Exchange, Interval
-
-    required_cols = {'datetime', 'open', 'high', 'low', 'close', 'volume'}
-    missing = required_cols - set(df.columns)
-    if missing:
-        raise ValueError(f"数据缺少必要列: {missing}")
-
-    exchange: Exchange = Exchange(exchange_code)
-    bar_interval: Interval = interval if interval is not None else Interval.DAILY
-
-    bars: list[BarData] = [
-        BarData(
-            symbol=pure_symbol,
-            exchange=exchange,
-            datetime=pd.Timestamp(row['datetime']).to_pydatetime(),
-            interval=bar_interval,
-            open_price=row['open'],
-            high_price=row['high'],
-            low_price=row['low'],
-            close_price=row['close'],
-            volume=row['volume'],
-            gateway_name="CSV",
-        )
-        for row in df.to_dict(orient='records')
-    ]
-
-    logger.info(f"转换完成: {len(bars)} 条 BarData")
-    return bars
-
-
-# ── Engine ───────────────────────────────────────────────
 
 
 class VnpyBacktestEngine:
@@ -297,55 +240,14 @@ class VnpyBacktestEngine:
                 'statistics_is': train_result.get('statistics', {}),
             })
 
-        returns: list[float] = []
-        sharpes: list[float] = []
-        drawdowns: list[float] = []
-        win_rates: list[float] = []
-        is_returns: list[float] = []
-        oos_returns: list[float] = []
-
-        for w in window_results:
-            stats = w.get('statistics', {})
-            is_stats = w.get('statistics_is', {})
-            returns.append(parse_percentage(stats.get('total_return', 0)))
-            sharpes.append(float(stats.get('sharpe_ratio', 0)))
-            drawdowns.append(parse_percentage(stats.get('max_drawdown', 0)))
-            win_rates.append(parse_percentage(stats.get('win_rate', 0)))
-            is_returns.append(parse_percentage(is_stats.get('total_return', 0)))
-            oos_returns.append(parse_percentage(stats.get('total_return', 0)))
-
-        arr_returns = np.array(returns, dtype=float)
-
-        is_mean = float(np.mean(is_returns)) if is_returns else 0.0
-        oos_mean = float(np.mean(oos_returns)) if oos_returns else 0.0
-
-        aggregate = {
-            'return_mean': float(np.mean(arr_returns)),
-            'return_std': float(np.std(arr_returns)),
-            'sharpe_mean': float(np.mean(sharpes)),
-            'sharpe_std': float(np.std(sharpes)),
-            'max_drawdown_mean': float(np.mean(drawdowns)),
-            'max_drawdown_worst': float(np.max(drawdowns)),
-            'win_rate_mean': float(np.mean(win_rates)),
-            'win_rate_std': float(np.std(win_rates)),
-            'positive_window_ratio': profitable_ratio(
-                int(np.sum(arr_returns > 0)), len(arr_returns),
-            ),
-            'stability_score': float(max(0.0, min(
-                1.0,
-                1.0 - float(np.std(arr_returns)) / max(
-                    abs(float(np.mean(arr_returns))), 1e-9
-                ),
-            ))),
-            'is_oos_return_gap': is_mean - oos_mean,
-        }
+        aggregate = aggregate_walk_forward(window_results)
 
         logger.info(
             f"Walk-Forward 汇总 ({len(windows)} 窗口): "
-            f"OOS均收益={aggregate['return_mean']:.2%}, "
-            f"夏普={aggregate['sharpe_mean']:.2f}, "
-            f"IS-OOS差距={aggregate['is_oos_return_gap']:.2%}, "
-            f"盈利窗口比={aggregate['positive_window_ratio']:.0%}"
+            f"OOS均收益={aggregate.return_mean:.2%}, "
+            f"夏普={aggregate.sharpe_mean:.2f}, "
+            f"IS-OOS差距={aggregate.is_oos_return_gap:.2%}, "
+            f"盈利窗口比={aggregate.positive_window_ratio:.0%}"
         )
 
         return {
@@ -353,7 +255,7 @@ class VnpyBacktestEngine:
             'symbol': symbol,
             'windows': len(windows),
             'window_results': window_results,
-            'aggregate': aggregate,
+            'aggregate': aggregate.to_dict(),
         }
 
     # ── 内部方法 ──────────────────────────────────────────────
@@ -379,7 +281,7 @@ class VnpyBacktestEngine:
               - error (如果失败)
         """
         from vnpy_ctastrategy.backtesting import BacktestingEngine
-        from vnpy.trader.constant import Exchange, Interval
+        from vnpy.trader.constant import Exchange
 
         c = parse_contract(symbol)
         if c is None:
@@ -388,16 +290,7 @@ class VnpyBacktestEngine:
         exchange_code = c.exchange
         vt_symbol = f"{pure_symbol}.{Exchange(exchange_code).value}"
 
-        _interval_map = {
-            '1m': getattr(Interval, 'MINUTE', Interval.MINUTE),
-            '5m': getattr(Interval, 'MINUTE_5', Interval.MINUTE),
-            '15m': getattr(Interval, 'MINUTE_15', Interval.MINUTE),
-            '30m': getattr(Interval, 'MINUTE_30', Interval.MINUTE),
-            '1h': Interval.HOUR,
-            'd': Interval.DAILY,
-        }
-        interval = _interval_map.get(self.interval, Interval.DAILY)
-
+        interval = resolve_interval(self.interval)
         bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
 
         results: list[dict[str, Any]] = []
