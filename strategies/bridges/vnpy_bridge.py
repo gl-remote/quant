@@ -209,7 +209,7 @@ class VnpyStrategyBridge(CtaTemplate):
             ctx = build_context(
                 self._data_feed,
                 self._requirements,
-                pd.Timestamp(standardized.datetime),
+                standardized.datetime,  # 直接传 datetime 对象，不需要转换
                 standardized  # 显式传入当前 bar
             )
 
