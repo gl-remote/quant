@@ -302,6 +302,7 @@ class VnpyBacktestEngine:
             )
 
             engine = BacktestingEngine()
+            engine.output = lambda msg: logger.debug(f"[vnpy] {msg}")  # 重定向 print 到 loguru
             engine.set_parameters(
                 vt_symbol=vt_symbol,
                 interval=interval,
