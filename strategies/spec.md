@@ -468,48 +468,6 @@ def row_to_bar(row: pd.Series) -> Bar:
     )
 ```
 
-#### VnpyStrategyBridge.on_init() 完整实现（使用方案 A）
-
-```python
-def on_init(self) -> None:
-    if self._core.name == "_uninitialized":
-        logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
-        return
-    
-    logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
-    self.write_log(f"策略初始化: {self._core.name}")
-    
-    # 获取数据需求
-    requirements = self._core.data_requirements(self._state.strategy_config)
-    self._requirements = requirements
-    
-    # 初始化 DataFeed
-    data_feed = DataFeedCache.get_or_create(self._state.symbol)
-    data_feed.setup(requirements)
-    
-    # 加载非主周期历史数据
-    if requirements:
-        # 注意：这里需要通过某种方式获取 DataManager 实例
-        # 可以通过 State.extra 或全局单例等方式
-        # 实际实现需要与现有 data 模块集成
-        for period in requirements.periods:
-            if period == self._state.period:
-                continue
-                
-            # 从 data 模块加载非主周期 DataFrame，直接加载到 DataFeed
-            # df = data_manager.load_data(self._state.symbol, period)
-            # data_feed.load_history_df(period, df)
-    
-    # 预计算指标
-    data_feed.calculate_all()
-    self._data_feed = data_feed
-```
-
-**优化要点**：
-1. **推荐使用 **方案 A**：DataFeed 直接支持 DataFrame 加载，避免全量 Bar 转换
-2. **只在必要时**使用单行转换，避免不必要的循环转换
-3. **保持接口一致性**：主周期数据依然通过 on_bar 逐根喂入，非主周期数据直接加载 DataFrame
-
 ### 7. build_context() 签名变更实现
 修改 `build_context()` 函数签名，新增 `bar` 参数：
 
