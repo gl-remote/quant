@@ -19,6 +19,7 @@ from strategies import (
     build_context,
     MaStrategyCore,
 )
+from strategies.ma_strategy import MACrossParams
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -189,7 +190,7 @@ def test_build_context():
 
     # 构建上下文
     latest_bar = bars[-1]
-    ctx = build_context(feed, reqs, latest_bar.datetime)
+    ctx = build_context(feed, reqs, latest_bar.datetime, latest_bar)
 
     print(f"BarContext symbol: {ctx.symbol}")
     print(f"包含的周期: {list(ctx.multi.keys())}")
@@ -201,19 +202,15 @@ def test_strategy_with_data_feed():
     """测试策略使用 DataFeed"""
     print("=== 测试策略使用 DataFeed ===\n")
 
-    # 配置策略使用数据管理系统
-    strategy_params = {
-        "sma_short": 5,
-        "sma_long": 10,
-        "use_data_feed": True,
-    }
-    strategy = MaStrategyCore(strategy_params)
+    # 新架构策略不需要参数构造
+    strategy = MaStrategyCore()
+    cfg = MACrossParams(sma_short=5, sma_long=10)
 
     print(f"策略名称: {strategy.name}")
     print(f"策略版本: {strategy.VERSION}")
 
     # 查看策略的数据需求
-    reqs = strategy.data_requirements()
+    reqs = strategy.data_requirements(cfg)
     if reqs:
         print(f"策略需求的周期: {list(reqs.periods.keys())}")
         for period, indicators in reqs.indicators.items():
