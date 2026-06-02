@@ -468,6 +468,11 @@ def row_to_bar(row: pd.Series) -> Bar:
     )
 ```
 
+**优化要点**：
+1. **推荐使用 **方案 A**：DataFeed 直接支持 DataFrame 加载，避免全量 Bar 转换
+2. **只在必要时**使用单行转换，避免不必要的循环转换
+3. **保持接口一致性**：主周期数据依然通过 on_bar 逐根喂入，非主周期数据直接加载 DataFrame
+
 ### 7. build_context() 签名变更实现
 修改 `build_context()` 函数签名，新增 `bar` 参数：
 
