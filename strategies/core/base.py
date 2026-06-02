@@ -188,7 +188,7 @@ class UninitializedStrategy(Strategy[Any]):
     name = "_uninitialized"
     VERSION = ""
 
-    def on_bar(self, state: State, ctx: BarContext) -> Signal:
+    def on_bar(self, state: State[Any], ctx: BarContext) -> Signal:
         raise RuntimeError("Strategy core not yet injected into bridge")
 
     def on_fill(self, fill: Fill) -> None:

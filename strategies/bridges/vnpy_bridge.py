@@ -23,7 +23,6 @@ import logging
 from datetime import datetime
 from typing import Any, Optional, cast
 
-import pandas as pd
 from vnpy_ctastrategy import CtaTemplate
 
 from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy, State
@@ -74,7 +73,7 @@ class VnpyStrategyBridge(CtaTemplate):
         """
         super().__init__(*args, **kwargs)
         self._core: Strategy[Any] = UninitializedStrategy()
-        self._state: State = State(symbol="", period="", strategy_config=None)
+        self._state: State[Any] = State(symbol="", period="", strategy_config=None)
         self._requirements: Optional[DataRequirements] = None
         self._data_feed: Any = None
         self.entry_price: float = 0.0
