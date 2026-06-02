@@ -218,8 +218,11 @@ class OptunaOptimizer:
         result = OptunaResult()
         trial_index: list[dict[str, Any]] = []
         trial_index_lock = threading.Lock()
+        completed_count = 0
+        progress_lock = threading.Lock()
 
         def objective(trial: optuna.trial.Trial) -> float:
+            nonlocal completed_count
             _start_trial(trial.number)
             try:
                 params = self._suggest_params(trial)
@@ -254,6 +257,13 @@ class OptunaOptimizer:
                 return score
             finally:
                 _end_trial()
+                with progress_lock:
+                    completed_count += 1
+                    # 多线程进度：print 直接写 stderr，不走 trial buffer
+                    if self._n_jobs > 1:
+                        print(f"\r  [{completed_count}/{n_trials}]",
+                              end="" if completed_count < n_trials else "\n",
+                              file=sys.stderr, flush=True)
 
         # 抑制 optuna 默认日志（INFO → WARNING）
         optuna.logging.set_verbosity(optuna.logging.WARNING)
