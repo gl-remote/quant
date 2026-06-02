@@ -311,7 +311,8 @@ class OptunaOptimizer:
         logger.remove(None)  # remove all default sinks, keep trial sink
 
         try:
-            study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs, show_progress_bar=True)
+            study.optimize(objective, n_trials=n_trials, n_jobs=self._n_jobs,
+                          show_progress_bar=(self._n_jobs <= 1))
         finally:
             logger.remove(_trial_sink_id)
             # 恢复默认 stderr 输出
