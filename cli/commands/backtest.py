@@ -280,6 +280,9 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
     optimizer_arg: str | None = args.optimizer  # pyright: ignore[reportAny]
 
     try:
+        run_id = 0
+        _sink_id = None
+        _log_lines: list[str] = []
         bc = cm.get_backtest_config()
 
         # ── 步骤 1: 确定品种列表 ──
@@ -328,10 +331,10 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         )
 
         # 挂日志收集器：DEBUG 全量 → output/r{run_id}/data/logs.json
-        _log_lines: list[str] = []
+        _log_lines.clear()
         _log_lock = threading.Lock()
 
-        def _log_collector(message: "loguru.Message") -> None:
+        def _log_collector(message) -> None:  # type: ignore[no-untyped-def]
             with _log_lock:
                 _log_lines.append(str(message).rstrip('\n'))
 
@@ -423,9 +426,9 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         raise
     finally:
         # 移除日志收集器，写入 JSON 数组
-        if '_sink_id' in locals():
+        if _sink_id is not None:
             logger.remove(_sink_id)
-        if '_log_lines' in locals() and _log_lines:
+        if run_id > 0 and _log_lines:
             logs_dir = Path("output") / f"r{run_id}" / "data"
             logs_dir.mkdir(parents=True, exist_ok=True)
             with open(logs_dir / "logs.json", "w", encoding="utf-8") as f:
