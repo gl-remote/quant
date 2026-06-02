@@ -378,16 +378,15 @@ class DataFeed:
         if period_data is not None and period_data.length > 0 and bar_time <= period_data.latest_time:  # type: ignore[union-attr]
             return
 
-        with self._lock:
-            if period not in self._periods:
-                raise KeyError(f"Period {period} not registered")
+        if period not in self._periods:
+            raise KeyError(f"Period {period} not registered")
 
-            self._periods[period].append_bar(bar)
+        self._periods[period].append_bar(bar)
 
-            if events:
-                self.append_events(events)
+        if events:
+            self.append_events(events)
 
-            self._check_period_conversion(period)
+        self._check_period_conversion(period)
 
     def _check_period_conversion(self, source_period: str) -> None:
         """检查是否触发周期转换（内部方法）
@@ -484,33 +483,17 @@ class DataFeed:
         :raises KeyError: 如果周期未注册
         :raises ValueError: 如果current_time晚于最新数据时间或超时
         """
-        with self._lock:
-            # 检查周期是否存在
-            if period_name not in self._periods:
-                raise KeyError(f"Period {period_name} not registered")
+        if period_name not in self._periods:
+            raise KeyError(f"Period {period_name} not registered")
 
-            current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
+        current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
-            # 等待更新完成（如果需要）
-            if self._updating_time != pd.Timestamp(0):
-                if current_time_ts >= self._updating_time:
-                    if timeout is None:
-                        # 回测模式，直接抛错
-                        raise ValueError(f"current_time {current_time_ts} is >= updating_time {self._updating_time}")
-                    elif timeout > 0:
-                        # 等待更新完成
-                        if not self._condition.wait(timeout=timeout):
-                            raise ValueError(f"Timeout waiting for update to complete")
-                    else:  # timeout == 0
-                        # 非阻塞，抛错
-                        raise ValueError(f"Update in progress and timeout=0")
+        # 懒加载计算指标
+        self._calculate_indicators_for_period(period_name)
 
-            # 懒加载计算指标
-            self._calculate_indicators_for_period(period_name)
-
-            # 获取视图
-            period_data = self._periods[period_name]
-            return period_data.get_data(current_time_ts, lookback_bars, self._events)
+        # 获取视图
+        period_data = self._periods[period_name]
+        return period_data.get_data(current_time_ts, lookback_bars, self._events)
 
 
 # ==================== 辅助函数 ====================
