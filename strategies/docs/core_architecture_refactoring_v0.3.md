@@ -21,7 +21,7 @@
 ## 目标
 
 1. **State 解耦**：定义 `State[T]` dataclass，将策略配置、持仓、交易记录从 Strategy 迁移到 State，使 Strategy 成为纯决策逻辑
-2. **Runtime 集成**：VnpyStrategyBridge 集成 DataFeedCache，通过 on_init 完成 DataFeed 初始化、on_bar 中通过 update_bar/build_context 完整接入 runtime 数据管理架构
+2. **Runtime 集成**：VnpyBacktestBridge 集成 DataFeedCache，通过 on_init 完成 DataFeed 初始化、on_bar 中通过 update_bar/build_context 完整接入 runtime 数据管理架构
 3. **移除兼容模式**：MaStrategyCore 移除 `use_data_feed` 开关和 `_on_bar_compatible` 代码，仅保留 ctx 模式
 4. **接口统一**：Strategy 基类接口变更（`on_bar(state, ctx)`、`data_requirements(config)`），移除 `config`/`position` 属性，`reset()` 退化为空方法
 
@@ -36,15 +36,15 @@ VnpyBacktestEngine
     ↓ (df_to_vnpy_datalines: DataFrame → vnpy BarData)
 vnpy.BacktestingEngine
     ↓ (回测回放，调用 on_bar)
-VnpyStrategyBridge
+VnpyBacktestBridge
     ↓ (_vnpy_bar_to_bar: vnpy BarData → 标准 Bar)
 MaStrategyCore
     ↓ (策略决策：on_bar(bar) → Signal)
-VnpyStrategyBridge
+VnpyBacktestBridge
     ↓ (_execute_buy/_execute_sell: Signal → vnpy 下单)
 vnpy.BacktestingEngine
     ↓ (模拟成交)
-VnpyStrategyBridge
+VnpyBacktestBridge
     ↓ (构造 Fill 并回调)
 MaStrategyCore
 ```
@@ -67,7 +67,7 @@ MaStrategyCore
   - [`_wrap_injected_strategy`](file:///Users/REDACTED_API_KEY/Documents/src/quant/backtest/vnpy_backtest_engine.py#L362-L384)：注入策略到桥接器
 - **不涉及**：数据计算、策略决策
 
-#### 3. VnpyStrategyBridge 层 (strategies/bridges/)
+#### 3. VnpyBacktestBridge 层 (strategies/bridges/)
 - **核心理念**：Bridge 天然就是用来适配第三方运行时的
   - 向下适配：vnpy 回测/实盘引擎
   - 向上适配：我们的 runtime 数据管理架构
@@ -99,14 +99,14 @@ MaStrategyCore
 | 策略 proximity | 间接持有 | 直接持有 Strategy |
 | 共享数据管理 | 天然统一管理 | 需要通过 Cache 协调 |
 
-#### 推荐方案：在 VnpyStrategyBridge 接入
+#### 推荐方案：在 VnpyBacktestBridge 接入
 
 ```
 VnpyBacktestEngine
     ↓ (df_to_vnpy_datalines 保持不变)
 vnpy.BacktestingEngine
     ↓ (回测回放，调用 bridge.on_bar)
-VnpyStrategyBridge (新增 runtime 接入)
+VnpyBacktestBridge (新增 runtime 接入)
     ├─→ on_init 时：注册 DataFeed + 加载多周期历史数据 + 预计算指标
     ├─→ on_bar 时：
     │   ├─→ update_bar(标准 Bar)
@@ -117,7 +117,7 @@ MaStrategyCore (仅使用 ctx 模式)
 ```
 
 **关键变更点**：
-- VnpyStrategyBridge 新增 runtime 集成逻辑
+- VnpyBacktestBridge 新增 runtime 集成逻辑
 - VnpyBacktestEngine 需要传递 State 信息给 bridge
 - MaStrategyCore 移除兼容模式，仅依赖 BarContext
 - 通过 DataFeedCache 单例确保多策略数据共享
@@ -177,7 +177,7 @@ def _wrap_injected_strategy(
     strategy_params: dict[str, Any],
     symbol: str
 ) -> type:
-    from strategies.bridges import VnpyStrategyBridge
+    from strategies.bridges import VnpyBacktestBridge
     from strategies.utils.loader import load_strategy
     from strategies.core.state import State
 
@@ -188,7 +188,7 @@ def _wrap_injected_strategy(
     _captured_capital = self.initial_capital
     _captured_contract_size = self.contract_size
 
-    class _InjectedStrategy(VnpyStrategyBridge):
+    class _InjectedStrategy(VnpyBacktestBridge):
 
         def _load_default_core(self, _setting: object | None = None) -> None:
             pass
@@ -212,13 +212,13 @@ def _wrap_injected_strategy(
                 capital=_captured_capital,
                 contract_size=_captured_contract_size
             )
-            # on_init() 继承自 VnpyStrategyBridge，
+            # on_init() 继承自 VnpyBacktestBridge，
             # 按 requirements.periods 从 data 模块加载所需周期数据
 
     return _InjectedStrategy
 ```
 
-### 2. VnpyStrategyBridge
+### 2. VnpyBacktestBridge
 - `on_init()` 中完成 DataFeed 初始化（注册周期/指标、按 requirements 加载**非主周期**数据、预计算指标）
 - Bridge 通过 `self._state: State[T]` 持有所有运行时数据，config 通过 `self._state.strategy_config` 访问，Bridge 自身不挂 config 字段不读 `self._core.config`
 
@@ -783,7 +783,7 @@ def build_context(
 
 **最终方案**：Bridge 在 `on_init()` 中直接获取 DataManager 单例
 ```python
-# 在 VnpyStrategyBridge.on_init() 中
+# 在 VnpyBacktestBridge.on_init() 中
 def on_init(self):
     # ... 其他代码 ...
     

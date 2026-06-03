@@ -2,7 +2,7 @@
 
 > ⚠️ **历史文档 (v3.0)** — 2026-06-03 起该方案已废弃。
 >
-> **当前架构**：每个 `VnpyStrategyBridge` 创建独立 `DataFeed` 实例，
+> **当前架构**：每个 `VnpyBacktestBridge` 创建独立 `DataFeed` 实例，
 > 无全局缓存（`DataFeedCache`），无锁，无并发控制。
 > 内存换效率，每 bar 零锁开销。
 >

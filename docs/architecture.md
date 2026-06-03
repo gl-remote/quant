@@ -79,7 +79,7 @@ Bridge 调用流程:
 
 ### 桥接器对比
 
-| 特性 | VnpyStrategyBridge | TqsdkStrategyBridge |
+| 特性 | VnpyBacktestBridge | TqsdkStrategyBridge |
 |------|-------------------|---------------------|
 | 用途 | vn.py 批量回测 | 天勤实盘/模拟/回测 |
 | 订单执行 | `self.buy/sell` | 手动交易记录 |
