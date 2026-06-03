@@ -130,8 +130,8 @@ class TqSdkDataSource(BaseDataSource):
             logger.error("tqsdk 未安装，无法拉取数据")
             return pd.DataFrame()
 
-        # start_dt 设为 end_dt 前 1 天，preload 全部用于历史数据
-        start_dt = end_dt - timedelta(days=1)
+        # start_dt 紧贴 end_dt，preload 全部用于历史数据，不留 replay 缝隙
+        start_dt = end_dt - timedelta(minutes=1)
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
