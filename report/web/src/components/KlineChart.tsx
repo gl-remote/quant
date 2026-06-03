@@ -15,6 +15,8 @@ import {
 import type { KlineData, KlinePoint, TradeRecord } from "@/types";
 import QlPanel from "@/components/QlPanel";
 import { qlIdNameMap } from "@/data/qlIdMapping";
+import { SMA, MACD, Stochastic } from "lightweight-charts-indicators";
+import type { Bar } from "oakscriptjs";
 
 type ViewMode = "daily" | "raw";
 
@@ -50,21 +52,7 @@ function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
   }));
 }
 
-function calculateSMA(data: KlinePoint[], period: number): number[] {
-  const result: number[] = [];
-  for (let i = 0; i < data.length; i++) {
-    if (i < period - 1) {
-      result.push(NaN);
-      continue;
-    }
-    let sum = 0;
-    for (let j = i - period + 1; j <= i; j++) {
-      sum += data[j].close;
-    }
-    result.push(sum / period);
-  }
-  return result;
-}
+
 
 function convertTradeToMarkers(
   trades: TradeRecord[],
@@ -149,10 +137,32 @@ export default function KlineChart({ data, trades, loading }: Props) {
   const smaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const smaLongSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const markersRef = useRef<any>(null);
+  
+  // MACD refs
+  const macdLineRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const macdSignalRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const macdHistogramRef = useRef<ISeriesApi<"Histogram"> | null>(null);
+  
+  // KDJ refs
+  const kdjKRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const kdjDRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const kdjJRef = useRef<ISeriesApi<"Line"> | null>(null);
+  
+  // PriceLine refs
+  const macdZeroPriceLineRef = useRef<any>(null);
+  const kdjFiftyPriceLineRef = useRef<any>(null);
+  
   const [mode, setMode] = useState<ViewMode>("daily");
-  const [indicators, setIndicators] = useState<{ sma: boolean; trades: boolean }>({
+  const [indicators, setIndicators] = useState<{ 
+    sma: boolean; 
+    trades: boolean; 
+    macd: boolean; 
+    kdj: boolean 
+  }>({
     sma: true,
     trades: true,
+    macd: true,
+    kdj: true,
   });
 
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
@@ -205,15 +215,30 @@ export default function KlineChart({ data, trades, loading }: Props) {
       layout: {
         background: { color: "#ffffff" },
         textColor: "#333",
+        panes: {
+          separatorColor: "#e0e0e0",
+        },
       },
       grid: {
         vertLines: { color: "#f0f0f0" },
         horzLines: { color: "#f0f0f0" },
       },
       width: container.clientWidth,
-      height: 500,
+      height: 600,
       crosshair: {
-        mode: 1,
+        mode: 1, // CrosshairMode.Magnet
+        vertLine: {
+          width: 1,
+          color: "rgba(180, 180, 180, 0.5)",
+          style: 3,
+          visible: true,
+        },
+        horzLine: {
+          width: 1,
+          color: "rgba(180, 180, 180, 0.5)",
+          style: 3,
+          visible: true,
+        },
       },
       rightPriceScale: {
         borderColor: "#e0e0e0",
@@ -259,7 +284,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
       borderDownColor: "#EF5350",
       wickUpColor: "#26A69A",
       wickDownColor: "#EF5350",
-    });
+    }, 0);
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       color: "#26A69A",
@@ -267,17 +292,66 @@ export default function KlineChart({ data, trades, loading }: Props) {
         type: "volume",
       },
       priceScaleId: "",
-    });
+    }, 0);
 
     const smaShortSeries = chart.addSeries(LineSeries, {
       color: "#FF6B6B",
       lineWidth: 2,
-    });
+    }, 0);
 
     const smaLongSeries = chart.addSeries(LineSeries, {
       color: "#4ECDC4",
       lineWidth: 2,
+    }, 0);
+
+    // MACD series - pane 1
+    const macdLine = chart.addSeries(LineSeries, {
+      color: "#FF6B6B",
+      lineWidth: 1,
+    }, 1);
+    
+    // MACD DIFF 线创建 0 轴
+    macdZeroPriceLineRef.current = macdLine.createPriceLine({
+      price: 0,
+      color: "#999",
+      lineStyle: 2,
+      axisLabelVisible: true,
     });
+    
+    const macdSignal = chart.addSeries(LineSeries, {
+      color: "#4ECDC4",
+      lineWidth: 1,
+    }, 1);
+    
+    const macdHistogram = chart.addSeries(HistogramSeries, {
+      priceFormat: {
+        type: "price",
+      },
+    }, 1);
+
+    // KDJ series - pane 2
+    const kdjK = chart.addSeries(LineSeries, {
+      color: "#FF6B6B",
+      lineWidth: 1,
+    }, 2);
+    
+    // KDJ K 线序列实例上创建 50 线
+    kdjFiftyPriceLineRef.current = kdjK.createPriceLine({
+      price: 50,
+      color: "#999",
+      lineStyle: 2,
+      axisLabelVisible: true,
+    });
+    
+    const kdjD = chart.addSeries(LineSeries, {
+      color: "#4ECDC4",
+      lineWidth: 1,
+    }, 2);
+    
+    const kdjJ = chart.addSeries(LineSeries, {
+      color: "#FFA500",
+      lineWidth: 1,
+    }, 2);
 
     const markers = createSeriesMarkers(candlestickSeries);
 
@@ -292,6 +366,12 @@ export default function KlineChart({ data, trades, loading }: Props) {
     volumeSeriesRef.current = volumeSeries;
     smaShortSeriesRef.current = smaShortSeries;
     smaLongSeriesRef.current = smaLongSeries;
+    macdLineRef.current = macdLine;
+    macdSignalRef.current = macdSignal;
+    macdHistogramRef.current = macdHistogram;
+    kdjKRef.current = kdjK;
+    kdjDRef.current = kdjD;
+    kdjJRef.current = kdjJ;
     markersRef.current = markers;
     chartRef.current = chart;
     console.log("[KlineChart] 图表创建成功");
@@ -332,22 +412,78 @@ export default function KlineChart({ data, trades, loading }: Props) {
     }));
     volSeries.setData(volumeData);
 
+    // Convert to Bar[] for lightweight-charts-indicators
+    const bars: Bar[] = klineData.map((d) => ({
+      time: toChartTime(d.datetime) as number,
+      open: d.open,
+      high: d.high,
+      low: d.low,
+      close: d.close,
+      volume: d.volume,
+    }));
+
     if (indicators.sma && smaShortSeriesRef.current && smaLongSeriesRef.current) {
-      const smaShort = calculateSMA(klineData, 5);
-      const smaLong = calculateSMA(klineData, 60);
+      const smaShortResult = SMA.calculate(bars, { len: 5, src: "close" });
+      const smaLongResult = SMA.calculate(bars, { len: 60, src: "close" });
 
-      const smaShortData = klineData.map((d, idx) => ({
-        time: toChartTime(d.datetime),
-        value: smaShort[idx],
+      smaShortSeriesRef.current.setData(smaShortResult.plots.plot0);
+      smaLongSeriesRef.current.setData(smaLongResult.plots.plot0);
+    }
+
+    // MACD
+    if (
+      indicators.macd && 
+      macdLineRef.current && 
+      macdSignalRef.current && 
+      macdHistogramRef.current
+    ) {
+      const macdResult = MACD.calculate(bars, { 
+        fastLength: 12, 
+        slowLength: 26, 
+        signalLength: 9 
+      });
+      
+      // 自定义 MACD histogram 的颜色
+      const histogramData = macdResult.plots.plot2.map((item) => ({
+        ...item,
+        color: (item.value ?? 0) >= 0 
+          ? "rgba(38,166,154,0.7)" 
+          : "rgba(239,83,80,0.7)",
       }));
+      
+      macdLineRef.current.setData(macdResult.plots.plot0);
+      macdSignalRef.current.setData(macdResult.plots.plot1);
+      macdHistogramRef.current.setData(histogramData);
+    }
 
-      const smaLongData = klineData.map((d, idx) => ({
-        time: toChartTime(d.datetime),
-        value: smaLong[idx],
-      }));
-
-      smaShortSeriesRef.current.setData(smaShortData);
-      smaLongSeriesRef.current.setData(smaLongData);
+    // KDJ (Stochastic)
+    if (
+      indicators.kdj && 
+      kdjKRef.current && 
+      kdjDRef.current && 
+      kdjJRef.current
+    ) {
+      const stochasticResult = Stochastic.calculate(bars, { 
+        period: 9, 
+        smooth: 3 
+      } as any);
+      
+      // Stochastic 默认给出 K 和 D，J = 3K - 2D
+      const kData = stochasticResult.plots.plot0;
+      const dData = stochasticResult.plots.plot1;
+      const jData = kData.map((item, idx) => {
+        const kVal = kData[idx]?.value;
+        const dVal = dData[idx]?.value;
+        const jVal = (kVal != null && dVal != null) ? 3 * Number(kVal) - 2 * Number(dVal) : undefined;
+        return {
+          ...item,
+          value: jVal,
+        };
+      });
+      
+      kdjKRef.current.setData(kData);
+      kdjDRef.current.setData(dData);
+      kdjJRef.current.setData(jData);
     }
 
     if (markers) {
@@ -365,6 +501,16 @@ export default function KlineChart({ data, trades, loading }: Props) {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
       smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
       smaLongSeriesRef.current.applyOptions({ visible: indicators.sma });
+    }
+    if (macdLineRef.current && macdSignalRef.current && macdHistogramRef.current) {
+      macdLineRef.current.applyOptions({ visible: indicators.macd });
+      macdSignalRef.current.applyOptions({ visible: indicators.macd });
+      macdHistogramRef.current.applyOptions({ visible: indicators.macd });
+    }
+    if (kdjKRef.current && kdjDRef.current && kdjJRef.current) {
+      kdjKRef.current.applyOptions({ visible: indicators.kdj });
+      kdjDRef.current.applyOptions({ visible: indicators.kdj });
+      kdjJRef.current.applyOptions({ visible: indicators.kdj });
     }
   }, [indicators]);
 
@@ -439,6 +585,28 @@ export default function KlineChart({ data, trades, loading }: Props) {
           SMA 均线
         </button>
         <button
+          onClick={() => setIndicators((prev) => ({ ...prev, macd: !prev.macd }))}
+          data-ql-id="RUN-KLINE-BTN-MACD"
+          className={`px-3.5 py-1.5 text-xs cursor-pointer rounded-md transition-all border ${
+            indicators.macd
+              ? "bg-purple-50 border-purple-300 text-purple-700"
+              : "bg-white border-slate-200 text-slate-500"
+          }`}
+        >
+          MACD
+        </button>
+        <button
+          onClick={() => setIndicators((prev) => ({ ...prev, kdj: !prev.kdj }))}
+          data-ql-id="RUN-KLINE-BTN-KDJ"
+          className={`px-3.5 py-1.5 text-xs cursor-pointer rounded-md transition-all border ${
+            indicators.kdj
+              ? "bg-orange-50 border-orange-300 text-orange-700"
+              : "bg-white border-slate-200 text-slate-500"
+          }`}
+        >
+          KDJ
+        </button>
+        <button
           onClick={() => setIndicators((prev) => ({ ...prev, trades: !prev.trades }))}
           data-ql-id="RUN-KLINE-BTN-TRADES"
           className={`px-3.5 py-1.5 text-xs cursor-pointer rounded-md transition-all border ${
@@ -462,7 +630,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
       {toolbar}
       <div
         ref={containerRef}
-        className="w-full h-[500px]"
+        className="w-full h-[600px]"
         data-ql-id="RUN-KLINE-CHART"
       />
       <div className="flex justify-center gap-6 mt-3 pt-3 border-t border-slate-100">
