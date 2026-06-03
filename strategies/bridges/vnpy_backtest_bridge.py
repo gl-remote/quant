@@ -182,6 +182,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         # 2. 数据过期则全量重加载所有周期数据
         if data_stale:
+            self._register_requirements(feed)
             self._load_periods(feed)
             self._log_data_feed_summary("数据加载完成（计算前）")
             feed.calculate_all()
@@ -281,6 +282,15 @@ class VnpyBacktestBridge(CtaTemplate):
                     changed = True
 
         return changed
+
+    def _register_requirements(self, data_feed: DataFeed) -> None:
+        """将 DataRequirements 中的全部周期和指标注册到 DataFeed"""
+        assert self._requirements is not None
+        for pn in self._requirements.periods:
+            data_feed.register_period(pn)
+        for pn, inds in self._requirements.indicators.items():
+            for ind in inds:
+                data_feed.register_indicator(pn, ind.name, **ind.params)
 
     def _load_periods(self, data_feed: Any) -> None:
         """从 DataManager 加载所有周期的历史数据（全量覆盖）"""
