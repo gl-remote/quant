@@ -28,6 +28,7 @@ from .writer import (  # 导入数据写入模块
     export_equity_json,
     export_kline_json,
     export_optuna_json,
+    export_trades_json,
     write_nav_json,
 )
 
@@ -109,12 +110,17 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
         ):
             executed_count += 1
             has_data_change = True
+        if _export_trades_with_incremental(
+            cache, dm, output_dir, run_id
+        ):
+            executed_count += 1
+            has_data_change = True
         if _export_nav_with_incremental(
             cache, dm, output_dir
         ):
             executed_count += 1
             has_data_change = True
-        skip_count = 7 - executed_count
+        skip_count = 8 - executed_count
     else:
         export_run_json(output_dir, run_id)
         export_summary_json(output_dir, run_id)
@@ -122,8 +128,9 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
         export_equity_json(output_dir, run_id)
         export_kline_json(output_dir, run_id)
         export_optuna_json(output_dir, run_id)
+        export_trades_json(output_dir, run_id)
         write_nav_json(output_dir)
-        success_count = 7
+        success_count = 8
         skip_count = 0
         has_data_change = True
     
@@ -263,6 +270,46 @@ def _export_kline_with_incremental(
     return kline_changed
 
 
+def _export_trades_with_incremental(
+    cache: BuildCache,
+    dm: DataManager,
+    output_dir: str,
+    run_id: int,
+) -> bool:
+    """导出 trades 数据（带增量检查）"""
+    summary = dm.get_run_summary(run_id)
+    trades_data = {}
+    for s in summary:
+        s_id = s.get("id")
+        if not s_id:
+            continue
+        symbol = str(s.get("symbol", ""))
+        trades = dm.query_trades(int(s_id))
+        trades_data[symbol] = [
+            {
+                "datetime": t.datetime,
+                "symbol": t.symbol,
+                "direction": t.direction,
+                "offset": t.offset,
+                "open_price": t.open_price,
+                "close_price": t.close_price,
+                "quantity": t.quantity,
+                "pnl": t.pnl,
+                "commission": t.commission,
+            }
+            for t in trades
+        ]
+    
+    if cache.needs_update("trades", run_id, trades_data):
+        logger.info("→ 导出 trades（数据已变更）")
+        export_trades_json(output_dir, run_id)
+        cache.update_fingerprint("trades", run_id, trades_data)
+        return True
+    else:
+        logger.info("○ 跳过 trades（数据未变更）")
+        return False
+
+
 def _export_nav_with_incremental(
     cache: BuildCache,
     dm: DataManager,
@@ -294,6 +341,8 @@ def _dispatch_export(data_type: str, output_dir: str, run_id: int) -> None:
         export_kline_json(output_dir, run_id)
     elif data_type == "optuna":
         export_optuna_json(output_dir, run_id)
+    elif data_type == "trades":
+        export_trades_json(output_dir, run_id)
     elif data_type == "nav":
         write_nav_json(output_dir)
 

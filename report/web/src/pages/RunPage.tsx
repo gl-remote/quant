@@ -9,6 +9,7 @@ import type {
   EquityData,
   OptunaData,
   RunLogs,
+  TradesData,
 } from "@/types";
 import MetricCards from "@/components/MetricCards";
 import SymbolTable from "@/components/SymbolTable";
@@ -44,6 +45,10 @@ export default function RunPage() {
   );
   const { data: runLogs } = useFetchJson<RunLogs>(
     "logs.json",
+    runId
+  );
+  const { data: tradesData } = useFetchJson<TradesData>(
+    "trades.json",
     runId
   );
 
@@ -189,7 +194,11 @@ export default function RunPage() {
             <MetricCards run={run} backtests={backtests} />
             <div className="grid grid-cols-[1fr_420px] gap-7">
               <div className="flex flex-col">
-                <KlineChart data={kline} loading={klineLoading} />
+                <KlineChart
+          data={kline}
+          trades={selectedSymbol ? tradesData?.[selectedSymbol] : null}
+          loading={klineLoading}
+        />
                 {equity && selectedSymbol && equity[selectedSymbol] && (
                   <EquityChart data={equity[selectedSymbol]} />
                 )}

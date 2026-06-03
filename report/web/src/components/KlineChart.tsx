@@ -8,10 +8,11 @@ import {
   LineSeries,
   CandlestickData,
   HistogramData,
+  LineData,
   Time,
   TickMarkType,
 } from "lightweight-charts";
-import type { KlineData, KlinePoint } from "@/types";
+import type { KlineData, KlinePoint, TradeRecord } from "@/types";
 import QlPanel from "@/components/QlPanel";
 import { qlIdNameMap } from "@/data/qlIdMapping";
 
@@ -19,6 +20,7 @@ type ViewMode = "daily" | "raw";
 
 interface Props {
   data: KlineData | null;
+  trades?: TradeRecord[] | null;
   loading?: boolean;
 }
 
@@ -67,15 +69,99 @@ function calculateSMA(data: KlinePoint[], period: number): number[] {
   return result;
 }
 
-export default function KlineChart({ data, loading }: Props) {
+function convertTradeToMarkers(
+  trades: TradeRecord[],
+  klineData: KlinePoint[]
+): LineData<Time>[] {
+  if (!trades || trades.length === 0 || !klineData || klineData.length === 0) {
+    return [];
+  }
+
+  // 找到K线数据的价格范围，用于计算标记位置
+  const prices = klineData.flatMap((k) => [k.high, k.low]);
+  const minPrice = Math.min(...prices);
+  const maxPrice = Math.max(...prices);
+  const priceRange = maxPrice - minPrice;
+  const padding = priceRange * 0.05; // 5%的边距
+
+  const markers: LineData<Time>[] = [];
+
+  for (const trade of trades) {
+    // 转换交易时间为时间戳
+    let tradeTime: Time;
+    if (typeof trade.datetime === "number") {
+      tradeTime = trade.datetime as Time;
+    } else if (trade.datetime.includes(" ")) {
+      tradeTime = (new Date(trade.datetime.replace(" ", "T") + "Z").getTime() / 1000) as Time;
+    } else if (trade.datetime.includes("T")) {
+      tradeTime = (new Date(trade.datetime + "Z").getTime() / 1000) as Time;
+    } else {
+      tradeTime = trade.datetime as Time;
+    }
+
+    // 确定标记位置和形状
+    let price: number;
+    let shape: "arrowUp" | "arrowDown";
+    let color: string;
+    let text: string;
+
+    if (trade.offset === "open") {
+      price = trade.open_price;
+      if (trade.direction === "long") {
+        shape = "arrowUp";
+        color = "#26A69A"; // 绿色，做多开仓
+        text = "开多";
+      } else {
+        shape = "arrowDown";
+        color = "#EF5350"; // 红色，做空开仓
+        text = "开空";
+      }
+      // 开仓标记在价格下方一点
+      price = price - padding;
+    } else {
+      price = trade.close_price;
+      if (trade.direction === "long") {
+        shape = "arrowDown";
+        color = "#26A69A"; // 绿色，做多平仓
+        text = "平多";
+      } else {
+        shape = "arrowUp";
+        color = "#EF5350"; // 红色，做空平仓
+        text = "平空";
+      }
+      // 平仓标记在价格上方一点
+      price = price + padding;
+    }
+
+    markers.push({
+      time: tradeTime,
+      value: price,
+      // @ts-ignore - lightweight-charts 支持自定义标记，但类型定义可能不完整
+      marker: {
+        shape,
+        color,
+        size: 1,
+        text,
+      },
+    });
+  }
+
+  return markers;
+}
+
+export default function KlineChart({ data, trades, loading }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const smaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const smaLongSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const tradeMarkersSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const [mode, setMode] = useState<ViewMode>("daily");
-  const [indicators, setIndicators] = useState<{ sma: boolean }>({ sma: true });
+  const [indicators, setIndicators] = useState<{ sma: boolean; trades: boolean }>({
+    sma: true,
+    trades: true,
+  });
 
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
   console.log("[KlineChart] 渲染 - data:", data ? "有数据" : "null", "loading:", loading, "klineData:", klineData ? `${klineData.length}条` : "null");
@@ -174,6 +260,14 @@ export default function KlineChart({ data, loading }: Props) {
       lineWidth: 2,
     });
 
+    const tradeMarkersSeries = chart.addSeries(LineSeries, {
+      color: "transparent",
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false,
+    });
+
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
         top: 0.85,
@@ -185,6 +279,7 @@ export default function KlineChart({ data, loading }: Props) {
     volumeSeriesRef.current = volumeSeries;
     smaShortSeriesRef.current = smaShortSeries;
     smaLongSeriesRef.current = smaLongSeries;
+    tradeMarkersSeriesRef.current = tradeMarkersSeries;
     chartRef.current = chart;
     console.log("[KlineChart] 图表创建成功");
 
@@ -210,6 +305,7 @@ export default function KlineChart({ data, loading }: Props) {
     if (!klineData) return;
     const candleSeries = candlestickSeriesRef.current;
     const volSeries = volumeSeriesRef.current;
+    const tradeMarkersSeries = tradeMarkersSeriesRef.current;
     if (!candleSeries || !volSeries) return;
 
     console.log("[KlineChart] 设置 K 线数据:", klineData.length, "条");
@@ -240,15 +336,28 @@ export default function KlineChart({ data, loading }: Props) {
       smaShortSeriesRef.current.setData(smaShortData);
       smaLongSeriesRef.current.setData(smaLongData);
     }
-  }, [klineData, indicators]);
 
-  // 控制 SMA 可见性
+    // 设置交易标记
+    if (tradeMarkersSeries && indicators.trades && trades) {
+      const markers = convertTradeToMarkers(trades, klineData);
+      tradeMarkersSeries.setData(markers);
+      tradeMarkersSeries.applyOptions({ visible: true });
+    } else if (tradeMarkersSeries) {
+      tradeMarkersSeries.setData([]);
+      tradeMarkersSeries.applyOptions({ visible: false });
+    }
+  }, [klineData, indicators, trades]);
+
+  // 控制 SMA 和交易标记可见性
   useEffect(() => {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
       smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
       smaLongSeriesRef.current.applyOptions({ visible: indicators.sma });
     }
-  }, [indicators.sma]);
+    if (tradeMarkersSeriesRef.current) {
+      tradeMarkersSeriesRef.current.applyOptions({ visible: indicators.trades });
+    }
+  }, [indicators]);
 
   if (loading) {
     return (
@@ -320,6 +429,17 @@ export default function KlineChart({ data, loading }: Props) {
         >
           SMA 均线
         </button>
+        <button
+          onClick={() => setIndicators((prev) => ({ ...prev, trades: !prev.trades }))}
+          data-ql-id="RUN-KLINE-BTN-TRADES"
+          className={`px-3.5 py-1.5 text-xs cursor-pointer rounded-md transition-all border ${
+            indicators.trades
+              ? "bg-blue-50 border-blue-300 text-blue-700"
+              : "bg-white border-slate-200 text-slate-500"
+          }`}
+        >
+          交易标记
+        </button>
       </div>
     </div>
   );
@@ -352,6 +472,14 @@ export default function KlineChart({ data, loading }: Props) {
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="w-2 h-2 rounded-full bg-[#EF5350]" />
           <span>阴线</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="text-[#26A69A]">▲</span>
+          <span>开多</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <span className="text-[#EF5350]">▼</span>
+          <span>开空</span>
         </div>
       </div>
     </QlPanel>

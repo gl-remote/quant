@@ -140,6 +140,45 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
             logger.info("K线已导出: %s → %s", symbol, dest.name)
 
 
+def export_trades_json(output_dir: str, run_id: int) -> None:
+    """
+    导出交易记录 JSON（每个品种的最优回测的交易记录）
+    
+    Args:
+        output_dir: 输出目录
+        run_id: 运行ID
+    """
+    dm = get_data_manager()
+    summary = dm.get_run_summary(run_id)
+    all_trades: dict[str, list[dict[str, Any]]] = {}
+    
+    for s in summary:
+        bt_id = s.get('id')
+        if not bt_id:
+            continue
+        
+        symbol = str(s.get('symbol', ''))
+        trades = dm.query_trades(int(bt_id))  # type: ignore
+        
+        # 转换为序列化格式
+        all_trades[symbol] = []
+        for t in trades:
+            # 转换 TradeRecord 为 dict
+            all_trades[symbol].append({
+                'datetime': t.datetime,
+                'symbol': t.symbol,
+                'direction': t.direction,
+                'offset': t.offset,
+                'open_price': t.open_price,
+                'close_price': t.close_price,
+                'quantity': t.quantity,
+                'pnl': t.pnl,
+                'commission': t.commission,
+            })
+    
+    _write_json(output_dir, f"r{run_id}/data/trades.json", all_trades)
+
+
 def export_optuna_json(output_dir: str, run_id: int) -> None:
     """
     导出 Optuna 优化数据 JSON（含图表配置）
@@ -154,7 +193,7 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
     if not optuna_data:
         return
 
-    study_name = str(optuna_data.get("study_name", ""))
+    study_name = str(optuna_data.get('study_name', ''))
     
     charts_spec: dict[str, Any] = {}
     if study_name:
@@ -163,21 +202,21 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
             study_db_url = f"sqlite:///{os.path.abspath(dm.store.db_path)}"
             charts_spec = build_optuna_spec(study_db_url, study_name)
         except Exception as e:
-            logger.warning("Optuna chart spec 生成失败: %s", e)
+            logger.warning(f"Optuna chart spec 生成失败: {e}")
 
-    best_params_raw = optuna_data.get("best_params") or []
-    best_params_from_optuna = charts_spec.get("best_params") or []
+    best_params_raw = optuna_data.get('best_params') or []
+    best_params_from_optuna = charts_spec.get('best_params') or []
     merged_best_params = best_params_from_optuna if best_params_from_optuna else best_params_raw
 
     result = {
-        "study_name": study_name,
-        "trial_count": optuna_data.get("trial_count", 0),
-        "best_value": charts_spec.get("best_value"),
-        "best_params": merged_best_params,
-        "optimization_history": charts_spec.get("optimization_history"),
-        "param_importances": charts_spec.get("param_importances"),
-        "parallel_coordinate": charts_spec.get("parallel_coordinate"),
-        "contour": charts_spec.get("contour"),
+        'study_name': study_name,
+        'trial_count': optuna_data.get('trial_count', 0),
+        'best_value': charts_spec.get('best_value'),
+        'best_params': merged_best_params,
+        'optimization_history': charts_spec.get('optimization_history'),
+        'param_importances': charts_spec.get('param_importances'),
+        'parallel_coordinate': charts_spec.get('parallel_coordinate'),
+        'contour': charts_spec.get('contour'),
     }
     _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
 

@@ -170,3 +170,23 @@ export type { EChartsOption };
  * 运行日志 — 单字符串（整个 run.log 内容）
  */
 export type RunLogs = string;
+
+/**
+ * 单笔交易记录
+ */
+export interface TradeRecord {
+  datetime: string;  // 交易时间
+  symbol: string;    // 品种代码
+  direction: string; // 方向: long/short
+  offset: string;    // 开平: open/close
+  open_price: number; // 开仓价
+  close_price: number; // 平仓价
+  quantity: number; // 数量
+  pnl: number;      // 盈亏
+  commission: number; // 手续费
+}
+
+/**
+ * 所有交易数据（按品种分组）
+ */
+export type TradesData = Record<string, TradeRecord[]>;
