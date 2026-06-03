@@ -95,7 +95,7 @@ DEFAULT_SMA_SHORT = 5       # 短期均线周期 (K线)
 DEFAULT_SMA_LONG = 20      # 长期均线周期 (K线)
 DEFAULT_STOP_LOSS_RATIO = 0.03   # 止损比例 (3%)
 DEFAULT_TAKE_PROFIT_RATIO = 0.05  # 止盈比例 (5%)
-DEFAULT_POSITION_RATIO = 0.1    # 仓位比例 (10%)
+DEFAULT_POSITION_RATIO = 0.3    # 仓位比例 (30%)
 DEFAULT_KLINE_PERIOD = 5      # K线周期 (分钟)
 
 

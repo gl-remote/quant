@@ -401,14 +401,25 @@ class VnpyBacktestBridge(CtaTemplate):
             signal = Signal()
 
         close_price = float(getattr(bar, 'close_price', 0))
-        if signal.action == TRADE_ACTION_BUY and self.pos == 0:
-            self._execute_trade(signal, close_price, bar_time, is_buy=True)
-        elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
-            self._execute_trade(signal, close_price, bar_time, is_buy=False)
-        elif signal.action == TRADE_ACTION_SELL and self.pos == 0:
-            self._execute_trade(signal, close_price, bar_time, is_short=True)
-        elif signal.action == TRADE_ACTION_BUY and self.pos < 0:
-            self._execute_trade(signal, close_price, bar_time, is_cover=True)
+
+        if signal.action:
+            matched = False
+            if signal.action == TRADE_ACTION_BUY and self.pos == 0:
+                self._execute_trade(signal, close_price, bar_time, is_buy=True)
+                matched = True
+            elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
+                self._execute_trade(signal, close_price, bar_time, is_buy=False)
+                matched = True
+            elif signal.action == TRADE_ACTION_SELL and self.pos == 0:
+                self._execute_trade(signal, close_price, bar_time, is_short=True)
+                matched = True
+            elif signal.action == TRADE_ACTION_BUY and self.pos < 0:
+                self._execute_trade(signal, close_price, bar_time, is_cover=True)
+                matched = True
+            if not matched:
+                logger.debug("[{}] {} signal={} 未执行: pos={} vol={} price={}",
+                            self.strategy_name, bar_time, signal.action, self.pos,
+                            signal.volume, close_price)
 
     def on_tick(self, tick: Any) -> None:
         """vnpy Tick回调 — 本策略不使用 Tick 数据"""
@@ -493,6 +504,9 @@ class VnpyBacktestBridge(CtaTemplate):
 
             self._state.fills.append(fill)
             self._core.on_fill(fill)
+            logger.debug("[{}] 成交: {} {} @{:.2f} x{} pos_dir={}",
+                        self.strategy_name, fill.action, trade_datetime,
+                        trade_price, trade_volume, self._state.position.direction)
 
     # ── 交易执行 ───────────────────────────────────────────
 
