@@ -166,6 +166,39 @@ export default function KlineChart({ data, trades, loading }: Props) {
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
   console.log("[KlineChart] 渲染 - data:", data ? "有数据" : "null", "loading:", loading, "klineData:", klineData ? `${klineData.length}条` : "null");
 
+  // 隐藏 TradingView logo 元素
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const hideLogo = () => {
+      // 查找并隐藏 logo 元素
+      const logoElements = container.querySelectorAll('a[href*="tradingview.com"], a[href*="lightweight-charts.com"]');
+      logoElements.forEach(el => {
+        (el as HTMLElement).style.display = 'none';
+      });
+      
+      // 也可以查找 canvas 外的其他元素
+      const allElements = container.querySelectorAll('*');
+      allElements.forEach(el => {
+        const htmlEl = el as HTMLElement;
+        if (htmlEl.style.position === 'absolute' && 
+            (htmlEl.style.bottom === '0px' || htmlEl.style.bottom === '0')) {
+          htmlEl.style.display = 'none';
+        }
+      });
+    };
+    
+    // 初次隐藏
+    hideLogo();
+    
+    // 使用 MutationObserver 监测 DOM 变化，防止 logo 重新出现
+    const observer = new MutationObserver(hideLogo);
+    observer.observe(container, { childList: true, subtree: true });
+    
+    return () => observer.disconnect();
+  }, [klineData]);
+
   // 初始化图表 - 依赖 klineData，当有数据且容器挂载后才初始化
   useEffect(() => {
     console.log("[KlineChart] 图表初始化 useEffect, klineData:", !!klineData, "container:", !!containerRef.current, "chart:", !!chartRef.current);
@@ -230,10 +263,6 @@ export default function KlineChart({ data, trades, loading }: Props) {
           const pad = (n: number) => String(n).padStart(2, "0");
           return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         },
-      },
-      // @ts-ignore - logo 是 lightweight-charts 的有效配置，但类型定义可能没有更新
-      logo: {
-        visible: false, // 隐藏 TradingView 品牌链接
       },
     });
 
