@@ -8,7 +8,7 @@
 
 职责:
   - 策略加载与配置解析
-  - 策略与 VnpyStrategyBridge 的集成
+  - 策略与 VnpyBacktestBridge 的集成
   - 策略配置类型提取（泛型反射）
   - State 对象创建（封装构造逻辑）
 
@@ -28,7 +28,7 @@ from strategies import Strategy, State
 from strategies.utils import load_strategy
 
 if TYPE_CHECKING:
-    from strategies.bridges import VnpyStrategyBridge
+    from strategies.bridges import VnpyBacktestBridge
 
 
 class StrategyFactory:
@@ -147,8 +147,8 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
-    ) -> type[VnpyStrategyBridge]:
-        """创建注入了策略实例和状态的 VnpyStrategyBridge 子类
+    ) -> type[VnpyBacktestBridge]:
+        """创建注入了策略实例和状态的 VnpyBacktestBridge 子类
 
         【为什么要动态创建类】
         因为 vnpy 的 BacktestingEngine 需要传入策略类（class），
@@ -159,7 +159,7 @@ class StrategyFactory:
         1. 加载策略类（通过 strategy_name）
         2. 提取策略配置类型（泛型反射）
         3. 从 strategy_params 构造配置对象
-        4. 动态创建 VnpyStrategyBridge 子类
+        4. 动态创建 VnpyBacktestBridge 子类
         5. 在子类的 __init__ 中注入 Strategy 和 State
 
         Args:
@@ -171,9 +171,9 @@ class StrategyFactory:
             contract_size: 合约乘数
 
         Returns:
-            继承自 VnpyStrategyBridge 的类，可直接传给 vnpy 引擎
+            继承自 VnpyBacktestBridge 的类，可直接传给 vnpy 引擎
         """
-        from strategies.bridges import VnpyStrategyBridge
+        from strategies.bridges import VnpyBacktestBridge
 
         # 步骤1: 加载策略类
         strategy_instance = load_strategy(strategy_name)
@@ -187,7 +187,7 @@ class StrategyFactory:
         strategy_config = config_cls(**filtered_params)
 
         # 步骤3: 动态创建注入子类
-        class _InjectedStrategy(VnpyStrategyBridge):
+        class _InjectedStrategy(VnpyBacktestBridge):
 
             def _load_default_core(self, _setting: object | None = None) -> None:
                 """禁用默认加载，因为我们会在 __init__ 中注入"""
@@ -219,7 +219,7 @@ def create_strategy_class(
     period: str,
     capital: float,
     contract_size: int,
-) -> type[VnpyStrategyBridge]:
+) -> type[VnpyBacktestBridge]:
     """便捷函数：直接创建注入的策略桥接类
 
     这是 StrategyFactory.create_injected_strategy_class 的别名，

@@ -10,7 +10,7 @@
 
 【推荐导入方式】
   from strategies import MaStrategyCore          # 策略核心
-  from strategies import VnpyStrategyBridge       # vn.py 桥接器
+  from strategies import VnpyBacktestBridge        # vn.py 回测桥接器
   from strategies import TqsdkStrategyBridge      # 天勤桥接器
   from strategies import Strategy, Bar, Signal    # 基类 + 数据类型
   from strategies import CORE_VERSION             # 版本号常量
@@ -231,9 +231,9 @@ from .utils import (
 
 # 桥接器（可选导入，可能有依赖缺失）
 try:
-    from .bridges import VnpyStrategyBridge
+    from .bridges import VnpyBacktestBridge
 except ImportError:
-    VnpyStrategyBridge = None  # type: ignore[assignment, misc]
+    VnpyBacktestBridge = None  # type: ignore[assignment, misc]
 
 try:
     from .bridges import TqsdkStrategyBridge
@@ -261,5 +261,5 @@ __all__ = [
     'load_strategy', 'get_strategy_class_name',
     'apply_strategy_config', 'serialize_strategy_params',
     # 桥接器
-    'VnpyStrategyBridge', 'TqsdkStrategyBridge',
+    'VnpyBacktestBridge', 'TqsdkStrategyBridge',
 ]

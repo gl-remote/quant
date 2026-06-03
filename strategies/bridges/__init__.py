@@ -1,11 +1,11 @@
 try:
-    from .vnpy_bridge import VnpyStrategyBridge
+    from .vnpy_bridge import VnpyBacktestBridge
 except ImportError:
-    VnpyStrategyBridge = None  # type: ignore[assignment, misc]
+    VnpyBacktestBridge = None  # type: ignore[assignment, misc]
 
 try:
     from .tqsdk_bridge import TqsdkStrategyBridge
 except ImportError:
     TqsdkStrategyBridge = None  # type: ignore[assignment, misc]
 
-__all__ = ['VnpyStrategyBridge', 'TqsdkStrategyBridge']
+__all__ = ['VnpyBacktestBridge', 'TqsdkStrategyBridge']

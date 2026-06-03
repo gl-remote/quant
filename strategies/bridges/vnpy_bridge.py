@@ -35,7 +35,7 @@ from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTIO
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
 
-class VnpyStrategyBridge(CtaTemplate):
+class VnpyBacktestBridge(CtaTemplate):
     """vn.py 策略桥接器 — 集成 runtime 数据管理架构
 
     【设计理念】
