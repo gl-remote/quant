@@ -231,6 +231,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
           return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         },
       },
+      // @ts-ignore - logo 是 lightweight-charts 的有效配置，但类型定义可能没有更新
       logo: {
         visible: false, // 隐藏 TradingView 品牌链接
       },
