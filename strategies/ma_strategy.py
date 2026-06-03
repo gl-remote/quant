@@ -215,7 +215,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
                 signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=reason,
                                 volume=state.position.volume)
 
-        # ── 空仓：找入场 ──
+        # ── 空仓：做多或做空入场 ──
         else:
             vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
                                            state.contract_size)
