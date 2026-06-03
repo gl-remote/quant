@@ -69,30 +69,18 @@ class TqSdkDataSource(BaseDataSource):
         account: object,
     ) -> pd.DataFrame:
         """执行单次天勤 API 拉取"""
-        from datetime import timedelta
         from common.tqsdk_imports import tqsdk
 
         if not tqsdk.ensure():
             logger.error("tqsdk 未安装，无法拉取数据")
             return pd.DataFrame()
 
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
-        # tqsdk 的 preload 从 start_dt 往前倒推 ~10000 条，start 之后只有几天。
-        # 如果用户期望的日期范围比 preload 窗口大，把 start_dt 后移，
-        # 让 preload 窗口覆盖期望范围的后半段，避免数据全部落在范围之前。
-        range_days = (end_dt - start_dt).days
-        est_coverage_days = int(self._TQ_PRELOAD_BARS * kline_period / 28800)  # ~40 天
-        if range_days > est_coverage_days:
-            # 偏移 = 期望天数超出覆盖天数的部分，把 preload 窗口往后推
-            offset_days = range_days - est_coverage_days
-            adjusted_start = start_dt + timedelta(days=offset_days)
-            logger.debug(
-                f"tqsdk 日期调整: {start_date} → {adjusted_start.strftime('%Y-%m-%d')} "
-                f"(期望 {range_days}d > preload ~{est_coverage_days}d，后移 {offset_days}d)"
-            )
-            start_dt = adjusted_start
+        # tqsdk backtest 模式下 preload 最多 ~10000 条，replay 阶段几乎拿不到数据。
+        # 直接把 start_dt 设为 end_dt，让 tqsdk 只做 preload 不跑回放，
+        # 10000 条全部用于覆盖 end_dt 之前的历史数据。
+        start_dt = end_dt
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
