@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import os
+import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -56,12 +57,14 @@ class OptunaResult:
         best_value: 最优目标值
         trial_data: 全部试验数据 [{search_params, value, engine_results, strategy_params, ...}, ...]
         study: optuna.Study 实例（用于可视化）
+        actual_seed: 实际使用的随机种子
     """
 
     best_params: dict[str, Any] = field(default_factory=dict)
     best_value: float = 0.0
     trial_data: list[dict[str, Any]] = field(default_factory=list)
     study: optuna.Study | None = None
+    actual_seed: int = 0
 
 
 @dataclass
@@ -76,6 +79,7 @@ class SearchResult:
         n_trials: 试验次数
         study_name: optuna study 名称
         trial_data: 全部试验数据
+        actual_seed: 实际使用的随机种子
     """
 
     best_params: dict[str, Any] = field(default_factory=dict)
@@ -83,10 +87,11 @@ class SearchResult:
     n_trials: int = 0
     study_name: str = ""
     trial_data: list[dict[str, Any]] = field(default_factory=list)
+    actual_seed: int = 0
 
 
 class OptunaOptimizer:
-    """基于 Optuna 的参数优化器（严格单线程）
+    """基于 Optuna 的参数优化器 (严格单线程)
 
     支持两种搜索模式：
       1. **Grid Search** (网格)：穷举搜索空间的所有组合
@@ -111,6 +116,8 @@ class OptunaOptimizer:
         study_db_path: str = "",
         search_type: str = "bayesian",
         study_name: str = "",
+        random_seed: int = 42,
+        use_fixed_seed: bool = False,
     ) -> None:
         self._engine = engine
         self._datasets = datasets
@@ -122,6 +129,13 @@ class OptunaOptimizer:
         self._n_trials = n_trials
         self._study_db_path = study_db_path
         self._search_type = search_type
+        self._use_fixed_seed = use_fixed_seed
+        # 确定实际使用的种子
+        if use_fixed_seed:
+            self._actual_seed = random_seed
+        else:
+            # 生成一个随机种子
+            self._actual_seed = random.randint(1, 999999)
 
         # study 名：自定义 > 自动生成
         if study_name:
@@ -206,7 +220,7 @@ class OptunaOptimizer:
         # 根据搜索类型选择 sampler
         if self._search_type == "grid":
             grid_space = self._create_grid_space()
-            sampler = optuna.samplers.GridSampler(grid_space)
+            sampler = optuna.samplers.GridSampler(grid_space, seed=self._actual_seed)
             if not grid_space:
                 n_trials = 0
             else:
@@ -216,7 +230,7 @@ class OptunaOptimizer:
                 n_trials = min(self._n_trials, n_combinations)
             logger.info("Grid Search: 搜索空间={}, 计划试验={}", grid_space, n_trials)
         else:
-            sampler = optuna.samplers.TPESampler()  # type: ignore[assignment]
+            sampler = optuna.samplers.TPESampler(seed=self._actual_seed)  # type: ignore[assignment]
             n_trials = self._n_trials
 
         study = optuna.create_study(
@@ -235,10 +249,11 @@ class OptunaOptimizer:
         result.best_value = study.best_value or 0.0
         result.trial_data = trial_index
         result.study = study
+        result.actual_seed = self._actual_seed
 
         logger.info(
-            "Optuna 优化完成: best_value={:.4f} best_params={} study={}",
-            result.best_value, result.best_params, self._study_name,
+            "Optuna 优化完成: best_value={:.4f} best_params={} study={} seed={}",
+            result.best_value, result.best_params, self._study_name, self._actual_seed,
         )
         return result
 
@@ -282,6 +297,8 @@ def run_param_search(
     search_type: str,
     study_db_path: str = "",
     study_name: str = "",
+    random_seed: int = 42,
+    use_fixed_seed: bool = False,
 ) -> SearchResult:
     """执行参数搜索（网格或贝叶斯，严格单线程）
 
@@ -297,6 +314,8 @@ def run_param_search(
         search_type: "grid" 或 "bayesian"
         study_db_path: Optuna study 存储路径
         study_name: 自定义 study 名称
+        random_seed: 随机种子，用于保证复现性
+        use_fixed_seed: 是否使用固定随机种子（默认不使用）
 
     Returns:
         SearchResult 搜索结果
@@ -313,6 +332,8 @@ def run_param_search(
         study_db_path=study_db_path,
         search_type=search_type,
         study_name=study_name,
+        random_seed=random_seed,
+        use_fixed_seed=use_fixed_seed,
     )
     opt_result = optimizer.optimize()
 
@@ -322,4 +343,5 @@ def run_param_search(
         n_trials=len(opt_result.trial_data),
         study_name=optimizer.study_name,
         trial_data=opt_result.trial_data,
+        actual_seed=opt_result.actual_seed,
     )

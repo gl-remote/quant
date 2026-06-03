@@ -404,6 +404,12 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                 run_id=run_id,
             )
             if result:
+                # 保存实际使用的随机种子
+                dm.store.update_run_seed(
+                    run_id=run_id,
+                    use_fixed_seed=optimizer_cfg.use_fixed_seed,
+                    random_seed=result.actual_seed
+                )
                 # CLI 统一持久化
                 _persist_search_results(
                     dm=dm,

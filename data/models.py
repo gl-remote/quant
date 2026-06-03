@@ -168,6 +168,8 @@ class Run(OrmBaseModel):
     engine: CharField = CharField(default="grid")
     symbols: IntegerField = IntegerField(default=0)
     status: CharField = CharField(default="running")
+    use_fixed_seed: IntegerField = IntegerField(default=0)  # 0=false, 1=true
+    random_seed: IntegerField = IntegerField(null=True)
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]

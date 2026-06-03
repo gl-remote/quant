@@ -63,6 +63,17 @@ class DataStore:
             [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily],
             safe=True,
         )
+        # 简单的迁移逻辑：为现有数据库添加新字段
+        try:
+            # 检查并添加 use_fixed_seed 字段
+            cursor = database.execute_sql("PRAGMA table_info(runs)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "use_fixed_seed" not in columns:
+                database.execute_sql("ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0")
+            if "random_seed" not in columns:
+                database.execute_sql("ALTER TABLE runs ADD COLUMN random_seed INTEGER")
+        except Exception as e:
+            logger.warning(f"数据库迁移失败: {e}")
 
     def close(self) -> None:
         """关闭数据库连接"""
@@ -190,9 +201,15 @@ class DataStore:
 
     # ── 运行记录 ────────────────────────────────────────────────────
 
-    def create_run(self, strategy: str, engine: str, symbols: int) -> int:
+    def create_run(self, strategy: str, engine: str, symbols: int, use_fixed_seed: bool = False, random_seed: int | None = None) -> int:
         """创建一次批量回测运行记录，返回 run_id"""
-        r = Run.create(strategy=strategy, engine=engine, symbols=symbols)
+        r = Run.create(
+            strategy=strategy, 
+            engine=engine, 
+            symbols=symbols,
+            use_fixed_seed=1 if use_fixed_seed else 0,
+            random_seed=random_seed
+        )
         return r.id  # type: ignore[no-any-return]
 
     def finish_run(self, run_id: int, status: str = "success") -> None:
@@ -202,6 +219,13 @@ class DataStore:
     def link_study(self, run_id: int, study_name: str) -> None:
         """关联 run 与 Optuna study"""
         RunStudy.get_or_create(run_id=run_id, study_name=study_name)
+
+    def update_run_seed(self, run_id: int, use_fixed_seed: bool, random_seed: int) -> None:
+        """更新运行记录的随机种子"""
+        Run.update(
+            use_fixed_seed=1 if use_fixed_seed else 0,
+            random_seed=random_seed
+        ).where(Run.id == run_id).execute()
 
     # ── 回测记录操作 ────────────────────────────────────────────────
 
@@ -450,13 +474,16 @@ class DataStore:
             for field in ['created_at', 'updated_at']:
                 if result.get(field) is not None:
                     result[field] = str(result[field])
+            # 转换 use_fixed_seed 为 bool
+            if 'use_fixed_seed' in result:
+                result['use_fixed_seed'] = bool(result['use_fixed_seed'])
         return result
 
     def get_all_runs(self) -> list[dict[str, object]]:
         """获取所有运行记录"""
         rows = list(
             Run
-            .select(Run.id, Run.strategy, Run.engine, Run.symbols, Run.status, Run.created_at)
+            .select(Run.id, Run.strategy, Run.engine, Run.symbols, Run.status, Run.created_at, Run.use_fixed_seed, Run.random_seed)
             .order_by(Run.id.desc())
             .dicts()
         )
@@ -469,6 +496,8 @@ class DataStore:
                 'symbols': r['symbols'],
                 'status': r['status'],
                 'created': str(r['created_at']),
+                'use_fixed_seed': bool(r['use_fixed_seed']),
+                'random_seed': r['random_seed'],
             })
         return result
 

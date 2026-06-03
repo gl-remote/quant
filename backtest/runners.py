@@ -50,10 +50,11 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
 def execute_parameter_search(engine: "VnpyBacktestEngine",
                             strategy_name: str, strategy_params: dict[str, Any],
                             capital: float, contract_size: int,
-                            datasets: list[tuple[str, KlineDataFrame, str]],
+                            datasets: list[tuple[str, pd.DataFrame, str]],
                             n_trials: int, optimizer_cfg: Any, cm: ConfigManager,
                             optimizer_arg: str | None, git_hash: str | None,
-                            dm: DataManager, run_id: int ) -> SearchResult | None:
+                            dm: DataManager,
+                            run_id: int) -> SearchResult | None:
     """执行参数搜索
 
     Args:
@@ -82,6 +83,7 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
     
     if not search_space:
         logger.warning("搜索空间为空，跳过参数搜索")
+        dm.store.finish_run(run_id, "skipped")
         return None
 
     if not optimizer_cfg.enabled:
@@ -108,6 +110,8 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
         search_type=run_engine,
         study_db_path=optuna_db_url,
         study_name=study_name,
+        random_seed=optimizer_cfg.random_seed,
+        use_fixed_seed=optimizer_cfg.use_fixed_seed,
     )
 
     logger.info("{} 完成: best={:.4f} params={} trials={}",

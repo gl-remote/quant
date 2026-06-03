@@ -118,6 +118,8 @@ class OptimizerConfig(BaseModel):
     enabled: bool = False
     engine: str = "grid"  # grid | bayesian
     n_trials: int = 50
+    use_fixed_seed: bool = False  # 是否使用固定随机种子，默认不使用（随机）
+    random_seed: int = 42
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
     strategy_spaces: dict[str, dict[str, dict[str, Any]]] = Field(default_factory=dict)
 

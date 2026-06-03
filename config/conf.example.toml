@@ -56,6 +56,8 @@ enabled = true                    # 是否启用参数优化
 engine = "bayesian"                 # 优化引擎: "grid" 或 "bayesian"
 n_trials = 50                     # Optuna 最大试验次数
 table_prefix = "optuna_"          # Optuna 表名前缀
+use_fixed_seed = false            # 是否使用固定随机种子（默认false，即随机）
+random_seed = 42                  # 固定随机种子值（仅在use_fixed_seed=true时有效）
 
 # 全局搜索空间（适用于所有策略）
 # [optimizer.search_space]
