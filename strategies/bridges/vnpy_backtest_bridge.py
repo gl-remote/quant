@@ -210,22 +210,26 @@ class VnpyBacktestBridge(CtaTemplate):
         main_period = self._state.period
 
         if not os.path.isdir(feeds_dir):
+            logger.info("[{}] feeds 目录不存在，全量加载", self.strategy_name)
             return DataFeed(symbol=self._state.symbol), True
 
         try:
             feed = DataFeed.from_feeds(feeds_dir)
-        except Exception:
+        except Exception as e:
+            logger.warning("[{}] feeds 加载失败: {}，全量重算", self.strategy_name, e)
             return DataFeed(symbol=self._state.symbol), True
 
         # 检查主周期数据是否存在
         main_pd = feed.get_period(main_period)
         if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
+            logger.warning("[{}] feeds 主周期为空，全量重算", self.strategy_name)
             return feed, True
 
         # 从 ExportMetadata 查源数据起止时间（避免读 CSV）
         dm = DataManager()
         meta = dm.store.get_metadata(self._state.symbol, interval=main_period)
         if meta is None or not meta.get('min_dt') or not meta.get('max_dt'):
+            logger.warning("[{}] ExportMetadata 缺失，全量重算", self.strategy_name)
             return feed, True
 
         cache_start = str(main_pd._df.index[0].date())  # pyright: ignore[reportPrivateUsage]
@@ -258,6 +262,8 @@ class VnpyBacktestBridge(CtaTemplate):
                 for _symbol, df, _data_src in results:
                     if len(df) > 0:
                         feed.load_history_df(pn, df.set_index('datetime'))
+                        logger.info("[{}] 增量加载周期: period={} rows={}",
+                                    self.strategy_name, pn, len(df))
                 changed = True
 
         # 补充缺失指标（仅注册，不计算）
@@ -268,6 +274,8 @@ class VnpyBacktestBridge(CtaTemplate):
                 key = (ind.name, tuple(sorted(ind.params.items())))
                 if key not in cached:
                     feed.register_indicator(pn, ind.name, **ind.params)
+                    logger.info("[{}] 增量注册指标: period={} indicator={}({})",
+                                self.strategy_name, pn, ind.name, ind.params)
                     changed = True
 
         return changed
@@ -281,6 +289,10 @@ class VnpyBacktestBridge(CtaTemplate):
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
                     data_feed.load_history_df(period, df.set_index('datetime'))
+                    logger.info("[{}] 加载数据: period={} rows={}",
+                                self.strategy_name, period, len(df))
+                else:
+                    logger.warning("[{}] 加载数据为空: period={}", self.strategy_name, period)
 
     def _build_ctx_cache(self) -> None:
         """预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
@@ -331,6 +343,11 @@ class VnpyBacktestBridge(CtaTemplate):
                 events=[],
             )
 
+        logger.info("[{}] ctx_cache 构造完成: {} 条, range={}~{}",
+                    self.strategy_name, len(self._ctx_cache),
+                    main_df.index[0] if len(main_df) > 0 else "N/A",
+                    main_df.index[-1] if len(main_df) > 0 else "N/A")
+
     # ── vnpy 行情回调 ──────────────────────────────────────
 
     def on_bar(self, bar: Any) -> None:
@@ -348,6 +365,9 @@ class VnpyBacktestBridge(CtaTemplate):
         if ctx is not None:
             signal = self._core.on_bar(self._state, ctx)
         else:
+            if len(self._ctx_cache) == 0 and not getattr(self, '_warned_empty_cache', False):
+                logger.warning("[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name)
+                self._warned_empty_cache = True
             signal = Signal()
 
         close_price = float(getattr(bar, 'close_price', 0))
