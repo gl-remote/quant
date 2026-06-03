@@ -179,10 +179,26 @@ class MaStrategyCore(Strategy[MACrossParams]):
         macd_col = "macd_12_9_26"   # fast=12, signal=9, slow=26
         kdj_col = "kdj_3_3_9"       # d_period=3, k_period=3, n=9
 
-        cur_5m_short = view_5m.indicator(sma_short_col, -1) or 0.0
-        cur_15m_long = view_15m.indicator(sma_long_col, -1) or 0.0
-        macd_val = view_1m.indicator(macd_col, -1) or 0.0
-        kdj_val = view_1m.indicator(kdj_col, -1) or 50.0
+        def _get(view: Any, col: str, idx: int, fallback: float) -> float:
+            v = view.indicator(col, idx)
+            return v if v is not None else fallback
+
+        cur_5m_short = _get(view_5m, sma_short_col, -1, 0.0)
+        cur_15m_long = _get(view_15m, sma_long_col, -1, 0.0)
+        macd_val = _get(view_1m, macd_col, -1, 0.0)
+        kdj_val = _get(view_1m, kdj_col, -1, 50.0)
+
+        # 每 100 根 bar 打一次指标快照，方便诊断
+        if not hasattr(self, '_bar_count'):
+            self._bar_count = 0
+        self._bar_count += 1
+        if self._bar_count % 100 == 1:
+            from loguru import logger as _log
+            _log.info(
+                "[ma] #{:>5} | 5m_sma_{}={:.4f} 15m_sma_{}={:.4f} macd={:.4f} kdj={:.4f} close={:.4f}",
+                self._bar_count, config.sma_short, cur_5m_short,
+                config.sma_long, cur_15m_long, macd_val, kdj_val, ctx.bar.close,
+            )
 
         long_bias = cur_5m_short > cur_15m_long
         short_bias = cur_5m_short < cur_15m_long

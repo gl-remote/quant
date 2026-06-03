@@ -18,6 +18,8 @@
 from datetime import datetime as dt
 import json
 import os
+
+from loguru import logger
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -424,9 +426,8 @@ class DataFeed:
                 series = period_data.apply_indicator(func_info.func, **params)
                 period_data.set_indicator_column(col_name, series)
                 period_data.mark_indicator_calculated(col_name)
-            except Exception:
-                # 计算失败，跳过该指标
-                pass
+            except Exception as e:
+                logger.warning("指标计算失败 [{}][{}]: {}", period_name, indicator_name, e)
 
     def calculate_all(self) -> None:
         """批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）

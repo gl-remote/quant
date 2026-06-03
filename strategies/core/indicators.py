@@ -31,4 +31,5 @@ def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3,
              d_period: int = 3) -> pd.Series:
     result = ta.kdj(high=df["high"], low=df["low"], close=df["close"],
                     length=n, signal=k_period)
-    return cast(pd.Series, result[f"J_{n}_{k_period}_{d_period}"])
+    # pandas-ta 的 KDJ 列名只含 length 和 signal，不含 d_period
+    return cast(pd.Series, result[f"J_{n}_{k_period}"])
