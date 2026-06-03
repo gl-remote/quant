@@ -21,6 +21,7 @@
 
 from loguru import logger
 from datetime import datetime
+import os
 from typing import Any, Optional, cast
 
 import pandas as pd
@@ -92,6 +93,9 @@ class VnpyBacktestBridge(CtaTemplate):
         """vnpy 初始化回调 — 预加载数据、预计算指标、预构造上下文
 
         on_bar 中只做 O(1) 的 dict 查找，零重算、零时间戳搜索。
+
+        优先从 output/feeds/{symbol}/ 加载预计算数据，起止时间与源数据
+        一致则跳过 calculate_all，不一致则完整流程并覆盖旧 feeds。
         """
         if not self.is_initialized():
             logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
@@ -105,21 +109,27 @@ class VnpyBacktestBridge(CtaTemplate):
             self.load_bar(20)
             return
 
-        # 创建 DataFeed，注册周期和指标
-        data_feed = DataFeed(symbol=self._state.symbol)
-        for period_name in self._requirements.periods:
-            data_feed.register_period(period_name)
-        for period_name, indicators in self._requirements.indicators.items():
-            for indicator in indicators:
-                data_feed.register_indicator(period_name, indicator.name, **indicator.params)
+        main_period = self._state.period
+        feeds_dir = f"output/feeds/{self._state.symbol}"
 
-        # 加载全部数据并预计算指标（一次性完成）
-        self._load_all_periods(data_feed)
-        data_feed.calculate_all()
+        # 尝试从 feeds 加载
+        data_feed = self._try_load_feeds(feeds_dir, main_period)
+
+        if data_feed is None:
+            # 完整流程：创建 → 注册 → 加载数据 → 计算指标 → 保存 feeds
+            data_feed = DataFeed(symbol=self._state.symbol)
+            for period_name in self._requirements.periods:
+                data_feed.register_period(period_name)
+            for period_name, indicators in self._requirements.indicators.items():
+                for indicator in indicators:
+                    data_feed.register_indicator(period_name, indicator.name, **indicator.params)
+            self._load_all_periods(data_feed)
+            data_feed.calculate_all()
+            data_feed.to_feeds(feeds_dir)
+
         self._data_feed = data_feed
 
         # 预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
-        main_period = self._state.period
         main_pd = data_feed.get_period(main_period)
         if main_pd is not None:
             main_df: pd.DataFrame = main_pd._df  # pyright: ignore[reportPrivateUsage]
@@ -181,6 +191,47 @@ class VnpyBacktestBridge(CtaTemplate):
                 if len(df) > 0:
                     df_indexed = df.set_index('datetime')
                     data_feed.load_history_df(period, df_indexed)
+
+    def _try_load_feeds(self, feeds_dir: str, main_period: str) -> Optional[DataFeed]:
+        """尝试从 feeds 加载预计算数据，校验起止时间
+
+        从 DataManager 获取源数据起止时间，与 feeds 中主周期 parquet
+        的起止时间比对。一致返回 DataFeed 实例，不一致返回 None。
+
+        :param feeds_dir: feeds 目录路径
+        :param main_period: 主周期名称
+        :return: 有效则返回 DataFeed 实例，否则返回 None
+        """
+        if not os.path.isdir(feeds_dir):
+            return None
+
+        # 获取源数据起止时间
+        dm = DataManager()
+        src_results = dm.load_kline([self._state.symbol], interval=main_period)
+        if not src_results:
+            return None
+        _, src_df, _ = src_results[0]
+        if len(src_df) == 0:
+            return None
+        src_start = pd.Timestamp(src_df['datetime'].iloc[0])
+        src_end = pd.Timestamp(src_df['datetime'].iloc[-1])
+
+        try:
+            feed = DataFeed.from_feeds(feeds_dir)
+            main_pd = feed.get_period(main_period)
+            if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
+                return None
+            cache_start = main_pd._df.index[0]  # pyright: ignore[reportPrivateUsage]
+            cache_end = main_pd._df.index[-1]  # pyright: ignore[reportPrivateUsage]
+            if src_start == cache_start and src_end == cache_end:
+                logger.info("[{}] feeds 命中，跳过指标计算", self.strategy_name)
+                return feed
+            logger.info("[{}] feeds 过期 (源:{}, 缓存:{}), 重新计算",
+                        self.strategy_name, src_end, cache_end)
+        except Exception:
+            pass
+
+        return None
 
     def on_start(self) -> None:
         """vnpy 启动回调

@@ -330,6 +330,21 @@ class PeriodData:
 
     # --- 指标计算状态管理方法 ---
 
+    def load_df_parquet(self, df: pd.DataFrame, indicator_columns: list[str]) -> None:
+        """从 parquet 加载 DataFrame 并批量标记已计算指标
+
+        专为 DataFeed.from_feeds 设计，一行完成数据加载 + 指标状态恢复。
+        load_df(replace=True) 会清空已有数据和指标标记，然后逐个恢复。
+
+        :param df: 含 index=datetime、columns=OHLCV+indicators 的 DataFrame
+        :param indicator_columns: 需标记为已计算的指标列名列表
+        """
+        self.load_df(df, replace=True)
+        last_idx = len(self._df) - 1
+        for col in indicator_columns:
+            if col in self._df.columns:
+                self.mark_indicator_calculated(col, last_idx)
+
     def is_indicator_calculated(self, name: str) -> bool:
         """检查指标是否已计算
 

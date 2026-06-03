@@ -16,10 +16,12 @@
 """
 
 from datetime import datetime as dt
+import json
+import os
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
-from pandas._libs import NaTType
 
 from .events import (
     Event,
@@ -44,6 +46,10 @@ def _parse_source_from_symbol(symbol: str) -> Optional[str]:
     if '.' in symbol:
         return symbol.split('.')[0]
     return None
+
+
+# parquet 序列化时区分 OHLCV 列和指标列
+_OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
 
 
 class DataFeed:
@@ -430,6 +436,91 @@ class DataFeed:
         """
         for period_name in self._periods:
             self._calculate_indicators_for_period(period_name)
+
+    # ── parquet 持久化 ────────────────────────────────────────
+
+    OHLCV_COLUMNS: set[str] = {"open", "high", "low", "close", "volume"}
+
+    def to_feeds(self, feeds_dir: str) -> None:
+        """将全部周期数据 + events + 元数据写为 parquet 文件
+
+        每个周期存 {period}.parquet，events 存 events.parquet，
+        元数据（symbol/source/periods/indicators）存 _meta.json。
+
+        :param feeds_dir: 目标目录路径（自动创建）
+        """
+        Path(feeds_dir).mkdir(parents=True, exist_ok=True)
+
+        # 构建 _meta.json
+        indicators_serializable: Dict[str, List[Dict[str, Any]]] = {}
+        for pn, ind_list in self._registered_indicators.items():
+            indicators_serializable[pn] = [
+                {"name": n, "params": p} for n, p in ind_list
+            ]
+        meta = {
+            "symbol": self.symbol,
+            "source": self.source,
+            "periods": list(self._periods.keys()),
+            "indicators": indicators_serializable,
+        }
+        meta_path = os.path.join(feeds_dir, "_meta.json")
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, indent=2, ensure_ascii=False)
+
+        # 各周期 parquet
+        for period_name, period_data in self._periods.items():
+            fp = os.path.join(feeds_dir, f"{period_name}.parquet")
+            period_data._df.to_parquet(fp, index=True)  # pyright: ignore[reportPrivateUsage]
+
+        # events
+        if not self._events.empty:
+            events_fp = os.path.join(feeds_dir, "events.parquet")
+            self._events.to_parquet(events_fp, index=False)
+
+    @classmethod
+    def from_feeds(cls, feeds_dir: str) -> "DataFeed":
+        """从 parquet 文件恢复完整 DataFeed 实例
+
+        恢复内容包括：周期数据（含 OHLCV 和指标列）、events 表、
+        指标注册配置和已计算标记。加载后无需再调 calculate_all()。
+
+        :param feeds_dir: 源目录路径
+        :return: 恢复的 DataFeed 实例
+        :raises FileNotFoundError: feeds_dir 或 _meta.json 不存在
+        """
+        meta_path = os.path.join(feeds_dir, "_meta.json")
+        if not os.path.isfile(meta_path):
+            raise FileNotFoundError(f"元数据文件不存在: {meta_path}")
+
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+
+        feed = cls(symbol=meta["symbol"])
+        if meta.get("source"):
+            feed.source = meta["source"]
+
+        # 恢复每个周期
+        for period_name in meta["periods"]:
+            fp = os.path.join(feeds_dir, f"{period_name}.parquet")
+            if not os.path.isfile(fp):
+                continue
+            df = pd.read_parquet(fp)
+            # 识别指标列（非 OHLCV 的列）
+            indicator_cols = [c for c in df.columns if c not in cls.OHLCV_COLUMNS]
+            feed.register_period(period_name)
+            feed._periods[period_name].load_df_parquet(df, indicator_cols)
+
+        # 恢复指标注册配置
+        for pn, ind_list in meta.get("indicators", {}).items():
+            for ind in ind_list:
+                feed.register_indicator(pn, ind["name"], **ind["params"])
+
+        # events
+        events_fp = os.path.join(feeds_dir, "events.parquet")
+        if os.path.isfile(events_fp):
+            feed._events = pd.read_parquet(events_fp)
+
+        return feed
 
     def get_period(self, period_name: str) -> Optional[PeriodData]:
         """获取指定周期的PeriodData实例（高级用法）
