@@ -55,7 +55,7 @@ class TqSdkDataSource(BaseDataSource):
 
         return self._to_standard_df(raw_df)
 
-    # tqsdk get_kline_serial 内部上限约 10000 条，preload 往 start 之前倒推
+    # tqsdk get_kline_serial 内部上限约 10000 条（仅文档说明，分段逻辑不再依赖此值）
     _TQ_PRELOAD_BARS: ClassVar[int] = 10000
     # data_length 参数的上限，大于 tqsdk 实际能返回的即可
     _MAX_DATA_LENGTH: ClassVar[int] = 200000
@@ -68,20 +68,69 @@ class TqSdkDataSource(BaseDataSource):
         kline_period: int,
         account: object,
     ) -> pd.DataFrame:
-        """执行单次天勤 API 拉取"""
+        """执行天勤 API 拉取，以实际数据驱动分段：每次拉取后取最早时间，
+        以此为锚点继续往前拉，直到覆盖到 start_date 或无新数据为止。"""
+        from datetime import timedelta
+
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=15)
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(hour=9)
+
+        all_dfs: list[pd.DataFrame] = []
+        seg_end = end_dt
+        seg_count = 0
+        max_segments = 20  # 安全上限
+
+        while seg_count < max_segments:
+            seg_count += 1
+            df = self._fetch_once(symbol, seg_end, kline_period, account)
+
+            if df.empty:
+                break
+
+            all_dfs.append(df)
+
+            # 本段最早数据时间
+            min_dt = pd.to_datetime(df["datetime"]).min()
+
+            if min_dt <= start_dt:
+                # 已覆盖到用户要求的起始日期
+                break
+
+            # 下一段以本段最早时间 + 1 小时为锚点，继续往前拿
+            seg_end = min_dt.to_pydatetime() + timedelta(hours=1)
+
+        if not all_dfs:
+            return pd.DataFrame(columns=Qlib_COLUMNS)
+
+        if seg_count > 1:
+            logger.info(f"tqsdk 分段拉取 {symbol}: 共 {seg_count} 段")
+
+        combined = pd.concat(all_dfs, ignore_index=True)
+        combined = combined.drop_duplicates(subset="datetime", keep="last")
+        combined = combined.sort_values("datetime").reset_index(drop=True)
+
+        # 按用户要求的 start_date 截断
+        combined = combined[combined["datetime"] >= start_date]  # type: ignore[assignment]
+        combined = combined.reset_index(drop=True)
+
+        return combined  # type: ignore[return-value]
+
+    def _fetch_once(
+        self,
+        symbol: str,
+        end_dt: datetime,
+        kline_period: int,
+        account: object,
+    ) -> pd.DataFrame:
+        """单次 tqsdk 拉取：以 end_dt 为锚点，preload 往回拿 ~10000 条"""
+        from datetime import timedelta
         from common.tqsdk_imports import tqsdk
 
         if not tqsdk.ensure():
             logger.error("tqsdk 未安装，无法拉取数据")
             return pd.DataFrame()
 
-        from datetime import timedelta
-
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-
-        # tqsdk backtest 模式下 preload 最多 ~10000 条，replay 阶段几乎拿不到数据。
-        # start_dt 设为 end_dt 前 1 秒，保证回测区间有效同时 replay 趋近于零，
-        # 10000 条全部用于覆盖 end_dt 之前的历史数据。
+        # start_dt 设为 end_dt 前 1 天，preload 全部用于历史数据
         start_dt = end_dt - timedelta(days=1)
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
@@ -90,13 +139,10 @@ class TqSdkDataSource(BaseDataSource):
             backtest=tqsdk.TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth
         )
 
-        # tqsdk 以 end_dt 为锚点，从数据源拉回最多 data_length 条
-        # 设置一个足够大的值让 tqsdk 尽其所能返回
         klines = api.get_kline_serial(
             symbol, duration_seconds=kline_period, data_length=self._MAX_DATA_LENGTH
         )
 
-        # start_dt == end_dt，只需一次 wait_update 完成 preload
         try:
             api.wait_update()
         except tqsdk.BacktestFinished:
