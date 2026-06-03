@@ -107,14 +107,18 @@ def main() -> None:
     p = sub.add_parser(
         'report',
         help='管理与查看回测数据',
-        description='回测数据管理：列表、详情查看、数据清理、报告重建\n\n'
-                    '用法:\n'
-                    '  python main.py report                   列出最近 20 条回测\n'
-                    '  python main.py report --id 42           查看指定回测详情\n'
-                    '  python main.py report --clean 42        删除指定回测及关联数据\n'
-                    '  python main.py report --build           重建所有运行的可视化报告\n'
-                    '  python main.py report --build --run 1   重建指定运行的可视化报告\n'
-                    '  python main.py report --symbol DCE.m2509 按品种过滤列表'
+        description='''回测数据管理：列表、详情查看、数据清理、报告重建
+
+用法:
+  python main.py report                   列出最近 20 条回测
+  python main.py report --id 42           查看指定回测详情
+  python main.py report --clean 42        删除指定回测及关联数据
+  python main.py report --build           重建所有运行的可视化报告
+  python main.py report --build --run 1   重建指定运行的可视化报告
+  python main.py report --symbol DCE.m2509  按品种过滤列表
+  python main.py report --strategy ma      按策略名称过滤列表
+''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument('--id', type=int, default=None, help='查看指定 ID 的详细报告')
     p.add_argument('--clean', dest='clean_id', type=int, default=None,
