@@ -25,10 +25,16 @@ def cmd_report(args: argparse.Namespace):
         args: argparse.Namespace，包含:
             id:       回测 ID (show 模式)
             clean_id: 要删除的回测 ID (--clean)
+            build:    是否重建可视化报告 (--build)
+            run_id:   指定运行 ID (--run，配合 --build)
             symbol:   按品种过滤 (list 模式)
             strategy: 按策略过滤 (list 模式)
             limit:    最大条数 (list 模式)
     """
+    if args.build:
+        _cmd_build(args.run_id)
+        return
+
     cm = ConfigManager()
     dm = DataManager(cm)
 
@@ -56,7 +62,34 @@ def _cmd_show(dm: DataManager, backtest_id: int) -> None:
     report = format_single_report(dm, backtest_id)
     print(report)
 
-    print("\n💡 可视化报告请打开 output/index.html 查看 (需执行 backtest 命令生成)")
+    print("\n💡 可视化报告: python main.py report --build  (或打开 output/index.html)")
+
+
+def _cmd_build(run_id: int | None = None) -> None:
+    """重建可视化 HTML 报告
+
+    Args:
+        run_id: 指定重建某个 run（None 则重建所有）
+    """
+    from report import build_all
+    from pathlib import Path
+
+    if run_id is not None:
+        # 重建指定 run
+        print(f"重建运行 r{run_id} 的可视化报告...")
+        build_all(output_dir="output", run_id=run_id, incremental=False)
+    else:
+        # 重建所有 run
+        print("重建所有运行的可视化报告...")
+        runs = sorted(Path("output").glob("r*"))
+        if not runs:
+            print("没有找到运行记录")
+            return
+        for run_dir in runs:
+            rid = int(run_dir.name[1:])  # "r1" → 1
+            print(f"  → 重建 r{rid}...")
+            build_all(output_dir="output", run_id=rid, incremental=False)
+    print("完成。")
 
 
 def _cmd_clean(dm: DataManager, backtest_id: int) -> None:

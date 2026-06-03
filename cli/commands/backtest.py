@@ -415,6 +415,16 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                     run_id=run_id,
                 )
 
+                # run.log → logs.json（必须在 build_dashboard 前，前端需要）
+                if run_id > 0:
+                    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
+                    if log_file.exists():
+                        with open(log_file, encoding="utf-8") as f:
+                            text = f.read()
+                        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
+                        with open(json_file, "w", encoding="utf-8") as f:
+                            json.dump(text, f, ensure_ascii=False)
+
                 # 自动生成回测看板
                 dm.store.finish_run(run_id)
                 build_dashboard(
@@ -437,15 +447,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
             colorize=True,
         )
-        # run.log 整读 → logs.json 单字符串（dashboard 用）
-        if run_id > 0:
-            log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
-            if log_file.exists():
-                with open(log_file, encoding="utf-8") as f:
-                    text = f.read()
-                json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
-                with open(json_file, "w", encoding="utf-8") as f:
-                    json.dump(text, f, ensure_ascii=False)
+        # logs.json 已在 build_dashboard 前写入，这里不再重复
 
 
 def _persist_search_results(

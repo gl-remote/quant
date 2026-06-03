@@ -44,14 +44,14 @@ class BacktestRecord(BaseModel):
     total_trades: int = 0
     win_trades: int | None = None
     loss_trades: int | None = None
-    win_rate: float = 0.0
+    win_rate: float | None = None
     max_consecutive_win: int | None = None
     max_consecutive_loss: int | None = None
     avg_win: float | None = None
     avg_loss: float | None = None
     win_loss_ratio: float | None = None
     sharpe_ratio: float | None = None
-    max_drawdown: float = 0.0
+    max_drawdown: float | None = None
     max_drawdown_duration: int | None = None
     daily_std: float | None = None
     return_drawdown_ratio: float | None = None
