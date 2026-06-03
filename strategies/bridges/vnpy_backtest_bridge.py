@@ -293,16 +293,34 @@ class VnpyBacktestBridge(CtaTemplate):
                 data_feed.register_indicator(pn, ind.name, **ind.params)
 
     def _load_periods(self, data_feed: Any) -> None:
-        """从 DataManager 加载所有周期的历史数据（全量覆盖）"""
+        """从 DataManager 加载所有周期的历史数据（按主周期结束时间对齐）"""
         assert self._requirements is not None  # _setup_data_feed 调用方已判空
         dm = DataManager()
+        main_period = self._state.period
+
+        # 先加载主周期，确定结束日期
+        main_results = dm.load_kline([self._state.symbol], interval=main_period)
+        if not main_results:
+            return
+        _, main_df, _ = main_results[0]
+        if len(main_df) == 0:
+            return
+        data_feed.load_history_df(main_period, main_df.set_index('datetime'))
+        logger.info("[{}] 加载主周期: period={} rows={}",
+                    self.strategy_name, main_period, len(main_df))
+        end_date = str(main_df['datetime'].iloc[-1])[:10]
+
+        # 其他周期以主周期结束日期对齐
         for period in self._requirements.periods:
-            results = dm.load_kline([self._state.symbol], interval=period)
+            if period == main_period:
+                continue
+            results = dm.load_kline([self._state.symbol], interval=period,
+                                    end_date=end_date)
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
                     data_feed.load_history_df(period, df.set_index('datetime'))
-                    logger.info("[{}] 加载数据: period={} rows={}",
-                                self.strategy_name, period, len(df))
+                    logger.info("[{}] 加载周期: period={} rows={} (end={})",
+                                self.strategy_name, period, len(df), end_date)
                 else:
                     logger.warning("[{}] 加载数据为空: period={}", self.strategy_name, period)
 
