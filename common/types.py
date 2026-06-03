@@ -33,7 +33,7 @@ from .constants import STATUS_FAILED
 TradeAction = Literal['buy', 'sell', '']
 """交易动作: 'buy' (买入) | 'sell' (卖出) | '' (无操作)"""
 
-PositionDirection = Literal['long', '']
+PositionDirection = Literal['long', 'short', '']
 """持仓方向: 'long' (多头) | '' (空仓)"""
 
 

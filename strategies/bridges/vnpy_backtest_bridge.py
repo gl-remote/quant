@@ -32,7 +32,9 @@ from strategies.core.types import StrategyPosition
 from strategies.runtime import DataFeed, DataRequirements
 from strategies.runtime.requirements import BarContext
 from strategies.runtime.period import PeriodDataView
-from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
+from common.constants import (TRADE_ACTION_BUY, TRADE_ACTION_SELL,
+                              TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT,
+                              TRADE_OFFSET_OPEN)
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
 
@@ -375,6 +377,10 @@ class VnpyBacktestBridge(CtaTemplate):
             self._execute_trade(signal, close_price, bar_time, is_buy=True)
         elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
             self._execute_trade(signal, close_price, bar_time, is_buy=False)
+        elif signal.action == TRADE_ACTION_SELL and self.pos == 0:
+            self._execute_trade(signal, close_price, bar_time, is_short=True)
+        elif signal.action == TRADE_ACTION_BUY and self.pos < 0:
+            self._execute_trade(signal, close_price, bar_time, is_cover=True)
 
     def on_tick(self, tick: Any) -> None:
         """vnpy Tick回调 — 本策略不使用 Tick 数据"""
@@ -407,7 +413,16 @@ class VnpyBacktestBridge(CtaTemplate):
             else:
                 is_long = (str(direction).upper() == TRADE_DIRECTION_LONG) if isinstance(direction, str) else False
 
-            if is_long:
+            # vnpy 的 offset：OPEN=开仓, CLOSE=平仓
+            offset = getattr(trade, 'offset', None)
+            is_open = False
+            if offset is not None and hasattr(offset, 'value'):
+                is_open = (offset.value == TRADE_OFFSET_OPEN)
+            elif isinstance(offset, str):
+                is_open = (offset.upper() == 'OPEN')
+
+            if is_long and is_open:
+                # 买入开多
                 fill = Fill(
                     timestamp=str(trade_datetime),
                     symbol=self._state.symbol,
@@ -421,7 +436,23 @@ class VnpyBacktestBridge(CtaTemplate):
                     entry_price=trade_price,
                     volume=trade_volume,
                 )
+            elif not is_long and is_open:
+                # 卖出开空
+                fill = Fill(
+                    timestamp=str(trade_datetime),
+                    symbol=self._state.symbol,
+                    action=cast(TradeAction, TRADE_ACTION_SELL),
+                    price=trade_price,
+                    volume=trade_volume,
+                    reason="",
+                )
+                self._state.position = StrategyPosition(
+                    direction=cast(PositionDirection, TRADE_DIRECTION_SHORT),
+                    entry_price=trade_price,
+                    volume=trade_volume,
+                )
             else:
+                # 平仓（多平或空平）
                 fill = Fill(
                     timestamp=str(trade_datetime),
                     symbol=self._state.symbol,
@@ -438,13 +469,17 @@ class VnpyBacktestBridge(CtaTemplate):
     # ── 交易执行 ───────────────────────────────────────────
 
     def _execute_trade(self, signal: Signal, price: float,
-                       bar_time: pd.Timestamp, is_buy: bool) -> None:
-        """执行买卖委托 — 统一入口
+                       bar_time: pd.Timestamp,
+                       is_buy: bool = False, is_short: bool = False,
+                       is_cover: bool = False) -> None:
+        """执行交易委托 — 统一入口
 
         :param signal: 策略信号
         :param price: 当前价格
         :param bar_time: K线时间
-        :param is_buy: True=买入, False=卖出
+        :param is_buy: 做多开仓
+        :param is_short: 做空开仓
+        :param is_cover: 做空平仓
         """
         if is_buy:
             volume = signal.volume
@@ -452,13 +487,25 @@ class VnpyBacktestBridge(CtaTemplate):
                 return
             self.buy(price, volume)
             self.entry_price = price
-            logger.debug(
-                f"[{self.strategy_name}] {bar_time} 买入 @{price:.2f} x{volume}")
+            logger.debug(f"[{self.strategy_name}] {bar_time} 买入开多 @{price:.2f} x{volume}")
+        elif is_short:
+            volume = signal.volume
+            if volume <= 0:
+                return
+            self.short(price, volume)
+            self.entry_price = price
+            logger.debug(f"[{self.strategy_name}] {bar_time} 卖出开空 @{price:.2f} x{volume}")
+        elif is_cover:
+            pos = abs(self.pos)
+            if pos <= 0:
+                return
+            self.cover(price, pos)
+            self.entry_price = 0.0
+            logger.debug(f"[{self.strategy_name}] {bar_time} {signal.reason}买入平空 @{price:.2f}")
         else:
             pos = abs(self.pos)
             if pos <= 0:
                 return
             self.sell(price, pos)
             self.entry_price = 0.0
-            logger.debug(
-                f"[{self.strategy_name}] {bar_time} {signal.reason}卖出 @{price:.2f}")
+            logger.debug(f"[{self.strategy_name}] {bar_time} {signal.reason}卖出平多 @{price:.2f}")

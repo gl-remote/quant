@@ -26,10 +26,9 @@ from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
     TRADE_DIRECTION_LONG,
+    TRADE_DIRECTION_SHORT,
     SIGNAL_STOP_LOSS,
     SIGNAL_TAKE_PROFIT,
-    SIGNAL_DEATH_CROSS,
-    SIGNAL_GOLDEN_CROSS,
     STRATEGY_MA,
     DEFAULT_SMA_SHORT,
     DEFAULT_SMA_LONG,
@@ -38,8 +37,6 @@ from common.constants import (
     DEFAULT_POSITION_RATIO,
 )
 from common.formulas import (
-    golden_cross,
-    death_cross,
     stop_loss_triggered,
     take_profit_triggered,
     position_size,
@@ -159,42 +156,73 @@ class MaStrategyCore(Strategy[MACrossParams]):
         """处理一根K线 — 策略决策中枢
 
         【决策流程】
-        - 5m SMA(short) 上穿 15m SMA(long) → 金叉买入
-        - 5m SMA(short) 下穿 15m SMA(long) → 死叉卖出
-        - 持有中先检查止损/止盈，再检查死叉
+
+        - 5m SMA(short) 大于 15m SMA(long) 做多
+            → 1m macd 大于 0 → 1m kdj 小于 50 → 买入开仓  
+            → 1m macd 小于 0 或者 1m kdj 大于 80 → 平仓  
+        - 5m SMA(short) 小于 15m SMA(long) 做空
+            → 1m macd 小于 0 → 1m kdj 大于 50 → 卖出开仓
+            → 1m macd 大于 0 或者 1m kdj 小于 20 → 平仓  
+        - 持有中先检查止损/止盈，再检查其他
 
         :param state: 运行时状态
         :param ctx: 行情上下文
         :return: 交易决策信号
         """
         config = state.strategy_config
+        view_1m = ctx.multi["1m"]
         view_5m = ctx.multi["5m"]
         view_15m = ctx.multi["15m"]
+
         sma_short_col = f"sma_{config.sma_short}"
         sma_long_col = f"sma_{config.sma_long}"
+        macd_col = "macd_12_9_26"   # fast=12, signal=9, slow=26
+        kdj_col = "kdj_3_3_9"       # d_period=3, k_period=3, n=9
 
-        cur_short = view_5m.indicator(sma_short_col, -1) or 0.0
-        cur_long = view_15m.indicator(sma_long_col, -1) or 0.0
-        prev_short = view_5m.indicator(sma_short_col, -2) or 0.0
-        prev_long = view_15m.indicator(sma_long_col, -2) or 0.0
+        cur_5m_short = view_5m.indicator(sma_short_col, -1) or 0.0
+        cur_15m_long = view_15m.indicator(sma_long_col, -1) or 0.0
+        macd_val = view_1m.indicator(macd_col, -1) or 0.0
+        kdj_val = view_1m.indicator(kdj_col, -1) or 50.0
 
+        long_bias = cur_5m_short > cur_15m_long
+        short_bias = cur_5m_short < cur_15m_long
+        direction = state.position.direction
         signal = Signal()
 
-        if state.position.direction == TRADE_DIRECTION_LONG:
+        # ── 持有多头 ──
+        if direction == TRADE_DIRECTION_LONG:
             if self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio):
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
                                 volume=state.position.volume)
             elif self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio):
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_TAKE_PROFIT,
                                 volume=state.position.volume)
-            elif self._is_death_cross(cur_short, cur_long, prev_short, prev_long):
-                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_DEATH_CROSS,
+            elif macd_val < 0 or kdj_val > 80:
+                reason = f"MACD={macd_val:.2f}" if macd_val < 0 else f"KDJ={kdj_val:.1f}"
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=reason,
                                 volume=state.position.volume)
+
+        # ── 持有空头 ──
+        elif direction == TRADE_DIRECTION_SHORT:
+            if self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio):
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_STOP_LOSS,
+                                volume=state.position.volume)
+            elif self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio):
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_TAKE_PROFIT,
+                                volume=state.position.volume)
+            elif macd_val > 0 or kdj_val < 20:
+                reason = f"MACD={macd_val:.2f}" if macd_val > 0 else f"KDJ={kdj_val:.1f}"
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=reason,
+                                volume=state.position.volume)
+
+        # ── 空仓：找入场 ──
         else:
-            if self._is_golden_cross(cur_short, cur_long, prev_short, prev_long):
-                vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
-                                               state.contract_size)
-                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_GOLDEN_CROSS, volume=vol)
+            vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
+                                           state.contract_size)
+            if long_bias and macd_val > 0 and kdj_val < 50:
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
+            elif short_bias and macd_val < 0 and kdj_val > 50:
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
         return signal
 
@@ -218,32 +246,6 @@ class MaStrategyCore(Strategy[MACrossParams]):
         pass
 
     # ---- 内部算法 ----
-
-    @staticmethod
-    def _is_golden_cross(cur_short: float, cur_long: float,
-                         prev_short: float, prev_long: float) -> bool:
-        """检测金叉 — 短期均线上穿长期均线
-
-        :param cur_short: 当前短期均线
-        :param cur_long: 当前长期均线
-        :param prev_short: 前一根短期均线
-        :param prev_long: 前一根长期均线
-        :return: 是否金叉
-        """
-        return golden_cross(prev_short, prev_long, cur_short, cur_long)
-
-    @staticmethod
-    def _is_death_cross(cur_short: float, cur_long: float,
-                        prev_short: float, prev_long: float) -> bool:
-        """检测死叉 — 短期均线下穿长期均线
-
-        :param cur_short: 当前短期均线
-        :param cur_long: 当前长期均线
-        :param prev_short: 前一根短期均线
-        :param prev_long: 前一根长期均线
-        :return: 是否死叉
-        """
-        return death_cross(prev_short, prev_long, cur_short, cur_long)
 
     @staticmethod
     def _check_stop_loss(entry_price: float, current_price: float,
