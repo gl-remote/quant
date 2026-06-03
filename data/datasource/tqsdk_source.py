@@ -94,34 +94,28 @@ class TqSdkDataSource(BaseDataSource):
             symbol, duration_seconds=kline_period, data_length=self._MAX_DATA_LENGTH
         )
 
-        rows = []
-        prev_len = 0
+        # start_dt == end_dt，只需一次 wait_update 完成 preload
         try:
-            while True:
-                api.wait_update()
-                if api.is_changing(klines):
-                    current_len = len(klines)
-                    for i in range(prev_len, current_len):
-                        ts = datetime.fromtimestamp(
-                            klines["datetime"].iloc[i] / 10**9
-                        )
-                        row = {
-                            "datetime": ts.strftime("%Y-%m-%d %H:%M:%S"),
-                            "open": float(klines["open"].iloc[i]),
-                            "high": float(klines["high"].iloc[i]),
-                            "low": float(klines["low"].iloc[i]),
-                            "close": float(klines["close"].iloc[i]),
-                            "volume": int(klines["volume"].iloc[i]),
-                        }
-                        rows.append(row)
-                    prev_len = current_len
+            api.wait_update()
         except tqsdk.BacktestFinished:
             pass
-        except Exception:
-            api.close()
-            raise
-        finally:
-            api.close()
+
+        rows = []
+        for i in range(len(klines)):
+            ts = datetime.fromtimestamp(
+                klines["datetime"].iloc[i] / 10**9
+            )
+            row = {
+                "datetime": ts.strftime("%Y-%m-%d %H:%M:%S"),
+                "open": float(klines["open"].iloc[i]),
+                "high": float(klines["high"].iloc[i]),
+                "low": float(klines["low"].iloc[i]),
+                "close": float(klines["close"].iloc[i]),
+                "volume": int(klines["volume"].iloc[i]),
+            }
+            rows.append(row)
+
+        api.close()
 
         return pd.DataFrame(rows, columns=Qlib_COLUMNS)
 
