@@ -75,12 +75,14 @@ class TqSdkDataSource(BaseDataSource):
             logger.error("tqsdk 未安装，无法拉取数据")
             return pd.DataFrame()
 
+        from datetime import timedelta
+
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
         # tqsdk backtest 模式下 preload 最多 ~10000 条，replay 阶段几乎拿不到数据。
-        # 直接把 start_dt 设为 end_dt，让 tqsdk 只做 preload 不跑回放，
+        # start_dt 设为 end_dt 前 1 秒，保证回测区间有效同时 replay 趋近于零，
         # 10000 条全部用于覆盖 end_dt 之前的历史数据。
-        start_dt = end_dt
+        start_dt = end_dt - timedelta(days=1)
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
