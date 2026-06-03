@@ -231,6 +231,9 @@ export default function KlineChart({ data, trades, loading }: Props) {
           return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         },
       },
+      logo: {
+        visible: false, // 隐藏 TradingView 品牌链接
+      },
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
