@@ -8,9 +8,9 @@ import {
   LineSeries,
   CandlestickData,
   HistogramData,
-  LineData,
   Time,
   TickMarkType,
+  createSeriesMarkers,
 } from "lightweight-charts";
 import type { KlineData, KlinePoint, TradeRecord } from "@/types";
 import QlPanel from "@/components/QlPanel";
@@ -28,18 +28,15 @@ function toChartTime(dt: string | number): Time {
   if (typeof dt === "number") {
     return dt as Time;
   }
-  // 处理字符串格式的时间戳
   if (!isNaN(Number(dt))) {
     return Number(dt) as Time;
   }
-  // 兼容旧格式（已废弃，保留用于迁移）
   if (dt.includes(" ")) {
     return (new Date(dt.replace(" ", "T") + "Z").getTime() / 1000) as Time;
   }
   if (dt.includes("T")) {
     return (new Date(dt + "Z").getTime() / 1000) as Time;
   }
-  // 纯日期格式返回字符串
   return dt as Time;
 }
 
@@ -72,22 +69,19 @@ function calculateSMA(data: KlinePoint[], period: number): number[] {
 function convertTradeToMarkers(
   trades: TradeRecord[],
   klineData: KlinePoint[]
-): LineData<Time>[] {
+): any[] {
   if (!trades || trades.length === 0 || !klineData || klineData.length === 0) {
     return [];
   }
 
-  // 找到K线数据的价格范围，用于计算标记位置
-  const prices = klineData.flatMap((k) => [k.high, k.low]);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice;
-  const padding = priceRange * 0.05; // 5%的边距
+  const klineTimeSet = new Set(klineData.map(d => {
+    const t = toChartTime(d.datetime);
+    return typeof t === "number" ? t : String(t);
+  }));
 
-  const markers: LineData<Time>[] = [];
+  const markers: any[] = [];
 
   for (const trade of trades) {
-    // 转换交易时间为时间戳
     let tradeTime: Time;
     if (typeof trade.datetime === "number") {
       tradeTime = trade.datetime as Time;
@@ -99,50 +93,48 @@ function convertTradeToMarkers(
       tradeTime = trade.datetime as Time;
     }
 
-    // 确定标记位置和形状
-    let price: number;
-    let shape: "arrowUp" | "arrowDown";
+    const normalizedTime = typeof tradeTime === "number" ? tradeTime : String(tradeTime);
+    if (!klineTimeSet.has(normalizedTime)) {
+      continue;
+    }
+
+    let position: "aboveBar" | "belowBar";
     let color: string;
+    let shape: "arrowUp" | "arrowDown";
     let text: string;
 
     if (trade.offset === "open") {
-      price = trade.open_price;
       if (trade.direction === "long") {
+        position = "belowBar";
+        color = "#26A69A";
         shape = "arrowUp";
-        color = "#26A69A"; // 绿色，做多开仓
         text = "开多";
       } else {
+        position = "aboveBar";
+        color = "#EF5350";
         shape = "arrowDown";
-        color = "#EF5350"; // 红色，做空开仓
         text = "开空";
       }
-      // 开仓标记在价格下方一点
-      price = price - padding;
     } else {
-      price = trade.close_price;
       if (trade.direction === "long") {
+        position = "aboveBar";
+        color = "#26A69A";
         shape = "arrowDown";
-        color = "#26A69A"; // 绿色，做多平仓
         text = "平多";
       } else {
+        position = "belowBar";
+        color = "#EF5350";
         shape = "arrowUp";
-        color = "#EF5350"; // 红色，做空平仓
         text = "平空";
       }
-      // 平仓标记在价格上方一点
-      price = price + padding;
     }
 
     markers.push({
       time: tradeTime,
-      value: price,
-      // @ts-ignore - lightweight-charts 支持自定义标记，但类型定义可能不完整
-      marker: {
-        shape,
-        color,
-        size: 1,
-        text,
-      },
+      position,
+      color,
+      shape,
+      text,
     });
   }
 
@@ -156,7 +148,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null);
   const smaShortSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const smaLongSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
-  const tradeMarkersSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const markersRef = useRef<any>(null);
   const [mode, setMode] = useState<ViewMode>("daily");
   const [indicators, setIndicators] = useState<{ sma: boolean; trades: boolean }>({
     sma: true,
@@ -166,19 +158,16 @@ export default function KlineChart({ data, trades, loading }: Props) {
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
   console.log("[KlineChart] 渲染 - data:", data ? "有数据" : "null", "loading:", loading, "klineData:", klineData ? `${klineData.length}条` : "null");
 
-  // 隐藏 TradingView logo 元素
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     
     const hideLogo = () => {
-      // 查找并隐藏 logo 元素
       const logoElements = container.querySelectorAll('a[href*="tradingview.com"], a[href*="lightweight-charts.com"]');
       logoElements.forEach(el => {
         (el as HTMLElement).style.display = 'none';
       });
       
-      // 也可以查找 canvas 外的其他元素
       const allElements = container.querySelectorAll('*');
       allElements.forEach(el => {
         const htmlEl = el as HTMLElement;
@@ -189,17 +178,14 @@ export default function KlineChart({ data, trades, loading }: Props) {
       });
     };
     
-    // 初次隐藏
     hideLogo();
     
-    // 使用 MutationObserver 监测 DOM 变化，防止 logo 重新出现
     const observer = new MutationObserver(hideLogo);
     observer.observe(container, { childList: true, subtree: true });
     
     return () => observer.disconnect();
   }, [klineData]);
 
-  // 初始化图表 - 依赖 klineData，当有数据且容器挂载后才初始化
   useEffect(() => {
     console.log("[KlineChart] 图表初始化 useEffect, klineData:", !!klineData, "container:", !!containerRef.current, "chart:", !!chartRef.current);
     
@@ -293,13 +279,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
       lineWidth: 2,
     });
 
-    const tradeMarkersSeries = chart.addSeries(LineSeries, {
-      color: "transparent",
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      crosshairMarkerVisible: false,
-    });
+    const markers = createSeriesMarkers(candlestickSeries);
 
     volumeSeries.priceScale().applyOptions({
       scaleMargins: {
@@ -312,7 +292,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
     volumeSeriesRef.current = volumeSeries;
     smaShortSeriesRef.current = smaShortSeries;
     smaLongSeriesRef.current = smaLongSeries;
-    tradeMarkersSeriesRef.current = tradeMarkersSeries;
+    markersRef.current = markers;
     chartRef.current = chart;
     console.log("[KlineChart] 图表创建成功");
 
@@ -330,15 +310,15 @@ export default function KlineChart({ data, trades, loading }: Props) {
       window.removeEventListener("resize", handleResize);
       chart.remove();
       chartRef.current = null;
+      markersRef.current = null;
     };
   }, [klineData]);
 
-  // 设置 K 线数据
   useEffect(() => {
     if (!klineData) return;
     const candleSeries = candlestickSeriesRef.current;
     const volSeries = volumeSeriesRef.current;
-    const tradeMarkersSeries = tradeMarkersSeriesRef.current;
+    const markers = markersRef.current;
     if (!candleSeries || !volSeries) return;
 
     console.log("[KlineChart] 设置 K 线数据:", klineData.length, "条");
@@ -370,25 +350,21 @@ export default function KlineChart({ data, trades, loading }: Props) {
       smaLongSeriesRef.current.setData(smaLongData);
     }
 
-    // 设置交易标记
-    if (tradeMarkersSeries && indicators.trades && trades) {
-      const markers = convertTradeToMarkers(trades, klineData);
-      tradeMarkersSeries.setData(markers);
-      tradeMarkersSeries.applyOptions({ visible: true });
-    } else if (tradeMarkersSeries) {
-      tradeMarkersSeries.setData([]);
-      tradeMarkersSeries.applyOptions({ visible: false });
+    if (markers) {
+      if (indicators.trades && trades) {
+        const markerData = convertTradeToMarkers(trades, klineData);
+        console.log("[KlineChart] 设置交易标记:", markerData.length, "个");
+        markers.setMarkers(markerData);
+      } else {
+        markers.setMarkers([]);
+      }
     }
   }, [klineData, indicators, trades]);
 
-  // 控制 SMA 和交易标记可见性
   useEffect(() => {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {
       smaShortSeriesRef.current.applyOptions({ visible: indicators.sma });
       smaLongSeriesRef.current.applyOptions({ visible: indicators.sma });
-    }
-    if (tradeMarkersSeriesRef.current) {
-      tradeMarkersSeriesRef.current.applyOptions({ visible: indicators.trades });
     }
   }, [indicators]);
 
