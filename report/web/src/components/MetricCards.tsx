@@ -11,19 +11,29 @@ export default function MetricCards({ run, backtests }: Props) {
     return null;
   }
 
-  const totalReturn = backtests.reduce(
+  // 只保留每个品种最优的那条回测记录（和 SymbolTable 保持一致）
+  const bestBySymbol: Record<string, typeof backtests[0]> = {};
+  for (const bt of backtests) {
+    const sym = bt.symbol;
+    if (!bestBySymbol[sym] || (bt.total_return || 0) > (bestBySymbol[sym].total_return || 0)) {
+      bestBySymbol[sym] = bt;
+    }
+  }
+  const bestRecords = Object.values(bestBySymbol);
+  const uniqueSymbols = bestRecords.length;
+
+  const totalReturn = bestRecords.reduce(
     (sum, b) => sum + (b.total_return || 0),
     0
   );
-  const avgReturn = totalReturn / backtests.length;
-  const totalTrades = backtests.reduce(
+  const avgReturn = totalReturn / uniqueSymbols;
+  const totalTrades = bestRecords.reduce(
     (sum, b) => sum + (b.total_trades || 0),
     0
   );
   const avgSharpe =
-    backtests.reduce((sum, b) => sum + (b.sharpe_ratio || 0), 0) /
-    backtests.length;
-  const uniqueSymbols = new Set(backtests.map((b) => b.symbol)).size;
+    bestRecords.reduce((sum, b) => sum + (b.sharpe_ratio || 0), 0) /
+    uniqueSymbols;
 
   const cards = [
     { label: "总品种数", value: String(uniqueSymbols) },

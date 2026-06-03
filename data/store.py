@@ -501,21 +501,21 @@ class DataStore:
             total_return = float(r['total_return'] or 0)
             if sym not in best or total_return > float(best[sym].get('total_return') or 0):  # type: ignore[arg-type]
                 best[sym] = {
-                    'id': r['id'],
-                    'symbol': sym,
-                    'total_return': total_return,
-                    'total_trades': r['total_trades'] or 0,
-                    'win_rate': float(r['win_rate'] or 0) * 100,
-                    'max_drawdown': float(r['max_drawdown'] or 0) * 100,
-                    'sharpe': float(r['sharpe_ratio'] or 0),
-                    'end_balance': float(r['end_balance'] or 0),
-                    'ret_cls': 'badge-green' if total_return > 0 else 'badge-red',
-                    'sr_cls': 'badge-green' if (r['sharpe_ratio'] or 0) > 0 else 'badge-red',
-                    'data_src': r['data_src'],
-                    'start_date': r['start_date'],
-                    'end_date': r['end_date'],
-                    'kline_interval': r['kline_interval'],
-                }
+            'id': r['id'],
+            'symbol': sym,
+            'total_return': total_return,
+            'total_trades': r['total_trades'] or 0,
+            'win_rate': float(r['win_rate'] or 0) * 100,
+            'max_drawdown': float(r['max_drawdown'] or 0),
+            'sharpe': float(r['sharpe_ratio'] or 0),
+            'end_balance': float(r['end_balance'] or 0),
+            'ret_cls': 'badge-green' if total_return > 0 else 'badge-red',
+            'sr_cls': 'badge-green' if (r['sharpe_ratio'] or 0) > 0 else 'badge-red',
+            'data_src': r['data_src'],
+            'start_date': r['start_date'],
+            'end_date': r['end_date'],
+            'kline_interval': r['kline_interval'],
+        }
         return [best[s] for s in sorted(best)]
 
     def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
