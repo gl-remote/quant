@@ -98,26 +98,13 @@ function convertTradeToMarkers(
       continue;
     }
 
-    // Clean up direction and offset strings
-    let direction: string = trade.direction;
-    let offset: string = trade.offset;
-    
-    // Handle cases where direction is "direction.long" or similar
-    if (typeof direction === "string" && direction.includes(".")) {
-      direction = direction.split(".")[1];
-    }
-    // Handle cases where offset is "offset.open" or similar
-    if (typeof offset === "string" && offset.includes(".")) {
-      offset = offset.split(".")[1];
-    }
-
     let position: "aboveBar" | "belowBar";
     let color: string;
     let shape: "arrowUp" | "arrowDown";
     let text: string;
 
-    if (offset === "open") {
-      if (direction === "long") {
+    if (trade.offset === "open") {
+      if (trade.direction === "long") {
         position = "belowBar";
         color = "#26A69A";
         shape = "arrowUp";
@@ -129,7 +116,7 @@ function convertTradeToMarkers(
         text = "开空";
       }
     } else {
-      if (direction === "long") {
+      if (trade.direction === "long") {
         position = "aboveBar";
         color = "#26A69A";
         shape = "arrowDown";

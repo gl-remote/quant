@@ -285,20 +285,28 @@ def _export_trades_with_incremental(
             continue
         symbol = str(s.get("symbol", ""))
         trades = dm.query_trades(int(s_id))
-        trades_data[symbol] = [
-            {
+        trades_data[symbol] = []
+        for t in trades:
+            # 清理 direction 和 offset 字符串
+            direction = t.direction
+            if "." in str(direction):
+                direction = str(direction).split(".")[-1]
+            
+            offset = t.offset
+            if "." in str(offset):
+                offset = str(offset).split(".")[-1]
+            
+            trades_data[symbol].append({
                 "datetime": t.datetime,
                 "symbol": t.symbol,
-                "direction": t.direction,
-                "offset": t.offset,
+                "direction": direction,
+                "offset": offset,
                 "open_price": t.open_price,
                 "close_price": t.close_price,
                 "quantity": t.quantity,
                 "pnl": t.pnl,
                 "commission": t.commission,
-            }
-            for t in trades
-        ]
+            })
     
     if cache.needs_update("trades", run_id, trades_data):
         logger.info("→ 导出 trades（数据已变更）")

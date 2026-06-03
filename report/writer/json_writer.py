@@ -163,12 +163,21 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
         # 转换为序列化格式
         all_trades[symbol] = []
         for t in trades:
+            # 清理 direction 和 offset 字符串
+            direction = t.direction
+            if "." in str(direction):
+                direction = str(direction).split(".")[-1]
+            
+            offset = t.offset
+            if "." in str(offset):
+                offset = str(offset).split(".")[-1]
+            
             # 转换 TradeRecord 为 dict
             all_trades[symbol].append({
                 'datetime': t.datetime,
                 'symbol': t.symbol,
-                'direction': t.direction,
-                'offset': t.offset,
+                'direction': direction,
+                'offset': offset,
                 'open_price': t.open_price,
                 'close_price': t.close_price,
                 'quantity': t.quantity,
