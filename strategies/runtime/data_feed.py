@@ -34,7 +34,7 @@ from .events import (
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from ..core.types import Bar
-from ..core.indicators import sma_func, ema_func, rsi_func
+from ..core.indicators import sma_func, ema_func, rsi_func, macd_func, kdj_func
 
 
 def _parse_source_from_symbol(symbol: str) -> Optional[str]:
@@ -668,4 +668,16 @@ register_indicator_func(
     rsi_func,
     IndicatorCalcMode.BATCH,
     description='相对强弱指标 (Relative Strength Index)'
+)
+register_indicator_func(
+    'macd',
+    macd_func,
+    IndicatorCalcMode.BATCH,
+    description='MACD快慢线差值 (Moving Average Convergence Divergence)'
+)
+register_indicator_func(
+    'kdj',
+    kdj_func,
+    IndicatorCalcMode.BATCH,
+    description='KDJ随机指标J值'
 )

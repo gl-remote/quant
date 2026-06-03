@@ -125,28 +125,29 @@ class MaStrategyCore(Strategy[MACrossParams]):
     def data_requirements(self, config: MACrossParams) -> Optional[DataRequirements]:
         """策略的数据需求声明
 
-        【设计目的】
-        告诉框架策略需要什么数据和指标，框架在初始化时统一预计算。
-
         【本策略的需求】
-        - 周期: 1m（主周期）
-        - 历史K线: max(short, long) + 1 根（用于计算均线交叉）
-        - 指标: SMA(short)、SMA(long)
-        - 事件: 不需要
+        - 主周期: 1m — MACD + KDJ
+        - 5m: SMA(config.sma_short) — 短期均线（金叉/死叉判断）
+        - 15m: SMA(config.sma_long) — 长期均线（金叉/死叉判断）
 
-        【调用时机】
-        Bridge.on_init() 中调用一次，结果缓存起来。
-
-        :param config: 策略配置，用于确定需要什么周期的均线
+        :param config: 策略配置
         :return: 数据需求声明
         """
         return DataRequirements(
             periods={
-                "1m": PeriodRequirements(lookback_bars=max(config.sma_short, config.sma_long) + 1),
+                "1m": PeriodRequirements(lookback_bars=60),
+                "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
+                "15m": PeriodRequirements(lookback_bars=config.sma_long + 1),
             },
             indicators={
                 "1m": [
+                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
+                ],
+                "5m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_short}),
+                ],
+                "15m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_long}),
                 ],
             },
@@ -158,48 +159,28 @@ class MaStrategyCore(Strategy[MACrossParams]):
         """处理一根K线 — 策略决策中枢
 
         【决策流程】
-        步骤 1: 从 ctx 获取预计算的 SMA 指标
-          - 当前短期均线: cur_short
-          - 当前长期均线: cur_long
-          - 前一根短期均线: prev_short
-          - 前一根长期均线: prev_long
+        - 5m SMA(short) 上穿 15m SMA(long) → 金叉买入
+        - 5m SMA(short) 下穿 15m SMA(long) → 死叉卖出
+        - 持有中先检查止损/止盈，再检查死叉
 
-        步骤 2: 持仓检查
-          - 如果持有多头：
-            a. 先检查止损（优先级最高）
-            b. 再检查止盈
-            c. 最后检查死叉
-          - 如果空仓：
-            a. 只检查金叉
-
-        步骤 3: 生成 Signal
-          - 买入时：计算仓位大小（基于 capital、position_ratio、contract_size）
-          - 卖出时：清掉当前持仓
-
-        【为什么指标预计算】
-        - 避免在 on_bar 中重复计算 SMA
-        - 多个策略可以共享同一个 DataFeed，指标只计算一次
-        - 提高回测性能
-
-        :param state: 运行时状态，包含配置、持仓、资金等
-        :param ctx: 行情上下文，包含 K线、指标、多周期数据
+        :param state: 运行时状态
+        :param ctx: 行情上下文
         :return: 交易决策信号
         """
         config = state.strategy_config
-        view = ctx.multi["1m"]
+        view_5m = ctx.multi["5m"]
+        view_15m = ctx.multi["15m"]
         sma_short_col = f"sma_{config.sma_short}"
         sma_long_col = f"sma_{config.sma_long}"
 
-        # 从 ctx 获取预计算的指标（避免在 on_bar 中重复计算）
-        cur_short = view.indicator(sma_short_col, -1) or 0.0
-        cur_long = view.indicator(sma_long_col, -1) or 0.0
-        prev_short = view.indicator(sma_short_col, -2) or 0.0
-        prev_long = view.indicator(sma_long_col, -2) or 0.0
+        cur_short = view_5m.indicator(sma_short_col, -1) or 0.0
+        cur_long = view_15m.indicator(sma_long_col, -1) or 0.0
+        prev_short = view_5m.indicator(sma_short_col, -2) or 0.0
+        prev_long = view_15m.indicator(sma_long_col, -2) or 0.0
 
         signal = Signal()
 
         if state.position.direction == TRADE_DIRECTION_LONG:
-            # 持有多头：先检查风控（止损/止盈），再检查死叉
             if self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio):
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
                                 volume=state.position.volume)
@@ -210,7 +191,6 @@ class MaStrategyCore(Strategy[MACrossParams]):
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_DEATH_CROSS,
                                 volume=state.position.volume)
         else:
-            # 空仓：只检查金叉
             if self._is_golden_cross(cur_short, cur_long, prev_short, prev_long):
                 vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
                                                state.contract_size)

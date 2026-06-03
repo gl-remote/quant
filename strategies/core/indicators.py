@@ -1,28 +1,34 @@
 """内置指标计算函数
 
-这些是框架自带的默认指标实现，仅供 strategies/runtime/ 注册使用。
-依赖关系：仅依赖 pandas，不依赖 strategies/runtime/ 中的任何内容。
+所有指标统一使用 pandas-ta 库实现。
 """
 
 from typing import cast
 
 import pandas as pd
+import pandas_ta as ta
 
 
 def sma_func(df: pd.DataFrame, period: int) -> pd.Series:
-    """SMA指标计算函数 - 内置实现"""
-    return cast(pd.Series, df['close'].rolling(window=period).mean())
+    return ta.sma(df["close"], length=period)
 
 
 def ema_func(df: pd.DataFrame, period: int) -> pd.Series:
-    """EMA指标计算函数 - 内置实现"""
-    return cast(pd.Series, df['close'].ewm(span=period, adjust=False).mean())
+    return ta.ema(df["close"], length=period)
 
 
 def rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """RSI指标计算函数 - 内置实现"""
-    delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return cast(pd.Series, 100 - (100 / (1 + rs)))
+    return ta.rsi(df["close"], length=period)
+
+
+def macd_func(df: pd.DataFrame, fast: int = 12, slow: int = 26,
+              signal: int = 9) -> pd.Series:
+    result = ta.macd(df["close"], fast=fast, slow=slow, signal=signal)
+    return cast(pd.Series, result[f"MACDh_{fast}_{slow}_{signal}"])
+
+
+def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3,
+             d_period: int = 3) -> pd.Series:
+    result = ta.kdj(high=df["high"], low=df["low"], close=df["close"],
+                    length=n, signal=k_period)
+    return cast(pd.Series, result[f"J_{n}_{k_period}_{d_period}"])
