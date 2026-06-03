@@ -131,7 +131,7 @@ class TqSdkDataSource(BaseDataSource):
             return pd.DataFrame()
 
         # start_dt 紧贴 end_dt，preload 全部用于历史数据，不留 replay 缝隙
-        start_dt = end_dt - timedelta(minutes=1)
+        start_dt = end_dt - timedelta(minutes=30)
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
