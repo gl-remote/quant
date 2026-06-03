@@ -108,12 +108,11 @@ class VnpyBacktestBridge(CtaTemplate):
         self._data_feed = self._setup_data_feed()
         self._build_ctx_cache()
 
-        self._log_data_feed_summary()
         self.write_log(f"策略初始化: {self._core.name}")
 
     def on_start(self) -> None:
         """vnpy 启动回调"""
-        self._log_data_feed_summary()
+        self._log_data_feed_summary("策略启动 -- 使用的数据")
         self.write_log("策略启动")
 
     def on_stop(self) -> None:
@@ -127,10 +126,12 @@ class VnpyBacktestBridge(CtaTemplate):
         )
         self.write_log(f"策略停止: fills={fills_count} buys={buys} sells={sells}")
 
-    def _log_data_feed_summary(self) -> None:
+    def _log_data_feed_summary(self, label: str = "") -> None:
         """输出 DataFeed 内容摘要到日志文件（前端运行日志 Tab 可查看）
-        
-        日志自动带 run_id 和 backtest_id（由 logger.contextualize 注入）
+
+        列出每个周期的：行数、时间区间、已注册指标、已计算指标列。
+
+        :param label: 日志标签，如 "数据加载完成（计算前）"
         """
         if self._data_feed is None:
             return
@@ -143,14 +144,20 @@ class VnpyBacktestBridge(CtaTemplate):
             df = pd_obj._df  # pyright: ignore[reportPrivateUsage]
             if len(df) == 0:
                 continue
+            # 已注册指标配置
             indicators = self._data_feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
             ind_names = [f"{n}({','.join(f'{k}={v}' for k, v in p.items())})"
                          for n, p in indicators]
+            # 已计算完成的指标列（实际在 _df 中的列名）
+            ohlcv = {"open", "high", "low", "close", "volume"}
+            calc_cols = [c for c in df.columns if c not in ohlcv]
             logger.info(
                 f"[run={rid} bt={btid}] [{self.strategy_name}] "
-                f"DataFeed: period={pn} rows={len(df)} "
+                f"{label + ' ' if label else ''}"
+                f"period={pn} rows={len(df)} "
                 f"range={df.index[0]}~{df.index[-1]} "
-                f"indicators=[{', '.join(ind_names) if ind_names else '无'}]"
+                f"registered=[{', '.join(ind_names) if ind_names else '无'}] "
+                f"calculated_columns={calc_cols}"
             )
 
     # ── DataFeed 初始化 ────────────────────────────────────
@@ -174,7 +181,9 @@ class VnpyBacktestBridge(CtaTemplate):
         # 2. 数据过期则全量重加载所有周期数据
         if data_stale:
             self._load_periods(feed)
+            self._log_data_feed_summary("数据加载完成（计算前）")
             feed.calculate_all()
+            self._log_data_feed_summary("指标计算完成（计算后）")
             feed.to_feeds(feeds_dir)
             return feed
 
@@ -182,10 +191,13 @@ class VnpyBacktestBridge(CtaTemplate):
         changed = self._merge_missing_requirements(feed)
 
         if changed:
+            self._log_data_feed_summary("增量合并完成（计算前）")
             feed.calculate_all()
+            self._log_data_feed_summary("指标计算完成（计算后）")
             feed.to_feeds(feeds_dir)
             logger.info("[{}] feeds 已增量更新", self.strategy_name)
         else:
+            self._log_data_feed_summary("feeds 命中，跳过计算")
             logger.info("[{}] feeds 命中，跳过指标计算", self.strategy_name)
 
         return feed
