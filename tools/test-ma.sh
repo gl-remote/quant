@@ -30,7 +30,8 @@ echo "=========================================="
 echo ""
 echo "[步骤 1/2] 执行全量回测 + 网格搜索..."
 if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
-    --pattern "\.1m\." \
+    # --pattern "\.1m\." \
+    --pattern "DCE\.m.*\.1m\." \
     --strategy ma \
     --mode search \
     --optimizer bayesian \
