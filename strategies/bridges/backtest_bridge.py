@@ -128,38 +128,113 @@ class VnpyBacktestBridge(CtaTemplate):
     # ── DataFeed 初始化 ────────────────────────────────────
 
     def _setup_data_feed(self) -> DataFeed:
-        """构造 DataFeed：优先从 feeds 加载，未命中则完整流程
+        """统一入口：加载 → 校验 → 差量合并 → 增量计算
 
-        决策逻辑：
-        - feeds 存在且有效 → 加载并返回（跳过 calculate_all）
-        - 否则 → 创建新 DataFeed → 注册 → 加载数据 → 计算指标 → 存 feeds
-
-        :return: 已就绪的 DataFeed 实例
+        只做缺失的工作：
+        - feeds 不存在 → 全量加载 + 全量计算
+        - 数据过期 → 重加载数据 + 重算指标
+        - 加周期/加指标 → 只加载新周期 + 只算新指标
+        - 完全命中 → 零开销返回
         """
         assert self._requirements is not None  # on_init 已判空
 
         feeds_dir = f"output/feeds/{self._state.symbol}"
 
-        feed = self._try_load_feeds(feeds_dir)
-        if feed is not None:
+        # 1. 加载已有 feeds 或创建空 DataFeed，同时检查数据是否过期
+        feed, data_stale = self._assess_feed(feeds_dir)
+
+        # 2. 数据过期则全量重加载所有周期数据
+        if data_stale:
+            self._load_periods(feed)
+            feed.calculate_all()
+            feed.to_feeds(feeds_dir)
             return feed
 
-        # 完整流程
-        feed = DataFeed(symbol=self._state.symbol)
-        for period_name in self._requirements.periods:
-            feed.register_period(period_name)
-        for period_name, indicators in self._requirements.indicators.items():
-            for indicator in indicators:
-                feed.register_indicator(period_name, indicator.name, **indicator.params)
-        self._load_all_periods(feed)
-        feed.calculate_all()
-        feed.to_feeds(feeds_dir)
+        # 3. 数据不过期 → 增量合并缺失的周期和指标
+        changed = self._merge_missing_requirements(feed)
+
+        if changed:
+            feed.calculate_all()
+            feed.to_feeds(feeds_dir)
+            logger.info("[{}] feeds 已增量更新", self.strategy_name)
+        else:
+            logger.info("[{}] feeds 命中，跳过指标计算", self.strategy_name)
+
         return feed
 
-    def _load_all_periods(self, data_feed: Any) -> None:
-        """从 DataManager 加载所有周期的历史数据到 DataFeed"""
-        if self._requirements is None:
-            return
+    def _assess_feed(self, feeds_dir: str) -> tuple[DataFeed, bool]:
+        """加载 feeds 并判断数据是否过期
+
+        :return: (feed, data_stale) — True 表示数据过期需全量重算
+        """
+        main_period = self._state.period
+
+        if not os.path.isdir(feeds_dir):
+            return DataFeed(symbol=self._state.symbol), True
+
+        try:
+            feed = DataFeed.from_feeds(feeds_dir)
+        except Exception:
+            return DataFeed(symbol=self._state.symbol), True
+
+        # 检查主周期数据是否存在
+        main_pd = feed.get_period(main_period)
+        if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
+            return feed, True
+
+        # 从 ExportMetadata 查源数据起止时间（避免读 CSV）
+        dm = DataManager()
+        meta = dm.store.get_metadata(self._state.symbol, interval=main_period)
+        if meta is None or not meta.get('min_dt') or not meta.get('max_dt'):
+            return feed, True
+
+        cache_start = str(main_pd._df.index[0].date())  # pyright: ignore[reportPrivateUsage]
+        cache_end = str(main_pd._df.index[-1].date())  # pyright: ignore[reportPrivateUsage]
+        if meta['min_dt'] != cache_start or meta['max_dt'] != cache_end:
+            logger.info("[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
+                        self.strategy_name, meta['min_dt'], meta['max_dt'],
+                        cache_start, cache_end)
+            return feed, True
+
+        return feed, False
+
+    def _merge_missing_requirements(self, feed: DataFeed) -> bool:
+        """将 feeds 中缺失的周期和指标增量合并进去
+
+        只加载新周期的数据，只注册新指标（不计算，留给 calculate_all），
+        已计算过的指标在 calculate_all 中自动跳过。
+
+        :return: 是否有新增
+        """
+        assert self._requirements is not None  # _setup_data_feed 调用方已判空
+        changed = False
+        dm = DataManager()
+
+        # 补充缺失周期 + 加载数据
+        for pn in self._requirements.periods:
+            if pn not in feed._periods:  # pyright: ignore[reportPrivateUsage]
+                feed.register_period(pn)
+                results = dm.load_kline([self._state.symbol], interval=pn)
+                for _symbol, df, _data_src in results:
+                    if len(df) > 0:
+                        feed.load_history_df(pn, df.set_index('datetime'))
+                changed = True
+
+        # 补充缺失指标（仅注册，不计算）
+        for pn, inds in self._requirements.indicators.items():
+            cached = {(n, tuple(sorted(p.items())))
+                      for n, p in feed._registered_indicators.get(pn, [])}  # pyright: ignore[reportPrivateUsage]
+            for ind in inds:
+                key = (ind.name, tuple(sorted(ind.params.items())))
+                if key not in cached:
+                    feed.register_indicator(pn, ind.name, **ind.params)
+                    changed = True
+
+        return changed
+
+    def _load_periods(self, data_feed: Any) -> None:
+        """从 DataManager 加载所有周期的历史数据（全量覆盖）"""
+        assert self._requirements is not None  # _setup_data_feed 调用方已判空
         dm = DataManager()
         for period in self._requirements.periods:
             results = dm.load_kline([self._state.symbol], interval=period)
@@ -215,69 +290,6 @@ class VnpyBacktestBridge(CtaTemplate):
                 multi=multi,
                 events=[],
             )
-
-    # ── feeds 缓存校验 ─────────────────────────────────────
-
-    def _try_load_feeds(self, feeds_dir: str) -> Optional[DataFeed]:
-        """尝试从 feeds 加载预计算数据，校验完整性
-
-        :return: 有效则返回 DataFeed，否则返回 None
-        """
-        if not os.path.isdir(feeds_dir):
-            return None
-
-        # 获取源数据起止时间
-        dm = DataManager()
-        main_period = self._state.period
-        src_results = dm.load_kline([self._state.symbol], interval=main_period)
-        if not src_results:
-            return None
-        _, src_df, _ = src_results[0]
-        if len(src_df) == 0:
-            return None
-        src_start = pd.Timestamp(src_df['datetime'].iloc[0])
-        src_end = pd.Timestamp(src_df['datetime'].iloc[-1])
-
-        try:
-            feed = DataFeed.from_feeds(feeds_dir)
-            main_pd = feed.get_period(main_period)
-            if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
-                return None
-
-            if not self._validate_requirements_match(feed):
-                return None
-
-            cache_start = main_pd._df.index[0]  # pyright: ignore[reportPrivateUsage]
-            cache_end = main_pd._df.index[-1]  # pyright: ignore[reportPrivateUsage]
-            if src_start == cache_start and src_end == cache_end:
-                logger.info("[{}] feeds 命中，跳过指标计算", self.strategy_name)
-                return feed
-            logger.info("[{}] feeds 过期 (源:{}, 缓存:{}), 重新计算",
-                        self.strategy_name, src_end, cache_end)
-        except Exception:
-            pass
-        return None
-
-    def _validate_requirements_match(self, feed: DataFeed) -> bool:
-        """校验 feeds 中的周期和指标是否覆盖当前 requirements
-
-        :return: 完全覆盖返回 True，缺周期或缺指标返回 False
-        """
-        assert self._requirements is not None  # _try_load_feeds 调用方已判空
-        # 周期检查
-        if not self._requirements.periods.keys() <= set(feed._periods.keys()):  # pyright: ignore[reportPrivateUsage]
-            logger.info("[{}] feeds 缺少周期，重新计算", self.strategy_name)
-            return False
-
-        # 指标检查
-        for pn, inds in self._requirements.indicators.items():
-            cached_inds = feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
-            cached_names = {(n, tuple(sorted(p.items()))) for n, p in cached_inds}
-            required_names = {(i.name, tuple(sorted(i.params.items()))) for i in inds}
-            if not required_names.issubset(cached_names):
-                logger.info("[{}] feeds 缺少指标 (周期:{}), 重新计算", self.strategy_name, pn)
-                return False
-        return True
 
     # ── vnpy 行情回调 ──────────────────────────────────────
 
