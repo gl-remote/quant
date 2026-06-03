@@ -305,6 +305,13 @@ class VnpyBacktestBridge(CtaTemplate):
         bar_time = cast(pd.Timestamp, pd.Timestamp(raw_dt))
 
         ctx = self._ctx_cache.get(bar_time)
+        if ctx is None and len(self._ctx_cache) > 0:
+            # 时间戳对不上：打印一个样本定位问题
+            sample_key = next(iter(self._ctx_cache))
+            logger.warning(
+                "[{}] ctx_cache miss: bar={} cache_sample={} cache_size={}",
+                self.strategy_name, bar_time, sample_key, len(self._ctx_cache),
+            )
         if ctx is not None:
             signal = self._core.on_bar(self._state, ctx)
         else:

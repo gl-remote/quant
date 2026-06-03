@@ -51,6 +51,13 @@ def _parse_source_from_symbol(symbol: str) -> Optional[str]:
 # parquet 序列化时区分 OHLCV 列和指标列
 _OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
 
+# 检查 pyarrow 是否可用（parquet 必需），避免回测因缺少依赖而全挂
+try:
+    import pyarrow  # noqa: F401
+    _PARQUET_OK = True
+except ImportError:
+    _PARQUET_OK = False
+
 
 class DataFeed:
     """管理单个品种的多周期数据
@@ -447,8 +454,12 @@ class DataFeed:
         每个周期存 {period}.parquet，events 存 events.parquet，
         元数据（symbol/source/periods/indicators）存 _meta.json。
 
+        如果 pyarrow 不可用，静默跳过写入（回测结果不受影响）。
         :param feeds_dir: 目标目录路径（自动创建）
         """
+        if not _PARQUET_OK:
+            return
+
         Path(feeds_dir).mkdir(parents=True, exist_ok=True)
 
         # 构建 _meta.json
@@ -484,9 +495,12 @@ class DataFeed:
         恢复内容包括：周期数据（含 OHLCV 和指标列）、events 表、
         指标注册配置和已计算标记。加载后无需再调 calculate_all()。
 
+        如果 pyarrow 不可用，抛出 ImportError，调用方应降级到全量流程。
+
         :param feeds_dir: 源目录路径
         :return: 恢复的 DataFeed 实例
         :raises FileNotFoundError: feeds_dir 或 _meta.json 不存在
+        :raises ImportError: pyarrow 不可用
         """
         meta_path = os.path.join(feeds_dir, "_meta.json")
         if not os.path.isfile(meta_path):

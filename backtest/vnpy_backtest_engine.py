@@ -313,6 +313,10 @@ class VnpyBacktestEngine:
                 capital=self.initial_capital,
                 contract_size=self.contract_size,
             )
+            # 从核心策略类读取版本号
+            from strategies import load_strategy
+            _core = load_strategy(strategy_name)
+            strategy_version = getattr(type(_core), 'VERSION', None)
 
             engine = BacktestingEngine()
             # vnpy print → loguru，加上下文，丢进度条
@@ -353,7 +357,7 @@ class VnpyBacktestEngine:
                     'daily_results': [],
                     'error': str(e),
                     'strategy_config': None,
-                    'strategy_version': '',
+                    'strategy_version': strategy_version or '',
                 })
                 continue
 
@@ -366,7 +370,7 @@ class VnpyBacktestEngine:
                     else []
                 ),
                 'strategy_config': None,
-                'strategy_version': '',
+                'strategy_version': strategy_version or '',
             })
 
         return results
