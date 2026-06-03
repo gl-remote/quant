@@ -312,6 +312,8 @@ class VnpyBacktestEngine:
                 period=self.interval,
                 capital=self.initial_capital,
                 contract_size=self.contract_size,
+                run_id=self._run_id or 0,
+                backtest_id=bt_id,
             )
             # 从核心策略类读取版本号
             from strategies import load_strategy

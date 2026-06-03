@@ -1,5 +1,5 @@
 try:
-    from .backtest_bridge import VnpyBacktestBridge
+    from .vnpy_backtest_bridge import VnpyBacktestBridge
 except ImportError:
     VnpyBacktestBridge = None  # type: ignore[assignment, misc]
 

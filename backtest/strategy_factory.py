@@ -90,6 +90,8 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
+        run_id: int = 0,
+        backtest_id: int = 0,
     ) -> State[Any]:
         """创建 State 对象（封装构造逻辑）
 
@@ -103,6 +105,8 @@ class StrategyFactory:
             period: K线周期
             capital: 初始资金
             contract_size: 合约乘数
+            run_id: 运行 ID
+            backtest_id: 回测记录 ID
 
         Returns:
             初始化好的 State 对象
@@ -113,6 +117,8 @@ class StrategyFactory:
             strategy_config=strategy_config,
             capital=capital,
             contract_size=contract_size,
+            run_id=run_id,
+            backtest_id=backtest_id,
         )
 
     @staticmethod
@@ -147,6 +153,8 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
+        run_id: int = 0,
+        backtest_id: int = 0,
     ) -> type[VnpyBacktestBridge]:
         """创建注入了策略实例和状态的 VnpyBacktestBridge 子类
 
@@ -169,6 +177,8 @@ class StrategyFactory:
             period: K线周期
             capital: 初始资金
             contract_size: 合约乘数
+            run_id: 运行 ID
+            backtest_id: 回测记录 ID
 
         Returns:
             继承自 VnpyBacktestBridge 的类，可直接传给 vnpy 引擎
@@ -207,6 +217,8 @@ class StrategyFactory:
                     period=period,
                     capital=capital,
                     contract_size=contract_size,
+                    run_id=run_id,
+                    backtest_id=backtest_id,
                 )
 
         return _InjectedStrategy
@@ -219,12 +231,10 @@ def create_strategy_class(
     period: str,
     capital: float,
     contract_size: int,
+    run_id: int = 0,
+    backtest_id: int = 0,
 ) -> type[VnpyBacktestBridge]:
-    """便捷函数：直接创建注入的策略桥接类
-
-    这是 StrategyFactory.create_injected_strategy_class 的别名，
-    便于在不需要完整工厂类的地方直接调用。
-    """
+    """便捷函数：直接创建注入的策略桥接类"""
     return StrategyFactory.create_injected_strategy_class(
         strategy_name=strategy_name,
         strategy_params=strategy_params,
@@ -232,6 +242,8 @@ def create_strategy_class(
         period=period,
         capital=capital,
         contract_size=contract_size,
+        run_id=run_id,
+        backtest_id=backtest_id,
     )
 
 

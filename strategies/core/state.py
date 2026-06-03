@@ -98,6 +98,13 @@ class State(Generic[T]):
     - 回测结果统计
     """
 
+    # 运行标识（由 Engine 注入，用于日志追踪）
+    run_id: int = 0
+    """运行 ID，用于关联回测运行记录"""
+
+    backtest_id: int = 0
+    """回测记录 ID，由 Engine 创建占位记录后注入"""
+
     extra: Dict[str, Any] = field(default_factory=dict)
     """扩展字段，用于临时存储其他数据
 

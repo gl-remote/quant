@@ -108,22 +108,50 @@ class VnpyBacktestBridge(CtaTemplate):
         self._data_feed = self._setup_data_feed()
         self._build_ctx_cache()
 
+        self._log_data_feed_summary()
         self.write_log(f"策略初始化: {self._core.name}")
 
     def on_start(self) -> None:
         """vnpy 启动回调"""
-        logger.info(f"[{self.strategy_name}] 桥接器启动")
+        self._log_data_feed_summary()
         self.write_log("策略启动")
 
     def on_stop(self) -> None:
         """vnpy 停止回调 — 记录策略停止时的统计信息"""
         fills_count = len(self._state.fills)
         sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
+        buys = fills_count - sells
         logger.info(
             f"[{self.strategy_name}] 策略停止 | "
-            f"fills={fills_count} sells={sells}"
+            f"fills={fills_count} buys={buys} sells={sells}"
         )
-        self.write_log(f"策略停止: fills={fills_count} sells={sells}")
+        self.write_log(f"策略停止: fills={fills_count} buys={buys} sells={sells}")
+
+    def _log_data_feed_summary(self) -> None:
+        """输出 DataFeed 内容摘要到日志文件（前端运行日志 Tab 可查看）
+        
+        日志自动带 run_id 和 backtest_id（由 logger.contextualize 注入）
+        """
+        if self._data_feed is None:
+            return
+        rid = self._state.run_id
+        btid = self._state.backtest_id
+        for pn in self._data_feed._periods:  # pyright: ignore[reportPrivateUsage]
+            pd_obj = self._data_feed.get_period(pn)
+            if pd_obj is None:
+                continue
+            df = pd_obj._df  # pyright: ignore[reportPrivateUsage]
+            if len(df) == 0:
+                continue
+            indicators = self._data_feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
+            ind_names = [f"{n}({','.join(f'{k}={v}' for k, v in p.items())})"
+                         for n, p in indicators]
+            logger.info(
+                f"[run={rid} bt={btid}] [{self.strategy_name}] "
+                f"DataFeed: period={pn} rows={len(df)} "
+                f"range={df.index[0]}~{df.index[-1]} "
+                f"indicators=[{', '.join(ind_names) if ind_names else '无'}]"
+            )
 
     # ── DataFeed 初始化 ────────────────────────────────────
 
@@ -305,13 +333,6 @@ class VnpyBacktestBridge(CtaTemplate):
         bar_time = cast(pd.Timestamp, pd.Timestamp(raw_dt))
 
         ctx = self._ctx_cache.get(bar_time)
-        if ctx is None and len(self._ctx_cache) > 0:
-            # 时间戳对不上：打印一个样本定位问题
-            sample_key = next(iter(self._ctx_cache))
-            logger.warning(
-                "[{}] ctx_cache miss: bar={} cache_sample={} cache_size={}",
-                self.strategy_name, bar_time, sample_key, len(self._ctx_cache),
-            )
         if ctx is not None:
             signal = self._core.on_bar(self._state, ctx)
         else:
