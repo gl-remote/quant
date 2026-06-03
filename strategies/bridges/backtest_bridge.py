@@ -87,15 +87,12 @@ class VnpyBacktestBridge(CtaTemplate):
         """
         return self._core.name != "_uninitialized"
 
-    # ---- vnpy 生命周期 ----
+    # ── vnpy 生命周期 ──────────────────────────────────────
 
     def on_init(self) -> None:
         """vnpy 初始化回调 — 预加载数据、预计算指标、预构造上下文
 
         on_bar 中只做 O(1) 的 dict 查找，零重算、零时间戳搜索。
-
-        优先从 output/feeds/{symbol}/ 加载预计算数据，起止时间与源数据
-        一致则跳过 calculate_all，不一致则完整流程并覆盖旧 feeds。
         """
         if not self.is_initialized():
             logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
@@ -106,107 +103,132 @@ class VnpyBacktestBridge(CtaTemplate):
         self._requirements = self._core.data_requirements(self._state.strategy_config)
         if self._requirements is None:
             self.write_log(f"策略初始化: {self._core.name}")
-            self.load_bar(20)
             return
 
-        main_period = self._state.period
-        feeds_dir = f"output/feeds/{self._state.symbol}"
-
-        # 尝试从 feeds 加载
-        data_feed = self._try_load_feeds(feeds_dir, main_period)
-
-        if data_feed is None:
-            # 完整流程：创建 → 注册 → 加载数据 → 计算指标 → 保存 feeds
-            data_feed = DataFeed(symbol=self._state.symbol)
-            for period_name in self._requirements.periods:
-                data_feed.register_period(period_name)
-            for period_name, indicators in self._requirements.indicators.items():
-                for indicator in indicators:
-                    data_feed.register_indicator(period_name, indicator.name, **indicator.params)
-            self._load_all_periods(data_feed)
-            data_feed.calculate_all()
-            data_feed.to_feeds(feeds_dir)
-
-        self._data_feed = data_feed
-
-        # 预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
-        main_pd = data_feed.get_period(main_period)
-        if main_pd is not None:
-            main_df: pd.DataFrame = main_pd._df  # pyright: ignore[reportPrivateUsage]
-            for idx in range(len(main_df)):
-                ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
-                row = main_df.iloc[idx]
-                bar = Bar(
-                    symbol=self._state.symbol,
-                    datetime=cast(datetime, ts.to_pydatetime()),
-                    open=float(row['open']),
-                    high=float(row['high']),
-                    low=float(row['low']),
-                    close=float(row['close']),
-                    volume=float(row['volume']),
-                )
-                multi: dict[str, PeriodDataView] = {}
-                for period, req in self._requirements.periods.items():
-                    pd_obj = data_feed.get_period(period)
-                    if pd_obj is None:
-                        continue
-                    pdf: pd.DataFrame = pd_obj._df  # pyright: ignore[reportPrivateUsage]
-                    end_idx = int(pdf.index.get_indexer(
-                        pd.Index([ts]), method='ffill')[0])
-                    if end_idx < 0:
-                        end_idx = 0
-                    start_idx = max(0, end_idx - req.lookback_bars + 1)
-                    multi[period] = PeriodDataView(
-                        df_ref=pdf,
-                        events_ref=None,
-                        start_idx=start_idx,
-                        end_idx=end_idx,
-                        current_time=ts,
-                        period=period,
-                    )
-                self._ctx_cache[ts] = BarContext(
-                    symbol=self._state.symbol,
-                    bar=bar,
-                    multi=multi,
-                    events=[],
-                )
+        self._data_feed = self._setup_data_feed()
+        self._build_ctx_cache()
 
         self.write_log(f"策略初始化: {self._core.name}")
-        self.load_bar(20)
+
+    def on_start(self) -> None:
+        """vnpy 启动回调"""
+        logger.info(f"[{self.strategy_name}] 桥接器启动")
+        self.write_log("策略启动")
+
+    def on_stop(self) -> None:
+        """vnpy 停止回调 — 记录策略停止时的统计信息"""
+        fills_count = len(self._state.fills)
+        sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
+        logger.info(
+            f"[{self.strategy_name}] 策略停止 | "
+            f"fills={fills_count} sells={sells}"
+        )
+        self.write_log(f"策略停止: fills={fills_count} sells={sells}")
+
+    # ── DataFeed 初始化 ────────────────────────────────────
+
+    def _setup_data_feed(self) -> DataFeed:
+        """构造 DataFeed：优先从 feeds 加载，未命中则完整流程
+
+        决策逻辑：
+        - feeds 存在且有效 → 加载并返回（跳过 calculate_all）
+        - 否则 → 创建新 DataFeed → 注册 → 加载数据 → 计算指标 → 存 feeds
+
+        :return: 已就绪的 DataFeed 实例
+        """
+        assert self._requirements is not None  # on_init 已判空
+
+        feeds_dir = f"output/feeds/{self._state.symbol}"
+
+        feed = self._try_load_feeds(feeds_dir)
+        if feed is not None:
+            return feed
+
+        # 完整流程
+        feed = DataFeed(symbol=self._state.symbol)
+        for period_name in self._requirements.periods:
+            feed.register_period(period_name)
+        for period_name, indicators in self._requirements.indicators.items():
+            for indicator in indicators:
+                feed.register_indicator(period_name, indicator.name, **indicator.params)
+        self._load_all_periods(feed)
+        feed.calculate_all()
+        feed.to_feeds(feeds_dir)
+        return feed
 
     def _load_all_periods(self, data_feed: Any) -> None:
-        """加载所有周期的历史数据（包括主周期）
-
-        从 DataManager 一次性加载所有周期的完整数据集到 DataFeed，
-        用于预计算指标，避免在 vnpy 逐根回放时重复计算。
-        """
+        """从 DataManager 加载所有周期的历史数据到 DataFeed"""
         if self._requirements is None:
             return
-
         dm = DataManager()
-
         for period in self._requirements.periods:
             results = dm.load_kline([self._state.symbol], interval=period)
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
-                    df_indexed = df.set_index('datetime')
-                    data_feed.load_history_df(period, df_indexed)
+                    data_feed.load_history_df(period, df.set_index('datetime'))
 
-    def _try_load_feeds(self, feeds_dir: str, main_period: str) -> Optional[DataFeed]:
-        """尝试从 feeds 加载预计算数据，校验起止时间
+    def _build_ctx_cache(self) -> None:
+        """预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
 
-        从 DataManager 获取源数据起止时间，与 feeds 中主周期 parquet
-        的起止时间比对。一致返回 DataFeed 实例，不一致返回 None。
+        on_bar 中直接通过 timestamp 做 O(1) 查找。
+        """
+        assert self._requirements is not None  # on_init 已判空
+        main_pd = self._data_feed.get_period(self._state.period)
+        if main_pd is None:
+            return
 
-        :param feeds_dir: feeds 目录路径
-        :param main_period: 主周期名称
-        :return: 有效则返回 DataFeed 实例，否则返回 None
+        main_df: pd.DataFrame = main_pd._df  # pyright: ignore[reportPrivateUsage]
+        for idx in range(len(main_df)):
+            ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
+            row = main_df.iloc[idx]
+            bar = Bar(
+                symbol=self._state.symbol,
+                datetime=cast(datetime, ts.to_pydatetime()),
+                open=float(row['open']),
+                high=float(row['high']),
+                low=float(row['low']),
+                close=float(row['close']),
+                volume=float(row['volume']),
+            )
+            multi: dict[str, PeriodDataView] = {}
+            for period, req in self._requirements.periods.items():
+                pd_obj = self._data_feed.get_period(period)
+                if pd_obj is None:
+                    continue
+                pdf: pd.DataFrame = pd_obj._df  # pyright: ignore[reportPrivateUsage]
+                end_idx = int(pdf.index.get_indexer(
+                    pd.Index([ts]), method='ffill')[0])
+                if end_idx < 0:
+                    end_idx = 0
+                start_idx = max(0, end_idx - req.lookback_bars + 1)
+                multi[period] = PeriodDataView(
+                    df_ref=pdf,
+                    events_ref=None,
+                    start_idx=start_idx,
+                    end_idx=end_idx,
+                    current_time=ts,
+                    period=period,
+                )
+            self._ctx_cache[ts] = BarContext(
+                symbol=self._state.symbol,
+                bar=bar,
+                multi=multi,
+                events=[],
+            )
+
+    # ── feeds 缓存校验 ─────────────────────────────────────
+
+    def _try_load_feeds(self, feeds_dir: str) -> Optional[DataFeed]:
+        """尝试从 feeds 加载预计算数据，校验完整性
+
+        :return: 有效则返回 DataFeed，否则返回 None
         """
         if not os.path.isdir(feeds_dir):
             return None
 
         # 获取源数据起止时间
         dm = DataManager()
+        main_period = self._state.period
         src_results = dm.load_kline([self._state.symbol], interval=main_period)
         if not src_results:
             return None
@@ -221,6 +243,10 @@ class VnpyBacktestBridge(CtaTemplate):
             main_pd = feed.get_period(main_period)
             if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
                 return None
+
+            if not self._validate_requirements_match(feed):
+                return None
+
             cache_start = main_pd._df.index[0]  # pyright: ignore[reportPrivateUsage]
             cache_end = main_pd._df.index[-1]  # pyright: ignore[reportPrivateUsage]
             if src_start == cache_start and src_end == cache_end:
@@ -230,29 +256,30 @@ class VnpyBacktestBridge(CtaTemplate):
                         self.strategy_name, src_end, cache_end)
         except Exception:
             pass
-
         return None
 
-    def on_start(self) -> None:
-        """vnpy 启动回调
-        """
-        logger.info(f"[{self.strategy_name}] 桥接器启动")
-        self.write_log("策略启动")
+    def _validate_requirements_match(self, feed: DataFeed) -> bool:
+        """校验 feeds 中的周期和指标是否覆盖当前 requirements
 
-    def on_stop(self) -> None:
-        """vnpy 停止回调 — 记录策略停止时的统计信息
+        :return: 完全覆盖返回 True，缺周期或缺指标返回 False
         """
-        fills_count = len(self._state.fills)
-        sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
-        logger.info(
-            f"[{self.strategy_name}] 策略停止 | "
-            f"fills={fills_count} sells={sells}"
-        )
-        self.write_log(
-            f"策略停止: fills={fills_count} sells={sells}"
-        )
+        assert self._requirements is not None  # _try_load_feeds 调用方已判空
+        # 周期检查
+        if not self._requirements.periods.keys() <= set(feed._periods.keys()):  # pyright: ignore[reportPrivateUsage]
+            logger.info("[{}] feeds 缺少周期，重新计算", self.strategy_name)
+            return False
 
-    # ---- 核心: 数据转换 → 信号获取 → 下单执行 ----
+        # 指标检查
+        for pn, inds in self._requirements.indicators.items():
+            cached_inds = feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
+            cached_names = {(n, tuple(sorted(p.items()))) for n, p in cached_inds}
+            required_names = {(i.name, tuple(sorted(i.params.items()))) for i in inds}
+            if not required_names.issubset(cached_names):
+                logger.info("[{}] feeds 缺少指标 (周期:{}), 重新计算", self.strategy_name, pn)
+                return False
+        return True
+
+    # ── vnpy 行情回调 ──────────────────────────────────────
 
     def on_bar(self, bar: Any) -> None:
         """vnpy K线回调 — 从预构造缓存中 O(1) 获取上下文
@@ -273,52 +300,22 @@ class VnpyBacktestBridge(CtaTemplate):
 
         close_price = float(getattr(bar, 'close_price', 0))
         if signal.action == TRADE_ACTION_BUY and self.pos == 0:
-            self._execute_buy(signal, close_price, bar_time)
+            self._execute_trade(signal, close_price, bar_time, is_buy=True)
         elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
-            self._execute_sell(signal, close_price, bar_time)
-
-    def _execute_buy(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> None:
-        """执行买入"""
-        volume = signal.volume
-        if volume <= 0:
-            return
-        self.buy(price, volume)
-        self.entry_price = price
-        logger.debug(
-            f"[{self.strategy_name}] {bar_time} 买入 @{price:.2f} x{volume}")
-
-    def _execute_sell(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> None:
-        """执行卖出"""
-        pos = abs(self.pos)
-        if pos <= 0:
-            return
-        self.sell(price, pos)
-        self.entry_price = 0.0
-        logger.debug(
-            f"[{self.strategy_name}] {bar_time} {signal.reason}卖出 @{price:.2f}")
-
-    # ---- vnpy 回调 ----
+            self._execute_trade(signal, close_price, bar_time, is_buy=False)
 
     def on_tick(self, tick: Any) -> None:
-        """vnpy Tick回调 — 本策略不使用 Tick 数据
-        """
+        """vnpy Tick回调 — 本策略不使用 Tick 数据"""
         pass
 
     def on_order(self, order: Any) -> None:
-        """vnpy 订单回调 — 委托变化时调用
-        """
+        """vnpy 订单回调 — 委托变化时调用"""
         super().on_order(order)
 
     def on_trade(self, trade: Any) -> None:
         """vnpy 成交回调 — 同步成交状态到 State
 
-        【设计说明】
-        vnpy 在订单成交后会调用这个回调，我们在这里：
-        1. 更新 _state.position（根据成交信息）
-        2. 构造 Fill 并追加到 _state.fills
-        3. 调用 strategy.on_fill(fill) 通知策略
-
-        【为什么不在 _execute_buy/_execute_sell 中更新 State】
+        【为什么不在 _execute_trade 中更新 State】
         因为下单不等于成交，只有成交后才是真实的持仓变化。
         vnpy 引擎会在成交后调用 on_trade，这是更新 State 的正确时机。
 
@@ -327,21 +324,18 @@ class VnpyBacktestBridge(CtaTemplate):
         """
         super().on_trade(trade)
 
-        # 从 vnpy Trade 对象提取成交信息
         direction = getattr(trade, 'direction', None)
         trade_price = float(getattr(trade, 'price', 0))
         trade_volume = float(getattr(trade, 'volume', 0))
         trade_datetime = getattr(trade, 'datetime', datetime.now())
 
         if direction is not None:
-            # 判断是买入还是卖出
             if hasattr(direction, 'value'):
                 is_long = (direction.value == TRADE_DIRECTION_LONG)
             else:
                 is_long = (str(direction).upper() == TRADE_DIRECTION_LONG) if isinstance(direction, str) else False
 
             if is_long:
-                # 买入：更新 position 为多头
                 fill = Fill(
                     timestamp=str(trade_datetime),
                     symbol=self._state.symbol,
@@ -356,7 +350,6 @@ class VnpyBacktestBridge(CtaTemplate):
                     volume=trade_volume,
                 )
             else:
-                # 卖出：清空 position
                 fill = Fill(
                     timestamp=str(trade_datetime),
                     symbol=self._state.symbol,
@@ -367,8 +360,33 @@ class VnpyBacktestBridge(CtaTemplate):
                 )
                 self._state.position = StrategyPosition()
 
-            # 追加到 fills 列表
             self._state.fills.append(fill)
-
-            # 通知策略成交了
             self._core.on_fill(fill)
+
+    # ── 交易执行 ───────────────────────────────────────────
+
+    def _execute_trade(self, signal: Signal, price: float,
+                       bar_time: pd.Timestamp, is_buy: bool) -> None:
+        """执行买卖委托 — 统一入口
+
+        :param signal: 策略信号
+        :param price: 当前价格
+        :param bar_time: K线时间
+        :param is_buy: True=买入, False=卖出
+        """
+        if is_buy:
+            volume = signal.volume
+            if volume <= 0:
+                return
+            self.buy(price, volume)
+            self.entry_price = price
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} 买入 @{price:.2f} x{volume}")
+        else:
+            pos = abs(self.pos)
+            if pos <= 0:
+                return
+            self.sell(price, pos)
+            self.entry_price = 0.0
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} {signal.reason}卖出 @{price:.2f}")
