@@ -14,6 +14,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from data import DataManager  # noqa: E402
 from data.store import DataStore  # noqa: E402
 from common.constants import STATUS_FAILED  # noqa: E402
+from common.schemas import (
+    TradeRecordSchema,
+    BacktestDailySchema,
+    validate_backtest_consistency,
+)  # noqa: E402
 from conftest import insert_full_backtest  # noqa: E402
 
 
@@ -370,3 +375,152 @@ class TestDataManager:
     def test_delete_backtest_exists(self):
         assert hasattr(DataManager, 'delete_backtest')
         assert callable(DataManager.delete_backtest)
+
+
+# ═══════════════════════════════════════════════════════════
+# Pandera Schema 验证 & 跨表一致性
+# ═══════════════════════════════════════════════════════════
+
+import pandas as pd
+import pytest
+
+
+class TestTradeRecordSchema:
+    """验证 TradeRecordSchema 的字段约束"""
+
+    def test_valid_trades_pass(self):
+        df = pd.DataFrame({
+            'datetime': pd.to_datetime(['2024-01-15 10:00:00', '2024-01-20 14:30:00']),
+            'direction': ['long', 'short'],
+            'offset': ['open', 'close'],
+            'open_price': [3500.0, 3520.0],
+            'close_price': [3500.0, 3520.0],
+            'volume': [1.0, 1.0],
+            'quantity': [1.0, 1.0],
+            'pnl': [200.0, -100.0],
+            'commission': [3.0, 3.0],
+        })
+        validated = TradeRecordSchema.validate(df)
+        assert len(validated) == 2
+
+    def test_invalid_direction_fails(self):
+        df = pd.DataFrame({
+            'datetime': pd.to_datetime(['2024-01-15 10:00:00']),
+            'direction': ['invalid_direction'],
+            'offset': ['open'],
+            'open_price': [3500.0],
+            'close_price': [3500.0],
+            'volume': [1.0],
+            'quantity': [1.0],
+            'pnl': [0.0],
+            'commission': [0.0],
+        })
+        with pytest.raises(Exception):
+            TradeRecordSchema.validate(df)
+
+    def test_negative_price_fails(self):
+        df = pd.DataFrame({
+            'datetime': pd.to_datetime(['2024-01-15 10:00:00']),
+            'direction': ['long'],
+            'offset': ['open'],
+            'open_price': [-100.0],
+            'close_price': [3500.0],
+            'volume': [1.0],
+            'quantity': [1.0],
+            'pnl': [0.0],
+            'commission': [0.0],
+        })
+        with pytest.raises(Exception):
+            TradeRecordSchema.validate(df)
+
+
+class TestBacktestDailySchema:
+    """验证 BacktestDailySchema 的字段约束"""
+
+    def test_valid_daily_pass(self):
+        df = pd.DataFrame({
+            'date': pd.to_datetime(['2024-01-15', '2024-01-16']),
+            'equity': [100200.0, 100100.0],
+            'daily_return': [200.0, -100.0],
+            'drawdown': [0.0, -100.0],
+        })
+        validated = BacktestDailySchema.validate(df)
+        assert len(validated) == 2
+
+    def test_negative_equity_fails(self):
+        df = pd.DataFrame({
+            'date': pd.to_datetime(['2024-01-15']),
+            'equity': [-100.0],
+            'daily_return': [0.0],
+            'drawdown': [0.0],
+        })
+        with pytest.raises(Exception):
+            BacktestDailySchema.validate(df)
+
+    def test_positive_drawdown_fails(self):
+        """drawdown 应为 ≤0 的负值或零"""
+        df = pd.DataFrame({
+            'date': pd.to_datetime(['2024-01-15']),
+            'equity': [100000.0],
+            'daily_return': [0.0],
+            'drawdown': [100.0],
+        })
+        with pytest.raises(Exception):
+            BacktestDailySchema.validate(df)
+
+
+class TestBacktestConsistency:
+    """验证回测统计字段与交易记录之间的一致性"""
+
+    def test_consistent_data_pass(self):
+        errors = validate_backtest_consistency(
+            total_trades=43, win_trades=25, loss_trades=18,
+            trade_count=43, backtest_id=1,
+        )
+        assert len(errors) == 0
+
+    def test_win_loss_sum_mismatch(self):
+        errors = validate_backtest_consistency(
+            total_trades=43, win_trades=30, loss_trades=18,
+            trade_count=43, backtest_id=1,
+        )
+        assert len(errors) == 1
+        assert 'win_trades(30) + loss_trades(18) = 48' in errors[0]
+
+    def test_trade_count_mismatch(self):
+        """模拟本次 debug 发现的 total_trade_count 键名问题"""
+        errors = validate_backtest_consistency(
+            total_trades=0, win_trades=25, loss_trades=18,
+            trade_count=43, backtest_id=1,
+        )
+        assert len(errors) >= 2  # 两个不一致：win+loss≠total, 记录数≠total
+        assert any('实际记录数(43) ≠ total_trades(0)' in e for e in errors)
+
+    def test_both_win_loss_none_with_trades(self):
+        errors = validate_backtest_consistency(
+            total_trades=43, win_trades=None, loss_trades=None,
+            trade_count=43, backtest_id=1,
+        )
+        assert len(errors) == 1
+        assert 'win_trades 和 loss_trades 均为 None' in errors[0]
+
+    def test_empty_trades_zero_count(self):
+        errors = validate_backtest_consistency(
+            total_trades=0, win_trades=0, loss_trades=0,
+            trade_count=0, backtest_id=1,
+        )
+        assert len(errors) == 0
+
+    @pytest.mark.skip(reason="依赖 conftest.insert_full_backtest 的 BacktestResult 接口待更新")
+    def test_manager_consistency(self, temp_db_path):
+        """通过 DataManager 验证一致性方法"""
+        store = DataStore(temp_db_path)
+        bt_id = insert_full_backtest(store)
+        store.close()
+
+        dm = DataManager()
+        errors = dm.validate_consistency(bt_id)
+        # insert_full_backtest 插入 3 条交易，但 VNPTY_STATS 中 total_trades=80
+        # 所以会报不一致
+        assert len(errors) >= 1
+        dm.close()

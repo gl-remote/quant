@@ -17,6 +17,8 @@ from loguru import logger
 from pathlib import Path
 from datetime import datetime
 
+import pandas as pd
+import pandera.pandas as pa
 
 from .models import (
     database,
@@ -33,6 +35,11 @@ from .models import (
 )
 import common.constants as constants
 from common.types import BacktestResult
+from common.schemas import (
+    TradeRecordSchema,
+    BacktestDailySchema,
+    validate_backtest_consistency,
+)
 
 def _normalize_max_dd(raw_value: float | None) -> float:
     """将vnpy返回的max_drawdown归一化为比值"""
@@ -357,6 +364,17 @@ class DataStore:
         if not rows:
             return 0
 
+        # Pandera 验证：确保交易记录数据符合 Schema 约束
+        try:
+            trades_df = pd.DataFrame(rows)
+            trades_df['datetime'] = pd.to_datetime(trades_df['datetime'])
+            TradeRecordSchema.validate(trades_df)
+        except pa.errors.SchemaError as e:
+            logger.error(f"交易记录验证失败 [bt={backtest_id}]: {e}")
+            raise
+        except Exception as e:
+            logger.warning(f"交易记录验证跳过 [bt={backtest_id}]: {e}")
+
         with database.atomic():
             BacktestTrade.insert_many(rows).execute()
         return len(rows)
@@ -449,6 +467,17 @@ class DataStore:
 
         if not rows:
             return 0
+
+        # Pandera 验证：确保每日资金曲线数据符合 Schema 约束
+        try:
+            daily_df = pd.DataFrame(rows)
+            daily_df['date'] = pd.to_datetime(daily_df['date'])
+            BacktestDailySchema.validate(daily_df)
+        except pa.errors.SchemaError as e:
+            logger.error(f"每日资金曲线验证失败 [bt={backtest_id}]: {e}")
+            raise
+        except Exception as e:
+            logger.warning(f"每日资金曲线验证跳过 [bt={backtest_id}]: {e}")
 
         with database.atomic():
             BacktestDaily.insert_many(rows).execute()

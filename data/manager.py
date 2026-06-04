@@ -18,7 +18,7 @@ import re
 from typing import TYPE_CHECKING, cast
 
 from common.constants import COMMON_KLINE_INTERVALS
-from common.schemas import KlineDataFrame
+from common.schemas import KlineDataFrame, validate_backtest_consistency
 from common.types import BacktestResult
 import pandas as pd
 from pathlib import Path
@@ -384,6 +384,38 @@ class DataManager:
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
+
+    def validate_consistency(self, backtest_id: int) -> list[str]:
+        """验证回测记录与交易明细之间的一致性
+
+        检查项：
+        1. win_trades + loss_trades 是否等于 total_trades
+        2. backtest_trades 表的实际记录数是否等于 total_trades
+        3. 如果 total_trades > 0，win_trades/loss_trades 不能同时为 None
+
+        调试沉淀(2026-06-04):
+        - 项 2 即为本次 debug 发现的 total_trade_count vs total_trades 键名问题
+
+        Args:
+            backtest_id: 回测记录 ID
+
+        Returns:
+            错误信息列表，空列表表示验证通过
+        """
+        bt = self.get_backtest(backtest_id)
+        if bt is None:
+            return [f"回测记录 {backtest_id} 不存在"]
+
+        trades = self.query_trades(backtest_id)
+        trade_count = len(trades)
+
+        return validate_backtest_consistency(
+            total_trades=bt.total_trades,
+            win_trades=bt.win_trades,
+            loss_trades=bt.loss_trades,
+            trade_count=trade_count,
+            backtest_id=backtest_id,
+        )
 
     def query_daily(self, backtest_id: int) -> list[dict[str, object]]:
         """查询每日资金曲线"""

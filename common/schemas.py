@@ -102,6 +102,118 @@ class DailyReturnSchema(pa.DataFrameModel):
         extra = 'allow'
 
 
-# 类型别名，方便使用
+class TradeRecordSchema(pa.DataFrameModel):
+    """回测交易记录验证Schema
+
+    验证从 vnpy 引擎提取并写入 backtest_trades 表的交易记录。
+    字段说明：
+        datetime: 成交时间
+        direction: 方向 (long/short)
+        offset: 开平标志 (open/close/closetoday)
+        open_price: 开仓价
+        close_price: 成交价
+        volume: 成交量
+        quantity: 数量
+        pnl: 单笔盈亏
+        commission: 手续费
+    """
+    datetime: Series[pd.Timestamp] = pa.Field()
+    direction: Series[str] = pa.Field(isin=['long', 'short'])
+    offset: Series[str] = pa.Field(isin=['open', 'close', 'closetoday'])
+    open_price: Series[float] = pa.Field(ge=0.0)
+    close_price: Series[float] = pa.Field(ge=0.0)
+    volume: Series[float] = pa.Field(ge=0.0)
+    quantity: Series[float] = pa.Field(ge=0.0)
+    pnl: Series[float] = pa.Field()
+    commission: Series[float] = pa.Field(ge=0.0)
+
+    class Config:
+        coerce = True
+        strict = False
+
+
+class BacktestDailySchema(pa.DataFrameModel):
+    """回测每日资金曲线验证Schema
+
+    验证写入 backtest_daily 表的每日资金数据。
+    字段说明：
+        date: 日期
+        equity: 当日权益
+        daily_return: 当日收益率
+        drawdown: 当日回撤
+    """
+    date: Series[pd.Timestamp] = pa.Field()
+    equity: Series[float] = pa.Field(ge=0.0)
+    daily_return: Series[float] = pa.Field()
+    drawdown: Series[float] = pa.Field(le=0.0)
+
+    @pa.dataframe_check
+    def check_equity_positive(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
+        """验证权益值始终为正（账户未爆仓）"""
+        return bool((df['equity'] > 0).all())
+
+    class Config:
+        coerce = True
+        strict = False
+
+
+# ── 类型别名 ──────────────────────────────────────────────────
 KlineDataFrame = DataFrame[KlineSchema]
 DailyReturnDataFrame = DataFrame[DailyReturnSchema]
+TradeRecordDataFrame = DataFrame[TradeRecordSchema]
+BacktestDailyDataFrame = DataFrame[BacktestDailySchema]
+
+
+# ── 回测数据一致性验证函数 ────────────────────────────────────
+def validate_backtest_consistency(
+    total_trades: int,
+    win_trades: int | None,
+    loss_trades: int | None,
+    trade_count: int,
+    backtest_id: int | None = None,
+) -> list[str]:
+    """验证回测统计字段与交易记录之间的一致性
+
+    调试沉淀(2026-06-04):
+    - vn.py statistics 中总交易数字段为 total_trade_count
+    - win_trades + loss_trades 应等于 total_trades（允许 None 缺失）
+    - backtest_trades 表的实际记录数应等于 total_trades
+
+    Args:
+        total_trades: 回测统计中的总交易数
+        win_trades: 盈利交易数
+        loss_trades: 亏损交易数
+        trade_count: backtest_trades 表中的实际交易记录数
+        backtest_id: 回测记录 ID（用于日志）
+
+    Returns:
+        错误信息列表，空列表表示验证通过
+    """
+    errors: list[str] = []
+    prefix = f"[bt={backtest_id}] " if backtest_id else ""
+
+    # 1. win_trades + loss_trades ≈ total_trades
+    if win_trades is not None and loss_trades is not None:
+        expected = win_trades + loss_trades
+        if expected != total_trades:
+            errors.append(
+                f"{prefix}win_trades({win_trades}) + loss_trades({loss_trades}) "
+                f"= {expected} ≠ total_trades({total_trades})"
+            )
+
+    # 2. 实际交易记录数 = total_trades
+    if trade_count != total_trades:
+        errors.append(
+            f"{prefix}backtest_trades 实际记录数({trade_count}) "
+            f"≠ total_trades({total_trades})"
+        )
+
+    # 3. 如果 total_trades > 0，则 win_trades/loss_trades 不能同时为 None
+    if total_trades > 0:
+        if win_trades is None and loss_trades is None:
+            errors.append(
+                f"{prefix}total_trades={total_trades}>0，"
+                f"但 win_trades 和 loss_trades 均为 None"
+            )
+
+    return errors

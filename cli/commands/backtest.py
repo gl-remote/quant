@@ -543,19 +543,15 @@ def _persist_search_results(
             if daily:
                 dm.insert_backtest_daily(bt_id, daily)
             
-            """
-            保存交易记录（fills）
-            
-            调试沉淀(2026-06-04):
-            - BacktestResult.fills 字段包含 vnpy 回测引擎提取并转换后的标准化交易记录
-            - dm.insert_backtest_trades 函数会将这些记录存储到 backtest_trades 表
-            - 每条记录包含: datetime, direction, offset, open_price, close_price, volume, pnl, commission 等
-            - 该字段必须在 vnpy_backtest_engine.py 的 _create_backtest_result 中正确传递
-            """
             # 保存交易记录
             if er.fills:
                 dm.insert_backtest_trades(bt_id, er.fills)
 
+            # 跨表一致性验证：确保 backtests 统计字段与 backtest_trades 记录数一致
+            errors = dm.validate_consistency(bt_id)
+            if errors:
+                for err in errors:
+                    logger.warning(f"数据一致性警告: {err}")
     # 输出摘要
     print(f"\n============ {search_type.upper()} 优化结果 ============")
     print(f"  最优得分:  {result.best_value:.4f}")
