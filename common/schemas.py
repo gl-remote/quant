@@ -122,7 +122,6 @@ class TradeRecordSchema(pa.DataFrameModel):
     offset: Series[str] = pa.Field(isin=['open', 'close', 'closetoday'])
     open_price: Series[float] = pa.Field(ge=0.0)
     close_price: Series[float] = pa.Field(ge=0.0)
-    volume: Series[float] = pa.Field(ge=0.0)
     quantity: Series[float] = pa.Field(ge=0.0)
     pnl: Series[float] = pa.Field()
     commission: Series[float] = pa.Field(ge=0.0)
