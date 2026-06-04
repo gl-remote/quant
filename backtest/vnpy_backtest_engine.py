@@ -31,6 +31,8 @@ from .strategy_factory import create_strategy_class
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
 
+import datetime as _dt
+
 if TYPE_CHECKING:
     from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
@@ -481,24 +483,52 @@ class VnpyBacktestEngine:
                 - 旧代码直接遍历字典导致只拿到键字符串，报 'str' object has no attribute 'datetime' 错误
                 - 需要用 dict.values() 获取 TradeData 对象列表
                 
-                TradeData 对象关键字段:
-                - datetime: 交易时间
-                - direction: Direction 枚举 (LONG/SHORT)
-                - offset: Offset 枚举 (OPEN/CLOSETODAY/CLOSE)
-                - price: 成交价格
-                - volume: 成交量
-                - trade_pnl: 单笔交易盈亏
-                - commission: 手续费
+                调试沉淀(2026-06-05):
+                - TradeData 没有 trade_pnl 字段！vnpy 的 PnL 按天汇总在 DailyResult 上
+                - plain_trade 需要通过 FIFO 配对开平仓自行计算
+                - 配对规则: 按 datetime 排序，OPEN 入队，CLOSE 与队列中最旧的开仓配对
+                - LONG open + SHORT close → price_diff > 0 时盈利
+                - SHORT open + LONG close → price_diff < 0 时盈利
                 """
                 trades_list = []
                 if hasattr(engine, 'trades'):
-                    trades_obj = engine.trades
-                    # 调试记录: engine.trades 是 dict（键为序号字符串）或 list
-                    if isinstance(trades_obj, dict):
-                        trades_list = list(trades_obj.values())
-                    elif isinstance(trades_obj, list):
-                        trades_list = trades_obj
-                
+                    trades_list = list(engine.trades.values())
+
+                # FIFO 配对开平仓，计算逐笔盈亏
+                trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
+                open_queue: list[tuple[str, float, float]] = []  # (direction, price, volume)
+                trade_pnls: list[float] = [0.0] * len(trades_list)
+
+                for i, trade in enumerate(trades_list):
+                    offset_val = getattr(trade, 'offset', None)
+                    offset_str = offset_val.value if offset_val is not None and hasattr(offset_val, 'value') else str(offset_val) if offset_val else ''
+                    offset = _OFFSET_MAP.get(offset_str, offset_str)
+                    if offset == 'open':
+                        direction_val = getattr(trade, 'direction', None)
+                        direction_str = direction_val.value if direction_val is not None and hasattr(direction_val, 'value') else str(direction_val) if direction_val else ''
+                        direction = _DIRECTION_MAP.get(direction_str, direction_str)
+                        open_queue.append((direction, getattr(trade, 'price', 0.0), getattr(trade, 'volume', 0.0)))
+                        trade_pnls[i] = 0.0
+                    else:
+                        # 平仓：按 FIFO 与开仓配对
+                        close_price = getattr(trade, 'price', 0.0)
+                        remaining = getattr(trade, 'volume', 0.0)
+                        total_pnl = 0.0
+                        while remaining > 0 and open_queue:
+                            open_dir, open_price, open_vol = open_queue[0]
+                            matched_vol = min(remaining, open_vol)
+                            price_diff = close_price - open_price
+                            if open_dir == 'long':
+                                total_pnl += price_diff * matched_vol * self.contract_size
+                            else:  # short
+                                total_pnl += -price_diff * matched_vol * self.contract_size
+                            remaining -= matched_vol
+                            if matched_vol >= open_vol:
+                                open_queue.pop(0)
+                            else:
+                                open_queue[0] = (open_dir, open_price, open_vol - matched_vol)
+                        trade_pnls[i] = total_pnl
+
                 """
                 将 vnpy TradeData 对象转换为标准字典（字段名与 ORM BacktestTrade 对齐）
 
@@ -508,27 +538,29 @@ class VnpyBacktestEngine:
                     offset     → offset    (枚举值转字符串)
                     price      → open_price, close_price
                     volume     → quantity
-                    trade_pnl  → pnl
-                    commission → commission
+                    pnl        → 通过 FIFO 配对计算（TradeData 无此字段）
+                    commission → commission（TradeData 无此字段，暂=0）
                     (symbol 由外层注入)
 
                 调试沉淀(2026-06-04):
                 - direction 和 offset 是枚举类型，需调用 .value 获取字符串值
                 - 避免直接访问 trade 对象属性，使用 getattr() 以防字段缺失
                 - open_price/close_price 在单笔成交中取同一值 price，完整交易的开平仓价由策略层组装
+                
+                调试沉淀(2026-06-05):
+                - TradeData 无 trade_pnl 和 commission 字段，统一通过 FIFO 配对计算
+                - commission 隐藏在 vnpy 引擎内部计算中，无法逐笔提取，暂填 0
                 """
                 formatted_trades = []
-                for trade in trades_list:
+                for i, trade in enumerate(trades_list):
                     dt = getattr(trade, 'datetime', None)
                     direction_val = getattr(trade, 'direction', None)
                     offset_val = getattr(trade, 'offset', None)
                     price_val = getattr(trade, 'price', 0.0)
                     quantity_val = getattr(trade, 'volume', 0.0)
-                    trade_pnl_val = getattr(trade, 'trade_pnl', 0.0)
-                    commission_val = getattr(trade, 'commission', 0.0)
 
-                    direction = _DIRECTION_MAP.get(direction_val.value) if hasattr(direction_val, 'value') else _DIRECTION_MAP.get(str(direction_val), str(direction_val))
-                    offset = _OFFSET_MAP.get(offset_val.value) if hasattr(offset_val, 'value') else _OFFSET_MAP.get(str(offset_val), str(offset_val))
+                    direction = _DIRECTION_MAP.get(direction_val.value) if direction_val is not None and hasattr(direction_val, 'value') else _DIRECTION_MAP.get(str(direction_val), str(direction_val))
+                    offset = _OFFSET_MAP.get(offset_val.value) if offset_val is not None and hasattr(offset_val, 'value') else _OFFSET_MAP.get(str(offset_val), str(offset_val))
 
                     trade_dict = {
                         'datetime': dt,
@@ -538,12 +570,12 @@ class VnpyBacktestEngine:
                         'open_price': price_val,
                         'close_price': price_val,
                         'quantity': quantity_val,
-                        'pnl': trade_pnl_val,
-                        'commission': commission_val,
+                        'pnl': trade_pnls[i],
+                        'commission': 0.0,
                     }
                     formatted_trades.append(trade_dict)
 
-                # vnpy calculate_statistics 不输出 win_rate/win_trades/loss_trades
+                # vnpy calculate_statistics 不输出 win_trades/loss_trades 等字段
                 # 从交易记录的 pnl 字段自行计算并注入 statistics 字典
                 if formatted_trades:
                     win_list = [t for t in formatted_trades if t['pnl'] > 0]
@@ -551,12 +583,34 @@ class VnpyBacktestEngine:
                     win_cnt = len(win_list)
                     loss_cnt = len(loss_list)
                     total_trade_cnt = win_cnt + loss_cnt
-                    avg_win = sum(t['pnl'] for t in win_list) / win_cnt if win_cnt else 0
-                    avg_loss = abs(sum(t['pnl'] for t in loss_list) / loss_cnt) if loss_cnt else 0
+                    avg_win_val = sum(t['pnl'] for t in win_list) / win_cnt if win_cnt else 0
+                    avg_loss_val = abs(sum(t['pnl'] for t in loss_list) / loss_cnt) if loss_cnt else 0
+
+                    # 最大连续盈利/亏损
+                    max_consecutive_win = 0
+                    max_consecutive_loss = 0
+                    cur_win = 0
+                    cur_loss = 0
+                    for t in formatted_trades:
+                        if t['pnl'] > 0:
+                            cur_win += 1
+                            cur_loss = 0
+                            if cur_win > max_consecutive_win:
+                                max_consecutive_win = cur_win
+                        else:
+                            cur_loss += 1
+                            cur_win = 0
+                            if cur_loss > max_consecutive_loss:
+                                max_consecutive_loss = cur_loss
+
                     statistics['win_trades'] = win_cnt
                     statistics['loss_trades'] = loss_cnt
+                    statistics['average_win'] = avg_win_val
+                    statistics['average_loss'] = avg_loss_val
                     statistics['win_rate'] = win_cnt / total_trade_cnt if total_trade_cnt else 0
-                    statistics['win_loss_ratio'] = avg_win / avg_loss if avg_loss > 0 else 0
+                    statistics['win_loss_ratio'] = avg_win_val / avg_loss_val if avg_loss_val > 0 else 0
+                    statistics['max_consecutive_win'] = max_consecutive_win
+                    statistics['max_consecutive_loss'] = max_consecutive_loss
 
                 logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
             except Exception as e:
