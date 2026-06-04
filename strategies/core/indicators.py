@@ -33,3 +33,7 @@ def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3,
                     length=n, signal=k_period)
     # pandas-ta 的 KDJ 列名只含 length 和 signal，不含 d_period
     return cast(pd.Series, result[f"J_{n}_{k_period}"])
+
+
+def atr_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    return cast(pd.Series, ta.atr(high=df["high"], low=df["low"], close=df["close"], length=period))

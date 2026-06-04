@@ -20,6 +20,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
+from common.constants import (
+    TRADE_DIRECTION_LONG,
+    TRADE_DIRECTION_SHORT,
+)
 
 # 每交易日交易秒数 (4 小时日盘，不含夜盘)
 # 注意: 国内期货实际交易时段因夜盘而异（部分品种夜盘至 23:00，上期所品种至次日 2:30），
@@ -299,43 +303,57 @@ def death_cross(prev_short: float, prev_long: float,
 # ============================================================================
 
 def stop_loss_triggered(entry_price: float, current_price: float,
-                        stop_loss_ratio: float) -> bool:
+                        stop_loss_ratio: float,
+                        direction: str) -> bool:
     """检测止损条件
 
-    行业标准多头上损公式:
-      (入场价 - 当前价) / 入场价 >= 止损比例
+    行业标准公式:
+      多头: (入场价 - 当前价) / 入场价 >= 止损比例
+      空头: (当前价 - 入场价) / 入场价 >= 止损比例
 
     Args:
         entry_price: 入场价格
         current_price: 当前价格
         stop_loss_ratio: 止损比例 (如 0.03 = 3%)
+        direction: 持仓方向 (TRADE_DIRECTION_LONG or TRADE_DIRECTION_SHORT
 
     Returns:
         True 表示触发止损
     """
     if entry_price <= 0:
         return False
-    return (entry_price - current_price) / entry_price >= stop_loss_ratio
+    if direction == TRADE_DIRECTION_LONG:
+        return (entry_price - current_price) / entry_price >= stop_loss_ratio
+    elif direction == TRADE_DIRECTION_SHORT:
+        return (current_price - entry_price) / entry_price >= stop_loss_ratio
+    return False
 
 
 def take_profit_triggered(entry_price: float, current_price: float,
-                          take_profit_ratio: float) -> bool:
+                          take_profit_ratio: float,
+                          direction: str) -> bool:
     """检测止盈条件
 
-    行业标准多头止盈公式:
-      (当前价 - 入场价) / 入场价 >= 止盈比例
+    行业标准公式:
+      多头: (当前价 - 入场价) / 入场价 >= 止盈比例
+      空头: (入场价 - 当前价) / 入场价 >= 止盈比例
 
     Args:
         entry_price: 入场价格
         current_price: 当前价格
         take_profit_ratio: 止盈比例 (如 0.05 = 5%)
+        direction: 持仓方向 (TRADE_DIRECTION_LONG or TRADE_DIRECTION_SHORT
 
     Returns:
         True 表示触发止盈
     """
     if entry_price <= 0:
         return False
-    return (current_price - entry_price) / entry_price >= take_profit_ratio
+    if direction == TRADE_DIRECTION_LONG:
+        return (current_price - entry_price) / entry_price >= take_profit_ratio
+    elif direction == TRADE_DIRECTION_SHORT:
+        return (entry_price - current_price) / entry_price >= take_profit_ratio
+    return False
 
 
 # ============================================================================

@@ -36,7 +36,7 @@ from .events import (
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from ..core.types import Bar
-from ..core.indicators import sma_func, ema_func, rsi_func, macd_func, kdj_func
+from ..core.indicators import sma_func, ema_func, rsi_func, macd_func, kdj_func, atr_func
 
 
 def _parse_source_from_symbol(symbol: str) -> Optional[str]:
@@ -681,4 +681,10 @@ register_indicator_func(
     kdj_func,
     IndicatorCalcMode.BATCH,
     description='KDJ随机指标J值'
+)
+register_indicator_func(
+    'atr',
+    atr_func,
+    IndicatorCalcMode.BATCH,
+    description='平均真实波幅 (Average True Range)'
 )

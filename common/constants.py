@@ -91,8 +91,8 @@ STRATEGY_MA = 'ma'       # 双均线交叉策略
 # 策略配置默认值 (Strategy Defaults)
 # ============================================================================
 
-DEFAULT_SMA_SHORT = 5       # 短期均线周期 (K线)
-DEFAULT_SMA_LONG = 20      # 长期均线周期 (K线)
+DEFAULT_SMA_SHORT = 10       # 短期均线周期 (K线)
+DEFAULT_SMA_LONG = 40      # 长期均线周期 (K线)
 DEFAULT_STOP_LOSS_RATIO = 0.03   # 止损比例 (3%)
 DEFAULT_TAKE_PROFIT_RATIO = 0.05  # 止盈比例 (5%)
 DEFAULT_POSITION_RATIO = 0.3    # 仓位比例 (30%)
