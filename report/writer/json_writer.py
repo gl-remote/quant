@@ -140,15 +140,45 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
             logger.info("K线已导出: %s → %s", symbol, dest.name)
 
 
+def _get_best_trial_index(dm: Any, run_id: int) -> int:
+    """从 Optuna 表获取最优 trial 的编号"""
+    try:
+        study_rows = list(
+            dm.store.db.execute_sql(
+                "SELECT t.number FROM trials t "
+                "JOIN trial_values tv ON t.trial_id = tv.trial_id "
+                "WHERE t.study_id=(SELECT s.study_id FROM studies s "
+                "  JOIN run_studies rs ON rs.study_name=s.study_name "
+                "  WHERE rs.run_id=?) "
+                "AND t.state='COMPLETE' "
+                "ORDER BY tv.value DESC LIMIT 1",
+                (run_id,)
+            )
+        )
+        if study_rows:
+            return int(study_rows[0][0])
+    except Exception:
+        pass
+    return 0
+
+
 def export_trades_json(output_dir: str, run_id: int) -> None:
     """
-    导出交易记录 JSON（每个品种的最优回测的交易记录）
+    导出交易记录 JSON（取最优参数组合的所有品种的成交记录）
+    
+    逻辑：从 Optuna study 中找到最优 trial，仅导出该 trial 对应各品种的 backtest 的成交。
+    这样 K 线图上展示的是同一组最优参数在所有品种上的交易表现。
     
     Args:
         output_dir: 输出目录
         run_id: 运行ID
     """
     dm = get_data_manager()
+    
+    # 1. 从 optuna study 找最佳 trial_index
+    best_trial_index = _get_best_trial_index(dm, run_id)
+    
+    # 2. 取所有成功回测，过滤出目标 trial
     summary = dm.get_run_summary(run_id)
     all_trades: dict[str, list[dict[str, Any]]] = {}
     
@@ -156,11 +186,23 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
         bt_id = s.get('id')
         if not bt_id:
             continue
-        
         symbol = str(s.get('symbol', ''))
-        trades = dm.query_trades(int(bt_id))  # type: ignore
         
-        # 转换为序列化格式
+        # engine_config 包含 trial_index，过滤匹配
+        engine_cfg = s.get('engine_config') or '{}'
+        if isinstance(engine_cfg, str):
+            try:
+                cfg = json.loads(engine_cfg)
+            except Exception:
+                cfg = {}
+        else:
+            cfg = engine_cfg
+        trial_idx = cfg.get('trial_index')
+        
+        if trial_idx is None or trial_idx != best_trial_index:
+            continue
+        
+        trades = dm.query_trades(int(bt_id))
         all_trades[symbol] = []
         for t in trades:
             # 清理 direction 和 offset 字符串

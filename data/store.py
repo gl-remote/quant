@@ -579,6 +579,7 @@ class DataStore:
                 Backtest.start_date,
                 Backtest.end_date,
                 Backtest.kline_interval,
+                Backtest.engine_config,
             )
             .where(Backtest.run_id == run_id, Backtest.status == 'success')
             .order_by(Backtest.symbol, Backtest.total_return.desc())

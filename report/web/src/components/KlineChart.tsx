@@ -62,6 +62,10 @@ function convertTradeToMarkers(
     return [];
   }
 
+  // 判断是否是日线模式：相邻 K 线时间差 >= 24 小时
+  const isDaily = klineData.length >= 2 &&
+    (Number(klineData[1].datetime) - Number(klineData[0].datetime)) >= 86400;
+
   const klineTimeSet = new Set(klineData.map(d => {
     const t = toChartTime(d.datetime);
     return typeof t === "number" ? t : String(t);
@@ -81,7 +85,14 @@ function convertTradeToMarkers(
       tradeTime = trade.datetime as Time;
     }
 
-    const normalizedTime = typeof tradeTime === "number" ? tradeTime : String(tradeTime);
+    let normalizedTime: number | string;
+    if (isDaily && typeof tradeTime === "number") {
+      // 日线模式下截断到日期级，与日线 K 线的日期对齐
+      normalizedTime = Math.floor(tradeTime / 86400) * 86400;
+    } else {
+      normalizedTime = typeof tradeTime === "number" ? tradeTime : String(tradeTime);
+    }
+
     if (!klineTimeSet.has(normalizedTime)) {
       continue;
     }
