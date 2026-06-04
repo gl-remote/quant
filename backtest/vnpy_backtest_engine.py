@@ -541,7 +541,7 @@ class VnpyBacktestEngine:
                         'pnl': trade_pnl_val,
                         'commission': commission_val,
                     }
-formatted_trades.append(trade_dict)
+                    formatted_trades.append(trade_dict)
 
                 # vnpy calculate_statistics 不输出 win_rate/win_trades/loss_trades
                 # 从交易记录的 pnl 字段自行计算并注入 statistics 字典
