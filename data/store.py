@@ -80,6 +80,11 @@ class DataStore:
                 database.execute_sql("ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0")
             if "random_seed" not in columns:
                 database.execute_sql("ALTER TABLE runs ADD COLUMN random_seed INTEGER")
+            # 检查并添加 reason 字段（backtest_trades）
+            cursor2 = database.execute_sql("PRAGMA table_info(backtest_trades)")
+            cols2 = [row[1] for row in cursor2.fetchall()]
+            if "reason" not in cols2:
+                database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(32) DEFAULT ''")
         except Exception as e:
             logger.warning(f"数据库迁移失败: {e}")
 
@@ -374,6 +379,7 @@ class DataStore:
                 'quantity': float(trade['quantity']),
                 'pnl': float(trade.get('pnl', 0.0)),
                 'commission': float(trade.get('commission', 0.0)),
+                'reason': str(trade.get('reason', '')),
                 'created_at': now,
             })
 
