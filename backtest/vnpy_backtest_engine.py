@@ -116,10 +116,7 @@ class VnpyBacktestEngine:
 
         Returns:
             BacktestResult 对象
-        """
-        """
-        创建结构化回测结果对象
-        
+            
         调试沉淀(2026-06-04):
         - vn.py 回测引擎返回的 statistics 字典中，总交易数的键为 total_trade_count 而非 total_trades
         - 旧代码从 profit_days/loss_days 读取会导致错误的交易统计
