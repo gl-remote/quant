@@ -24,7 +24,7 @@ from strategies.utils import serialize_strategy_params
 from config.app_config import BacktestConfig
 from data.manager import DataManager
 
-from .data_utils import df_to_vnpy_datalines, resolve_interval
+from .data_utils import df_to_vnpy_datalines, resolve_interval, calculate_date_range
 from .results import aggregate_walk_forward
 from .strategy_factory import create_strategy_class
 
@@ -57,6 +57,7 @@ class VnpyBacktestEngine:
         """
         self._dm = dm
         self._run_id: int | None = None
+        self._git_hash: str | None = None
         self.initial_capital: float = float(backtest_config.initial_capital)
         self.commission_rate: float = float(backtest_config.commission_rate)
         self.slippage: float = float(backtest_config.slippage)
@@ -74,6 +75,124 @@ class VnpyBacktestEngine:
             raise ValueError(f"price_tick 必须大于 0，当前: {self.price_tick}")
         if self.contract_size <= 0:
             raise ValueError(f"contract_size 必须大于 0，当前: {self.contract_size}")
+
+    def set_git_hash(self, git_hash: str | None) -> None:
+        """设置 Git 提交哈希
+        """
+        self._git_hash = git_hash
+
+    # ── 私有辅助方法 ──────────────────────────────────────────
+
+    def _create_backtest_result(
+        self,
+        symbol: str,
+        backtest_id: int | None,
+        strategy_name: str,
+        strategy_version: str | None,
+        strategy_params: dict[str, float] | None,
+        error: str | None,
+        data_start: str,
+        data_end: str,
+        total_days: int,
+        stats: dict[str, Any],
+        daily_results: list[dict[str, Any]],
+    ) -> BacktestResult:
+        """创建 BacktestResult 对象
+
+        Args:
+            symbol: 品种代码
+            backtest_id: 回测记录 ID
+            strategy_name: 策略名称
+            strategy_version: 策略版本
+            strategy_params: 策略参数
+            error: 错误信息（如果有）
+            data_start: 开始日期
+            data_end: 结束日期
+            total_days: 总天数
+            stats: 统计信息字典
+            daily_results: 每日结果列表
+
+        Returns:
+            BacktestResult 对象
+        """
+        return BacktestResult(
+            symbol=symbol,
+            backtest_id=backtest_id,
+            strategy=strategy_name,
+            strategy_version=strategy_version,
+            git_hash=self._git_hash,
+            strategy_params=strategy_params or {},
+            success=error is None,
+            error_message=error,
+            start_date=data_start,
+            end_date=data_end,
+            total_days=total_days,
+            total_trades=stats.get('total_trades', 0) or 0,
+            total_return=stats.get('total_return', 0.0) or 0.0,
+            end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
+            annual_return=stats.get('annual_return'),
+            win_trades=stats.get('profit_days', stats.get('win_trades', 0)) or 0,
+            loss_trades=stats.get('loss_days', stats.get('loss_trades', 0)) or 0,
+            win_rate=stats.get('win_rate'),
+            max_consecutive_win=stats.get('max_consecutive_win'),
+            max_consecutive_loss=stats.get('max_consecutive_loss'),
+            avg_win=stats.get('average_win'),
+            avg_loss=stats.get('average_loss'),
+            win_loss_ratio=stats.get('win_loss_ratio'),
+            sharpe_ratio=stats.get('sharpe_ratio'),
+            max_drawdown=stats.get('max_drawdown'),
+            max_drawdown_duration=stats.get('max_drawdown_duration', stats.get('max_ddpercent_duration', 0)),
+            daily_std=stats.get('return_std', stats.get('daily_std')),
+            return_drawdown_ratio=stats.get('return_drawdown_ratio'),
+            initial_capital=self.initial_capital,
+            commission_rate=self.commission_rate,
+            slippage=self.slippage,
+            price_tick=self.price_tick,
+            contract_size=self.contract_size,
+            kline_interval=self.interval,
+            daily_results=daily_results if daily_results else [],
+        )
+
+    def _create_placeholder_record(
+        self,
+        symbol: str,
+        strategy_name: str,
+        strategy_version: str | None,
+        data_start: str,
+        data_end: str,
+        total_days: int,
+    ) -> Any:
+        """创建回测占位记录
+
+        Args:
+            symbol: 品种代码
+            strategy_name: 策略名称
+            strategy_version: 策略版本
+            data_start: 开始日期
+            data_end: 结束日期
+            total_days: 总天数
+
+        Returns:
+            创建的 Backtest 模型实例
+        """
+        from data.models import Backtest as BTModel
+        return BTModel.create(
+            run=self._run_id,
+            symbol=symbol,
+            strategy=strategy_name,
+            strategy_version=strategy_version,
+            git_hash=self._git_hash,
+            status="running",
+            start_date=data_start,
+            end_date=data_end,
+            total_days=total_days,
+            initial_capital=self.initial_capital,
+            commission_rate=self.commission_rate,
+            slippage=self.slippage,
+            price_tick=self.price_tick,
+            contract_size=self.contract_size,
+            kline_interval=self.interval,
+        )
 
     # ── 公开接口 ──────────────────────────────────────────────
 
@@ -115,9 +234,8 @@ class VnpyBacktestEngine:
 
             logger.info(f"\n>>> 品种: {symbol} ({len(strategy_names)} 个策略)")
 
-            data_start = str(df['datetime'].iloc[0])[:10]
-            data_end = str(df['datetime'].iloc[-1])[:10]
-            logger.debug(f"数据: {len(df)} 条, {data_start} ~ {data_end}")
+            data_start, data_end, total_days = calculate_date_range(df)
+            logger.debug(f"数据: {len(df)} 条, {data_start} ~ {data_end}, 共 {total_days} 天")
 
             batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list)
             for i, r in enumerate(batch_results):
@@ -126,40 +244,18 @@ class VnpyBacktestEngine:
                 error = r.get('error')
                 sym = symbols[i] if i < len(symbols) else symbol
                 strategy_config = r.get('strategy_config')
-                results.append(BacktestResult(
+                results.append(self._create_backtest_result(
                     symbol=sym,
                     backtest_id=r.get('bt_id'),
-                    strategy=strategy_names[i] if i < len(strategy_names) else "unknown",
+                    strategy_name=strategy_names[i] if i < len(strategy_names) else "unknown",
                     strategy_version=r.get('strategy_version'),
                     strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
-                    success=error is None,
-                    error_message=error,
-                    start_date=data_start,
-                    end_date=data_end,
-                    total_trades=stats.get('total_trades', 0) or 0,
-                    total_return=stats.get('total_return', 0.0) or 0.0,
-                    end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
-                    annual_return=stats.get('annual_return'),
-                    win_trades=stats.get('profit_days', stats.get('win_trades', 0)) or 0,
-                    loss_trades=stats.get('loss_days', stats.get('loss_trades', 0)) or 0,
-                    win_rate=stats.get('win_rate'),
-                    max_consecutive_win=stats.get('max_consecutive_win'),
-                    max_consecutive_loss=stats.get('max_consecutive_loss'),
-                    avg_win=stats.get('average_win'),
-                    avg_loss=stats.get('average_loss'),
-                    win_loss_ratio=stats.get('win_loss_ratio'),
-                    sharpe_ratio=stats.get('sharpe_ratio'),
-                    max_drawdown=stats.get('max_drawdown'),
-                    max_drawdown_duration=stats.get('max_drawdown_duration', stats.get('max_ddpercent_duration', 0)),
-                    daily_std=stats.get('return_std', stats.get('daily_std')),
-                    return_drawdown_ratio=stats.get('return_drawdown_ratio'),
-                    initial_capital=self.initial_capital,
-                    commission_rate=self.commission_rate,
-                    slippage=self.slippage,
-                    price_tick=self.price_tick,
-                    contract_size=self.contract_size,
-                    kline_interval=self.interval,
-                    daily_results=daily if daily else [],
+                    error=error,
+                    data_start=data_start,
+                    data_end=data_end,
+                    total_days=total_days,
+                    stats=stats,
+                    daily_results=daily,
                 ))
 
         succeeded = sum(1 for r in results if r.success)
@@ -292,16 +388,23 @@ class VnpyBacktestEngine:
         interval = resolve_interval(self.interval)
         bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
 
+        data_start, data_end, total_days = calculate_date_range(df)
+        
         results: list[dict[str, Any]] = []
         for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
-            # 创建占位记录，拿 backtest_id 用于日志追踪
-            from data.models import Backtest as BTModel
-            bt_placeholder = BTModel.create(
-                run=self._run_id,
+            # 提前获取策略版本号
+            from strategies import load_strategy
+            _core = load_strategy(strategy_name)
+            strategy_version = getattr(type(_core), 'VERSION', None)
+            
+            # 创建占位记录
+            bt_placeholder = self._create_placeholder_record(
                 symbol=symbol,
-                strategy=strategy_name,
-                status="running",
-                initial_capital=self.initial_capital,
+                strategy_name=strategy_name,
+                strategy_version=strategy_version,
+                data_start=data_start,
+                data_end=data_end,
+                total_days=total_days,
             )
             bt_id = bt_placeholder.id
 
@@ -315,10 +418,6 @@ class VnpyBacktestEngine:
                 run_id=self._run_id or 0,
                 backtest_id=bt_id,
             )
-            # 从核心策略类读取版本号
-            from strategies import load_strategy
-            _core = load_strategy(strategy_name)
-            strategy_version = getattr(type(_core), 'VERSION', None)
 
             engine = BacktestingEngine()
             # vnpy print → loguru，加上下文，丢进度条
@@ -366,11 +465,7 @@ class VnpyBacktestEngine:
             results.append({
                 'bt_id': bt_id,
                 'statistics': statistics,
-                'daily_results': (
-                    daily_results.reset_index().to_dict('records')
-                    if daily_results is not None
-                    else []
-                ),
+                'daily_results': daily_results.reset_index().to_dict('records'),
                 'strategy_config': None,
                 'strategy_version': strategy_version or '',
             })

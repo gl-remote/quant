@@ -147,8 +147,18 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         account = cm.get_account_info()
         bc = cm.get_backtest_config()
         capital = capital_arg if capital_arg else bc.initial_capital
+        git_hash = get_git_hash()
         strategy_core = load_strategy(strategy)
         strategy_cls = get_strategy_class_name(strategy_core)
+        strategy_version = getattr(type(strategy_core), 'VERSION', None)
+        
+        # 计算总天数
+        try:
+            start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_dt = datetime.strptime(end_date_str, '%Y-%m-%d')
+            total_days = (end_dt - start_dt).days + 1
+        except (ValueError, TypeError):
+            total_days = None
 
         bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=symbol)
 
@@ -201,12 +211,21 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         bt_id = dm.insert_backtest(BacktestResult(
             symbol=symbol,
             strategy=strategy_cls,
+            strategy_version=strategy_version,
+            git_hash=git_hash,
             status=STATUS_SUCCESS,
             total_trades=total_trades,
             total_return=total_profit,
             end_balance=capital_val + total_profit if capital_val else 0,
             start_date=start_date_str,
             end_date=end_date_str,
+            total_days=total_days,
+            initial_capital=capital_val or bc.initial_capital,
+            commission_rate=bc.commission_rate,
+            slippage=bc.slippage,
+            price_tick=bc.price_tick,
+            contract_size=bc.contract_size,
+            kline_interval=bc.interval,
             strategy_params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
             engine_config={'type': 'tqsdk', 'gui': gui_flag},
         ))
@@ -245,8 +264,19 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         _ = dm.insert_backtest(BacktestResult(
             symbol=symbol,
             strategy=strategy_cls or 'unknown',
+            strategy_version=strategy_version,
+            git_hash=git_hash,
             status=STATUS_FAILED,
             error_message=str(e),
+            start_date=start_date_str,
+            end_date=end_date_str,
+            total_days=total_days,
+            initial_capital=capital_val or bc.initial_capital,
+            commission_rate=bc.commission_rate,
+            slippage=bc.slippage,
+            price_tick=bc.price_tick,
+            contract_size=bc.contract_size,
+            kline_interval=bc.interval,
             engine_config={'type': 'tqsdk'},
         ))
         raise
@@ -320,6 +350,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         # ── 步骤 4: 初始化引擎和 Git 信息 ──
         engine = VnpyBacktestEngine(bc, dm)
         git_hash = get_git_hash()
+        engine.set_git_hash(git_hash)
 
         # 创建运行记录
         run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"

@@ -261,6 +261,13 @@ class DataStore:
             bt.error_message = result.error_message
             bt.start_date = result.start_date
             bt.end_date = result.end_date
+            bt.total_days = result.total_days
+            bt.initial_capital = result.initial_capital
+            bt.commission_rate = result.commission_rate
+            bt.slippage = result.slippage
+            bt.price_tick = result.price_tick
+            bt.contract_size = result.contract_size
+            bt.kline_interval = result.kline_interval
             bt.end_balance = end_balance
             bt.total_return = total_return
             bt.annual_return = result.annual_return
@@ -292,6 +299,7 @@ class DataStore:
                 error_message=result.error_message,
                 start_date=result.start_date,
                 end_date=result.end_date,
+                total_days=result.total_days,
                 initial_capital=initial_capital,
                 commission_rate=result.commission_rate,
                 slippage=result.slippage,

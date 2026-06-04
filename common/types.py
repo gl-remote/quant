@@ -78,6 +78,7 @@ class BacktestResult:
     # 日期
     start_date: str | None = None
     end_date: str | None = None
+    total_days: int | None = None
     # 绩效
     total_trades: int = 0
     end_balance: float = 0.0

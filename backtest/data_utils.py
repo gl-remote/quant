@@ -4,12 +4,13 @@
 提供:
   - df_to_vnpy_datalines: DataFrame → vnpy BarData 列表
   - INTERVAL_MAP: 周期字符串 → vnpy Interval 枚举
+  - calculate_date_range: 从 DataFrame 计算日期范围和总天数
 """
 
 from __future__ import annotations
 
 from loguru import logger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 import pandas as pd
 
@@ -48,6 +49,23 @@ def resolve_interval(interval_str: str) -> Interval:
         vnpy Interval 枚举值
     """
     return _init_interval_map().get(interval_str, _init_interval_map()['d'])
+
+
+def calculate_date_range(df: pd.DataFrame) -> Tuple[str, str, int]:
+    """从 DataFrame 计算日期范围和总天数
+
+    Args:
+        df: 包含 'datetime' 列的 K 线数据
+
+    Returns:
+        (start_date, end_date, total_days) 元组
+    """
+    data_start = str(df['datetime'].iloc[0])[:10]
+    data_end = str(df['datetime'].iloc[-1])[:10]
+    start_dt = pd.to_datetime(data_start)
+    end_dt = pd.to_datetime(data_end)
+    total_days = (end_dt - start_dt).days + 1
+    return data_start, data_end, total_days
 
 
 def df_to_vnpy_datalines(
