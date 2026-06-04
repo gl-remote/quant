@@ -96,6 +96,7 @@ class VnpyBacktestEngine:
         total_days: int,
         stats: dict[str, Any],
         daily_results: list[dict[str, Any]],
+        trades: list[dict[str, Any]] | None = None,
     ) -> BacktestResult:
         """创建 BacktestResult 对象
 
@@ -111,6 +112,7 @@ class VnpyBacktestEngine:
             total_days: 总天数
             stats: 统计信息字典
             daily_results: 每日结果列表
+            trades: 交易记录列表
 
         Returns:
             BacktestResult 对象
@@ -127,12 +129,12 @@ class VnpyBacktestEngine:
             start_date=data_start,
             end_date=data_end,
             total_days=total_days,
-            total_trades=stats.get('total_trades', 0) or 0,
+            total_trades=stats.get('total_trade_count', stats.get('total_trades', 0)) or 0,
             total_return=stats.get('total_return', 0.0) or 0.0,
             end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
             annual_return=stats.get('annual_return'),
-            win_trades=stats.get('profit_days', stats.get('win_trades', 0)) or 0,
-            loss_trades=stats.get('loss_days', stats.get('loss_trades', 0)) or 0,
+            win_trades=stats.get('win_trades', 0) or 0,
+            loss_trades=stats.get('loss_trades', 0) or 0,
             win_rate=stats.get('win_rate'),
             max_consecutive_win=stats.get('max_consecutive_win'),
             max_consecutive_loss=stats.get('max_consecutive_loss'),
@@ -151,6 +153,7 @@ class VnpyBacktestEngine:
             contract_size=self.contract_size,
             kline_interval=self.interval,
             daily_results=daily_results if daily_results else [],
+            fills=trades if trades else [],
         )
 
     def _create_placeholder_record(
@@ -245,18 +248,19 @@ class VnpyBacktestEngine:
                 sym = symbols[i] if i < len(symbols) else symbol
                 strategy_config = r.get('strategy_config')
                 results.append(self._create_backtest_result(
-                    symbol=sym,
-                    backtest_id=r.get('bt_id'),
-                    strategy_name=strategy_names[i] if i < len(strategy_names) else "unknown",
-                    strategy_version=r.get('strategy_version'),
-                    strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
-                    error=error,
-                    data_start=data_start,
-                    data_end=data_end,
-                    total_days=total_days,
-                    stats=stats,
-                    daily_results=daily,
-                ))
+                symbol=sym,
+                backtest_id=r.get('bt_id'),
+                strategy_name=strategy_names[i] if i < len(strategy_names) else "unknown",
+                strategy_version=r.get('strategy_version'),
+                strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
+                error=error,
+                data_start=data_start,
+                data_end=data_end,
+                total_days=total_days,
+                stats=stats,
+                daily_results=daily,
+                trades=r.get('trades', []),
+            ))
 
         succeeded = sum(1 for r in results if r.success)
         logger.info(f"\n回测完成: {succeeded}/{len(results)} 成功")
@@ -448,6 +452,48 @@ class VnpyBacktestEngine:
                     engine.run_backtesting()
                 daily_results = engine.calculate_result()
                 statistics = engine.calculate_statistics()
+                
+                # 从 vnpy 引擎中提取交易记录
+                trades_list = []
+                if hasattr(engine, 'trades'):
+                    trades_obj = engine.trades
+                    # 检查是字典还是列表
+                    if isinstance(trades_obj, dict):
+                        trades_list = list(trades_obj.values())
+                    elif isinstance(trades_obj, list):
+                        trades_list = trades_obj
+                
+                # 转换 TradeData 对象到字典
+                formatted_trades = []
+                for trade in trades_list:
+                    trade_dict = {}
+                    # 提取标准字段
+                    dt = getattr(trade, 'datetime', None)
+                    direction_val = getattr(trade, 'direction', None)
+                    offset_val = getattr(trade, 'offset', None)
+                    price_val = getattr(trade, 'price', 0.0)
+                    volume_val = getattr(trade, 'volume', 0.0)
+                    trade_pnl_val = getattr(trade, 'trade_pnl', 0.0)
+                    commission_val = getattr(trade, 'commission', 0.0)
+                    
+                    # 处理枚举值
+                    direction = direction_val.value if hasattr(direction_val, 'value') else str(direction_val)
+                    offset = offset_val.value if hasattr(offset_val, 'value') else str(offset_val)
+                    
+                    trade_dict = {
+                        'datetime': dt,
+                        'direction': direction,
+                        'offset': offset,
+                        'open_price': price_val,
+                        'close_price': price_val,
+                        'volume': volume_val,
+                        'quantity': volume_val,
+                        'pnl': trade_pnl_val,
+                        'commission': commission_val,
+                    }
+                    formatted_trades.append(trade_dict)
+                
+                logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
             except Exception as e:
                 logger.exception(
                     f"回测执行异常 [{symbol}][{strategy_name}]: {e}",
@@ -456,6 +502,7 @@ class VnpyBacktestEngine:
                     'bt_id': bt_id,
                     'statistics': {},
                     'daily_results': [],
+                    'trades': [],
                     'error': str(e),
                     'strategy_config': None,
                     'strategy_version': strategy_version or '',
@@ -466,6 +513,7 @@ class VnpyBacktestEngine:
                 'bt_id': bt_id,
                 'statistics': statistics,
                 'daily_results': daily_results.reset_index().to_dict('records'),
+                'trades': formatted_trades,
                 'strategy_config': None,
                 'strategy_version': strategy_version or '',
             })
