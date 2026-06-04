@@ -20,14 +20,17 @@ function formatNumber(v: number): string {
   return v.toLocaleString("zh-CN");
 }
 
-const columns: { key: SortKey; label: string; format: (v: number) => string }[] = [
+const columns: { key: SortKey; label: string; format: (v: any) => string }[] = [
   { key: "symbol", label: "品种", format: (v) => String(v) },
   { key: "total_return", label: "收益率", format: (v) => formatPct(v * 100) },
-  { key: "total_trades", label: "交易次数", format: formatNumber },
   { key: "win_rate", label: "胜率", format: (v) => formatPct(v, 1) },
+  { key: "win_loss_ratio", label: "盈亏比", format: (v) => v.toFixed(2) },
+  { key: "total_trades", label: "交易次数", format: formatNumber },
   { key: "max_drawdown", label: "最大回撤", format: (v) => formatPct(v) },
   { key: "sharpe", label: "夏普比率", format: (v) => v.toFixed(2) },
+  { key: "annual_return", label: "年化收益率", format: (v) => formatPct(v * 100) },
   { key: "end_balance", label: "最终权益", format: formatNumber },
+  { key: "id", label: "回测ID", format: (v) => String(v) },
 ];
 
 export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
@@ -142,8 +145,14 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                   >
                     {formatPct(item.total_return * 100)}
                   </td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.total_trades)}</td>
                   <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatPct(item.win_rate, 1)}</td>
+                  <td
+                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
+                    style={{ color: item.win_loss_ratio >= 1 ? "#059669" : "#dc2626" }}
+                  >
+                    {item.win_loss_ratio.toFixed(2)}
+                  </td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.total_trades)}</td>
                   <td className="px-3.5 py-2.5 border-b border-slate-50 text-red-600 whitespace-nowrap">
                     {formatPct(item.max_drawdown)}
                   </td>
@@ -153,7 +162,14 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                   >
                     {item.sharpe.toFixed(2)}
                   </td>
+                  <td
+                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
+                    style={{ color: item.annual_return >= 0 ? "#059669" : "#dc2626" }}
+                  >
+                    {formatPct(item.annual_return * 100)}
+                  </td>
                   <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.end_balance)}</td>
+                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-400 text-xs whitespace-nowrap">{item.id}</td>
                 </tr>
               );
             })}

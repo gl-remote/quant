@@ -48,9 +48,12 @@ export interface SummaryItem {
   total_return: number;        // 总收益率
   total_trades: number;       // 总交易次数
   win_rate: number;          // 胜率
+  win_loss_ratio: number;    // 盈亏比
+  annual_return: number;     // 年化收益率
   max_drawdown: number;      // 最大回撤
   sharpe: number;             // 夏普比率
   end_balance: number;        // 最终资金
+  id: number;                 // 回测ID
   ret_cls?: string;         // 收益率样式类（可选）
   sr_cls?: string;          // 夏普比率样式类（可选）
 }

@@ -10,18 +10,24 @@ describe('SymbolTable', () => {
       total_return: 0.105, // 10.5%
       total_trades: 50,
       win_rate: 60.0,
+      win_loss_ratio: 1.5,
+      annual_return: 0.08,
       max_drawdown: 5.2,
       sharpe: 1.8,
       end_balance: 110500,
+      id: 1,
     },
     {
       symbol: 'SHFE.au2506',
       total_return: 0.152, // 15.2%
       total_trades: 30,
       win_rate: 70.0,
+      win_loss_ratio: 2.1,
+      annual_return: 0.12,
       max_drawdown: 4.0,
       sharpe: 2.2,
       end_balance: 115200,
+      id: 2,
     },
   ];
 

@@ -541,8 +541,23 @@ class VnpyBacktestEngine:
                         'pnl': trade_pnl_val,
                         'commission': commission_val,
                     }
-                    formatted_trades.append(trade_dict)
-                
+formatted_trades.append(trade_dict)
+
+                # vnpy calculate_statistics 不输出 win_rate/win_trades/loss_trades
+                # 从交易记录的 pnl 字段自行计算并注入 statistics 字典
+                if formatted_trades:
+                    win_list = [t for t in formatted_trades if t['pnl'] > 0]
+                    loss_list = [t for t in formatted_trades if t['pnl'] <= 0]
+                    win_cnt = len(win_list)
+                    loss_cnt = len(loss_list)
+                    total_trade_cnt = win_cnt + loss_cnt
+                    avg_win = sum(t['pnl'] for t in win_list) / win_cnt if win_cnt else 0
+                    avg_loss = abs(sum(t['pnl'] for t in loss_list) / loss_cnt) if loss_cnt else 0
+                    statistics['win_trades'] = win_cnt
+                    statistics['loss_trades'] = loss_cnt
+                    statistics['win_rate'] = win_cnt / total_trade_cnt if total_trade_cnt else 0
+                    statistics['win_loss_ratio'] = avg_win / avg_loss if avg_loss > 0 else 0
+
                 logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
             except Exception as e:
                 logger.exception(
