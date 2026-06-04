@@ -35,6 +35,18 @@ if TYPE_CHECKING:
     from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
 
+# vnpy Direction/Offset 枚举值 → 标准字段映射
+# vnpy 中文 locale 下 .value 返回中文，需要映射为 Schema 接受的英文
+_DIRECTION_MAP = {
+    '多': 'long', '空': 'short',
+    'LONG': 'long', 'SHORT': 'short',
+}
+_OFFSET_MAP = {
+    '开': 'open', '平': 'close', '平今': 'closetoday',
+    'OPEN': 'open', 'CLOSE': 'close', 'CLOSETODAY': 'closetoday',
+}
+
+
 class VnpyBacktestEngine:
     """vn.py 回测引擎 (纯执行器)
 
@@ -515,8 +527,8 @@ class VnpyBacktestEngine:
                     trade_pnl_val = getattr(trade, 'trade_pnl', 0.0)
                     commission_val = getattr(trade, 'commission', 0.0)
 
-                    direction = direction_val.value if hasattr(direction_val, 'value') else str(direction_val)
-                    offset = offset_val.value if hasattr(offset_val, 'value') else str(offset_val)
+                    direction = _DIRECTION_MAP.get(direction_val.value) if hasattr(direction_val, 'value') else _DIRECTION_MAP.get(str(direction_val), str(direction_val))
+                    offset = _OFFSET_MAP.get(offset_val.value) if hasattr(offset_val, 'value') else _OFFSET_MAP.get(str(offset_val), str(offset_val))
 
                     trade_dict = {
                         'datetime': dt,
