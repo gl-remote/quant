@@ -20,15 +20,15 @@ class TestConfigLoading:
     def test_load_from_temp_file(self, temp_config_file):
         cm = ConfigManager(config_file=temp_config_file)
         tc = cm.get_trading_config()
-        assert tc.sma_short == 5
-        assert tc.sma_long == 20
+        assert tc.sma_short == 10
+        assert tc.sma_long == 40
         assert tc.stop_loss_ratio == 0.03
 
     def test_defaults_when_no_config(self):
         cm = ConfigManager(config_file='/nonexistent/path.toml')
         tc = cm.get_trading_config()
-        assert tc.sma_short == 5
-        assert tc.position_ratio == 0.1
+        assert tc.sma_short == 10
+        assert tc.position_ratio == 0.3
 
 
 class TestTradingConfig:
@@ -37,16 +37,16 @@ class TestTradingConfig:
         tc = cm.get_trading_config()
         assert tc.stop_loss_ratio == 0.03
         assert tc.take_profit_ratio == 0.05
-        assert tc.position_ratio == 0.1
-        assert tc.sma_short == 5
-        assert tc.sma_long == 20
+        assert tc.position_ratio == 0.3
+        assert tc.sma_short == 10
+        assert tc.sma_long == 40
         assert tc.kline_period == 5
 
     def test_get_trading_config_from_file(self, temp_config_file):
         cm = ConfigManager(config_file=temp_config_file)
         tc = cm.get_trading_config()
-        assert tc.sma_short == 5
-        assert tc.sma_long == 20
+        assert tc.sma_short == 10
+        assert tc.sma_long == 40
 
 
 class TestBacktestConfig:

@@ -122,10 +122,13 @@ def trading_config_dict():
     return {
         'stop_loss_ratio': 0.03,
         'take_profit_ratio': 0.05,
-        'position_ratio': 0.1,
-        'sma_short': 5,
-        'sma_long': 20,
+        'position_ratio': 0.3,
+        'sma_short': 10,
+        'sma_long': 40,
         'kline_period': 5,
+        'atr_period': 14,
+        'atr_stop_loss_multiplier': 2.0,
+        'atr_take_profit_multiplier': 3.0,
     }
 
 
@@ -136,12 +139,15 @@ def base_config_dict():
         'strategies': [
             {
                 'name': 'ma',
-                'sma_short': 5,
-                'sma_long': 20,
+                'sma_short': 10,
+                'sma_long': 40,
                 'stop_loss_ratio': 0.03,
                 'take_profit_ratio': 0.05,
-                'position_ratio': 0.1,
+                'position_ratio': 0.3,
                 'kline_period': 5,
+                'atr_period': 14,
+                'atr_stop_loss_multiplier': 2.0,
+                'atr_take_profit_multiplier': 3.0,
             },
         ],
         'data': {

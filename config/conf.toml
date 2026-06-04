@@ -36,15 +36,15 @@ atr_take_profit_multiplier = 1.5 # ATR 止盈倍数（盈利超过 atr * multipl
   # 参数搜索空间 (同时支持 grid 和 bayesian 模式)
   [strategies.search_space.atr_stop_loss_multiplier]
   type = "float"
-  low = 1.0
-  high = 3.0
-  step = 0.5
+  low = 0.8
+  high = 1.8
+  step = 0.2
 
   [strategies.search_space.atr_take_profit_multiplier]
   type = "float"
-  low = 2.0
-  high = 5.0
-  step = 0.5
+  low = 0.4
+  high = 3.2
+  step = 0.4
 
 # 未来可扩展更多策略:
 # [[strategies]]

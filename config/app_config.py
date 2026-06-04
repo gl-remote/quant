@@ -79,6 +79,10 @@ class StrategyItemConfig(BaseModel):
     take_profit_ratio: float = DEFAULT_TAKE_PROFIT_RATIO
     position_ratio: float = DEFAULT_POSITION_RATIO
     kline_period: int = DEFAULT_KLINE_PERIOD
+    # ATR 相关参数
+    atr_period: int = 14
+    atr_stop_loss_multiplier: float = 2.0
+    atr_take_profit_multiplier: float = 3.0
     # 策略专属的参数搜索空间（同时支持 grid 和 bayesian 模式）
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
