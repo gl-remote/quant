@@ -106,6 +106,7 @@ class BacktestResult:
     kline_interval: str = ""
     # 原始数据
     engine_config: dict[str, object] = field(default_factory=dict)
+    data_src: str | None = None  # 数据源文件路径（CSV 等），TqSdk 实时数据为 None
     strategy_params: dict[str, float] | None = None
     fills: list[dict[str, object]] = field(default_factory=list)
     daily_results: list[dict] = field(default_factory=list)

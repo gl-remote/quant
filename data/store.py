@@ -16,6 +16,7 @@ from __future__ import annotations
 from loguru import logger
 from pathlib import Path
 from datetime import datetime
+import json
 
 import pandas as pd
 import pandera.pandas as pa
@@ -262,6 +263,8 @@ class DataStore:
         if result.backtest_id:
             # 更新已有占位记录
             bt = Backtest.get_by_id(result.backtest_id)
+            if run_id is not None:
+                bt.run = run_id
             bt.symbol = result.symbol
             bt.strategy = result.strategy
             bt.strategy_version = result.strategy_version
@@ -294,7 +297,8 @@ class DataStore:
             bt.max_drawdown_duration = result.max_drawdown_duration or 0
             bt.daily_std = result.daily_std
             bt.return_drawdown_ratio = result.return_drawdown_ratio
-            bt.data_src = data_src
+            bt.engine_config = json.dumps(result.engine_config) if result.engine_config else None
+            bt.data_src = data_src or result.data_src
             bt.updated_at = now
             bt.save()
         else:
@@ -332,13 +336,17 @@ class DataStore:
                 max_drawdown_duration=result.max_drawdown_duration or 0,
                 daily_std=result.daily_std,
                 return_drawdown_ratio=result.return_drawdown_ratio,
-                data_src=data_src,
+                engine_config=json.dumps(result.engine_config) if result.engine_config else None,
+                data_src=data_src or result.data_src,
                 created_at=now,
                 updated_at=now,
             )
-        # 写入参数
+        # 写入参数（更新时先删旧参数再插入，避免重复）
         params = result.strategy_params
         if params:
+            if result.backtest_id:
+                # 更新路径：删除旧参数
+                BacktestParam.delete().where(BacktestParam.backtest == bt).execute()
             for name, value in params.items():
                 BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
         return bt.id  # type: ignore[no-any-return]

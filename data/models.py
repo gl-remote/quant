@@ -220,6 +220,7 @@ class Backtest(OrmBaseModel):
     max_drawdown_duration: IntegerField = IntegerField(null=True)
     daily_std: FloatField = FloatField(null=True)
     return_drawdown_ratio: FloatField = FloatField(null=True)
+    engine_config: TextField = TextField(null=True)  # JSON: 引擎类型、优化器、study名等元数据
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     updated_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
     data_src: TextField = TextField(null=True)
@@ -239,14 +240,19 @@ class BacktestParam(OrmBaseModel):
 
 
 class BacktestTrade(OrmBaseModel):
-    """回测交易明细"""
+    """回测交易明细（逐笔成交记录）
+
+    注意: vnpy 的 TradeData 代表单笔成交(fill)，不是完整交易(trade)。
+    单笔成交中 open_price 和 close_price 取同一值 price。
+    完整交易的开仓价/平仓价需要策略层按 offset=open/close 配对组装。
+    """
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='trades', on_delete='CASCADE')
     datetime: DateTimeField = DateTimeField()
     symbol: CharField = CharField()
     direction: CharField = CharField()
     offset: CharField = CharField()
-    open_price: FloatField = FloatField()
-    close_price: FloatField = FloatField()
+    open_price: FloatField = FloatField()  # 成交价（开仓时=入场价，平仓时=出场价）
+    close_price: FloatField = FloatField()  # 同上，单笔成交时与 open_price 相同
     quantity: FloatField = FloatField()
     pnl: FloatField = FloatField()
     commission: FloatField = FloatField()
@@ -257,11 +263,15 @@ class BacktestTrade(OrmBaseModel):
 
 
 class BacktestDaily(OrmBaseModel):
-    """回测每日资金曲线"""
+    """回测每日资金曲线
+
+    注意: daily_return 字段实际存储的是当日净盈亏金额(net_pnl)，
+    而非百分比收益率。字段名保留 historical compatibility。
+    """
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='daily', on_delete='CASCADE')
     date: DateField = DateField()
-    equity: FloatField = FloatField()  # 当日资金净值
-    daily_return: FloatField = FloatField()  # 当日收益率
+    equity: FloatField = FloatField()  # 当日权益
+    daily_return: FloatField = FloatField()  # 当日净盈亏(金额)，非百分比
     drawdown: FloatField = FloatField()  # 当日回撤
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
 
