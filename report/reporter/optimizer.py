@@ -113,8 +113,8 @@ def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
 
     return {
         "tooltip": {"trigger": "axis"},
-        "legend": {"data": ["目标值", "历史最优"], "bottom": 0},
-        "grid": {"left": 60, "right": 30, "top": 20, "bottom": 40},
+        "legend": {"data": ["目标值", "历史最优"], "right": 20, "top": 8, "itemWidth": 18, "itemHeight": 10},
+        "grid": {"left": 60, "right": 30, "top": 36, "bottom": 40},
         "xAxis": {"type": "value", "name": "试验序号", "nameLocation": "center", "nameGap": 25},
         "yAxis": {"type": "value", "name": "目标值"},
         "series": [
@@ -241,13 +241,14 @@ def _build_contour(study: optuna.study.Study, trials: list[optuna.trial.FrozenTr
             "inRange": {"color": ["#313695", "#4575b4", "#74add1", "#abd9e9",
                                   "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"]},
             "calculable": True,
-            "orient": "horizontal",
-            "left": "center",
-            "bottom": 0,
+            "orient": "vertical",
+            "right": 10,
+            "top": 20,
+            "bottom": 40,
         },
         "xAxis": {"type": "value", "name": p1, "nameLocation": "center", "nameGap": 25},
         "yAxis": {"type": "value", "name": p2, "nameLocation": "center", "nameGap": 35},
-        "grid": {"left": 70, "right": 30, "top": 20, "bottom": 50},
+        "grid": {"left": 70, "right": 60, "top": 20, "bottom": 40},
         "series": [{
             "name": f"{p1} vs {p2}",
             "type": "scatter",
