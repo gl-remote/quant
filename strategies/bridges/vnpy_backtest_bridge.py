@@ -34,7 +34,7 @@ from strategies.runtime.requirements import BarContext
 from strategies.runtime.period import PeriodDataView
 from common.constants import (TRADE_ACTION_BUY, TRADE_ACTION_SELL,
                               TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT,
-                              TRADE_OFFSET_OPEN)
+                              TRADE_OFFSET_OPEN, DIRECTION_MAP, OFFSET_MAP)
 from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
 
@@ -100,7 +100,7 @@ class VnpyBacktestBridge(CtaTemplate):
             logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
             return
 
-        logger.info(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
+        logger.debug(f"[{self.strategy_name}] 桥接器初始化: {self._core.name}")
 
         self._requirements = self._core.data_requirements(self._state.strategy_config)
         if self._requirements is None:
@@ -122,7 +122,7 @@ class VnpyBacktestBridge(CtaTemplate):
         fills_count = len(self._state.fills)
         sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
         buys = fills_count - sells
-        logger.info(
+        logger.debug(
             f"[{self.strategy_name}] 策略停止 | "
             f"fills={fills_count} buys={buys} sells={sells}"
         )
@@ -153,7 +153,7 @@ class VnpyBacktestBridge(CtaTemplate):
             # 已计算完成的指标列（实际在 _df 中的列名）
             ohlcv = {"open", "high", "low", "close", "volume"}
             calc_cols = [c for c in df.columns if c not in ohlcv]
-            logger.info(
+            logger.debug(
                 f"[run={rid} bt={btid}] [{self.strategy_name}] "
                 f"{label + ' ' if label else ''}"
                 f"period={pn} rows={len(df)} "
@@ -198,10 +198,10 @@ class VnpyBacktestBridge(CtaTemplate):
             feed.calculate_all()
             self._log_data_feed_summary("指标计算完成（计算后）")
             feed.to_feeds(feeds_dir)
-            logger.info("[{}] feeds 已增量更新", self.strategy_name)
+            logger.debug("[{}] feeds 已增量更新", self.strategy_name)
         else:
             self._log_data_feed_summary("feeds 命中，跳过计算")
-            logger.info("[{}] feeds 命中，跳过指标计算", self.strategy_name)
+            logger.debug("[{}] feeds 命中，跳过指标计算", self.strategy_name)
 
         return feed
 
@@ -213,7 +213,7 @@ class VnpyBacktestBridge(CtaTemplate):
         main_period = self._state.period
 
         if not os.path.isdir(feeds_dir):
-            logger.info("[{}] feeds 目录不存在，全量加载", self.strategy_name)
+            logger.debug("[{}] feeds 目录不存在，全量加载", self.strategy_name)
             return DataFeed(symbol=self._state.symbol), True
 
         try:
@@ -238,7 +238,7 @@ class VnpyBacktestBridge(CtaTemplate):
         cache_start = str(main_pd._df.index[0].date())  # pyright: ignore[reportPrivateUsage]
         cache_end = str(main_pd._df.index[-1].date())  # pyright: ignore[reportPrivateUsage]
         if meta['min_dt'] != cache_start or meta['max_dt'] != cache_end:
-            logger.info("[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
+            logger.debug("[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
                         self.strategy_name, meta['min_dt'], meta['max_dt'],
                         cache_start, cache_end)
             return feed, True
@@ -265,7 +265,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 for _symbol, df, _data_src in results:
                     if len(df) > 0:
                         feed.load_history_df(pn, df.set_index('datetime'))
-                        logger.info("[{}] 增量加载周期: period={} rows={}",
+                        logger.debug("[{}] 增量加载周期: period={} rows={}",
                                     self.strategy_name, pn, len(df))
                 changed = True
 
@@ -277,7 +277,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 key = (ind.name, tuple(sorted(ind.params.items())))
                 if key not in cached:
                     feed.register_indicator(pn, ind.name, **ind.params)
-                    logger.info("[{}] 增量注册指标: period={} indicator={}({})",
+                    logger.debug("[{}] 增量注册指标: period={} indicator={}({})",
                                 self.strategy_name, pn, ind.name, ind.params)
                     changed = True
 
@@ -306,7 +306,7 @@ class VnpyBacktestBridge(CtaTemplate):
         if len(main_df) == 0:
             return
         data_feed.load_history_df(main_period, main_df.set_index('datetime'))
-        logger.info("[{}] 加载主周期: period={} rows={}",
+        logger.debug("[{}] 加载主周期: period={} rows={}",
                     self.strategy_name, main_period, len(main_df))
         end_date = str(main_df['datetime'].iloc[-1])[:10]
 
@@ -319,7 +319,7 @@ class VnpyBacktestBridge(CtaTemplate):
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
                     data_feed.load_history_df(period, df.set_index('datetime'))
-                    logger.info("[{}] 加载周期: period={} rows={} (end={})",
+                    logger.debug("[{}] 加载周期: period={} rows={} (end={})",
                                 self.strategy_name, period, len(df), end_date)
                 else:
                     logger.warning("[{}] 加载数据为空: period={}", self.strategy_name, period)
@@ -373,7 +373,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 events=[],
             )
 
-        logger.info("[{}] ctx_cache 构造完成: {} 条, range={}~{}",
+        logger.debug("[{}] ctx_cache 构造完成: {} 条, range={}~{}",
                     self.strategy_name, len(self._ctx_cache),
                     main_df.index[0] if len(main_df) > 0 else "N/A",
                     main_df.index[-1] if len(main_df) > 0 else "N/A")
@@ -405,21 +405,29 @@ class VnpyBacktestBridge(CtaTemplate):
         if signal.action:
             matched = False
             if signal.action == TRADE_ACTION_BUY and self.pos == 0:
+                logger.debug("[{}] {} signal=buy reason={} vol={} pos=0 → 执行买入开多",
+                            self.strategy_name, bar_time, signal.reason, signal.volume)
                 self._execute_trade(signal, close_price, bar_time, is_buy=True)
                 matched = True
             elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
+                logger.debug("[{}] {} signal=sell reason={} vol={} pos={} → 执行平多",
+                            self.strategy_name, bar_time, signal.reason, signal.volume, self.pos)
                 self._execute_trade(signal, close_price, bar_time, is_buy=False)
                 matched = True
             elif signal.action == TRADE_ACTION_SELL and self.pos == 0:
+                logger.debug("[{}] {} signal=sell reason={} vol={} pos=0 → 执行卖出开空",
+                            self.strategy_name, bar_time, signal.reason, signal.volume)
                 self._execute_trade(signal, close_price, bar_time, is_short=True)
                 matched = True
             elif signal.action == TRADE_ACTION_BUY and self.pos < 0:
+                logger.debug("[{}] {} signal=buy reason={} vol={} pos={} → 执行买入平空",
+                            self.strategy_name, bar_time, signal.reason, signal.volume, self.pos)
                 self._execute_trade(signal, close_price, bar_time, is_cover=True)
                 matched = True
             if not matched:
-                logger.debug("[{}] {} signal={} 未执行: pos={} vol={} price={}",
-                            self.strategy_name, bar_time, signal.action, self.pos,
-                            signal.volume, close_price)
+                logger.debug("[{}] {} signal={} reason={} vol={} 未执行: pos={} price={}",
+                            self.strategy_name, bar_time, signal.action, signal.reason,
+                            signal.volume, self.pos, close_price)
 
     def on_tick(self, tick: Any) -> None:
         """vnpy Tick回调 — 本策略不使用 Tick 数据"""
@@ -448,7 +456,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         if direction is not None:
             if hasattr(direction, 'value'):
-                is_long = (direction.value == TRADE_DIRECTION_LONG)
+                is_long = DIRECTION_MAP.get(direction.value, '') == TRADE_DIRECTION_LONG
             else:
                 is_long = (str(direction).upper() == TRADE_DIRECTION_LONG) if isinstance(direction, str) else False
 
@@ -456,9 +464,15 @@ class VnpyBacktestBridge(CtaTemplate):
             offset = getattr(trade, 'offset', None)
             is_open = False
             if offset is not None and hasattr(offset, 'value'):
-                is_open = (offset.value == TRADE_OFFSET_OPEN)
+                is_open = OFFSET_MAP.get(offset.value, '') == TRADE_OFFSET_OPEN
             elif isinstance(offset, str):
                 is_open = (offset.upper() == 'OPEN')
+
+            # 提取上次 signal 的 reason（在 _execute_trade 中已暂存）
+            trade_reason = getattr(self, '_last_signal_reason', '')
+
+            # 注入到 vnpy TradeData，Engine 数据提取时可通过 getattr(trade, 'reason', '') 读取
+            trade.reason = trade_reason
 
             if is_long and is_open:
                 # 买入开多
@@ -468,7 +482,7 @@ class VnpyBacktestBridge(CtaTemplate):
                     action=cast(TradeAction, TRADE_ACTION_BUY),
                     price=trade_price,
                     volume=trade_volume,
-                    reason="",
+                    reason=trade_reason,
                 )
                 self._state.position = StrategyPosition(
                     direction=cast(PositionDirection, TRADE_DIRECTION_LONG),
@@ -483,7 +497,7 @@ class VnpyBacktestBridge(CtaTemplate):
                     action=cast(TradeAction, TRADE_ACTION_SELL),
                     price=trade_price,
                     volume=trade_volume,
-                    reason="",
+                    reason=trade_reason,
                 )
                 self._state.position = StrategyPosition(
                     direction=cast(PositionDirection, TRADE_DIRECTION_SHORT),
@@ -498,7 +512,7 @@ class VnpyBacktestBridge(CtaTemplate):
                     action=cast(TradeAction, TRADE_ACTION_SELL),
                     price=trade_price,
                     volume=trade_volume,
-                    reason="",
+                    reason=trade_reason,
                 )
                 self._state.position = StrategyPosition()
 
@@ -523,6 +537,7 @@ class VnpyBacktestBridge(CtaTemplate):
         :param is_short: 做空开仓
         :param is_cover: 做空平仓
         """
+        self._last_signal_reason = signal.reason  # 暂存给 on_trade 使用
         if is_buy:
             volume = signal.volume
             if volume <= 0:

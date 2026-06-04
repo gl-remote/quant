@@ -30,23 +30,7 @@ from .strategy_factory import create_strategy_class
 
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
-
-import datetime as _dt
-
-if TYPE_CHECKING:
-    from vnpy.trader.object import BarData
-    from vnpy.trader.constant import Exchange, Interval
-
-# vnpy Direction/Offset 枚举值 → 标准字段映射
-# vnpy 中文 locale 下 .value 返回中文，需要映射为 Schema 接受的英文
-_DIRECTION_MAP = {
-    '多': 'long', '空': 'short',
-    'LONG': 'long', 'SHORT': 'short',
-}
-_OFFSET_MAP = {
-    '开': 'open', '平': 'close', '平今': 'closetoday',
-    'OPEN': 'open', 'CLOSE': 'close', 'CLOSETODAY': 'closetoday',
-}
+from common.constants import DIRECTION_MAP, OFFSET_MAP
 
 
 class VnpyBacktestEngine:
@@ -502,11 +486,11 @@ class VnpyBacktestEngine:
                 for i, trade in enumerate(trades_list):
                     offset_val = getattr(trade, 'offset', None)
                     offset_str = offset_val.value if offset_val is not None and hasattr(offset_val, 'value') else str(offset_val) if offset_val else ''
-                    offset = _OFFSET_MAP.get(offset_str, offset_str)
+                    offset = OFFSET_MAP.get(offset_str, offset_str)
                     if offset == 'open':
                         direction_val = getattr(trade, 'direction', None)
                         direction_str = direction_val.value if direction_val is not None and hasattr(direction_val, 'value') else str(direction_val) if direction_val else ''
-                        direction = _DIRECTION_MAP.get(direction_str, direction_str)
+                        direction = DIRECTION_MAP.get(direction_str, direction_str)
                         open_queue.append((direction, getattr(trade, 'price', 0.0), getattr(trade, 'volume', 0.0)))
                         trade_pnls[i] = 0.0
                     else:
@@ -559,8 +543,8 @@ class VnpyBacktestEngine:
                     price_val = getattr(trade, 'price', 0.0)
                     quantity_val = getattr(trade, 'volume', 0.0)
 
-                    direction = _DIRECTION_MAP.get(direction_val.value) if direction_val is not None and hasattr(direction_val, 'value') else _DIRECTION_MAP.get(str(direction_val), str(direction_val))
-                    offset = _OFFSET_MAP.get(offset_val.value) if offset_val is not None and hasattr(offset_val, 'value') else _OFFSET_MAP.get(str(offset_val), str(offset_val))
+                    direction = DIRECTION_MAP.get(direction_val.value) if direction_val is not None and hasattr(direction_val, 'value') else DIRECTION_MAP.get(str(direction_val), str(direction_val))
+                    offset = OFFSET_MAP.get(offset_val.value) if offset_val is not None and hasattr(offset_val, 'value') else OFFSET_MAP.get(str(offset_val), str(offset_val))
 
                     trade_dict = {
                         'datetime': dt,
@@ -572,6 +556,7 @@ class VnpyBacktestEngine:
                         'quantity': quantity_val,
                         'pnl': trade_pnls[i],
                         'commission': 0.0,
+                        'reason': getattr(trade, 'reason', ''),
                     }
                     formatted_trades.append(trade_dict)
 

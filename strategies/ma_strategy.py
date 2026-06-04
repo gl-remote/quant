@@ -170,9 +170,9 @@ class MaStrategyCore(Strategy[MACrossParams]):
         【决策流程】
 
         - 5m SMA(short) 大于 15m SMA(long) 做多
-            → 1m macd 大于 0 → 1m kdj 小于 60 → 买入开仓  
+            → 1m macd 大于 0 → 1m kdj 小于 60 → → 买入开仓  
         - 5m SMA(short) 小于 15m SMA(long) 做空
-            → 1m macd 小于 0 → 1m kdj 大于 40 → 卖出开仓
+            → 1m macd 小于 0 → 1m kdj 大于 40 → → 卖出开仓
         - 出场规则（持仓时，以当前持仓方向为准，按以下顺序检查）
             - 固定比例止盈 (当前资金+持仓市值） * take_profit_ratio
             - 固定比例止损 (当前资金+持仓市值） * stop_loss_ratio 

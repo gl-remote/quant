@@ -256,6 +256,7 @@ class BacktestTrade(OrmBaseModel):
     quantity: FloatField = FloatField()
     pnl: FloatField = FloatField()
     commission: FloatField = FloatField()
+    reason: CharField = CharField(max_length=32, default='')
     created_at: DateTimeField = DateTimeField(constraints=[SQL('DEFAULT CURRENT_TIMESTAMP')])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]

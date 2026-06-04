@@ -35,6 +35,17 @@ TRADE_DIRECTION_SHORT = 'short'     # 空头持仓方向
 TRADE_OFFSET_OPEN = 'open'         # 开仓
 TRADE_OFFSET_CLOSE = 'close'        # 平仓
 
+# vnpy Direction/Offset 枚举值 → 标准字段映射
+# vnpy 中文 locale 下 .value 返回中文，需要映射为 Schema 接受的英文
+DIRECTION_MAP = {
+    '多': 'long', '空': 'short',
+    'LONG': 'long', 'SHORT': 'short',
+}
+OFFSET_MAP = {
+    '开': 'open', '平': 'close', '平今': 'closetoday',
+    'OPEN': 'open', 'CLOSE': 'close', 'CLOSETODAY': 'closetoday',
+}
+
 
 # ============================================================================
 # 信号触发原因 (Signal Reasons)
