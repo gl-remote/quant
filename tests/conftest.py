@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 import tomli_w
 
 from common.constants import STATUS_SUCCESS
+from common.types import BacktestResult
 
 
 # ==============================================================================
@@ -67,28 +68,46 @@ def make_daily(dt, equity=100000.0, daily_return=0.0, drawdown=0.0):
 
 
 def insert_full_backtest(store, **overrides):
-    """插入一条完整回测 (主记录 + 交易 + 每日曲线)，返回 backtest_id"""
-    ec = {
-        'initial_capital': 100000.0,
-        'commission_rate': 0.0003,
-        'slippage': 1.0,
-        'price_tick': 1.0,
-        'contract_size': 10,
-        'kline_interval': '1m',
-    }
-    bt_id = store.insert_backtest_detailed(
+    """插入一条完整回测 (主记录 + 交易 + 每日曲线)，返回 backtest_id
+
+    通过 BacktestResult 对象调用 insert_backtest_detailed，与实际回测流程一致。
+    """
+    s = VNPTY_STATS
+    result = BacktestResult(
         symbol=overrides.get('symbol', 'DCE.m2509'),
         strategy=overrides.get('strategy', 'ma'),
         status=STATUS_SUCCESS,
-        error_message=None,
-        statistics=VNPTY_STATS,
-        engine_config=ec,
-        params={'sma_short':5,'sma_long':20},
         start_date='2024-01-01',
         end_date='2024-12-31',
+        total_days=365,
+        initial_capital=100000.0,
+        commission_rate=0.0003,
+        slippage=1.0,
+        price_tick=1.0,
+        contract_size=10,
+        kline_interval='1m',
+        end_balance=s['end_balance'],
+        total_return=s['end_balance'] - 100000.0,
+        annual_return=s['annual_return'],
+        total_trades=s['total_trades'],
+        win_trades=s['win_trades'],
+        loss_trades=s['loss_trades'],
+        max_consecutive_win=s['max_consecutive_win'],
+        max_consecutive_loss=s['max_consecutive_loss'],
+        avg_win=s['average_win'],
+        avg_loss=s['average_loss'],
+        win_loss_ratio=s['win_loss_ratio'],
+        sharpe_ratio=s['sharpe_ratio'],
+        max_drawdown=s['max_drawdown'],
+        max_drawdown_duration=s['max_ddpercent_duration'],
+        daily_std=s['daily_std'],
+        return_drawdown_ratio=s['return_drawdown_ratio'],
+        win_rate=s['win_trades'] / (s['win_trades'] + s['loss_trades']),
+        strategy_params={'sma_short': 5, 'sma_long': 20},
         strategy_version='1.0',
         git_hash='abc1234',
     )
+    bt_id = store.insert_backtest_detailed(result)
     trades = [
         make_trade('2024-01-15 10:00:00', direction='long', offset='open', pnl=200.0),
         make_trade('2024-01-20 14:30:00', direction='short', offset='close', pnl=-100.0),

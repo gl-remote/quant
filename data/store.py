@@ -262,6 +262,8 @@ class DataStore:
         if result.backtest_id:
             # 更新已有占位记录
             bt = Backtest.get_by_id(result.backtest_id)
+            bt.symbol = result.symbol
+            bt.strategy = result.strategy
             bt.strategy_version = result.strategy_version
             bt.git_hash = result.git_hash
             bt.status = result.status

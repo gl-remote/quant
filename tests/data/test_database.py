@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from data import DataManager  # noqa: E402
 from data.store import DataStore  # noqa: E402
 from common.constants import STATUS_FAILED  # noqa: E402
+from common.types import BacktestResult  # noqa: E402
 from common.schemas import (
     TradeRecordSchema,
     BacktestDailySchema,
@@ -295,11 +296,17 @@ class TestInsertAndQuery:
     def test_failed_backtest_ignored_by_default(self, temp_db_path):
         store = DataStore(temp_db_path)
         insert_full_backtest(store, symbol='DCE.good')
-        store.insert_backtest_detailed(
-            symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
-            error_message='test error', statistics={}, engine_config={},
-            params={}, start_date=None, end_date=None,
+        failed_result = BacktestResult(
+            symbol='DCE.bad',
+            strategy='ma',
+            status=STATUS_FAILED,
+            error_message='test error',
+            start_date=None,
+            end_date=None,
+            initial_capital=100000.0,
+            end_balance=0.0,
         )
+        store.insert_backtest_detailed(failed_result)
         results = store.query_backtests(status='success')
         assert len(results) == 1
         assert results[0].symbol == 'DCE.good'
