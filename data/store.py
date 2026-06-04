@@ -657,6 +657,27 @@ class DataStore:
             })
         return result
 
+    def get_best_trial_index(self, run_id: int) -> int:
+        """获取最优 trial 在引擎配置中的编号（用于 trades.json 导出过滤）"""
+        try:
+            rows = list(
+                database.execute_sql(
+                    "SELECT t.number FROM trials t "
+                    "JOIN trial_values tv ON t.trial_id = tv.trial_id "
+                    "WHERE t.study_id=(SELECT s.study_id FROM studies s "
+                    "  JOIN run_studies rs ON rs.study_name=s.study_name "
+                    "  WHERE rs.run_id=?) "
+                    "AND t.state='COMPLETE' "
+                    "ORDER BY tv.value DESC LIMIT 1",
+                    (run_id,)
+                )
+            )
+            if rows:
+                return int(rows[0][0])
+        except Exception:
+            pass
+        return 0
+
     def get_equity_data(self, backtest_id: int) -> dict[str, object] | None:
         """获取指定回测记录的资金曲线数据"""
         rows = self.query_daily(backtest_id)

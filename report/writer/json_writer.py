@@ -140,28 +140,6 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
             logger.info("K线已导出: %s → %s", symbol, dest.name)
 
 
-def _get_best_trial_index(dm: Any, run_id: int) -> int:
-    """从 Optuna 表获取最优 trial 的编号"""
-    try:
-        study_rows = list(
-            dm.store.db.execute_sql(
-                "SELECT t.number FROM trials t "
-                "JOIN trial_values tv ON t.trial_id = tv.trial_id "
-                "WHERE t.study_id=(SELECT s.study_id FROM studies s "
-                "  JOIN run_studies rs ON rs.study_name=s.study_name "
-                "  WHERE rs.run_id=?) "
-                "AND t.state='COMPLETE' "
-                "ORDER BY tv.value DESC LIMIT 1",
-                (run_id,)
-            )
-        )
-        if study_rows:
-            return int(study_rows[0][0])
-    except Exception:
-        pass
-    return 0
-
-
 def export_trades_json(output_dir: str, run_id: int) -> None:
     """
     导出交易记录 JSON（取最优参数组合的所有品种的成交记录）
@@ -176,45 +154,39 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
     dm = get_data_manager()
     
     # 1. 从 optuna study 找最佳 trial_index
-    best_trial_index = _get_best_trial_index(dm, run_id)
+    best_trial_index = dm.store.get_best_trial_index(run_id)
     
-    # 2. 取所有成功回测，过滤出目标 trial
-    summary = dm.get_run_summary(run_id)
+    # 2. 遍历所有成功回测，只取最优 trial 的成交
+    import json as _j
+    from data.models import Backtest, BacktestTrade
+    
     all_trades: dict[str, list[dict[str, Any]]] = {}
-    
-    for s in summary:
-        bt_id = s.get('id')
-        if not bt_id:
+    for bt in Backtest.select(Backtest.id, Backtest.symbol, Backtest.engine_config).where(
+        Backtest.run_id == run_id, Backtest.status == 'success'
+    ):
+        ec = bt.engine_config
+        if not ec:
             continue
-        symbol = str(s.get('symbol', ''))
-        
-        # engine_config 包含 trial_index，过滤匹配
-        engine_cfg = s.get('engine_config') or '{}'
-        if isinstance(engine_cfg, str):
+        if isinstance(ec, str):
             try:
-                cfg = json.loads(engine_cfg)
+                cfg = _j.loads(ec)
             except Exception:
-                cfg = {}
+                continue
         else:
-            cfg = engine_cfg
-        trial_idx = cfg.get('trial_index')
-        
-        if trial_idx is None or trial_idx != best_trial_index:
+            cfg = ec
+        if cfg.get('trial_index') != best_trial_index:
             continue
         
-        trades = dm.query_trades(int(bt_id))
+        symbol = bt.symbol
+        trades = list(BacktestTrade.select().where(BacktestTrade.backtest_id == bt.id))
         all_trades[symbol] = []
         for t in trades:
-            # 清理 direction 和 offset 字符串
             direction = t.direction
             if "." in str(direction):
                 direction = str(direction).split(".")[-1]
-            
             offset = t.offset
             if "." in str(offset):
                 offset = str(offset).split(".")[-1]
-            
-            # 转换 TradeRecord 为 dict
             all_trades[symbol].append({
                 'datetime': t.datetime,
                 'symbol': t.symbol,
@@ -225,6 +197,7 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
                 'quantity': t.quantity,
                 'pnl': t.pnl,
                 'commission': t.commission,
+                'reason': t.reason if hasattr(t, 'reason') else '',
             })
     
     _write_json(output_dir, f"r{run_id}/data/trades.json", all_trades)
