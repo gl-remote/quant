@@ -518,7 +518,6 @@ class TestBacktestConsistency:
         )
         assert len(errors) == 0
 
-    @pytest.mark.skip(reason="依赖 conftest.insert_full_backtest 的 BacktestResult 接口待更新")
     def test_manager_consistency(self, temp_db_path):
         """通过 DataManager 验证一致性方法"""
         store = DataStore(temp_db_path)
