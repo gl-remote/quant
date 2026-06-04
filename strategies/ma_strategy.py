@@ -57,12 +57,14 @@ class MACrossParams:
     stop_loss_ratio: 止损比例（相对于入场价）
     take_profit_ratio: 止盈比例（相对于入场价）
     position_ratio: 仓位比例（相对于总资金）
+    atr_period: ATR 指标计算周期
+    atr_stop_loss_multiplier: ATR 止损倍数（亏损超过 atr * multiplier 时止损）
     """
     sma_short: int = DEFAULT_SMA_SHORT
-    """短期均线周期，默认 5"""
+    """短期均线周期，默认 10"""
 
     sma_long: int = DEFAULT_SMA_LONG
-    """长期均线周期，默认 20"""
+    """长期均线周期，默认 40"""
 
     stop_loss_ratio: float = DEFAULT_STOP_LOSS_RATIO
     """止损比例，默认 0.03 (3%)"""
@@ -72,6 +74,15 @@ class MACrossParams:
 
     position_ratio: float = DEFAULT_POSITION_RATIO
     """仓位比例，默认 0.1 (10%)"""
+
+    atr_period: int = 14
+    """ATR 指标计算周期，默认 14"""
+
+    atr_stop_loss_multiplier: float = 2.0
+    """ATR 止损倍数，默认 2.0（亏损超过 atr * multiplier 时止损）"""
+
+    atr_take_profit_multiplier: float = 3.0
+    """ATR 止盈倍数，默认 3.0（盈利超过 atr * multiplier 时止盈）"""
 
 
 class MaStrategyCore(Strategy[MACrossParams]):
@@ -125,7 +136,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
         【本策略的需求】
         - 主周期: 1m — MACD + KDJ
         - 5m: SMA(config.sma_short) — 短期均线（金叉/死叉判断）
-        - 15m: SMA(config.sma_long) — 长期均线（金叉/死叉判断）
+        - 15m: SMA(config.sma_long) + ATR(config.atr_period) — 长期均线 + 波动率指标
 
         :param config: 策略配置
         :return: 数据需求声明
@@ -134,7 +145,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
             periods={
                 "1m": PeriodRequirements(lookback_bars=60),
                 "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=config.sma_long + 1),
+                "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
             },
             indicators={
                 "1m": [
@@ -146,6 +157,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_long}),
+                    IndicatorRequirements(name="atr", params={"period": config.atr_period}),
                 ],
             },
             events=EventsRequirements.no_events(),
@@ -158,12 +170,15 @@ class MaStrategyCore(Strategy[MACrossParams]):
         【决策流程】
 
         - 5m SMA(short) 大于 15m SMA(long) 做多
-            → 1m macd 大于 0 → 1m kdj 小于 50 → 买入开仓  
-            → 1m macd 小于 0 或者 1m kdj 大于 80 → 平仓  
+            → 1m macd 大于 0 → 1m kdj 小于 60 → 买入开仓  
         - 5m SMA(short) 小于 15m SMA(long) 做空
-            → 1m macd 小于 0 → 1m kdj 大于 50 → 卖出开仓
-            → 1m macd 大于 0 或者 1m kdj 小于 20 → 平仓  
-        - 持有中先检查止损/止盈，再检查其他
+            → 1m macd 小于 0 → 1m kdj 大于 40 → 卖出开仓
+        - 出场规则（持仓时，以当前持仓方向为准，按以下顺序检查）
+            - 固定比例止盈 (当前资金+持仓市值） * take_profit_ratio
+            - 固定比例止损 (当前资金+持仓市值） * stop_loss_ratio 
+            - ATR 止损 (15m atr * atr_stop_loss_multiplier)  
+            - ATR 止盈 (15m atr * atr_take_profit_multiplier)
+            - 不检查其他退场信号，仅根据以上条件判断是否出场。
 
         :param state: 运行时状态
         :param ctx: 行情上下文
@@ -176,6 +191,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         sma_short_col = f"sma_{config.sma_short}"
         sma_long_col = f"sma_{config.sma_long}"
+        atr_col = f"atr_{config.atr_period}"
         macd_col = "macd_12_9_26"   # fast=12, signal=9, slow=26
         kdj_col = "kdj_3_3_9"       # d_period=3, k_period=3, n=9
 
@@ -185,6 +201,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         cur_5m_short = _get(view_5m, sma_short_col, -1, 0.0)
         cur_15m_long = _get(view_15m, sma_long_col, -1, 0.0)
+        cur_atr = _get(view_15m, atr_col, -1, 0.0)
         macd_val = _get(view_1m, macd_col, -1, 0.0)
         kdj_val = _get(view_1m, kdj_col, -1, 50.0)
 
@@ -195,9 +212,9 @@ class MaStrategyCore(Strategy[MACrossParams]):
         if self._bar_count % 100 == 1:
             from loguru import logger as _log
             _log.info(
-                "[ma] #{:>5} | 5m_sma_{}={:.4f} 15m_sma_{}={:.4f} macd={:.4f} kdj={:.4f} close={:.4f}",
+                "[ma] #{:>5} | 5m_sma_{}={:.4f} 15m_sma_{}={:.4f} atr={:.4f} macd={:.4f} kdj={:.4f} close={:.4f}",
                 self._bar_count, config.sma_short, cur_5m_short,
-                config.sma_long, cur_15m_long, macd_val, kdj_val, ctx.bar.close,
+                config.sma_long, cur_15m_long, cur_atr, macd_val, kdj_val, ctx.bar.close,
             )
 
         long_bias = cur_5m_short > cur_15m_long
@@ -207,37 +224,53 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         # ── 持有多头 ──
         if direction == TRADE_DIRECTION_LONG:
-            if self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio):
-                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
-                                volume=state.position.volume)
-            elif self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio):
+            if self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio, direction):
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_TAKE_PROFIT,
                                 volume=state.position.volume)
-            elif macd_val < 0 or kdj_val > 80:
-                reason = f"MACD={macd_val:.2f}" if macd_val < 0 else f"KDJ={kdj_val:.1f}"
-                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=reason,
+            elif self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio, direction):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
+                                volume=state.position.volume)
+            elif self._check_atr_stop_loss(
+                state.position.entry_price, ctx.bar.close, cur_atr,
+                config.atr_stop_loss_multiplier, TRADE_DIRECTION_LONG
+            ):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_STOP_LOSS,
+                                volume=state.position.volume)
+            elif self._check_atr_take_profit(
+                state.position.entry_price, ctx.bar.close, cur_atr,
+                config.atr_take_profit_multiplier, TRADE_DIRECTION_LONG
+            ):
+                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason=SIGNAL_TAKE_PROFIT,
                                 volume=state.position.volume)
 
         # ── 持有空头 ──
         elif direction == TRADE_DIRECTION_SHORT:
-            if self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio):
-                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_STOP_LOSS,
-                                volume=state.position.volume)
-            elif self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio):
+            if self._check_take_profit(state.position.entry_price, ctx.bar.close, config.take_profit_ratio, direction):
                 signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_TAKE_PROFIT,
                                 volume=state.position.volume)
-            elif macd_val > 0 or kdj_val < 20:
-                reason = f"MACD={macd_val:.2f}" if macd_val > 0 else f"KDJ={kdj_val:.1f}"
-                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=reason,
+            elif self._check_stop_loss(state.position.entry_price, ctx.bar.close, config.stop_loss_ratio, direction):
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_STOP_LOSS,
+                                volume=state.position.volume)
+            elif self._check_atr_stop_loss(
+                state.position.entry_price, ctx.bar.close, cur_atr,
+                config.atr_stop_loss_multiplier, TRADE_DIRECTION_SHORT
+            ):
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_STOP_LOSS,
+                                volume=state.position.volume)
+            elif self._check_atr_take_profit(
+                state.position.entry_price, ctx.bar.close, cur_atr,
+                config.atr_take_profit_multiplier, TRADE_DIRECTION_SHORT
+            ):
+                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason=SIGNAL_TAKE_PROFIT,
                                 volume=state.position.volume)
 
         # ── 空仓：做多或做空入场 ──
         else:
             vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
                                            state.contract_size)
-            if long_bias and macd_val > 0 and kdj_val < 50:
+            if long_bias and macd_val > 0 and kdj_val < 60:
                 signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
-            elif short_bias and macd_val < 0 and kdj_val > 50:
+            elif short_bias and macd_val < 0 and kdj_val > 40:
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
         return signal
@@ -265,27 +298,91 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
     @staticmethod
     def _check_stop_loss(entry_price: float, current_price: float,
-                         stop_loss_ratio: float) -> bool:
+                         stop_loss_ratio: float, direction: str) -> bool:
         """检查止损是否触发
 
         :param entry_price: 入场价格
         :param current_price: 当前价格
         :param stop_loss_ratio: 止损比例
+        :param direction: 持仓方向（long/short）
         :return: 是否触发止损
         """
-        return stop_loss_triggered(entry_price, current_price, stop_loss_ratio)
+        return stop_loss_triggered(entry_price, current_price, stop_loss_ratio, direction)
+
+    @staticmethod
+    def _check_atr_stop_loss(
+        entry_price: float,
+        current_price: float,
+        atr_value: float | None,
+        atr_multiplier: float,
+        direction: str
+    ) -> bool:
+        """检查 ATR 止损是否触发
+
+        :param entry_price: 入场价格
+        :param current_price: 当前价格
+        :param atr_value: ATR 值
+        :param atr_multiplier: ATR 止损倍数
+        :param direction: 持仓方向（long/short）
+        :return: 是否触发止损
+        """
+        if atr_value is None or atr_value <= 0:
+            return False
+
+        max_loss = atr_value * atr_multiplier
+
+        if direction == TRADE_DIRECTION_LONG:
+            # 多头：当前价格低于入场价 - max_loss
+            return current_price < (entry_price - max_loss)
+        elif direction == TRADE_DIRECTION_SHORT:
+            # 空头：当前价格高于入场价 + max_loss
+            return current_price > (entry_price + max_loss)
+        
+        return False
+
+    @staticmethod
+    def _check_atr_take_profit(
+        entry_price: float,
+        current_price: float,
+        atr_value: float | None,
+        atr_multiplier: float,
+        direction: str
+    ) -> bool:
+        """检查 ATR 止盈是否触发
+
+        :param entry_price: 入场价格
+        :param current_price: 当前价格
+        :param atr_value: ATR 值
+        :param atr_multiplier: ATR 止盈倍数
+        :param direction: 持仓方向（long/short）
+        :return: 是否触发止盈
+        """
+        if atr_value is None or atr_value <= 0:
+            return False
+
+        target_profit = atr_value * atr_multiplier
+
+        if direction == TRADE_DIRECTION_LONG:
+            # 多头：当前价格高于入场价 + target_profit
+            return current_price > (entry_price + target_profit)
+        elif direction == TRADE_DIRECTION_SHORT:
+            # 空头：当前价格低于入场价 - target_profit
+            return current_price < (entry_price - target_profit)
+        
+        return False
 
     @staticmethod
     def _check_take_profit(entry_price: float, current_price: float,
-                           take_profit_ratio: float) -> bool:
+                           take_profit_ratio: float, direction: str) -> bool:
         """检查止盈是否触发
 
         :param entry_price: 入场价格
         :param current_price: 当前价格
         :param take_profit_ratio: 止盈比例
+        :param direction: 持仓方向（long/short）
         :return: 是否触发止盈
         """
-        return take_profit_triggered(entry_price, current_price, take_profit_ratio)
+        return take_profit_triggered(entry_price, current_price, take_profit_ratio, direction)
 
     @staticmethod
     def _calc_position_size(price: float, capital: float, position_ratio: float,
