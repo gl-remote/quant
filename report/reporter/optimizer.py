@@ -175,7 +175,7 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
     if not param_names:
         return None
 
-    values_list = [t.values for t in ct]
+    values_list = [t.value for t in ct]
     params_list = [t.params for t in ct]
 
     dims: list[dict] = []
