@@ -103,21 +103,27 @@ class DailyReturnSchema(pa.DataFrameModel):
 
 
 class TradeRecordSchema(pa.DataFrameModel):
-    """回测交易记录验证Schema
+    """回测交易记录验证Schema（字段与 ORM BacktestTrade 完全对齐）
 
-    验证从 vnpy 引擎提取并写入 backtest_trades 表的交易记录。
+    验证写入 backtest_trades 表的交易记录数据。
     字段说明：
-        datetime: 成交时间
-        direction: 方向 (long/short)
-        offset: 开平标志 (open/close/closetoday)
-        open_price: 开仓价
-        close_price: 成交价
-        volume: 成交量
-        quantity: 数量
-        pnl: 单笔盈亏
+        datetime:   成交时间
+        symbol:     品种代码 (如 DCE.m2505)
+        direction:  方向 (long/short)
+        offset:     开平标志 (open/close/closetoday)
+        open_price: 开仓价 / 成交价
+        close_price: 平仓价 / 成交价
+        quantity:   成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
+        pnl:        单笔盈亏
         commission: 手续费
+
+    统一规则(2026-06-04):
+    - 各引擎层（vnpy/TqSdk）产出时必须使用本 Schema 定义的字段名
+    - store 层不再做字段名兼容转换（fallback）
+    - vnpy TradeData.volume → 映射为 quantity
     """
     datetime: Series[pd.Timestamp] = pa.Field()
+    symbol: Series[str] = pa.Field()
     direction: Series[str] = pa.Field(isin=['long', 'short'])
     offset: Series[str] = pa.Field(isin=['open', 'close', 'closetoday'])
     open_price: Series[float] = pa.Field(ge=0.0)

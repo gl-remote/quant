@@ -342,22 +342,28 @@ class DataStore:
         return bt.id  # type: ignore[no-any-return]
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
-        """批量插入交易明细"""
+        """批量插入交易明细
+
+        输入 trades 字段名必须与 ORM BacktestTrade 对齐:
+            datetime, symbol, direction, offset,
+            open_price, close_price, quantity, pnl, commission
+        各引擎层（vnpy / TqSdk）应在产出时完成字段映射，此处不再做兼容转换。
+        """
         now = datetime.now()
-        rows = []
+        rows: list[dict[str, object]] = []
 
         for trade in trades:
             rows.append({
                 'backtest_id': backtest_id,
-                'symbol': str(trade.get('symbol', '')),
-                'datetime': trade.get('datetime', ''),
-                'direction': str(trade.get('direction', '')).lower(),
+                'symbol': str(trade['symbol']),
+                'datetime': trade['datetime'],
+                'direction': str(trade['direction']).lower(),
                 'offset': str(trade.get('offset', 'open')).lower(),
-                'open_price': float(trade.get('open_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
-                'close_price': float(trade.get('close_price', trade.get('price', 0.0))),  # type: ignore[arg-type]
-                'quantity': float(trade.get('quantity', trade.get('volume', 0))),  # type: ignore[arg-type]
-                'pnl': float(trade.get('pnl', 0.0)),  # type: ignore[arg-type]
-                'commission': float(trade.get('commission', 0.0)),  # type: ignore[arg-type]
+                'open_price': float(trade['open_price']),
+                'close_price': float(trade['close_price']),
+                'quantity': float(trade['quantity']),
+                'pnl': float(trade.get('pnl', 0.0)),
+                'commission': float(trade.get('commission', 0.0)),
                 'created_at': now,
             })
 

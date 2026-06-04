@@ -233,12 +233,18 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         if fills:
             trade_dicts = []
             for f in fills:
+                # TqSdk 字段 → ORM 标准字段映射
+                direction = 'long' if f.action == TRADE_ACTION_BUY else 'short'
                 trade_dicts.append({
                     'datetime': f.timestamp,
-                    'action': f.action,
-                    'price': f.price,
-                    'volume': f.volume,
-                    'reason': f.reason,
+                    'symbol': f.symbol,
+                    'direction': direction,
+                    'offset': 'open',  # TqSdk 不区分开平，统一记为 open
+                    'open_price': f.price,
+                    'close_price': f.price,
+                    'quantity': f.volume,
+                    'pnl': 0.0,
+                    'commission': 0.0,
                 })
             dm.insert_backtest_trades(bt_id, trade_dicts)
 

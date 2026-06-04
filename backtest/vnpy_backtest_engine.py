@@ -488,37 +488,44 @@ class VnpyBacktestEngine:
                         trades_list = trades_obj
                 
                 """
-                将 vnpy TradeData 对象转换为可序列化的标准字典
-                
+                将 vnpy TradeData 对象转换为标准字典（字段名与 ORM BacktestTrade 对齐）
+
+                字段映射（vnpy TradeData → 标准字段）:
+                    datetime   → datetime
+                    direction  → direction (枚举值转字符串)
+                    offset     → offset    (枚举值转字符串)
+                    price      → open_price, close_price
+                    volume     → quantity
+                    trade_pnl  → pnl
+                    commission → commission
+                    (symbol 由外层注入)
+
                 调试沉淀(2026-06-04):
                 - direction 和 offset 是枚举类型，需调用 .value 获取字符串值
                 - 避免直接访问 trade 对象属性，使用 getattr() 以防字段缺失
-                - 填充字段 open_price/close_price 是为了兼容旧数据结构，实际在单笔成交中是相同的
+                - open_price/close_price 在单笔成交中取同一值 price，完整交易的开平仓价由策略层组装
                 """
                 formatted_trades = []
                 for trade in trades_list:
-                    trade_dict = {}
-                    # 提取标准字段，增加容错性
                     dt = getattr(trade, 'datetime', None)
                     direction_val = getattr(trade, 'direction', None)
                     offset_val = getattr(trade, 'offset', None)
                     price_val = getattr(trade, 'price', 0.0)
-                    volume_val = getattr(trade, 'volume', 0.0)
+                    quantity_val = getattr(trade, 'volume', 0.0)
                     trade_pnl_val = getattr(trade, 'trade_pnl', 0.0)
                     commission_val = getattr(trade, 'commission', 0.0)
-                    
-                    # 处理枚举值，兼容字符串和枚举对象两种情况
+
                     direction = direction_val.value if hasattr(direction_val, 'value') else str(direction_val)
                     offset = offset_val.value if hasattr(offset_val, 'value') else str(offset_val)
-                    
+
                     trade_dict = {
                         'datetime': dt,
+                        'symbol': symbol,
                         'direction': direction,
                         'offset': offset,
                         'open_price': price_val,
                         'close_price': price_val,
-                        'volume': volume_val,
-                        'quantity': volume_val,
+                        'quantity': quantity_val,
                         'pnl': trade_pnl_val,
                         'commission': commission_val,
                     }

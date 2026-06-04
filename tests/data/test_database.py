@@ -391,6 +391,7 @@ class TestTradeRecordSchema:
     def test_valid_trades_pass(self):
         df = pd.DataFrame({
             'datetime': pd.to_datetime(['2024-01-15 10:00:00', '2024-01-20 14:30:00']),
+            'symbol': ['DCE.m2505', 'SHFE.rb2505'],
             'direction': ['long', 'short'],
             'offset': ['open', 'close'],
             'open_price': [3500.0, 3520.0],
@@ -405,6 +406,7 @@ class TestTradeRecordSchema:
     def test_invalid_direction_fails(self):
         df = pd.DataFrame({
             'datetime': pd.to_datetime(['2024-01-15 10:00:00']),
+            'symbol': ['DCE.m2505'],
             'direction': ['invalid_direction'],
             'offset': ['open'],
             'open_price': [3500.0],
@@ -419,6 +421,7 @@ class TestTradeRecordSchema:
     def test_negative_price_fails(self):
         df = pd.DataFrame({
             'datetime': pd.to_datetime(['2024-01-15 10:00:00']),
+            'symbol': ['DCE.m2505'],
             'direction': ['long'],
             'offset': ['open'],
             'open_price': [-100.0],
