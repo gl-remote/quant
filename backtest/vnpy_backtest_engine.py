@@ -117,6 +117,14 @@ class VnpyBacktestEngine:
         Returns:
             BacktestResult 对象
         """
+        """
+        创建结构化回测结果对象
+        
+        调试沉淀(2026-06-04):
+        - vn.py 回测引擎返回的 statistics 字典中，总交易数的键为 total_trade_count 而非 total_trades
+        - 旧代码从 profit_days/loss_days 读取会导致错误的交易统计
+        - win_trades/loss_trades 等字段在默认统计输出中可能缺失
+        """
         return BacktestResult(
             symbol=symbol,
             backtest_id=backtest_id,
@@ -129,6 +137,7 @@ class VnpyBacktestEngine:
             start_date=data_start,
             end_date=data_end,
             total_days=total_days,
+            # 调试记录(2026-06-04): vn.py statistics 中总交易数字段是 total_trade_count 而非 total_trades
             total_trades=stats.get('total_trade_count', stats.get('total_trades', 0)) or 0,
             total_return=stats.get('total_return', 0.0) or 0.0,
             end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
@@ -453,21 +462,46 @@ class VnpyBacktestEngine:
                 daily_results = engine.calculate_result()
                 statistics = engine.calculate_statistics()
                 
-                # 从 vnpy 引擎中提取交易记录
+                """
+                从 vnpy 回测引擎中提取交易记录并格式化
+                
+                调试沉淀(2026-06-04):
+                - vn.py BacktestingEngine.trades 是一个字典，而非列表！
+                - 字典键格式: 'BACKTESTING.1', 'BACKTESTING.2'... 等序号字符串
+                - 值类型: vnpy.trader.object.TradeData 对象
+                - 旧代码直接遍历字典导致只拿到键字符串，报 'str' object has no attribute 'datetime' 错误
+                - 需要用 dict.values() 获取 TradeData 对象列表
+                
+                TradeData 对象关键字段:
+                - datetime: 交易时间
+                - direction: Direction 枚举 (LONG/SHORT)
+                - offset: Offset 枚举 (OPEN/CLOSETODAY/CLOSE)
+                - price: 成交价格
+                - volume: 成交量
+                - trade_pnl: 单笔交易盈亏
+                - commission: 手续费
+                """
                 trades_list = []
                 if hasattr(engine, 'trades'):
                     trades_obj = engine.trades
-                    # 检查是字典还是列表
+                    # 调试记录: engine.trades 是 dict（键为序号字符串）或 list
                     if isinstance(trades_obj, dict):
                         trades_list = list(trades_obj.values())
                     elif isinstance(trades_obj, list):
                         trades_list = trades_obj
                 
-                # 转换 TradeData 对象到字典
+                """
+                将 vnpy TradeData 对象转换为可序列化的标准字典
+                
+                调试沉淀(2026-06-04):
+                - direction 和 offset 是枚举类型，需调用 .value 获取字符串值
+                - 避免直接访问 trade 对象属性，使用 getattr() 以防字段缺失
+                - 填充字段 open_price/close_price 是为了兼容旧数据结构，实际在单笔成交中是相同的
+                """
                 formatted_trades = []
                 for trade in trades_list:
                     trade_dict = {}
-                    # 提取标准字段
+                    # 提取标准字段，增加容错性
                     dt = getattr(trade, 'datetime', None)
                     direction_val = getattr(trade, 'direction', None)
                     offset_val = getattr(trade, 'offset', None)
@@ -476,7 +510,7 @@ class VnpyBacktestEngine:
                     trade_pnl_val = getattr(trade, 'trade_pnl', 0.0)
                     commission_val = getattr(trade, 'commission', 0.0)
                     
-                    # 处理枚举值
+                    # 处理枚举值，兼容字符串和枚举对象两种情况
                     direction = direction_val.value if hasattr(direction_val, 'value') else str(direction_val)
                     offset = offset_val.value if hasattr(offset_val, 'value') else str(offset_val)
                     

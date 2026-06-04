@@ -541,16 +541,20 @@ def _persist_search_results(
             # 保存交易明细 + 每日资金曲线
             daily = er.daily_results
             if daily:
-                trades = []
-                for d in daily:
-                    if 'trades' in d:
-                        trades.extend(
-                            vars(t) if hasattr(t, '__dataclass_fields__') else t
-                            for t in d.get('trades', [])
-                        )
-                if trades:
-                    dm.insert_backtest_trades(bt_id, trades)
                 dm.insert_backtest_daily(bt_id, daily)
+            
+            """
+            保存交易记录（fills）
+            
+            调试沉淀(2026-06-04):
+            - BacktestResult.fills 字段包含 vnpy 回测引擎提取并转换后的标准化交易记录
+            - dm.insert_backtest_trades 函数会将这些记录存储到 backtest_trades 表
+            - 每条记录包含: datetime, direction, offset, open_price, close_price, volume, pnl, commission 等
+            - 该字段必须在 vnpy_backtest_engine.py 的 _create_backtest_result 中正确传递
+            """
+            # 保存交易记录
+            if er.fills:
+                dm.insert_backtest_trades(bt_id, er.fills)
 
     # 输出摘要
     print(f"\n============ {search_type.upper()} 优化结果 ============")
