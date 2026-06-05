@@ -100,7 +100,7 @@ class OptunaOptimizer:
     注意：本优化器强制单线程执行，因为底层 vnpy BacktestingEngine 
     非线程安全，SQLite 也不支持多线程并发写入。
 
-    目标函数：最大化夏普比率平均值（取各品种夏普的均值）
+    目标函数：最大化 Calmar 比率平均值（年化收益/最大回撤，取各品种均值）
     """
 
     def __init__(
@@ -181,11 +181,13 @@ class OptunaOptimizer:
             pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
             engine_results = self._engine.run(pairs)
 
-            sharpes = [
-                r.sharpe_ratio or 0
-                for r in engine_results if r.success
+            # Calmar 比率均值：年化收益 / 最大回撤（风险调整后收益）
+            calmars = [
+                (r.annual_return or 0) / abs(r.max_drawdown or 0.001)
+                for r in engine_results
+                if r.success and (r.max_drawdown or 0) != 0
             ]
-            score = float(sum(sharpes) / len(sharpes)) if sharpes else -999.0
+            score = float(sum(calmars) / len(calmars)) if calmars else -999.0
 
             trial_index.append({
                 'search_params': params,
