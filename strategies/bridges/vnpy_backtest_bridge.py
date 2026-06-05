@@ -235,8 +235,8 @@ class VnpyBacktestBridge(CtaTemplate):
             logger.warning("[{}] ExportMetadata 缺失，全量重算", self.strategy_name)
             return feed, True
 
-        cache_start = str(main_pd._df.index[0].date())  # pyright: ignore[reportPrivateUsage]
-        cache_end = str(main_pd._df.index[-1].date())  # pyright: ignore[reportPrivateUsage]
+        cache_start = str(pd.DatetimeIndex(main_pd._df.index)[0].date())  # pyright: ignore[reportAttributeAccessIssue,reportPrivateUsage]
+        cache_end = str(pd.DatetimeIndex(main_pd._df.index)[-1].date())  # pyright: ignore[reportAttributeAccessIssue,reportPrivateUsage]
         if meta['min_dt'] != cache_start or meta['max_dt'] != cache_end:
             logger.debug("[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
                         self.strategy_name, meta['min_dt'], meta['max_dt'],
@@ -340,7 +340,7 @@ class VnpyBacktestBridge(CtaTemplate):
             row = main_df.iloc[idx]
             bar = Bar(
                 symbol=self._state.symbol,
-                datetime=cast(datetime, ts.to_pydatetime()),
+                datetime=ts.to_pydatetime(),
                 open=float(row['open']),
                 high=float(row['high']),
                 low=float(row['low']),

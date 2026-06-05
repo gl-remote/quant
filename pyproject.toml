@@ -84,7 +84,7 @@ disable = [
 ]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.12"
 ignore_missing_imports = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -95,7 +95,7 @@ warn_unused_configs = true
 
 [tool.pyright]
 typeCheckingMode = "strict"
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 # 第三方库无类型存根产生大量噪音，关闭相关检查
 reportUnknownMemberType = false
 reportUnknownVariableType = false
