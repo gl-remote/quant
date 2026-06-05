@@ -14,11 +14,12 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from strategies import (
-    Bar, Event, BigTradeEvent, DataFeedCache, DataFeed,
+    Bar, Event, BigTradeEvent, DataFeed,
     PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
     build_context,
     MaStrategyCore,
 )
+from strategies.runtime.cache import get_cached_feed, set_cached_feed, clear_cache
 from strategies.ma_strategy import MACrossParams
 from common.constants import (
     TRADE_ACTION_BUY,
@@ -146,18 +147,27 @@ def test_data_feed_basic():
 
 
 def test_data_feed_cache():
-    """测试 DataFeedCache 单例"""
-    print("=== 测试 DataFeedCache 单例 ===\n")
+    """测试全局 DataFeed 内存缓存"""
+    print("=== 测试 DataFeed 内存缓存 ===\n")
 
-    cache1 = DataFeedCache.get_instance()
-    cache2 = DataFeedCache.get_instance()
+    feed = DataFeed("TEST2")
 
-    print(f"cache1 与 cache2 是否相同: {cache1 is cache2}")
+    clear_cache()
+    # 未命中
+    f1 = get_cached_feed("TEST2", "2024-01-01", "2024-12-31")
+    print(f"空缓存读取: {f1 is None}")
 
-    # 获取或创建 DataFeed
-    feed = cache1.get_or_create("TEST2")
-    print(f"DataFeed symbol: {feed.symbol}")
-    print()
+    # set + get 命中
+    set_cached_feed("TEST2", feed, "2024-01-01", "2024-12-31")
+    f2 = get_cached_feed("TEST2", "2024-01-01", "2024-12-31")
+    print(f"缓存命中: {f2 is feed}")
+
+    # 日期不匹配 → 失效
+    f3 = get_cached_feed("TEST2", "2024-01-01", "2025-06-01")
+    print(f"日期不匹配失效: {f3 is None}")
+
+    clear_cache()
+    print("缓存已清空\n")
 
 
 def test_build_context():

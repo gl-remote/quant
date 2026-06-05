@@ -21,6 +21,7 @@
 
 from loguru import logger
 from datetime import datetime
+import json
 import os
 from typing import Any, Optional, cast
 
@@ -30,6 +31,7 @@ from vnpy_ctastrategy import CtaTemplate
 from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy, State
 from strategies.core.types import StrategyPosition
 from strategies.runtime import DataFeed, DataRequirements
+from strategies.runtime.cache import get_cached_feed, set_cached_feed
 from strategies.runtime.requirements import BarContext
 from strategies.runtime.period import PeriodDataView
 from common.constants import (TRADE_ACTION_BUY, TRADE_ACTION_SELL,
@@ -168,14 +170,25 @@ class VnpyBacktestBridge(CtaTemplate):
         """统一入口：加载 → 校验 → 差量合并 → 增量计算
 
         只做缺失的工作：
+        - 内存缓存命中 → 零 I/O 返回
         - feeds 不存在 → 全量加载 + 全量计算
         - 数据过期 → 重加载数据 + 重算指标
         - 加周期/加指标 → 只加载新周期 + 只算新指标
-        - 完全命中 → 零开销返回
+        - 完全命中磁盘缓存 → 零开销返回
         """
         assert self._requirements is not None  # on_init 已判空
 
         feeds_dir = f"output/feeds/{self._state.symbol}"
+        main_period = self._state.period
+
+        # 0. 查源数据新鲜度，尝试内存缓存（零 I/O 路径）
+        dm = DataManager()
+        meta = dm.store.get_metadata(self._state.symbol, interval=main_period)
+        if meta and meta.get('min_dt') and meta.get('max_dt'):
+            cached = get_cached_feed(self._state.symbol, meta['min_dt'], meta['max_dt'])
+            if cached is not None:
+                logger.debug("[{}] 内存缓存命中，跳过 parquet I/O", self.strategy_name)
+                return cached
 
         # 1. 加载已有 feeds 或创建空 DataFeed，同时检查数据是否过期
         feed, data_stale = self._assess_feed(feeds_dir)
@@ -188,6 +201,7 @@ class VnpyBacktestBridge(CtaTemplate):
             feed.calculate_all()
             self._log_data_feed_summary("指标计算完成（计算后）")
             feed.to_feeds(feeds_dir)
+            self._cache_feed(feed, meta, feeds_dir)
             return feed
 
         # 3. 数据不过期 → 增量合并缺失的周期和指标
@@ -203,7 +217,34 @@ class VnpyBacktestBridge(CtaTemplate):
             self._log_data_feed_summary("feeds 命中，跳过计算")
             logger.debug("[{}] feeds 命中，跳过指标计算", self.strategy_name)
 
+        self._cache_feed(feed, meta, feeds_dir)
         return feed
+
+    def _cache_feed(self, feed: DataFeed, meta: Any, feeds_dir: str) -> None:
+        """将 DataFeed 写入内存缓存
+
+        :param feed: DataFeed 实例
+        :param meta: ExportMetadata 返回结果（含 min_dt/max_dt），None 时尝试从 parquet 恢复
+        """
+        if meta and meta.get('min_dt') and meta.get('max_dt'):
+            set_cached_feed(feed.symbol, feed, meta['min_dt'], meta['max_dt'])
+            return
+        # 无 meta 时尝试从 parquet _meta.json 中恢复时间范围
+        meta_path = os.path.join(feeds_dir, "_meta.json")
+        if os.path.isfile(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    pm = json.load(f)
+                periods = pm.get("periods", [])
+                if periods:
+                    first_pd = feed.get_period(periods[0])
+                    if first_pd is not None and first_pd.length > 0:
+                        idx = first_pd._df.index  # pyright: ignore[reportPrivateUsage]
+                        min_dt = str(idx[0].date())
+                        max_dt = str(idx[-1].date())
+                        set_cached_feed(feed.symbol, feed, min_dt, max_dt)
+            except Exception:
+                pass
 
     def _assess_feed(self, feeds_dir: str) -> tuple[DataFeed, bool]:
         """加载 feeds 并判断数据是否过期

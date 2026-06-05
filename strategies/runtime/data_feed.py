@@ -2,7 +2,7 @@
 
 【架构设计】
 - DataFeed: 管理单个品种的多周期数据，负责调度计算和事件管理
-- DataFeedCache: 单例模式，管理多个品种的DataFeed
+- 内存缓存: 模块级 cache 按 symbol 缓存 DataFeed，减少回测中重复 parquet I/O
 
 【并发安全】
 - 基于条件变量的Append-Only快照机制

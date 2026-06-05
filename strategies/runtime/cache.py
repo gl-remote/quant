@@ -1,70 +1,65 @@
-"""DataFeed 全局单例缓存
+"""DataFeed 内存缓存
 
-管理多个品种的 DataFeed 实例，提供统一的路由入口。
+避免同进程内多条回测重复做 parquet 反序列化和指标计算。
+缓存键 = symbol + 源数据日期范围，日期不匹配时自动失效。
 
-注意：当前 vnpy bridge 每条回测直接创建 DataFeed 实例，此缓存暂未使用。
-保留类定义以便未来 TqSdk 实盘或多品种场景复用。
+使用方式:
+    from .cache import get_cached_feed, set_cached_feed
+
+    meta = store.get_metadata(symbol, interval=main_period)
+    if meta:
+        feed = get_cached_feed(symbol, meta['min_dt'], meta['max_dt'])
+        if feed is not None:
+            return feed  # 跳过 parquet I/O
+
+    feed = DataFeed.from_feeds(feeds_dir)
+    set_cached_feed(symbol, feed, meta['min_dt'], meta['max_dt'])
 """
 
-from datetime import datetime as dt
-from typing import Dict, List, Optional, Union
-
-import pandas as pd
+from typing import Dict, Optional, Tuple
 
 from .data_feed import DataFeed
-from .events import Event
-from .period import PeriodDataView
-from .requirements import DataRequirements
-from ..core.types import Bar
 
 
-class DataFeedCache:
-    """数据馈送缓存（单例模式）
+# 模块级缓存: symbol -> (DataFeed, min_dt, max_dt)
+_cache: Dict[str, Tuple[DataFeed, str, str]] = {}
 
-    - 单例模式，全局唯一入口
-    - 管理多个 DataFeed 实例
-    - 一个 symbol 对应一个 DataFeed
-    - 只做路由，实际数据操作委托给 DataFeed
+
+def get_cached_feed(symbol: str, min_dt: str, max_dt: str) -> Optional[DataFeed]:
+    """从内存缓存获取 DataFeed
+
+    只有 symbol 和源数据日期范围完全匹配时才命中。
+    日期不匹配时自动清除失效条目，避免返回过期数据。
+
+    :param symbol: 品种标识
+    :param min_dt: 源数据最早日期 (yyyy-mm-dd)
+    :param max_dt: 源数据最晚日期 (yyyy-mm-dd)
+    :return: 缓存的 DataFeed 实例，未命中返回 None
     """
+    entry = _cache.get(symbol)
+    if entry is None:
+        return None
+    feed, cached_min, cached_max = entry
+    if cached_min == min_dt and cached_max == max_dt:
+        return feed
+    # 数据范围变了，缓存失效
+    del _cache[symbol]
+    return None
 
-    _instance: Optional['DataFeedCache'] = None
 
-    def __init__(self) -> None:
-        self._datafeeds: Dict[str, DataFeed] = {}
+def set_cached_feed(symbol: str, feed: DataFeed, min_dt: str, max_dt: str) -> None:
+    """将 DataFeed 存入内存缓存
 
-    @classmethod
-    def get_instance(cls) -> 'DataFeedCache':
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
+    后续同 symbol 的回测可直接命中，跳过 parquet 反序列化。
 
-    @classmethod
-    def set_instance(cls, instance: Optional['DataFeedCache']) -> None:
-        cls._instance = instance
+    :param symbol: 品种标识
+    :param feed: DataFeed 实例
+    :param min_dt: 源数据最早日期 (yyyy-mm-dd)
+    :param max_dt: 源数据最晚日期 (yyyy-mm-dd)
+    """
+    _cache[symbol] = (feed, min_dt, max_dt)
 
-    def get_or_create(self, symbol: str, source: Optional[str] = None) -> DataFeed:
-        if symbol not in self._datafeeds:
-            self._datafeeds[symbol] = DataFeed(symbol, source)
-        return self._datafeeds[symbol]
 
-    def update_bar(self, symbol: str, bar: Bar, period_name: str,
-                   events: Optional[List[Event]] = None) -> None:
-        datafeed = self.get_or_create(symbol)
-        datafeed.update_bar(bar, period_name, events)
-
-    def get_data(self, symbol: str, period_name: str,
-                 current_time: Union[pd.Timestamp, dt],
-                 lookback_bars: int = 1,
-                 timeout: Optional[float] = None) -> Optional[PeriodDataView]:
-        datafeed = self.get_or_create(symbol)
-        return datafeed.get_data(period_name, current_time, lookback_bars, timeout)
-
-    def setup(self, symbol: str, requirements: DataRequirements) -> DataFeed:
-        datafeed = self.get_or_create(symbol)
-        for period_name in requirements.periods:
-            datafeed.register_period(period_name)
-        for period_name, indicators in requirements.indicators.items():
-            for indicator in indicators:
-                datafeed.register_indicator(
-                    period_name, indicator.name, **indicator.params)
-        return datafeed
+def clear_cache() -> None:
+    """清空所有缓存"""
+    _cache.clear()
