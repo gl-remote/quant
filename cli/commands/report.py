@@ -72,21 +72,23 @@ def _cmd_build(run_id: int | None = None) -> None:
         run_id: 指定重建某个 run（None 则重建所有）
     """
     from report import build_all
-    from pathlib import Path
 
     if run_id is not None:
         # 重建指定 run
         print(f"重建运行 r{run_id} 的可视化报告...")
         build_all(output_dir="output", run_id=run_id, incremental=False)
     else:
-        # 重建所有 run
+        # 重建所有 run（从数据库查询，不依赖 output 目录）
         print("重建所有运行的可视化报告...")
-        runs = sorted(Path("output").glob("r*"))
+        cm = ConfigManager()
+        dm = DataManager(cm)
+        runs = dm.get_all_runs()
+        dm.close()
         if not runs:
             print("没有找到运行记录")
             return
-        for run_dir in runs:
-            rid = int(run_dir.name[1:])  # "r1" → 1
+        for r in runs:
+            rid = r['id']
             print(f"  → 重建 r{rid}...")
             build_all(output_dir="output", run_id=rid, incremental=False)
     print("完成。")
