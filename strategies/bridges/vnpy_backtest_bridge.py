@@ -421,6 +421,45 @@ class VnpyBacktestBridge(CtaTemplate):
 
     # ── vnpy 行情回调 ──────────────────────────────────────
 
+    def _update_peak_prices(self, bar: Bar) -> None:
+        """更新持仓期间的 peak 价格，在调用 strategy.on_bar 前执行"""
+        pos = self._state.position
+        if not pos.direction:
+            return
+        if pos.direction == TRADE_DIRECTION_LONG:
+            if bar.high > pos.highest_price:
+                pos.highest_price = bar.high
+            if pos.lowest_price == 0.0 or bar.low < pos.lowest_price:
+                pos.lowest_price = bar.low
+        elif pos.direction == TRADE_DIRECTION_SHORT:
+            if pos.highest_price == 0.0 or bar.high > pos.highest_price:
+                pos.highest_price = bar.high
+            if bar.low < pos.lowest_price:
+                pos.lowest_price = bar.low
+
+    def _log_bar_diagnostics(self, bar_time: pd.Timestamp, signal: Signal, close_price: float) -> None:
+        """统一诊断日志 — 有信号逐条打，无信号百条采样
+
+        :param bar_time: K线时间
+        :param signal: 策略信号（含 diagnostics）
+        :param close_price: 当前收盘价
+        """
+        if not hasattr(self, '_bar_log_count'):
+            self._bar_log_count = 0
+        self._bar_log_count += 1
+
+        if signal.action:
+            diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+            logger.debug("[{}] {} signal={} reason={} vol={} | {}",
+                        self.strategy_name, bar_time, signal.action,
+                        signal.reason, signal.volume, diag_str)
+        elif self._bar_log_count % 100 == 1:
+            if signal.diagnostics:
+                diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+            else:
+                diag_str = f"close={close_price:.4f}"
+            logger.debug("[{}] {} no signal | {}", self.strategy_name, bar_time, diag_str)
+
     def on_bar(self, bar: Any) -> None:
         """vnpy K线回调 — 从预构造缓存中 O(1) 获取上下文
 
@@ -432,8 +471,14 @@ class VnpyBacktestBridge(CtaTemplate):
             return
         bar_time = cast(pd.Timestamp, pd.Timestamp(raw_dt))
 
+        close_price = float(getattr(bar, 'close_price', 0))
+
         ctx = self._ctx_cache.get(bar_time)
         if ctx is not None:
+            # 1. 调用 strategy 前更新 peak 价格
+            self._update_peak_prices(ctx.bar)
+
+            # 2. 调用 strategy
             signal = self._core.on_bar(self._state, ctx)
         else:
             if len(self._ctx_cache) == 0 and not getattr(self, '_warned_empty_cache', False):
@@ -441,28 +486,22 @@ class VnpyBacktestBridge(CtaTemplate):
                 self._warned_empty_cache = True
             signal = Signal()
 
-        close_price = float(getattr(bar, 'close_price', 0))
+        # 3. 统一诊断日志
+        self._log_bar_diagnostics(bar_time, signal, close_price)
 
+        # 4. 执行信号
         if signal.action:
             matched = False
             if signal.action == TRADE_ACTION_BUY and self.pos == 0:
-                logger.debug("[{}] {} signal=buy reason={} vol={} pos=0 → 执行买入开多",
-                            self.strategy_name, bar_time, signal.reason, signal.volume)
                 self._execute_trade(signal, close_price, bar_time, is_buy=True)
                 matched = True
             elif signal.action == TRADE_ACTION_SELL and self.pos > 0:
-                logger.debug("[{}] {} signal=sell reason={} vol={} pos={} → 执行平多",
-                            self.strategy_name, bar_time, signal.reason, signal.volume, self.pos)
                 self._execute_trade(signal, close_price, bar_time, is_buy=False)
                 matched = True
             elif signal.action == TRADE_ACTION_SELL and self.pos == 0:
-                logger.debug("[{}] {} signal=sell reason={} vol={} pos=0 → 执行卖出开空",
-                            self.strategy_name, bar_time, signal.reason, signal.volume)
                 self._execute_trade(signal, close_price, bar_time, is_short=True)
                 matched = True
             elif signal.action == TRADE_ACTION_BUY and self.pos < 0:
-                logger.debug("[{}] {} signal=buy reason={} vol={} pos={} → 执行买入平空",
-                            self.strategy_name, bar_time, signal.reason, signal.volume, self.pos)
                 self._execute_trade(signal, close_price, bar_time, is_cover=True)
                 matched = True
             if not matched:
@@ -529,6 +568,8 @@ class VnpyBacktestBridge(CtaTemplate):
                     direction=cast(PositionDirection, TRADE_DIRECTION_LONG),
                     entry_price=trade_price,
                     volume=trade_volume,
+                    highest_price=trade_price,
+                    lowest_price=trade_price,
                 )
             elif not is_long and is_open:
                 # 卖出开空
@@ -544,6 +585,8 @@ class VnpyBacktestBridge(CtaTemplate):
                     direction=cast(PositionDirection, TRADE_DIRECTION_SHORT),
                     entry_price=trade_price,
                     volume=trade_volume,
+                    highest_price=trade_price,
+                    lowest_price=trade_price,
                 )
             else:
                 # 平仓（多平或空平）

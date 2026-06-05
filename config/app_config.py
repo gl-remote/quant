@@ -83,6 +83,11 @@ class StrategyItemConfig(BaseModel):
     atr_period: int = 14
     atr_stop_loss_multiplier: float = 2.0
     atr_take_profit_multiplier: float = 3.0
+    # 回撤止盈参数
+    trailing_activation_atr: float = 1.0
+    """移动止盈激活阈值（ATR 倍数），盈利超过 atr * activation 后启动跟踪，默认 1.0"""
+    trailing_drawdown_ratio: float = 0.25
+    """移动止盈回撤比例，激活后从最高价回落超过此比例触发止盈，默认 0.25 (25%)"""
     # 策略专属的参数搜索空间（同时支持 grid 和 bayesian 模式）
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
 

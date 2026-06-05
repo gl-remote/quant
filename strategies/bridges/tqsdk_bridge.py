@@ -16,7 +16,7 @@ from strategies import Strategy, Bar, Signal, Fill, State
 
 T = TypeVar('T')
 from strategies.runtime import BarContext
-from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
+from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT
 from common.types import PositionDirection
 from common.schemas import KlineDataFrame
 from common.typing import check_types
@@ -65,6 +65,22 @@ class TqsdkStrategyBridge(Generic[T]):
         if api:
             self.account = api.get_account()
 
+    def _update_peak_prices(self, bar: Bar) -> None:
+        """更新持仓期间的 peak 价格，在调用 strategy.on_bar 前执行"""
+        pos = self._state.position
+        if not pos.direction:
+            return
+        if pos.direction == TRADE_DIRECTION_LONG:
+            if bar.high > pos.highest_price:
+                pos.highest_price = bar.high
+            if pos.lowest_price == 0.0 or bar.low < pos.lowest_price:
+                pos.lowest_price = bar.low
+        elif pos.direction == TRADE_DIRECTION_SHORT:
+            if pos.highest_price == 0.0 or bar.high > pos.highest_price:
+                pos.highest_price = bar.high
+            if bar.low < pos.lowest_price:
+                pos.lowest_price = bar.low
+
     @check_types
     def on_bar(self, kline_data: KlineDataFrame, idx: int = -1) -> Signal:
         """处理天勤K线数据指定索引行，返回标准化 Signal
@@ -93,6 +109,9 @@ class TqsdkStrategyBridge(Generic[T]):
         )
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
+        # 调用 strategy 前更新 peak 价格
+        self._update_peak_prices(bar)
+
         return self._strategy.on_bar(self._state, ctx)
 
     def notify_fill(self, signal: Signal, fill_price: float) -> None:
@@ -114,6 +133,8 @@ class TqsdkStrategyBridge(Generic[T]):
                 direction=cast(PositionDirection, TRADE_DIRECTION_LONG),
                 entry_price=fill_price,
                 volume=signal.volume,
+                highest_price=fill_price,
+                lowest_price=fill_price,
             )
         elif signal.action == TRADE_ACTION_SELL:
             self._state.position = StrategyPosition()
@@ -148,12 +169,24 @@ class TqsdkStrategyBridge(Generic[T]):
         """
         target_pos = tqsdk.TargetPosTask(api, symbol)
         prev_kline_len = len(klines)
+        bar_log_count = 0
         while True:
             api.wait_update()
             if api.is_changing(klines):
                 current_len = len(klines)
                 for i in range(prev_kline_len, current_len):
                     signal = self.on_bar(klines, idx=i)
+                    bar_log_count += 1
+                    if signal.action:
+                        diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+                        logger.debug("[{}] signal={} reason={} vol={} | {}",
+                                    self.symbol, signal.action, signal.reason, signal.volume, diag_str)
+                    elif bar_log_count % 100 == 1:
+                        if signal.diagnostics:
+                            diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+                        else:
+                            diag_str = f"close={float(klines.close.iloc[i]):.4f}"
+                        logger.debug("[{}] no signal | {}", self.symbol, diag_str)
                     if signal.action == TRADE_ACTION_BUY:
                         target_pos.set_target_volume(signal.volume)
                         self.notify_fill(signal, float(klines.close.iloc[i]))
