@@ -135,8 +135,8 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         【本策略的需求】
         - 主周期: 1m — MACD + KDJ
-        - 5m: SMA(config.sma_short) — 短期均线（金叉/死叉判断）
-        - 15m: SMA(config.sma_long) + ATR(config.atr_period) — 长期均线 + 波动率指标
+        - 5m: SMA(config.sma_short) + ATR(config.atr_period) — 短期均线 + 波动率指标
+        - 15m: SMA(config.sma_long) — 长期均线
 
         :param config: 策略配置
         :return: 数据需求声明
@@ -144,8 +144,8 @@ class MaStrategyCore(Strategy[MACrossParams]):
         return DataRequirements(
             periods={
                 "1m": PeriodRequirements(lookback_bars=60),
-                "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
+                "5m": PeriodRequirements(lookback_bars=max(config.sma_short, config.atr_period) + 1),
+                "15m": PeriodRequirements(lookback_bars=config.sma_long + 1),
             },
             indicators={
                 "1m": [
@@ -154,10 +154,10 @@ class MaStrategyCore(Strategy[MACrossParams]):
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_short}),
+                    IndicatorRequirements(name="atr", params={"period": config.atr_period}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": config.atr_period}),
                 ],
             },
             events=EventsRequirements.no_events(),
@@ -167,17 +167,17 @@ class MaStrategyCore(Strategy[MACrossParams]):
     def on_bar(self, state: State[MACrossParams], ctx: BarContext) -> Signal:
         """处理一根K线 — 策略决策中枢
 
-        【决策流程（ ai 不要编辑这段注释）】
+        【决策流程】
 
         - 5m SMA(short) 大于 15m SMA(long) 做多
             → 1m macd 大于 0 → 1m kdj 小于 60 → 空仓状态 → 买入开仓  
         - 5m SMA(short) 小于 15m SMA(long) 做空
             → 1m macd 小于 0 → 1m kdj 大于 40 → 空仓状态 → 卖出开仓
         - 出场规则（持仓时，以当前持仓方向为准，按以下顺序检查）
-            - 固定比例止盈 (当前资金+持仓市值） * take_profit_ratio
-            - 固定比例止损 (当前资金+持仓市值） * stop_loss_ratio 
-            - ATR 止损 (15m atr * atr_stop_loss_multiplier)  
-            - ATR 止盈 (15m atr * atr_take_profit_multiplier)
+            - 固定比例止盈 (入场价 * take_profit_ratio)
+            - 固定比例止损 (入场价 * stop_loss_ratio)
+            - ATR 止损 (5m atr * atr_stop_loss_multiplier)  
+            - ATR 止盈 (5m atr * atr_take_profit_multiplier)
             - 不检查其他退场信号，仅根据以上条件判断是否出场。
 
         :param state: 运行时状态
@@ -201,7 +201,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         cur_5m_short = _get(view_5m, sma_short_col, -1, 0.0)
         cur_15m_long = _get(view_15m, sma_long_col, -1, 0.0)
-        cur_atr = _get(view_15m, atr_col, -1, 0.0)
+        cur_atr = _get(view_5m, atr_col, -1, 0.0)
         macd_val = _get(view_1m, macd_col, -1, 0.0)
         kdj_val = _get(view_1m, kdj_col, -1, 50.0)
 
