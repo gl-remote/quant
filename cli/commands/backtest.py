@@ -245,6 +245,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
                     'quantity': f.volume,
                     'pnl': 0.0,
                     'commission': 0.0,
+                    'reason': f.reason,
                 })
             dm.insert_backtest_trades(bt_id, trade_dicts)
 

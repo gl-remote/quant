@@ -303,6 +303,14 @@ class MaStrategyCore(Strategy[MACrossParams]):
             "kdj": kdj_val,
         }
 
+        # 有信号时 reason 改为 JSON 格式，写入 backtest_trades 表
+        if signal.action:
+            import json
+            signal.reason = json.dumps({
+                "r": signal.reason,
+                **signal.diagnostics,
+            })
+
         return signal
 
     @override
