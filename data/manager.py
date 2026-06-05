@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from loguru import logger
 import re
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, cast, Any
 
 from common.constants import COMMON_KLINE_INTERVALS
 from common.schemas import KlineDataFrame, validate_backtest_consistency
@@ -45,6 +45,16 @@ class DataManager:
     提供数据加载、保存、查询等高层接口，对外隐藏数据库实现细节。
     所有 DataFrame 数据都经过 Pandera Schema 验证。
     """
+
+
+def _get_attr(obj: object, key: str, default: object = None) -> object:
+    """获取对象属性值（兼容 dict 和 ORM model）"""
+    if hasattr(obj, key):
+        return getattr(obj, key, default)
+    return obj.get(key, default) if isinstance(obj, dict) else default
+
+
+class DataManager:
     _instance: DataManager | None = None
     _initialized: bool = False
 
@@ -392,6 +402,8 @@ class DataManager:
         1. win_trades + loss_trades 是否等于 total_trades
         2. backtest_trades 表的实际记录数是否等于 total_trades
         3. 如果 total_trades > 0，win_trades/loss_trades 不能同时为 None
+        4. (2026-06-06新增) profit_days + loss_days ≈ total_days
+        5. (2026-06-06新增) total_commission ≈ sum(trade.commission)
 
         调试沉淀(2026-06-04):
         - 项 2 即为本次 debug 发现的 total_trade_count vs total_trades 键名问题
@@ -409,12 +421,23 @@ class DataManager:
         trades = self.query_trades(backtest_id)
         trade_count = len(trades)
 
+        # 2026-06-06新增: 聚合逐笔手续费用于一致性校验
+        trade_commission_sum = sum(
+            float(_get_attr(t, 'commission', 0)) for t in trades
+        ) if trades else 0.0
+
         return validate_backtest_consistency(
             total_trades=bt.total_trades,
             win_trades=bt.win_trades,
             loss_trades=bt.loss_trades,
             trade_count=trade_count,
             backtest_id=backtest_id,
+            # 2026-06-06 新增校验参数
+            total_days=_get_attr(bt, 'total_days'),
+            profit_days=_get_attr(bt, 'profit_days'),
+            loss_days=_get_attr(bt, 'loss_days'),
+            total_commission=_get_attr(bt, 'total_commission'),
+            trade_commission_sum=trade_commission_sum,
         )
 
     def query_daily(self, backtest_id: int) -> list[dict[str, object]]:

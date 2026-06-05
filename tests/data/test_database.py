@@ -480,19 +480,21 @@ class TestBacktestConsistency:
     """验证回测统计字段与交易记录之间的一致性"""
 
     def test_consistent_data_pass(self):
+        """win+loss <= total_trades 且 trade_count == total_trades → 通过"""
         errors = validate_backtest_consistency(
-            total_trades=43, win_trades=25, loss_trades=18,
-            trade_count=43, backtest_id=1,
+            total_trades=50, win_trades=25, loss_trades=18,  # 43笔有盈亏，7笔开仓/持平
+            trade_count=50, backtest_id=1,
         )
         assert len(errors) == 0
 
-    def test_win_loss_sum_mismatch(self):
+    def test_win_loss_exceeds_total(self):
+        """盈亏笔数超过总成交笔数（不可能）"""
         errors = validate_backtest_consistency(
-            total_trades=43, win_trades=30, loss_trades=18,
-            trade_count=43, backtest_id=1,
+            total_trades=40, win_trades=30, loss_trades=18,  # 48 > 40，不可能
+            trade_count=40, backtest_id=1,
         )
         assert len(errors) == 1
-        assert 'win_trades(30) + loss_trades(18) = 48' in errors[0]
+        assert 'win_trades(30) + loss_trades(18) = 48 > total_trades(40)' in errors[0]
 
     def test_trade_count_mismatch(self):
         """模拟本次 debug 发现的 total_trade_count 键名问题"""
@@ -500,7 +502,7 @@ class TestBacktestConsistency:
             total_trades=0, win_trades=25, loss_trades=18,
             trade_count=43, backtest_id=1,
         )
-        assert len(errors) >= 2  # 两个不一致：win+loss≠total, 记录数≠total
+        assert len(errors) >= 2  # 两个不一致：win+loss>total, 记录数≠total
         assert any('实际记录数(43) ≠ total_trades(0)' in e for e in errors)
 
     def test_both_win_loss_none_with_trades(self):
@@ -517,6 +519,57 @@ class TestBacktestConsistency:
             trade_count=0, backtest_id=1,
         )
         assert len(errors) == 0
+
+    # 2026-06-06 新增: profit_days + loss_days 一致性校验
+    def test_profit_loss_days_consistent(self):
+        """盈利天数+亏损天数≈总天数（允许±2天误差）"""
+        errors = validate_backtest_consistency(
+            total_trades=10, win_trades=5, loss_trades=5,
+            trade_count=10, backtest_id=1,
+            total_days=200, profit_days=100, loss_days=99,
+        )
+        # 100+99=199 vs 200，差1天，在±2范围内，应通过
+        assert len(errors) == 0
+
+    def test_profit_loss_days_mismatch(self):
+        """盈利天数+亏损天数与总天数差异超过2天"""
+        errors = validate_backtest_consistency(
+            total_trades=10, win_trades=5, loss_trades=5,
+            trade_count=10, backtest_id=1,
+            total_days=365, profit_days=195, loss_days=170,
+        )
+        # 195+170=365 vs 365... 实际上相等
+        # 换一个不匹配的例子
+        errors2 = validate_backtest_consistency(
+            total_trades=10, win_trades=5, loss_trades=5,
+            trade_count=10, backtest_id=1,
+            total_days=365, profit_days=195, loss_days=50,
+        )
+        # 195+50=245 vs 365，差120天，应报错
+        assert len(errors2) >= 1
+        assert any('profit_days' in e for e in errors2)
+
+    # 2026-06-06 新增: commission 一致性校验
+    def test_commission_consistent(self):
+        """total_commission 与逐笔commission之和一致（允许1元误差）"""
+        errors = validate_backtest_consistency(
+            total_trades=10, win_trades=5, loss_trades=5,
+            trade_count=10, backtest_id=1,
+            total_commission=500.0, trade_commission_sum=499.8,
+        )
+        # 差0.2元，在1元误差内，应通过
+        assert len(errors) == 0
+
+    def test_commission_mismatch(self):
+        """total_commission 与逐笔commission之和差异过大"""
+        errors = validate_backtest_consistency(
+            total_trades=10, win_trades=5, loss_trades=5,
+            trade_count=10, backtest_id=1,
+            total_commission=500.0, trade_commission_sum=480.0,
+        )
+        # 差20元，超过1元误差，应报错
+        assert len(errors) >= 1
+        assert any('total_commission' in e for e in errors)
 
     def test_manager_consistency(self, temp_db_path):
         """通过 DataManager 验证一致性方法"""

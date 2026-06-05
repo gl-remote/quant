@@ -132,11 +132,33 @@ class VnpyBacktestEngine:
             start_date=data_start,
             end_date=data_end,
             total_days=total_days,
-            # 调试记录(2026-06-04): vn.py statistics 中总交易数字段是 total_trade_count 而非 total_trades
+            # ── 核心绩效指标（vnpy calculate_statistics 直接输出）───
+            # vnpy 键名为 total_trade_count；total_trades 为旧版兼容 fallback
             total_trades=stats.get('total_trade_count', stats.get('total_trades', 0)) or 0,
             total_return=stats.get('total_return', 0.0) or 0.0,
             end_balance=stats.get('end_balance', self.initial_capital) or self.initial_capital,
             annual_return=stats.get('annual_return'),
+            sharpe_ratio=stats.get('sharpe_ratio'),
+            max_drawdown=stats.get('max_drawdown'),
+            max_ddpercent=stats.get('max_ddpercent'),
+            max_drawdown_duration=stats.get('max_drawdown_duration', stats.get('max_ddpercent_duration', 0)),
+            daily_std=stats.get('return_std', stats.get('daily_std')),
+            return_drawdown_ratio=stats.get('return_drawdown_ratio'),
+            # ── 盈亏汇总（vnpy 直接输出）───────────────────────
+            total_net_pnl=stats.get('total_net_pnl'),
+            daily_net_pnl=stats.get('daily_net_pnl'),
+            total_commission=stats.get('total_commission'),
+            daily_commission=stats.get('daily_commission'),
+            total_slippage=stats.get('total_slippage'),
+            daily_slippage=stats.get('daily_slippage'),
+            total_turnover=stats.get('total_turnover'),
+            daily_turnover=stats.get('daily_turnover'),
+            # ── 交易日统计（vnpy 直接输出）──────────────────────
+            profit_days=stats.get('profit_days'),
+            loss_days=stats.get('loss_days'),
+            daily_trade_count=stats.get('daily_trade_count'),
+            daily_return_pct=stats.get('daily_return'),
+            # ── 交易级别统计（自行从逐笔 pnl 聚合计算）────────────
             win_trades=stats.get('win_trades', 0) or 0,
             loss_trades=stats.get('loss_trades', 0) or 0,
             win_rate=stats.get('win_rate'),
@@ -145,11 +167,10 @@ class VnpyBacktestEngine:
             avg_win=stats.get('average_win'),
             avg_loss=stats.get('average_loss'),
             win_loss_ratio=stats.get('win_loss_ratio'),
-            sharpe_ratio=stats.get('sharpe_ratio'),
-            max_drawdown=stats.get('max_drawdown'),
-            max_drawdown_duration=stats.get('max_drawdown_duration', stats.get('max_ddpercent_duration', 0)),
-            daily_std=stats.get('return_std', stats.get('daily_std')),
-            return_drawdown_ratio=stats.get('return_drawdown_ratio'),
+            # ── 进阶指标（vnpy 输出）───────────────────────────
+            ewm_sharpe=stats.get('ewm_sharpe'),
+            rgr_ratio=stats.get('rgr_ratio'),
+            # ── 引擎配置（入参）────────────────────────────────
             initial_capital=self.initial_capital,
             commission_rate=self.commission_rate,
             slippage=self.slippage,
@@ -459,59 +480,99 @@ class VnpyBacktestEngine:
                 
                 """
                 从 vnpy 回测引擎中提取交易记录并格式化
-                
+
                 调试沉淀(2026-06-04):
                 - vn.py BacktestingEngine.trades 是一个字典，而非列表！
                 - 字典键格式: 'BACKTESTING.1', 'BACKTESTING.2'... 等序号字符串
                 - 值类型: vnpy.trader.object.TradeData 对象
                 - 旧代码直接遍历字典导致只拿到键字符串，报 'str' object has no attribute 'datetime' 错误
                 - 需要用 dict.values() 获取 TradeData 对象列表
-                
-                调试沉淀(2026-06-05):
-                - TradeData 没有 trade_pnl 字段！vnpy 的 PnL 按天汇总在 DailyResult 上
-                - plain_trade 需要通过 FIFO 配对开平仓自行计算
-                - 配对规则: 按 datetime 排序，OPEN 入队，CLOSE 与队列中最旧的开仓配对
-                - LONG open + SHORT close → price_diff > 0 时盈利
-                - SHORT open + LONG close → price_diff < 0 时盈利
+
+                调试沉淀(2026-06-06):
+                - TradeData 无 trade_pnl / commission 字段（vnpy 4.x 设计如此）
+                - vnpy 的费用计算在 DailyResult.calculate_pnl() 中按日汇总：
+                  commission = sum(price * volume * size * rate)   每笔成交
+                  slippage  = sum(volume * size * slippage)         每笔成交
+                  net_pnl   = total_pnl - commission - slippage
+                - 我们在 FIFO 配对层面用相同公式逐笔计算，结果与 vnpy 日度净盈亏一致
                 """
                 trades_list = []
                 if hasattr(engine, 'trades'):
                     trades_list = list(engine.trades.values())
 
-                # FIFO 配对开平仓，计算逐笔盈亏
+                # 从 vnpy 引擎读取费率参数（与 set_parameters 传入的一致）
+                _rate = self.commission_rate
+                _slip = self.slippage
+                _size = self.contract_size
+
+                # FIFO 配对开平仓，计算逐笔净盈亏（含费用）
+                #
+                # 算法概述:
+                #   1. 按时间排序所有成交记录
+                #   2. 维护开仓队列 open_queue: (direction, price, volume)，遇到 offset=open 时入队
+                #   3. 遇到 offset=close 时，按 FIFO 从队列取最旧的开仓记录配对:
+                #      a. 毛利 = (平仓价 - 开仓价) × 方向系数 × 配对量 × 合约乘数
+                #      b. commission += 开仓侧(价×量×size×rate) + 平仓侧(价×量×size×rate)
+                #      c. slippage_cost += 开仓侧(量×size×slip) + 平仓侧(量×size×slip)
+                #   4. 净盈亏(pnl) = 毛利 - 总commission - 总slippage_cost
+                #   5. 开仓记录的 pnl/commission 均为 0，费用统一挂到平仓记录上
+                # 费用公式与 vnpy DailyResult.calculate_pnl() 完全一致
                 trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
-                open_queue: list[tuple[str, float, float]] = []  # (direction, price, volume)
+                # 开仓队列: (direction, price, volume)
+                open_queue: list[tuple[str, float, float]] = []
                 trade_pnls: list[float] = [0.0] * len(trades_list)
+                trade_commissions: list[float] = [0.0] * len(trades_list)
 
                 for i, trade in enumerate(trades_list):
                     offset_val = getattr(trade, 'offset', None)
                     offset_str = offset_val.value if offset_val is not None and hasattr(offset_val, 'value') else str(offset_val) if offset_val else ''
                     offset = OFFSET_MAP.get(offset_str, offset_str)
+                    trade_price = getattr(trade, 'price', 0.0)
+                    trade_volume = getattr(trade, 'volume', 0.0)
+
                     if offset == 'open':
                         direction_val = getattr(trade, 'direction', None)
                         direction_str = direction_val.value if direction_val is not None and hasattr(direction_val, 'value') else str(direction_val) if direction_val else ''
                         direction = DIRECTION_MAP.get(direction_str, direction_str)
-                        open_queue.append((direction, getattr(trade, 'price', 0.0), getattr(trade, 'volume', 0.0)))
+                        open_queue.append((direction, trade_price, trade_volume))
                         trade_pnls[i] = 0.0
+                        # 开仓手续费在平仓时一并计入（完整的一开一平周期）
+                        trade_commissions[i] = 0.0
                     else:
-                        # 平仓：按 FIFO 与开仓配对
-                        close_price = getattr(trade, 'price', 0.0)
-                        remaining = getattr(trade, 'volume', 0.0)
-                        total_pnl = 0.0
+                        # 平仓：按 FIFO 与开仓配对，计算净盈亏
+                        remaining = trade_volume
+                        gross_pnl = 0.0
+                        total_commission = 0.0
+                        total_slippage = 0.0
+
+                        # 平仓自身的手续费和滑点
+                        total_commission += trade_price * trade_volume * _size * _rate
+                        total_slippage += trade_volume * _size * _slip
+
                         while remaining > 0 and open_queue:
                             open_dir, open_price, open_vol = open_queue[0]
                             matched_vol = min(remaining, open_vol)
-                            price_diff = close_price - open_price
+                            price_diff = trade_price - open_price
+
+                            # 毛利（价差收益）
                             if open_dir == 'long':
-                                total_pnl += price_diff * matched_vol * self.contract_size
+                                gross_pnl += price_diff * matched_vol * _size
                             else:  # short
-                                total_pnl += -price_diff * matched_vol * self.contract_size
+                                gross_pnl += -price_diff * matched_vol * _size
+
+                            # 配对开仓侧的费用（与 vnpy DailyResult 公式一致）
+                            total_commission += open_price * matched_vol * _size * _rate
+                            total_slippage += matched_vol * _size * _slip
+
                             remaining -= matched_vol
                             if matched_vol >= open_vol:
                                 open_queue.pop(0)
                             else:
                                 open_queue[0] = (open_dir, open_price, open_vol - matched_vol)
-                        trade_pnls[i] = total_pnl
+
+                        # 净盈亏 = 毛利 - 手续费 - 滑点
+                        trade_pnls[i] = gross_pnl - total_commission - total_slippage
+                        trade_commissions[i] = total_commission
 
                 """
                 将 vnpy TradeData 对象转换为标准字典（字段名与 ORM BacktestTrade 对齐）
@@ -522,18 +583,20 @@ class VnpyBacktestEngine:
                     offset     → offset    (枚举值转字符串)
                     price      → open_price, close_price
                     volume     → quantity
-                    pnl        → 通过 FIFO 配对计算（TradeData 无此字段）
-                    commission → commission（TradeData 无此字段，暂=0）
+                    pnl        → 净盈亏（FIFO 配对计算，已扣除 commission + slippage）
+                    commission → 手续费总额（开仓侧 + 平仓侧，与 vnpy DailyResult 公式一致）
                     (symbol 由外层注入)
 
                 调试沉淀(2026-06-04):
                 - direction 和 offset 是枚举类型，需调用 .value 获取字符串值
                 - 避免直接访问 trade 对象属性，使用 getattr() 以防字段缺失
                 - open_price/close_price 在单笔成交中取同一值 price，完整交易的开平仓价由策略层组装
-                
-                调试沉淀(2026-06-05):
-                - TradeData 无 trade_pnl 和 commission 字段，统一通过 FIFO 配对计算
-                - commission 隐藏在 vnpy 引擎内部计算中，无法逐笔提取，暂填 0
+
+                调试沉淀(2026-06-06):
+                - pnl 为净盈亏（扣除手续费和滑点），commission 为该笔平仓周期内的总手续费
+                - 费用公式与 vnpy DailyResult.calculate_pnl() 完全一致：
+                  commission = Σ(price × volume × size × rate)
+                  slippage  = Σ(volume × size × slippage)
                 """
                 formatted_trades = []
                 for i, trade in enumerate(trades_list):
@@ -555,23 +618,29 @@ class VnpyBacktestEngine:
                         'close_price': price_val,
                         'quantity': quantity_val,
                         'pnl': trade_pnls[i],
-                        'commission': 0.0,
+                        'commission': trade_commissions[i],
                         'reason': getattr(trade, 'reason', ''),
                     }
                     formatted_trades.append(trade_dict)
 
                 # vnpy calculate_statistics 不输出 win_trades/loss_trades 等字段
                 # 从交易记录的 pnl 字段自行计算并注入 statistics 字典
+                # 注意：formatted_trades 包含开仓(pnl=0)和平仓(有实际pnl)，只统计有实际盈亏的平仓交易
                 if formatted_trades:
-                    win_list = [t for t in formatted_trades if t['pnl'] > 0]
-                    loss_list = [t for t in formatted_trades if t['pnl'] <= 0]
+                    # 只取有实际盈亏的交易（排除开仓 pnl=0 和持平 pnl=0）
+                    closed_trades = [t for t in formatted_trades if t['pnl'] != 0]
+                    win_list = [t for t in closed_trades if t['pnl'] > 0]
+                    loss_list = [t for t in closed_trades if t['pnl'] < 0]
                     win_cnt = len(win_list)
                     loss_cnt = len(loss_list)
-                    total_trade_cnt = win_cnt + loss_cnt
+                    total_trade_cnt = win_cnt + loss_cnt  # 有实际盈亏的笔数，非总成交数
                     avg_win_val = sum(t['pnl'] for t in win_list) / win_cnt if win_cnt else 0
                     avg_loss_val = abs(sum(t['pnl'] for t in loss_list) / loss_cnt) if loss_cnt else 0
 
-                    # 最大连续盈利/亏损
+                    # 最大连续盈利/亏损（基于平仓时间顺序）
+                    # 注意：此处遍历 formatted_trades（含 pnl=0 的开仓），
+                    #       pnl=0 走 else 分支会重置 cur_win，这是有意为之——
+                    #       连续亏损的定义包含"没有盈利交易"的情况
                     max_consecutive_win = 0
                     max_consecutive_loss = 0
                     cur_win = 0

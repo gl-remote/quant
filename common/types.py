@@ -65,50 +65,74 @@ class BacktestResult:
     """回测结果 — 统一传递结构，在各层之间传递
 
     消除 dict[str, object] 在各层间手动 unpack，提供精确类型。
+
+    字段来源说明:
+      - vnpy 直接提供: vnpy calculate_statistics() 输出
+      - 自行计算: 从逐笔交易记录(pnl)聚合统计（基于净盈亏）
+      - 配置入参: 回测运行时传入的参数
     """
-    # 标识
-    symbol: str
-    strategy: str
-    strategy_version: str | None = None
-    backtest_id: int | None = None  # 占位后可更新，不新建
-    # 状态
-    status: str = STATUS_FAILED
-    error_message: str | None = None
-    success: bool = False
-    # 日期
-    start_date: str | None = None
-    end_date: str | None = None
-    total_days: int | None = None
-    # 绩效
-    total_trades: int = 0
-    end_balance: float = 0.0
-    total_return: float = 0.0
-    annual_return: float | None = None
-    win_trades: int = 0
-    loss_trades: int = 0
-    win_rate: float | None = None
-    max_consecutive_win: int | None = None
-    max_consecutive_loss: int | None = None
-    avg_win: float | None = None
-    avg_loss: float | None = None
-    win_loss_ratio: float | None = None
-    sharpe_ratio: float | None = None
-    max_drawdown: float | None = None
-    max_drawdown_duration: int | None = None
-    daily_std: float | None = None
-    return_drawdown_ratio: float | None = None
-    # 引擎配置
-    initial_capital: float = 0.0
-    commission_rate: float = 0.0
-    slippage: float = 0.0
-    price_tick: float = 0.0
-    contract_size: int = 0
-    kline_interval: str = ""
-    # 原始数据
-    engine_config: dict[str, object] = field(default_factory=dict)
-    data_src: str | None = None  # 数据源文件路径（CSV 等），TqSdk 实时数据为 None
-    strategy_params: dict[str, float] | None = None
-    fills: list[dict[str, object]] = field(default_factory=list)
-    daily_results: list[dict] = field(default_factory=list)
-    # 链路信息
-    git_hash: str | None = None
+    # ── 标识 ──────────────────────────────────────────
+    symbol: str                                              # 品种代码
+    strategy: str                                            # 策略名称
+    strategy_version: str | None = None                      # 策略版本号
+    backtest_id: int | None = None                           # 回测记录ID（占位后可更新）
+    # ── 状态 ──────────────────────────────────────────
+    status: str = STATUS_FAILED                              # running / success / failed
+    error_message: str | None = None                         # 错误信息
+    success: bool = False                                    # 是否成功
+    # ── 日期范围 ──────────────────────────────────────
+    start_date: str | None = None                            # 回测起始日期
+    end_date: str | None = None                              # 回测结束日期
+    total_days: int | None = None                            # 总交易日数
+    # ── 核心绩效指标（vnpy calculate_statistics 输出）───
+    total_trades: int = 0                                    # 总成交笔数 [vnpy]
+    end_balance: float = 0.0                                 # 期末权益余额 [vnpy]
+    total_return: float = 0.0                                # 总收益率 (%) [vnpy]，如 15.5 表示 15.5%
+    annual_return: float | None = None                       # 年化收益率 (%) [vnpy]
+    sharpe_ratio: float | None = None                        # 夏普比率 [vnpy]
+    max_drawdown: float | None = None                        # 最大回撤金额（绝对值，如 50000.0 表示回撤 5 万元）[vnpy]
+    max_ddpercent: float | None = None                       # 最大回撤百分比 (%) [vnpy]
+    max_drawdown_duration: int | None = None                 # 最大回撤持续天数 [vnpy]
+    daily_std: float | None = None                           # 日收益率标准差 (%) [vnpy]
+    return_drawdown_ratio: float | None = None               # 收益回撤比 [vnpy]
+    # ── 盈亏汇总（vnpy 直接输出）───────────────────────
+    total_net_pnl: float | None = None                       # 总净盈亏金额（扣完费用）[vnpy]
+    daily_net_pnl: float | None = None                       # 日均净盈亏金额 [vnpy]
+    total_commission: float | None = None                    # 总手续费金额 [vnpy]
+    daily_commission: float | None = None                    # 日均手续费 [vnpy]
+    total_slippage: float | None = None                      # 总滑点成本金额 [vnpy]
+    daily_slippage: float | None = None                      # 日均滑点成本 [vnpy]
+    total_turnover: float | None = None                      # 总成交金额 [vnpy]
+    daily_turnover: float | None = None                      # 日均成交金额 [vnpy]
+    # ── 交易日统计（vnpy 直接输出）──────────────────────
+    profit_days: int | None = None                           # 盈利交易日数 [vnpy]
+    loss_days: int | None = None                             # 亏损交易日数 [vnpy]
+    daily_trade_count: float | None = None                   # 日均成交笔数 [vnpy]
+    daily_return_pct: float | None = None                    # 日均收益率 (%) [vnpy]
+    # ── 交易级别统计（自行从逐笔 pnl 聚合计算）──────────
+    win_trades: int = 0                                      # 盈利交易笔数 (pnl > 0)
+    loss_trades: int = 0                                     # 亏损交易笔数 (pnl < 0 的平仓次数，pnl=0 不计入)
+    win_rate: float | None = None                            # 胜率
+    max_consecutive_win: int | None = None                    # 最大连续盈利次数
+    max_consecutive_loss: int | None = None                   # 最大连续亏损次数
+    avg_win: float | None = None                             # 平均盈利金额
+    avg_loss: float | None = None                            # 平均亏损金额
+    win_loss_ratio: float | None = None                      # 盈亏比
+    # ── 进阶指标（vnpy 输出）───────────────────────────
+    ewm_sharpe: float | None = None                          # EWM 指数加权夏普比率 [vnpy]
+    rgr_ratio: float | None = None                           # RGR 比率 [vnpy]
+    # ── 引擎配置（入参）────────────────────────────────
+    initial_capital: float = 0.0                             # 初始资金
+    commission_rate: float = 0.0                              # 手续费率（小数比例，如 0.0003 表示万三）
+    slippage: float = 0.0                                    # 单边滑点
+    price_tick: float = 0.0                                  # 最小变动价位
+    contract_size: int = 0                                   # 合约乘数
+    kline_interval: str = ""                                  # K线周期
+    # ── 原始数据 ──────────────────────────────────────
+    engine_config: dict[str, object] = field(default_factory=dict)  # JSON 元数据
+    data_src: str | None = None                              # 数据源路径
+    strategy_params: dict[str, float] | None = None          # 策略参数
+    fills: list[dict[str, object]] = field(default_factory=list)     # 逐笔交易记录
+    daily_results: list[dict] = field(default_factory=list)         # 每日资金曲线
+    # ── 链路信息 ──────────────────────────────────────
+    git_hash: str | None = None                              # Git 提交哈希

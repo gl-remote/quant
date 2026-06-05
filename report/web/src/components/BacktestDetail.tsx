@@ -32,13 +32,23 @@ export default function BacktestDetail({
   }
 
   const metrics: [string, string][] = [
-    ["收益率", formatPct(bt.total_return * 100)],
-    ["胜率", formatPct(bt.win_rate, 1)],
-    ["最大回撤", formatPct(bt.max_drawdown)],
+    // 资金概况：total_return 是 vnpy 输出的百分比（已乘100），直接显示
+    ["收益率", `${bt.total_return?.toFixed(2) || "-"}%`],
+    ["净盈亏", bt.total_net_pnl?.toLocaleString("zh-CN") || "-"],
+    ["总手续费", bt.total_commission?.toLocaleString("zh-CN") || "-"],
+    ["总滑点", bt.total_slippage?.toLocaleString("zh-CN") || "-"],
+    // win_rate 基于 pnl>0 的平仓交易计算（排除开仓 pnl=0）
+    ["胜率(平仓)", formatPct(bt.win_rate, 1)],
+    // max_drawdown 是 vnpy 输出的绝对金额(元)，max_ddpercent 是百分比
+    ["最大回撤", `${bt.max_drawdown?.toLocaleString("zh-CN")}元 (${bt.max_ddpercent?.toFixed(2) || "-"}%)`],
     ["夏普比率", bt.sharpe_ratio?.toFixed(2) || "-"],
-    ["交易次数", String(bt.total_trades)],
-    ["初始资金", bt.initial_capital?.toLocaleString() || "-"],
-    ["最终权益", bt.end_balance?.toLocaleString() || "-"],
+    ["EWM夏普", bt.ewm_sharpe?.toFixed(2) || "-"],
+    // total_trades 是总成交笔数（含开仓+平仓），非盈亏笔数
+    ["成交次数", String(bt.total_trades)],
+    ["盈利天数", String(bt.profit_days ?? "-")],
+    ["亏损天数", String(bt.loss_days ?? "-")],
+    ["初始资金", bt.initial_capital?.toLocaleString("zh-CN") || "-"],
+    ["最终权益", bt.end_balance?.toLocaleString("zh-CN") || "-"],
     ["回测区间", `${bt.start_date} ~ ${bt.end_date}`],
     ["K线周期", bt.kline_interval || "-"],
     ["策略版本", bt.strategy_version || "-"],

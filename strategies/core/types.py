@@ -67,7 +67,12 @@ class StrategyPosition:
 
 @dataclass
 class Fill:
-    """订单成交记录 — Bridge 通知 Strategy 的成交回执"""
+    """订单成交记录 — Bridge 通知 Strategy 的成交回执
+
+    注意: Fill 不含 pnl/commission 等盈亏字段。
+    盈亏计算依赖开平仓配对，属于回测层逻辑（见 BacktestTrade / TradeRecord），
+    不属于 Strategy ↔ Bridge 通信协议的范畴。
+    """
     timestamp: str = ""
     symbol: str = ""
     action: TradeAction = ''        # 'buy' | 'sell'

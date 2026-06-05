@@ -25,6 +25,7 @@ from common.types import BacktestResult
 # ==============================================================================
 
 VNPTY_STATS = {
+    # 基础统计
     'total_trades': 80,
     'win_trades': 45,
     'loss_trades': 35,
@@ -40,11 +41,27 @@ VNPTY_STATS = {
     'max_ddpercent_duration': 15,
     'daily_std': 0.018,
     'return_drawdown_ratio': 1.5,
+    # 2026-06-06 新增 vnpy 统计字段
+    'max_ddpercent': 12.5,            # 最大回撤百分比
+    'total_net_pnl': 18000.0,          # 总净盈亏金额
+    'daily_net_pnl': 49.32,            # 日均净盈亏
+    'total_commission': 1200.5,        # 总手续费
+    'daily_commission': 3.29,          # 日均手续费
+    'total_slippage': 800.0,           # 总滑点成本
+    'daily_slippage': 2.19,           # 日均滑点
+    'total_turnover': 4000000.0,       # 总成交金额
+    'daily_turnover': 10958.9,        # 日均成交额
+    'profit_days': 195,                # 盈利交易日数
+    'loss_days': 170,                  # 亏损交易日数
+    'daily_trade_count': 0.22,         # 日均成交笔数
+    'daily_return_pct': 0.049,         # 日均收益率%
+    'ewm_sharpe': 1.42,               # EWM夏普比率
+    'rgr_ratio': 1.65,                # RGR比率
 }
 
 
 def make_trade(dt, sym='DCE.m2509', direction='long', offset='open',
-               price=3500.0, quantity=1, pnl=0.0):
+               price=3500.0, quantity=1, pnl=0.0, commission=10.5):
     return {
         'datetime': dt,
         'symbol': sym,
@@ -54,7 +71,7 @@ def make_trade(dt, sym='DCE.m2509', direction='long', offset='open',
         'close_price': price,
         'quantity': quantity,
         'pnl': pnl,
-        'commission': 0.0,
+        'commission': commission,  # 2026-06-06: 改为真实手续费
     }
 
 
@@ -99,9 +116,27 @@ def insert_full_backtest(store, **overrides):
         win_loss_ratio=s['win_loss_ratio'],
         sharpe_ratio=s['sharpe_ratio'],
         max_drawdown=s['max_drawdown'],
+        max_ddpercent=s['max_ddpercent'],                    # 2026-06-06新增
         max_drawdown_duration=s['max_ddpercent_duration'],
         daily_std=s['daily_std'],
         return_drawdown_ratio=s['return_drawdown_ratio'],
+        # 盈亏汇总 [vnpy] (2026-06-06新增)
+        total_net_pnl=s['total_net_pnl'],
+        daily_net_pnl=s['daily_net_pnl'],
+        total_commission=s['total_commission'],
+        daily_commission=s['daily_commission'],
+        total_slippage=s['total_slippage'],
+        daily_slippage=s['daily_slippage'],
+        total_turnover=s['total_turnover'],
+        daily_turnover=s['daily_turnover'],
+        # 交易日统计 [vnpy]
+        profit_days=s['profit_days'],
+        loss_days=s['loss_days'],
+        daily_trade_count=s['daily_trade_count'],
+        daily_return_pct=s['daily_return_pct'],
+        # 进阶指标 [vnpy]
+        ewm_sharpe=s['ewm_sharpe'],
+        rgr_ratio=s['rgr_ratio'],
         win_rate=s['win_trades'] / (s['win_trades'] + s['loss_trades']),
         strategy_params={'sma_short': 5, 'sma_long': 20},
         strategy_version='1.0',

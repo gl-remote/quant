@@ -56,8 +56,9 @@ export interface NavItem {
 
 /**
  * 品种汇总项
- * 
+ *
  * 包含每个品种的最优回测指标
+ * 2026-06-06 新增 vnpy 统计字段（盈亏汇总 / 交易日统计 / 进阶指标）
  */
 export interface SummaryItem {
   symbol: string;              // 品种代码
@@ -67,11 +68,22 @@ export interface SummaryItem {
   win_loss_ratio: number;    // 盈亏比
   annual_return: number;     // 年化收益率
   max_drawdown: number;      // 最大回撤
+  max_ddpercent?: number;    // 最大回撤百分比 [vnpy] (2026-06-06新增)
   sharpe: number;             // 夏普比率
   end_balance: number;        // 最终资金
   id: number;                 // 回测ID
   ret_cls?: string;         // 收益率样式类（可选）
   sr_cls?: string;          // 夏普比率样式类（可选）
+  // 盈亏汇总 [vnpy] (2026-06-06新增)
+  total_net_pnl?: number;     // 总净盈亏金额
+  total_commission?: number;  // 总手续费
+  total_slippage?: number;    // 总滑点成本
+  // 交易日统计 [vnpy]
+  profit_days?: number;       // 盈利交易日数
+  loss_days?: number;         // 亏损交易日数
+  // 进阶指标 [vnpy]
+  ewm_sharpe?: number;        // EWM夏普比率
+  rgr_ratio?: number;         // RGR比率
 }
 
 /**
@@ -105,13 +117,19 @@ export interface KlineData {
 }
 
 /**
- * 日线数据点（用于资金曲线
+ * 日线数据点（用于资金曲线）
+ * 2026-06-06 新增 vnpy 日度字段
  */
 export interface DailyPoint {
   date: string;            // 日期
   equity: number;            // 资金
-  daily_return: number;      // 日收益率
+  daily_return: number;      // 日收益(金额)
   drawdown: number;      // 回撤
+  // 2026-06-06 新增 vnpy 日度字段
+  turnover?: number;       // 当日成交金额 [vnpy]
+  commission?: number;     // 当日手续费 [vnpy]
+  slippage?: number;       // 当日滑点成本 [vnpy]
+  trade_count?: number;    // 当日成交笔数 [vnpy]
 }
 
 /**
@@ -126,6 +144,7 @@ export interface EquityData {
 
 /**
  * 回测记录
+ * 2026-06-06 新增 vnpy 统计字段（盈亏汇总 / 交易日统计 / 进阶指标）
  */
 export interface BacktestRecord {
   id: number;                  // 回测 ID
@@ -136,10 +155,11 @@ export interface BacktestRecord {
   end_date: string;          // 结束日期
   initial_capital: number;     // 初始资金
   end_balance: number;       // 最终资金
-  total_return: number;      // 总收益率
-  sharpe_ratio: number;       // 夏普比率
-  max_drawdown: number;      // 最大回撤
-  win_rate: number;         // 胜率
+  total_return: number;      // 总收益率 [vnpy]
+  sharpe_ratio: number;       // 夏普比率 [vnpy]
+  max_drawdown: number;      // 最大回撤(金额) [vnpy]
+  max_ddpercent?: number;     // 最大回撤百分比 [vnpy] (2026-06-06新增)
+  win_rate: number;         // 胜率 (基于逐笔 net_pnl 计算)
   total_trades: number;       // 总交易次数
   data_src: string;         // K线数据源
   kline_interval: string;      // K线周期
@@ -147,6 +167,23 @@ export interface BacktestRecord {
   git_hash: string;        // Git提交哈希
   params: { name: string; value: number }[]; // 策略参数
   daily: DailyPoint[];       // 日线数据
+  // 盈亏汇总 [vnpy] (2026-06-06新增)
+  total_net_pnl?: number;         // 总净盈亏金额
+  daily_net_pnl?: number;         // 日均净盈亏
+  total_commission?: number;      // 总手续费
+  daily_commission?: number;      // 日均手续费
+  total_slippage?: number;        // 总滑点成本
+  daily_slippage?: number;        // 日均滑点
+  total_turnover?: number;        // 总成交金额
+  daily_turnover?: number;        // 日均成交额
+  // 交易日统计 [vnpy] (2026-06-06新增)
+  profit_days?: number;            // 盈利交易日数
+  loss_days?: number;              // 亏损交易日数
+  daily_trade_count?: number;      // 日均成交笔数
+  daily_return_pct?: number;       // 日均收益率%
+  // 进阶指标 [vnpy] (2026-06-06新增)
+  ewm_sharpe?: number;             // EWM夏普比率
+  rgr_ratio?: number;              // RGR比率
 }
 
 /**

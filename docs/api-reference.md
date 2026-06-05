@@ -70,7 +70,7 @@ class MyStrategy(Strategy):
 |------|----------|
 | `Bar` | `symbol, datetime, open, high, low, close, volume` |
 | `Signal` | `action, volume, reason` |
-| `Fill` | `timestamp, action, price, volume, pnl` |
+| `Fill` | `timestamp, action, price, volume, reason`（注意：Fill 是单笔成交回执，不含 pnl/commission，逐笔净盈亏在回测引擎 FIFO 配对层面计算） |
 | `StrategyPosition` | `direction, entry_price, volume` |
 
 ---
@@ -85,9 +85,42 @@ class MyStrategy(Strategy):
 
 ```python
 class VnpyBacktestEngine:
-    def run(self, pairs: list[tuple[str, DataFrame, Strategy]]) -> list[dict]
+    def run(self, pairs: list[tuple[str, DataFrame, Strategy]]) -> list[BacktestResult]
     def run_walk_forward(self, data, symbol, strategy, ...) -> dict
 ```
+
+---
+
+## 核心数据结构
+
+### BacktestResult（回测结果）
+
+**模块路径**: `common.types.BacktestResult`
+
+**功能**: 回测引擎输出的完整结果，包含 vnpy 全量统计 + 自行计算的交易级指标。
+
+**字段分组**:
+
+| 分组 | 关键字段 | 来源 |
+|------|---------|------|
+| 元数据 | `symbol, strategy, version, git_hash, status, dates` | 引擎入参 |
+| **核心绩效** `[vnpy]` | `total_return(%, 如15.5=15.5%), end_balance, sharpe_ratio, max_drawdown(绝对金额), annual_return(%)` | `engine.calculate_statistics()` |
+| **盈亏汇总** `[vnpy]` | `total_net_pnl, total_commission, total_slippage, total_turnover` | 同上 |
+| **交易日统计** `[vnpy]` | `profit_days, loss_days, daily_trade_count, daily_return_pct(%)` | 同上 |
+| 交易级统计 | `win_trades(pnl>0), loss_trades(pnl<0), win_rate, avg_win, avg_loss, win_loss_ratio` | 基于 trades 聚合 |
+| 进阶指标 `[vnpy]` | `ewm_sharpe, rgr_ratio, max_ddpercent(%), return_drawdown_ratio` | 同上 |
+
+**格式约定**:
+- `total_return`, `annual_return`, `max_ddpercent`: 百分比格式（如 `15.5` = 15.5%）
+- `max_drawdown`: 绝对金额（如 `50000.0` = 回撤 5 万元）
+- `win_rate`: 比值 (0~1)，store 层输出时乘以 100
+- `pnl`（逐笔）: 净盈亏 = 毛利 - commission - slippage
+
+### BacktestRecord（数据库查询模型）
+
+**模块路径**: `common.schemas.BacktestRecord`
+
+**功能**: 从 SQLite 查询回测记录的 Pydantic 验证模型，字段与 backtests 表一一对应。
 
 ---
 

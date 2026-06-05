@@ -136,19 +136,41 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "【资金概况】",
         f"  初始资金:   {bt.initial_capital:,.2f}",
         f"  最终权益:   {_get_attr(bt, 'end_balance', 0):,.2f}",
-        f"  总收益率:   {format_pct(bt.total_return)}",
-        f"  年化收益:   {format_pct(_get_attr(bt, 'annual_return'))}",  # type: ignore[arg-type]
+        # total_return/annual_return 是 vnpy 输出的百分比（已乘100），直接显示
+        f"  总收益率:   {bt.total_return:.2f}%",
+        f"  年化收益:   {_get_attr(bt, 'annual_return') or 0:.2f}%",  # type: ignore[arg-type]
+        "",
+        "【盈亏汇总 [vnpy]】",  # 2026-06-06新增
+        f"  总净盈亏:   {_get_attr(bt, 'total_net_pnl', 0) or 0:,.2f}",
+        f"  日均净盈亏: {_get_attr(bt, 'daily_net_pnl', 0) or 0:,.2f}",
+        f"  总手续费:   {_get_attr(bt, 'total_commission', 0) or 0:,.2f} ({format_pct((_get_attr(bt, 'total_commission') or 0) / (bt.initial_capital or 1))})",
+        f"  日均手续费: {_get_attr(bt, 'daily_commission', 0) or 0:,.2f}",
+        f"  总滑点成本: {_get_attr(bt, 'total_slippage', 0) or 0:,.2f}",
+        f"  日均滑点:   {_get_attr(bt, 'daily_slippage', 0) or 0:,.2f}",
+        f"  总成交金额: {_get_attr(bt, 'total_turnover', 0) or 0:,.2f}",
         "",
         "【交易统计】",
         f"  总交易次数: {bt.total_trades or 0}",
+        # win_rate 是比值(0~1)，用 format_pct 正确
         f"  盈利交易:   {_get_attr(bt, 'win_trades', 0) or 0} ({format_pct(bt.win_rate)})",
         f"  亏损交易:   {_get_attr(bt, 'loss_trades', 0) or 0}",
         f"  平均盈利:   {format_float(bt.avg_win, ',.0f')}",
         f"  平均亏损:   {format_float(bt.avg_loss, ',.0f')}",
         "",
+        "【交易日统计 [vnpy]】",  # 2026-06-06新增
+        f"  盈利天数:   {_get_attr(bt, 'profit_days', 0) or 0} 天",
+        f"  亏损天数:   {_get_attr(bt, 'loss_days', 0) or 0} 天",
+        f"  日均成交笔数: {_get_attr(bt, 'daily_trade_count', 0) or 0:.1f}",
+        # daily_return_pct 是百分比数值（如 0.5 表示 0.5%），追加 % 符号显示
+        f"  日均收益率: {_get_attr(bt, 'daily_return_pct') or 0:.2f}%",  # type: ignore[arg-type]
+        "",
         "【风险评估】",
         f"  夏普比率:   {format_float(bt.sharpe_ratio)}",
-        f"  最大回撤:   {format_pct(bt.max_drawdown)}",
+        # max_drawdown 是绝对金额(元)，max_ddpercent 是百分比
+        f"  最大回撤:   {bt.max_drawdown:,.2f}元 ({_get_attr(bt, 'max_ddpercent', 0) or 0:.2f}%)",
+        f"  EWM夏普:    {format_float(_get_attr(bt, 'ewm_sharpe'))}",  # type: ignore[arg-type]
+        f"  RGR比率:    {format_float(_get_attr(bt, 'rgr_ratio'))}",  # type: ignore[arg-type]
+        f"  收益回撤比: {format_float(_get_attr(bt, 'return_drawdown_ratio'))}",  # type: ignore[arg-type]
         f"  日均波动率: {format_float(_get_attr(bt, 'daily_std'))}",  # type: ignore[arg-type]
         "",
         "【交易明细】",
@@ -242,7 +264,7 @@ def format_summary_report(
         f"  回测汇总 ({len(records)} 条)",
         f"{'=' * 110}",
         f"  {'#':>4} {'品种':<14} {'策略':<6} {'版本':<8} {'Git':<8} "
-        f"{'收益率':>8} {'夏普':>7} {'回撤':>7} {'胜率':>7} {'交易':>5} {'时间':<16}",
+        f"{'收益率%':>9} {'夏普':>7} {'回撤(元)':>10} {'胜率':>7} {'交易':>5} {'时间':<16}",
         f"  {'-' * 100}",
     ]
 
@@ -259,9 +281,12 @@ def format_summary_report(
             f"{strat:<6} "
             f"{version:<8} "
             f"{git:<8} "
-            f"{format_pct(bt.total_return):>8} "
+            # total_return 是 vnpy 百分比，直接显示
+            f"{bt.total_return:>7.2f}% "
             f"{format_float(bt.sharpe_ratio):>7} "
-            f"{format_pct(bt.max_drawdown):>7}  "
+            # max_drawdown 是绝对金额(元)
+            f"{bt.max_drawdown:>10,.0f} "
+            # win_rate 是比值(0~1)，用 format_pct 正确
             f"{format_pct(bt.win_rate):>7} "
             f"{bt.total_trades or 0:>5} "
             f"{created:<16}"

@@ -257,6 +257,102 @@ class ReportBuilder:
 
 ---
 
+## 回测数据模型（2026-06-06 更新）
+
+### vnpy 数据来源与格式约定
+
+vnpy 4.4.0 的 `calculate_statistics()` 返回的统计数据有明确的**格式约定**：
+
+| 字段 | 格式 | 示例 | 前端处理 |
+|------|------|------|---------|
+| `total_return` | **百分比**（已乘 100） | `15.2` 表示 15.2% | `.toFixed(2) + '%'` |
+| `annual_return` | **百分比**（已乘 100） | `8.5` 表示 8.5% | 同上 |
+| `max_drawdown` | **绝对金额**（元） | `5200` 表示亏了 5200 元 | `.toLocaleString('zh-CN')` + `'元'` |
+| `max_ddpercent` | **百分比**（已乘 100） | `12.5` 表示 12.5% | `.toFixed(2) + '%'` |
+| `win_rate` | **比值** (0~1) | `0.6` 表示 60% | store 层 `* 100` 后传前端 |
+
+> ⚠️ **重要**: 前端/报告层不得对上述字段再做 `* 100` 或百分比转换。store 层负责统一格式化。
+
+### 逐笔交易 PnL 计算方式
+
+vnpy 的 `TradeData` 不提供逐笔 PnL 和 commission，这些由我们通过 FIFO 配对计算：
+
+```
+开仓队列: [(方向, 价格, 数量), ...]   # FIFO 先进先出
+平仓时:
+  1. 取最旧的开仓记录配对
+  2. 毛利 = (平仓价 - 开仓价) × 配对数量 × 合约乘数 × 方向系数
+  3. commission = 开仓侧(价格×数量×size×rate) + 平仓侧(价格×数量×size×rate)
+  4. slippage = 开仓侧(数量×size×slip) + 平仓侧(数量×size×slip)
+  5. 净盈亏(pnl) = 毛利 - commission - slippage
+```
+
+费用参数来源：引擎初始化时的 `rate`、`slippage`、`size`（与 vnpy 内部 `DailyResult.calculate_pnl()` 公式一致）。
+
+### win_trades / loss_trades 统计范围
+
+只统计 **pnl != 0 的平仓交易**（排除开仓记录 pnl=0 和持平交易）：
+
+```python
+closed_trades = [t for t in trades if t['pnl'] != 0]  # 排除开仓
+win_trades = len([t for t in closed_trades if t['pnl'] > 0])
+loss_trades = len([t for t in closed_trades if t['pnl'] < 0])
+# 注意: win_trades + loss_trades <= total_trades（后者含所有成交）
+```
+
+### 数据库表结构
+
+#### backtests 表（53 列）
+
+字段按来源分为四组：
+
+| 分组 | 来源 | 关键字段 |
+|------|------|----------|
+| 元数据 | 我们自己 | symbol, strategy, version, git_hash, status, dates, config params |
+| **vnpy 直接提供** `[vnpy]` | `engine.calculate_statistics()` | total_return, end_balance, sharpe_ratio, max_drawdown, annual_return, daily_std, return_drawdown_ratio, **新增15个** |
+| **自行计算** | 基于 trades 的 pnl 字段聚合 | win_trades, loss_trades, win_rate, avg_win, avg_loss, win_loss_ratio, max_consecutive_win/loss |
+| 日度汇总 | 基于 backtest_daily 聚合 | profit_days, loss_days 等 |
+
+#### backtest_daily 表（11 列）
+
+每条记录对应一个交易日，来自 vnpy `DailyResult`：
+
+| 字段 | 来源 |
+|------|------|
+| date, equity, drawdown_pct | vnpy DailyResult |
+| **turnover, commission, slippage, trade_count** | vnpy DailyResult（2026-06-06 新增） |
+
+### 一致性校验规则
+
+`validate_backtest_consistency()` 执行以下检查：
+
+| # | 校验项 | 规则 |
+|---|--------|------|
+| 1 | 盈亏笔数 ≤ 总成交数 | `win_trades + loss_trades <= total_trades` |
+| 2 | 胜率匹配 | `abs(win_rate - win/(win+loss)) < 0.01` |
+| 3 | profit_days 匹配 | `profit_days ≈ daily 表中 equity > prev_equity 的天数` |
+| 4 | commission 对账 | `abs(total_commission - sum(trade.commission)) < 1.0` |
+
+### 数据流全景
+
+```
+vnpy 引擎
+  ├─ engine.trades (TradeData) → FIFO 配对 → 净盈亏 + 真实费用 → backtest_trades 表
+  ├─ engine.daily_results (DailyResult) → turnover/commission/slippage → backtest_daily 表
+  └─ engine.calculate_statistics() → 30+ 统计指标 → backtests 表
+       ↓
+BacktestResult dataclass (common/types.py) — 全量字段 + 默认值(TqSdk兼容)
+       ↓
+data/store.py — 写入 ORM + JSON 导出(get_run_summary / get_backtests_for_run)
+       ↓
+SQLite (自动迁移: ALTER TABLE 补列)
+       ↓
+前端 (types/index.ts → BacktestDetail/SymbolTable/MetricCards)
+文字报告 (report/reporter/text.py — 详情+汇总表)
+```
+
+---
+
 ## 过拟合评估体系
 
 系统通过四个维度评估策略过拟合风险：

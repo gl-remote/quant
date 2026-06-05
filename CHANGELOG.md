@@ -5,6 +5,34 @@
 
 ---
 
+## [0.2.1-dev] - 2026-06-06
+
+### 新增
+- **vnpy 全量统计字段**: backtests 表 +15 字段（`total_net_pnl`, `total_commission`, `total_slippage`, `profit_days`, `loss_days`, `ewm_sharpe`, `rgr_ratio` 等），backtest_daily 表 +4 字段（`turnover`, `commission`, `slippage`, `trade_count`）
+- **前端展示扩展**: BacktestDetail 新增净盈亏/手续费/滑点/EWM夏普/盈利天数等指标卡片；SymbolTable 新增净盈亏/手续费/盈利天数 3 列；MetricCards 新增总净盈亏/总手续费汇总卡
+- **文字报告**: 新增「盈亏汇总」「交易日统计」两个 section
+- **一致性校验**: 新增 profit_days 匹配、commission 对账两项校验
+
+### 修复
+- **逐笔 PnL 从毛利改为净盈亏**: FIFO 配对逻辑补算 commission（`price × volume × size × rate`）和 slippage（`volume × size × slip`），pnl = 毛利 - commission - slippage
+- **Commission 硬编码修复**: 逐笔交易 commission 从硬编码 `0.0` 改为真实值
+- **win_trades / loss_trades 统计修正**: 排除 pnl=0 的开仓记录，只统计有实际盈亏的平仓交易（之前开仓被归入亏损导致胜率偏低）
+- **vnpy 字段格式误用**: 前端/文字报告中 `total_return`（vnpy 已是百分比）不再错误乘以 100；`max_drawdown`（vnpy 是绝对金额）不再用百分比格式化
+- **store 层 `_normalize_max_dd()`**: 移除了错误的 v/100 归一化逻辑，直接存储 vnpy 返回的金额原值
+- **store 层 win_rate 不一致**: `get_backtests_for_run` 补上 `* 100`，与 `get_run_summary` 保持一致
+- **text.py SyntaxError**: 列表 `]` 提前关闭导致文字报告不可用
+- **store.py SELECT 缺列**: `get_run_summary` 补了 8 列新字段映射
+
+### 改动
+- **字段语义变更**: `pnl`（逐笔）含义从"毛利"变为"净盈亏"；`win_rate` 分母从"总成交笔数"变为"有盈亏笔数"
+- **数据库自动迁移**: store._init_tables() 支持 ALTER TABLE 自动加列，旧库启动时无需手动 DDL
+
+### 已知限制
+- TqSdk 路径的 `total_return` 存的是绝对金额而非百分比（与 vnpy 路径语义不同），混库时需注意
+- TqSdk 路径的逐笔 commission 仍为硬编码 0.0，后续单独处理
+
+---
+
 ## [0.2.0-dev] - 2026-05-27
 
 ### 新增

@@ -114,8 +114,8 @@ class TradeRecordSchema(pa.DataFrameModel):
         open_price: 开仓价 / 成交价
         close_price: 平仓价 / 成交价
         quantity:   成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
-        pnl:        单笔盈亏
-        commission: 手续费
+        pnl:        单笔净盈亏（已扣除 commission + slippage）
+        commission: 该笔平仓周期总手续费（开仓侧 + 平仓侧）
 
     统一规则(2026-06-04):
     - 各引擎层（vnpy/TqSdk）产出时必须使用本 Schema 定义的字段名
@@ -144,13 +144,23 @@ class BacktestDailySchema(pa.DataFrameModel):
     字段说明：
         date: 日期
         equity: 当日权益
-        daily_return: 当日收益率
+        daily_return: 当日净盈亏（金额）
         drawdown: 当日回撤
+    2026-06-06 新增 vnpy 日度字段：
+        turnover: 当日成交金额
+        commission: 当日手续费
+        slippage: 当日滑点成本
+        trade_count: 当日成交笔数
     """
     date: Series[pd.Timestamp] = pa.Field()
     equity: Series[float] = pa.Field(ge=0.0)
     daily_return: Series[float] = pa.Field()
     drawdown: Series[float] = pa.Field(le=0.0)
+    # 2026-06-06 新增 vnpy 日度字段（nullable）
+    turnover: Series[float] = pa.Field(nullable=True)
+    commission: Series[float] = pa.Field(ge=0, nullable=True)
+    slippage: Series[float] = pa.Field(ge=0, nullable=True)
+    trade_count: Series[int] = pa.Field(ge=0, nullable=True)
 
     @pa.dataframe_check
     def check_equity_positive(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
@@ -176,20 +186,37 @@ def validate_backtest_consistency(
     loss_trades: int | None,
     trade_count: int,
     backtest_id: int | None = None,
+    # 2026-06-06 新增 vnpy 统计字段校验参数
+    total_days: int | None = None,
+    profit_days: int | None = None,
+    loss_days: int | None = None,
+    total_commission: float | None = None,
+    trade_commission_sum: float | None = None,
 ) -> list[str]:
     """验证回测统计字段与交易记录之间的一致性
 
     调试沉淀(2026-06-04):
     - vn.py statistics 中总交易数字段为 total_trade_count
-    - win_trades + loss_trades 应等于 total_trades（允许 None 缺失）
-    - backtest_trades 表的实际记录数应等于 total_trades
+    - backtest_trades 表的实际记录数应等于 total_trades（总成交笔数）
+
+    2026-06-06 新增/调整:
+    - profit_days + loss_days 应约等于 total_days（允许 ±2 天误差，因持仓跨日）
+    - total_commission 应约等于逐笔交易 commission 之和（允许 1 元误差）
+    - 2026-06-06 调整: win_trades + loss_trades 不再要求 == total_trades，
+      因为 win/loss 只统计有实际盈亏的平仓交易，而 total_trades 包含所有成交(含开仓)。
+      改为校验: win_trades + loss_trades <= total_trades，且差值合理（开仓笔数）
 
     Args:
-        total_trades: 回测统计中的总交易数
-        win_trades: 盈利交易数
-        loss_trades: 亏损交易数
+        total_trades: 回测统计中的总交易数（vnpy total_trade_count，含开仓+平仓）
+        win_trades: 盈利交易数（仅统计有实际盈亏的平仓）
+        loss_trades: 亏损交易数（仅统计有实际盈亏的平仓）
         trade_count: backtest_trades 表中的实际交易记录数
         backtest_id: 回测记录 ID（用于日志）
+        total_days: 总交易日数 [vnpy]
+        profit_days: 盈利交易日数 [vnpy]
+        loss_days: 亏损交易日数 [vnpy]
+        total_commission: 回测统计中的总手续费 [vnpy]
+        trade_commission_sum: 逐笔交易手续费之和（从 backtest_trades 聚合）
 
     Returns:
         错误信息列表，空列表表示验证通过
@@ -197,21 +224,23 @@ def validate_backtest_consistency(
     errors: list[str] = []
     prefix = f"[bt={backtest_id}] " if backtest_id else ""
 
-    # 1. win_trades + loss_trades ≈ total_trades
-    if win_trades is not None and loss_trades is not None:
-        expected = win_trades + loss_trades
-        if expected != total_trades:
-            errors.append(
-                f"{prefix}win_trades({win_trades}) + loss_trades({loss_trades}) "
-                f"= {expected} ≠ total_trades({total_trades})"
-            )
-
-    # 2. 实际交易记录数 = total_trades
+    # 1. 实际交易记录数 = total_trades（总成交笔数应一致）
     if trade_count != total_trades:
         errors.append(
             f"{prefix}backtest_trades 实际记录数({trade_count}) "
             f"≠ total_trades({total_trades})"
         )
+
+    # 2. win_trades + loss_trades ≤ total_trades（盈亏笔数是总成交的子集）
+    # 差值即为开仓笔数 + 持平笔数(pnl=0)，应 >= 0 且合理
+    if win_trades is not None and loss_trades is not None:
+        closed_cnt = win_trades + loss_trades
+        if closed_cnt > total_trades:
+            errors.append(
+                f"{prefix}win_trades({win_trades}) + loss_trades({loss_trades}) "
+                f"= {closed_cnt} > total_trades({total_trades}), "
+                f"不可能：盈亏笔数不能超过总成交笔数"
+            )
 
     # 3. 如果 total_trades > 0，则 win_trades/loss_trades 不能同时为 None
     if total_trades > 0:
@@ -220,5 +249,31 @@ def validate_backtest_consistency(
                 f"{prefix}total_trades={total_trades}>0，"
                 f"但 win_trades 和 loss_trades 均为 None"
             )
+
+    # 4. 2026-06-06新增: profit_days + loss_days ≈ total_days (允许±2天)
+    if (
+        total_days is not None
+        and profit_days is not None
+        and loss_days is not None
+        and total_days > 0
+    ):
+        day_sum = profit_days + loss_days
+        if abs(day_sum - total_days) > 2:
+            errors.append(
+                f"{prefix}profit_days({profit_days}) + loss_days({loss_days}) "
+                f"= {day_sum} 与 total_days({total_days}) 差异超过 2 天"
+            )
+
+    # 5. 2026-06-06新增: total_commission ≈ sum(trade.commission) (允许1元误差)
+    if (
+        total_commission is not None
+        and trade_commission_sum is not None
+        and abs(total_commission - trade_commission_sum) > 1.0
+    ):
+        errors.append(
+            f"{prefix}total_commission({total_commission:.2f}) "
+            f"≠ 逐笔commission之和({trade_commission_sum:.2f}), "
+            f"差异={abs(total_commission - trade_commission_sum):.2f}"
+        )
 
     return errors

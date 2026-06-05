@@ -86,7 +86,7 @@ class TestBacktestRecord:
         assert r.avg_loss is None
 
     def test_from_dict_maps_all_fields(self):
-        """from_dict 正确映射 ORM 全部字段"""
+        """from_dict 正确映射 ORM 全部字段（含 2026-06-06 新增 15 个 vnpy 统计字段）"""
         orm_data = {
             'id': 1,
             'symbol': 'DCE.m2509',
@@ -99,8 +99,31 @@ class TestBacktestRecord:
             'loss_trades': 20,
             'avg_win': 100.0,
             'avg_loss': -50.0,
+            # 风险指标
             'sharpe_ratio': 1.2,
             'max_drawdown': 0.08,
+            'max_ddpercent': 8.5,                    # 2026-06-06新增
+            'max_drawdown_duration': 15,
+            'daily_std': 0.02,
+            'return_drawdown_ratio': 1.5,
+            # 盈亏汇总 [vnpy] (2026-06-06新增)
+            'total_net_pnl': 15000.0,
+            'daily_net_pnl': 41.1,
+            'total_commission': 800.5,
+            'daily_commission': 2.19,
+            'total_slippage': 500.0,
+            'daily_slippage': 1.37,
+            'total_turnover': 2500000.0,
+            'daily_turnover': 6849.32,
+            # 交易日统计 [vnpy] (2026-06-06新增)
+            'profit_days': 180,
+            'loss_days': 170,
+            'daily_trade_count': 0.14,
+            'daily_return_pct': 0.041,
+            # 进阶指标 [vnpy] (2026-06-06新增)
+            'ewm_sharpe': 1.35,
+            'rgr_ratio': 1.88,
+            # 时间范围
             'start_date': '2024-01-01',
             'end_date': '2024-12-31',
             'initial_capital': 100000.0,
@@ -125,6 +148,22 @@ class TestBacktestRecord:
         assert r.avg_loss == -50.0
         assert r.sharpe_ratio == 1.2
         assert r.max_drawdown == 0.08
+        # 2026-06-06 新增字段断言
+        assert r.max_ddpercent == 8.5
+        assert r.total_net_pnl == 15000.0
+        assert r.daily_net_pnl == 41.1
+        assert r.total_commission == 800.5
+        assert r.daily_commission == 2.19
+        assert r.total_slippage == 500.0
+        assert r.daily_slippage == 1.37
+        assert r.total_turnover == 2500000.0
+        assert r.daily_turnover == 6849.32
+        assert r.profit_days == 180
+        assert r.loss_days == 170
+        assert r.daily_trade_count == 0.14
+        assert r.daily_return_pct == 0.041
+        assert r.ewm_sharpe == 1.35
+        assert r.rgr_ratio == 1.88
         assert r.start_date == '2024-01-01'
         assert r.end_date == '2024-12-31'
         assert r.initial_capital == 100000.0

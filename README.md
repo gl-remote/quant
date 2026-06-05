@@ -2,7 +2,7 @@
 
 ![version](https://img.shields.io/badge/version-0.2.0--dev-blue) ![python](https://img.shields.io/badge/python-3.10%2B-green) ![tests](https://img.shields.io/badge/tests-162%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-51%25-yellow)
 
-基于双均线交叉（SMA Crossover）策略的自动化量化交易系统，支持数据获取、三阶段回测、过拟合评估及实盘交易。
+多策略量化交易系统，支持策略开发、三阶段回测（训练/验证/测试）、Walk-Forward 验证、参数优化及实盘交易。
 
 ## 核心功能
 
@@ -13,7 +13,8 @@
 - **数据导出** — 从天勤拉取历史 K 线，增量合并 / 强制覆盖为 CSV
 - **实盘交易** — 天勤实盘/模拟 + Web GUI
 - **操作日志** — 所有操作持久化至 SQLite，支持审计追溯
-- **统一回测引擎** — 根据标的数量自动选择 TqSdk（单标的）或 vn.py（批量）
+- **统一回测引擎** — 根据标的数量自动选择 TqSdk（单标的）或 vn.py（批量），逐笔 pnl 扣除手续费和滑点
+- **净盈亏数据模型** — 完整记录 vnpy 全量统计指标（53 列 backtests + 11 列 backtest_daily）
 
 ## 项目结构
 
@@ -126,8 +127,10 @@ python main.py backtest  # 扫描全部品种
 [backtest]
 initial_capital = 100000.0      # 初始资金
 commission_rate = 0.0003        # 手续费率
-slippage = 1                     # 滑点（跳）
+slippage = 0.1                  # 单边滑点（价格单位）
 interval = "1m"                  # K线周期: 1m/5m/15m/30m/1h/d
+price_tick = 1.0                # 最小变动价位
+contract_size = 10              # 合约乘数
 
 [backtest.split]
 train_ratio = 0.6                # 训练集 60%
@@ -153,6 +156,7 @@ position_ratio = 0.1            # 仓位 10%
 |------|------|
 | [系统概览](docs/overview.md) | 项目定位与核心能力 |
 | [架构设计](docs/architecture.md) | 模块划分、数据流、设计决策 |
+| [数据字典](docs/data-dictionary.md) | 全部字段含义、格式约定、计算公式 |
 | [配置说明](docs/configuration.md) | 参数详解与配置示例 |
 | [使用指南](docs/usage-guide.md) | 环境准备、CLI 操作、编程调用 |
 | [API 文档](docs/api-reference.md) | 核心接口与数据结构 |
@@ -162,9 +166,9 @@ position_ratio = 0.1            # 仓位 10%
 
 ## 环境要求
 
-- Python 3.8 ~ 3.11
-- 依赖：`numpy`, `pandas`, `pyyaml`, `tqsdk`
-- vn.py ≥ 3.8.0（可选，未安装时自动降级）
+- Python 3.10 ~ 3.12
+- 核心依赖：`numpy`, `pandas`, `peewee`, `pydantic`, `pandera`, `loguru`, `tqsdk`（详见 pyproject.toml）
+- 可选依赖：vn.py ≥ 3.8.0（批量回测，未安装时自动降级）
 
 ## 开发规范
 

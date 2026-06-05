@@ -35,11 +35,21 @@ export default function MetricCards({ run, backtests }: Props) {
     bestRecords.reduce((sum, b) => sum + (b.sharpe_ratio || 0), 0) /
     uniqueSymbols;
 
+  const totalCommission = bestRecords.reduce(
+    (sum, b) => sum + (b.total_commission || 0),
+    0
+  );
+  const totalNetPnl = bestRecords.reduce(
+    (sum, b) => sum + (b.total_net_pnl || 0),
+    0
+  );
+
   const cards = [
     { label: "总品种数", value: String(uniqueSymbols) },
     {
       label: "平均收益率",
-      value: `${(avgReturn * 100).toFixed(2)}%`,
+      // total_return 是 vnpy 输出的百分比（已乘100），avgReturn 直接显示
+      value: `${avgReturn.toFixed(2)}%`,
       color: avgReturn >= 0 ? "#059669" : "#dc2626",
     },
     { label: "总交易次数", value: String(totalTrades) },
@@ -47,6 +57,17 @@ export default function MetricCards({ run, backtests }: Props) {
       label: "平均夏普",
       value: avgSharpe.toFixed(2),
       color: avgSharpe >= 0 ? "#059669" : "#dc2626",
+    },
+    // 2026-06-06 新增 vnpy 统计字段
+    {
+      label: "总净盈亏",
+      value: `${totalNetPnl >= 0 ? "" : "-"}${Math.abs(totalNetPnl).toLocaleString("zh-CN")}`,
+      color: totalNetPnl >= 0 ? "#059669" : "#dc2626",
+    },
+    {
+      label: "总手续费",
+      value: totalCommission.toLocaleString("zh-CN"),
+      color: "#f59e0b",
     },
   ];
 
@@ -60,6 +81,8 @@ export default function MetricCards({ run, backtests }: Props) {
     "平均收益率": "RUN-MET-ITEM-RETURN",
     "总交易次数": "RUN-MET-ITEM-TRADES",
     "平均夏普": "RUN-MET-ITEM-SHARPE",
+    "总净盈亏": "RUN-MET-ITEM-NET-PNL",       // 2026-06-06新增
+    "总手续费": "RUN-MET-ITEM-COMMISSION",      // 2026-06-06新增
   };
 
   return (

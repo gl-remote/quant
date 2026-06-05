@@ -43,13 +43,14 @@ from common.schemas import (
 )
 
 def _normalize_max_dd(raw_value: float | None) -> float:
-    """将vnpy返回的max_drawdown归一化为比值"""
+    """返回 max_drawdown 原值
+
+    vnpy 的 max_drawdown 是绝对金额（如 50000 元），不再做归一化。
+    2026-06-06: 移除了旧版 v/100 的逻辑，因为 vnpy 输出的就是金额而非百分比。
+    """
     if raw_value is None:
         return 0.0
-    v = float(raw_value)
-    if abs(v) > 1:
-        return v / 100.0
-    return v
+    return float(raw_value)
 
 
 class DataStore:
@@ -73,18 +74,54 @@ class DataStore:
         )
         # 简单的迁移逻辑：为现有数据库添加新字段
         try:
-            # 检查并添加 use_fixed_seed 字段
+            # ── runs 表 ──────────────────────────────────────
             cursor = database.execute_sql("PRAGMA table_info(runs)")
             columns = [row[1] for row in cursor.fetchall()]
             if "use_fixed_seed" not in columns:
                 database.execute_sql("ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0")
             if "random_seed" not in columns:
                 database.execute_sql("ALTER TABLE runs ADD COLUMN random_seed INTEGER")
-            # 检查并添加 reason 字段（backtest_trades）
+            # ── backtest_trades 表 ───────────────────────────
             cursor2 = database.execute_sql("PRAGMA table_info(backtest_trades)")
             cols2 = [row[1] for row in cursor2.fetchall()]
             if "reason" not in cols2:
-                database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(32) DEFAULT ''")
+                database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(512) DEFAULT ''")
+            # ── backtests 表（2026-06-06 新增 vnpy 全量字段）────
+            cursor3 = database.execute_sql("PRAGMA table_info(backtests)")
+            bt_cols = [row[1] for row in cursor3.fetchall()]
+            _bt_alter = {
+                'max_ddpercent': 'REAL',
+                'total_net_pnl': 'REAL',
+                'daily_net_pnl': 'REAL',
+                'total_commission': 'REAL',
+                'daily_commission': 'REAL',
+                'total_slippage': 'REAL',
+                'daily_slippage': 'REAL',
+                'total_turnover': 'REAL',
+                'daily_turnover': 'REAL',
+                'profit_days': 'INTEGER',
+                'loss_days': 'INTEGER',
+                'daily_trade_count': 'REAL',
+                'daily_return_pct': 'REAL',
+                'ewm_sharpe': 'REAL',
+                'rgr_ratio': 'REAL',
+            }
+            for col_name, col_type in _bt_alter.items():
+                if col_name not in bt_cols:
+                    database.execute_sql(f"ALTER TABLE backtests ADD COLUMN {col_name} {col_type}")
+
+            # ── backtest_daily 表（2026-06-06 新增 vnpy 日度字段）────
+            cursor4 = database.execute_sql("PRAGMA table_info(backtest_daily)")
+            bd_cols = [row[1] for row in cursor4.fetchall()]
+            _bd_alter = {
+                'turnover': 'REAL',
+                'commission': 'REAL',
+                'slippage': 'REAL',
+                'trade_count': 'INTEGER',
+            }
+            for col_name, col_type in _bd_alter.items():
+                if col_name not in bd_cols:
+                    database.execute_sql(f"ALTER TABLE backtest_daily ADD COLUMN {col_name} {col_type}")
         except Exception as e:
             logger.warning(f"数据库迁移失败: {e}")
 
@@ -299,9 +336,28 @@ class DataStore:
             bt.win_loss_ratio = result.win_loss_ratio
             bt.sharpe_ratio = result.sharpe_ratio
             bt.max_drawdown = _normalize_max_dd(result.max_drawdown)
+            bt.max_ddpercent = result.max_ddpercent
             bt.max_drawdown_duration = result.max_drawdown_duration or 0
             bt.daily_std = result.daily_std
             bt.return_drawdown_ratio = result.return_drawdown_ratio
+            # ── 盈亏汇总（vnpy 直接输出）───────────────────────
+            bt.total_net_pnl = result.total_net_pnl
+            bt.daily_net_pnl = result.daily_net_pnl
+            bt.total_commission = result.total_commission
+            bt.daily_commission = result.daily_commission
+            bt.total_slippage = result.total_slippage
+            bt.daily_slippage = result.daily_slippage
+            bt.total_turnover = result.total_turnover
+            bt.daily_turnover = result.daily_turnover
+            # ── 交易日统计（vnpy 直接输出）──────────────────────
+            bt.profit_days = result.profit_days
+            bt.loss_days = result.loss_days
+            bt.daily_trade_count = result.daily_trade_count
+            bt.daily_return_pct = result.daily_return_pct
+            # ── 进阶指标（vnpy 输出）───────────────────────────
+            bt.ewm_sharpe = result.ewm_sharpe
+            bt.rgr_ratio = result.rgr_ratio
+            # ── 元数据 ────────────────────────────────────────
             bt.engine_config = json.dumps(result.engine_config) if result.engine_config else None
             bt.data_src = data_src or result.data_src
             bt.updated_at = now
@@ -338,9 +394,27 @@ class DataStore:
                 win_loss_ratio=result.win_loss_ratio,
                 sharpe_ratio=result.sharpe_ratio,
                 max_drawdown=_normalize_max_dd(result.max_drawdown),
+                max_ddpercent=result.max_ddpercent,
                 max_drawdown_duration=result.max_drawdown_duration or 0,
                 daily_std=result.daily_std,
                 return_drawdown_ratio=result.return_drawdown_ratio,
+                # ── 盈亏汇总（vnpy 直接输出）───────────────────────
+                total_net_pnl=result.total_net_pnl,
+                daily_net_pnl=result.daily_net_pnl,
+                total_commission=result.total_commission,
+                daily_commission=result.daily_commission,
+                total_slippage=result.total_slippage,
+                daily_slippage=result.daily_slippage,
+                total_turnover=result.total_turnover,
+                daily_turnover=result.daily_turnover,
+                # ── 交易日统计（vnpy 直接输出）──────────────────────
+                profit_days=result.profit_days,
+                loss_days=result.loss_days,
+                daily_trade_count=result.daily_trade_count,
+                daily_return_pct=result.daily_return_pct,
+                # ── 进阶指标（vnpy 输出）───────────────────────────
+                ewm_sharpe=result.ewm_sharpe,
+                rgr_ratio=result.rgr_ratio,
                 engine_config=json.dumps(result.engine_config) if result.engine_config else None,
                 data_src=data_src or result.data_src,
                 created_at=now,
@@ -472,7 +546,9 @@ class DataStore:
                 continue
             date_str = str(dt).split(' ')[0] if ' ' in str(dt) else str(dt).split('T')[0]
 
+            # vnpy calculate_result() 输出键名为 net_pnl；daily_return 为旧版键名兼容
             net_pnl = float(daily.get('net_pnl', daily.get('daily_return', 0.0)))  # type: ignore[arg-type]
+            # vnpy calculate_result() 输出键名为 balance；equity 为旧版键名兼容
             equity = float(daily.get('balance', daily.get('equity', 0.0)))  # type: ignore[arg-type]
             if equity > peak:
                 peak = equity
@@ -484,6 +560,11 @@ class DataStore:
                 'equity': equity,
                 'daily_return': net_pnl,
                 'drawdown': drawdown,
+                # 2026-06-06 新增 vnpy 日度字段
+                'turnover': float(daily.get('turnover', 0.0) or 0),
+                'commission': float(daily.get('commission', 0.0) or 0),
+                'slippage': float(daily.get('slippage', 0.0) or 0),
+                'trade_count': int(daily.get('trade_count', 0) or 0),
                 'created_at': now,
             })
 
@@ -522,6 +603,11 @@ class DataStore:
                 'equity': row.get('equity', 0),
                 'daily_return': row.get('daily_return', 0),
                 'drawdown': row.get('drawdown', 0),
+                # 2026-06-06 新增 vnpy 日度字段
+                'turnover': row.get('turnover'),
+                'commission': row.get('commission'),
+                'slippage': row.get('slippage'),
+                'trade_count': row.get('trade_count'),
             })
         return results
 
@@ -597,8 +683,19 @@ class DataStore:
                 Backtest.win_loss_ratio,
                 Backtest.annual_return,
                 Backtest.max_drawdown,
+                Backtest.max_ddpercent,              # 2026-06-06新增
                 Backtest.sharpe_ratio,
                 Backtest.end_balance,
+                # 盈亏汇总 [vnpy] (2026-06-06新增)
+                Backtest.total_net_pnl,
+                Backtest.total_commission,
+                Backtest.total_slippage,
+                # 交易日统计 [vnpy]
+                Backtest.profit_days,
+                Backtest.loss_days,
+                # 进阶指标 [vnpy]
+                Backtest.ewm_sharpe,
+                Backtest.rgr_ratio,
                 Backtest.data_src,
                 Backtest.start_date,
                 Backtest.end_date,
@@ -622,12 +719,24 @@ class DataStore:
             'symbol': sym,
             'total_return': total_return,
             'total_trades': r['total_trades'] or 0,
+            # win_rate 是比值(0~1)，前端展示期望百分比(0~100)
             'win_rate': float(r['win_rate'] or 0) * 100,
             'win_loss_ratio': float(r['win_loss_ratio'] or 0),
             'annual_return': float(r['annual_return'] or 0),
             'max_drawdown': float(r['max_drawdown'] or 0),
+            'max_ddpercent': float(r['max_ddpercent'] or 0),
             'sharpe': float(r['sharpe_ratio'] or 0),
             'end_balance': float(r['end_balance'] or 0),
+            # 盈亏汇总 [vnpy] (2026-06-06新增)
+            'total_net_pnl': float(r['total_net_pnl'] or 0),
+            'total_commission': float(r['total_commission'] or 0),
+            'total_slippage': float(r['total_slippage'] or 0),
+            # 交易日统计 [vnpy]
+            'profit_days': r['profit_days'] or 0,
+            'loss_days': r['loss_days'] or 0,
+            # 进阶指标 [vnpy]
+            'ewm_sharpe': float(r['ewm_sharpe'] or 0),
+            'rgr_ratio': float(r['rgr_ratio'] or 0),
             'ret_cls': 'badge-green' if total_return > 0 else 'badge-red',
             'sr_cls': 'badge-green' if (r['sharpe_ratio'] or 0) > 0 else 'badge-red',
             'data_src': r['data_src'],
@@ -674,8 +783,27 @@ class DataStore:
                 'total_return': float(bt['total_return'] or 0),
                 'sharpe_ratio': float(bt['sharpe_ratio'] or 0),
                 'max_drawdown': float(bt['max_drawdown'] or 0),
-                'win_rate': float(bt['win_rate'] or 0),
+                'max_ddpercent': float(bt['max_ddpercent'] or 0),
+                # win_rate 是比值(0~1)，前端 formatPct 期望百分比(0~100)
+                'win_rate': float(bt['win_rate'] or 0) * 100,
                 'total_trades': bt['total_trades'] or 0,
+                # 盈亏汇总 [vnpy] (2026-06-06新增)
+                'total_net_pnl': float(bt['total_net_pnl'] or 0),
+                'daily_net_pnl': float(bt['daily_net_pnl'] or 0),
+                'total_commission': float(bt['total_commission'] or 0),
+                'daily_commission': float(bt['daily_commission'] or 0),
+                'total_slippage': float(bt['total_slippage'] or 0),
+                'daily_slippage': float(bt['daily_slippage'] or 0),
+                'total_turnover': float(bt['total_turnover'] or 0),
+                'daily_turnover': float(bt['daily_turnover'] or 0),
+                # 交易日统计 [vnpy]
+                'profit_days': bt['profit_days'] or 0,
+                'loss_days': bt['loss_days'] or 0,
+                'daily_trade_count': float(bt['daily_trade_count'] or 0),
+                'daily_return_pct': float(bt['daily_return_pct'] or 0),
+                # 进阶指标 [vnpy]
+                'ewm_sharpe': float(bt['ewm_sharpe'] or 0),
+                'rgr_ratio': float(bt['rgr_ratio'] or 0),
                 'data_src': bt['data_src'],
                 'kline_interval': bt['kline_interval'],
                 'strategy_version': bt['strategy_version'],
