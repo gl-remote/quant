@@ -240,7 +240,7 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
         'optimization_history': charts_spec.get('optimization_history'),
         'param_importances': charts_spec.get('param_importances'),
         'parallel_coordinate': charts_spec.get('parallel_coordinate'),
-        'contour': charts_spec.get('contour'),
+        'contours': charts_spec.get('contours'),
     }
     _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
 

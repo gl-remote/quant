@@ -74,10 +74,10 @@ def build_optuna_spec(
 
     # --- contour ---
     try:
-        result["contour"] = _build_contour(study, trials)
+        result["contours"] = _build_contour(study, trials)
     except Exception as e:
         logger.warning("contour 生成失败: %s", e)
-        result["contour"] = None
+        result["contours"] = None
 
     return result
 
@@ -219,40 +219,16 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
 
 
 def _build_contour(study: optuna.study.Study, trials: list[optuna.trial.FrozenTrial]) -> dict | None:
-    """等高线图（取前两个参数）"""
+    """等高线图 — 返回参数名和原始试验数据，前端动态选择 X/Y 轴"""
     ct = _completed_trials(trials)
     param_names = _param_names(study)
     if len(param_names) < 2 or not ct:
         return None
 
-    p1, p2 = param_names[0], param_names[1]
-    points = [(t.params.get(p1, 0), t.params.get(p2, 0), t.value) for t in ct]
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    vs: list[float] = [p[2] for p in points if p[2] is not None]
-
-    if not vs:
-        return None
-
     return {
-        "tooltip": {},
-        "visualMap": {
-            "min": min(vs), "max": max(vs),
-            "inRange": {"color": ["#313695", "#4575b4", "#74add1", "#abd9e9",
-                                  "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"]},
-            "calculable": True,
-            "orient": "vertical",
-            "right": 10,
-            "top": 20,
-            "bottom": 40,
-        },
-        "xAxis": {"type": "value", "name": p1, "nameLocation": "center", "nameGap": 25},
-        "yAxis": {"type": "value", "name": p2, "nameLocation": "center", "nameGap": 35},
-        "grid": {"left": 70, "right": 60, "top": 20, "bottom": 40},
-        "series": [{
-            "name": f"{p1} vs {p2}",
-            "type": "scatter",
-            "data": [[xs[i], ys[i], vs[i]] for i in range(len(points))],
-            "symbolSize": 8,
-        }],
+        "param_names": param_names,
+        "trials": [
+            {"params": {k: t.params.get(k) for k in param_names}, "value": t.value}
+            for t in ct
+        ],
     }

@@ -13,6 +13,22 @@
 import type { EChartsOption } from "echarts";
 
 /**
+ * ContourTrial — 一次 Optuna 试验的参数和值
+ */
+export interface ContourTrial {
+  params: Record<string, number>;
+  value: number | null;
+}
+
+/**
+ * ContourMeta — 等高线图的原始数据，参数名 + 试验列表
+ */
+export interface ContourMeta {
+  param_names: string[];
+  trials: ContourTrial[];
+}
+
+/**
  * 回测运行信息
  * 
  * 对应 Python 后端 runs 表结构
@@ -164,7 +180,7 @@ export interface OptunaData {
   optimization_history: EChartsOption | null; // 优化历史图表配置
   param_importances: EChartsOption | null; // 参数重要性图表配置
   parallel_coordinate: EChartsOption | null; // 平行坐标图配置
-  contour: EChartsOption | null;       // 等高线图配置
+  contours: ContourMeta | null; // 等高线原始数据
 }
 
 export type { EChartsOption };
