@@ -450,6 +450,10 @@ class TestBacktestDailySchema:
             'equity': [100200.0, 100100.0],
             'daily_return': [200.0, -100.0],
             'drawdown': [0.0, -100.0],
+            'turnover': [50000.0, 30000.0],
+            'commission': [15.0, 9.0],
+            'slippage': [5.0, 3.0],
+            'trade_count': [2, 1],
         })
         validated = BacktestDailySchema.validate(df)
         assert len(validated) == 2

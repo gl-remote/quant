@@ -77,8 +77,8 @@ class TestBacktestRecord:
         r = BacktestRecord(symbol='m2509', strategy='ma')
         assert r.status == 'success'
         assert r.total_return == 0.0
-        assert r.max_drawdown == 0.0
-        assert r.win_rate == 0.0
+        assert r.max_drawdown is None
+        assert r.win_rate is None
         assert r.total_trades == 0
         assert r.win_trades is None
         assert r.loss_trades is None
