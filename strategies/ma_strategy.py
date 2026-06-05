@@ -290,15 +290,18 @@ class MaStrategyCore(Strategy[MACrossParams]):
             elif short_bias and macd_val < 0 and kdj_val > 40:
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
-        # 填充 diagnostics（持仓时记录指标快照给 Bridge 打日志）
-        if state.position.direction:
-            signal.diagnostics = {
-                "entry_price": state.position.entry_price,
-                "highest_price": state.position.highest_price,
-                "lowest_price": state.position.lowest_price,
-                "current_close": ctx.bar.close,
-                "atr": cur_atr,
-            }
+        # 填充 diagnostics — 按 data_requirements 中声明的指标全部记录
+        signal.diagnostics = {
+            "entry_price": state.position.entry_price,
+            "highest_price": state.position.highest_price,
+            "lowest_price": state.position.lowest_price,
+            "current_close": ctx.bar.close,
+            f"sma_{config.sma_short}": cur_5m_short,
+            f"sma_{config.sma_long}": cur_15m_long,
+            "atr": cur_atr,
+            "macd": macd_val,
+            "kdj": kdj_val,
+        }
 
         return signal
 
