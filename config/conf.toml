@@ -48,15 +48,15 @@ atr_take_profit_multiplier = 1.5 # ATR 止盈倍数（盈利超过 atr * multipl
 
   [strategies.search_space.trailing_activation_atr]
   type = "float"
-  low = 0.5
-  high = 3.0
-  step = 0.5
+  low = 0.3
+  high = 1.5
+  step = 0.3
 
   [strategies.search_space.trailing_drawdown_ratio]
   type = "float"
-  low = 0.05
-  high = 0.50
-  step = 0.05
+  low = 0.1
+  high = 0.5
+  step = 0.1
 
 # 未来可扩展更多策略:
 # [[strategies]]
