@@ -547,7 +547,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
     } else {
       console.log("[KlineChart-DEBUG] markers ref 未初始化");
     }
-  }, [klineData, indicators, trades]);
+  }, [klineData, indicators, trades, mode]);
 
   useEffect(() => {
     if (smaShortSeriesRef.current && smaLongSeriesRef.current) {

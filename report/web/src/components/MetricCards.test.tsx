@@ -120,3 +120,4 @@ describe('MetricCards', () => {
     // totalCommission = 350 + 280 + 420 = 1050
     expect(screen.getByText(/1,050/)).toBeInTheDocument();
   });
+});
