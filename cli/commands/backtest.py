@@ -527,7 +527,7 @@ def _persist_search_results(
         for er in trial.get('engine_results', []):
             # 覆盖引擎结果中的 trial 级别字段
             er.engine_config = trial_cfg
-            er.strategy_params = trial.get('search_params', {})
+            er.strategy_params = trial.get('strategy_params', {})
             er.git_hash = git_hash
 
             if not er.success:

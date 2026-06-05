@@ -560,8 +560,32 @@ class DataStore:
             })
         return result
 
+    def _filter_by_best_trial(self, backtests: list[dict[str, object]], run_id: int) -> list[dict[str, object]]:
+        """过滤出全局最优 trial 对应的回测记录"""
+        import json as _j
+
+        best_trial = self.get_best_trial_index(run_id)
+        if best_trial <= 0:
+            return backtests
+
+        filtered = []
+        for bt in backtests:
+            ec = bt.get('engine_config')
+            if not ec:
+                continue
+            if isinstance(ec, str):
+                try:
+                    cfg = _j.loads(ec)
+                except Exception:
+                    continue
+            else:
+                cfg = ec
+            if cfg.get('trial_index') == best_trial:
+                filtered.append(bt)
+        return filtered if filtered else backtests
+
     def get_run_summary(self, run_id: int) -> list[dict[str, object]]:
-        """获取每品种最优回测记录"""
+        """获取每品种最优回测记录（仅全局最优参数组合）"""
         rows = list(
             Backtest
             .select(
@@ -585,6 +609,8 @@ class DataStore:
             .order_by(Backtest.symbol, Backtest.total_return.desc())
             .dicts()
         )
+
+        rows = self._filter_by_best_trial(rows, run_id)
 
         best: dict[str, dict[str, object]] = {}
         for r in rows:
@@ -612,13 +638,15 @@ class DataStore:
         return [best[s] for s in sorted(best)]
 
     def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
-        """获取某 run 下所有回测记录（含参数和日线数据）"""
+        """获取某 run 下所有回测记录（含参数和日线数据，仅全局最优参数组合）"""
         backtests = list(
             Backtest
             .select()
             .where(Backtest.run_id == run_id, Backtest.status == 'success')
             .dicts()
         )
+
+        backtests = self._filter_by_best_trial(backtests, run_id)
 
         result = []
         for bt in backtests:

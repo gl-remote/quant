@@ -69,27 +69,45 @@ function convertTradeToMarkers(
   // 日线不展示买卖点
   if (isDaily) return [];
 
-  const klineTimeSet = new Set(klineData.map(d => {
-    const t = toChartTime(d.datetime);
-    return typeof t === "number" ? t : String(t);
-  }));
+  // 将 klineData 按 datetime 排序，用于二分查找归属K线
+  const sortedKlines = [...klineData].sort((a, b) => Number(a.datetime) - Number(b.datetime));
+  const klineTimes = sortedKlines.map(k => Number(k.datetime));
+
+  // 将交易时间归一化到所属K线的时间戳
+  function mapTradeToKlineTime(tradeTimestamp: number): number | null {
+    // 二分查找：找到最后一个 time <= tradeTimestamp 的K线
+    let lo = 0, hi = klineTimes.length - 1;
+    let result = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (klineTimes[mid] <= tradeTimestamp) {
+        result = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    if (result === -1) return null; // 交易早于所有K线
+    return klineTimes[result];
+  }
 
   const markers: any[] = [];
 
   for (const trade of trades) {
-    let tradeTime: Time;
+    let tradeTimestamp: number;
     if (typeof trade.datetime === "number") {
-      tradeTime = trade.datetime as Time;
+      tradeTimestamp = trade.datetime;
     } else if (trade.datetime.includes(" ")) {
-      tradeTime = (new Date(trade.datetime.replace(" ", "T") + "Z").getTime() / 1000) as Time;
+      // 不追加 "Z"，后端输出的是北京时间字符串，按本地时区解析
+      tradeTimestamp = new Date(trade.datetime.replace(" ", "T")).getTime() / 1000;
     } else if (trade.datetime.includes("T")) {
-      tradeTime = (new Date(trade.datetime + "Z").getTime() / 1000) as Time;
+      tradeTimestamp = new Date(trade.datetime).getTime() / 1000;
     } else {
-      tradeTime = trade.datetime as Time;
+      tradeTimestamp = Number(trade.datetime);
     }
 
-    const normalizedTime = typeof tradeTime === "number" ? tradeTime : String(tradeTime);
-    if (!klineTimeSet.has(normalizedTime as any)) {
+    const klineTime = mapTradeToKlineTime(tradeTimestamp);
+    if (klineTime === null) {
       continue;
     }
 
@@ -125,7 +143,7 @@ function convertTradeToMarkers(
     }
 
     markers.push({
-      time: tradeTime,
+      time: klineTime as Time,
       position,
       color,
       shape,
@@ -173,7 +191,6 @@ export default function KlineChart({ data, trades, loading }: Props) {
   });
 
   const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
-  console.log("[KlineChart] 渲染 - data:", data ? "有数据" : "null", "loading:", loading, "klineData:", klineData ? `${klineData.length}条` : "null");
 
   useEffect(() => {
     const container = containerRef.current;
@@ -204,20 +221,15 @@ export default function KlineChart({ data, trades, loading }: Props) {
   }, [klineData]);
 
   useEffect(() => {
-    console.log("[KlineChart] 图表初始化 useEffect, klineData:", !!klineData, "container:", !!containerRef.current, "chart:", !!chartRef.current);
-    
     if (!klineData) return;
     const container = containerRef.current;
     if (!container) {
-      console.log("[KlineChart] 无容器，跳过");
       return;
     }
     if (chartRef.current) {
-      console.log("[KlineChart] 图表已存在，跳过");
       return;
     }
 
-    console.log("[KlineChart] 创建图表");
     const chart = createChart(container, {
       layout: {
         background: { color: "#ffffff" },
@@ -381,7 +393,6 @@ export default function KlineChart({ data, trades, loading }: Props) {
     kdjJRef.current = kdjJ;
     markersRef.current = markers;
     chartRef.current = chart;
-    console.log("[KlineChart] 图表创建成功");
 
     const handleResize = () => {
       if (containerRef.current) {
@@ -408,7 +419,6 @@ export default function KlineChart({ data, trades, loading }: Props) {
     const markers = markersRef.current;
     if (!candleSeries || !volSeries) return;
 
-    console.log("[KlineChart] 设置 K 线数据:", klineData.length, "条");
     const candleData = convertToCandleData(klineData);
     candleSeries.setData(candleData);
 
@@ -494,13 +504,43 @@ export default function KlineChart({ data, trades, loading }: Props) {
     }
 
     if (markers) {
+      console.log("[KlineChart-DEBUG] trades 传入:", trades ? `${trades.length}条` : "null");
+      console.log("[KlineChart-DEBUG] indicators.trades:", indicators.trades);
+      console.log("[KlineChart-DEBUG] mode:", mode, "(raw=分钟线, daily=日线)");
+      if (trades && trades.length > 0) {
+        console.log("[KlineChart-DEBUG] trades 前3条样本:", trades.slice(0, 3).map(t => ({ datetime: t.datetime, direction: t.direction, offset: t.offset })));
+      // 验证：交易时间解析后的数值 vs K线时间戳是否一致
+      if (trades.length > 0) {
+        const sample = trades[0];
+        let ts: number;
+        if (typeof sample.datetime === "number") {
+          ts = sample.datetime;
+        } else if (sample.datetime.includes(" ")) {
+          ts = new Date(sample.datetime.replace(" ", "T")).getTime() / 1000;
+        } else {
+          ts = new Date(sample.datetime).getTime() / 1000;
+        }
+        const tsDate = new Date(ts * 1000);
+        console.log("[KlineChart-DEBUG] ⚠️ 时区验证 - trades[0]:", sample.datetime);
+        console.log("[KlineChart-DEBUG] ⚠️ 时区验证 - 解析后时间戳:", ts, "→ UTC:", tsDate.toISOString(), "→ 本地时间:", tsDate.toLocaleString());
+        console.log("[KlineChart-DEBUG] ⚠️ 时区验证 - K线首根时间戳:", klineData[0]?.datetime, "→ 对应时间:", new Date(Number(klineData[0].datetime) * 1000).toISOString());
+        console.log("[KlineChart-DEBUG] ⚠️ 时区验证 - 差值(秒):", ts - Number(klineData[0].datetime));
+      }
+      }
+      if (klineData && klineData.length > 0) {
+        console.log("[KlineChart-DEBUG] klineData(raw) 前3条 datetime:", klineData.slice(0, 3).map(k => k.datetime));
+        console.log("[KlineChart-DEBUG] klineData(raw) 后3条 datetime:", klineData.slice(-3).map(k => k.datetime));
+      }
       if (indicators.trades && trades) {
         const markerData = convertTradeToMarkers(trades, klineData);
-        console.log("[KlineChart] 设置交易标记:", markerData.length, "个");
+        console.log("[KlineChart-DEBUG] convertTradeToMarkers 结果:", markerData.length, "个", markerData.length > 0 ? "样本:" + JSON.stringify(markerData.slice(0, 2)) : "");
         markers.setMarkers(markerData);
       } else {
+        console.log("[KlineChart-DEBUG] 跳过标记设置: indicators.trades=", indicators.trades, "trades=", !!trades);
         markers.setMarkers([]);
       }
+    } else {
+      console.log("[KlineChart-DEBUG] markers ref 未初始化");
     }
   }, [klineData, indicators, trades]);
 
