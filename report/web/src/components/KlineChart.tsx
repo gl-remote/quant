@@ -116,29 +116,34 @@ function convertTradeToMarkers(
     let shape: "arrowUp" | "arrowDown";
     let text: string;
 
+    // direction = 交易方向(long=买入/short=卖出), offset = 开平(open=开仓/close=平仓)
     if (trade.offset === "open") {
       if (trade.direction === "long") {
+        // 买入开多
         position = "belowBar";
         color = "#26A69A";
         shape = "arrowUp";
-        text = "开多";
+        text = "多开";
       } else {
+        // 卖出开空
         position = "aboveBar";
         color = "#EF5350";
         shape = "arrowDown";
-        text = "开空";
+        text = "空开";
       }
     } else {
       if (trade.direction === "long") {
-        position = "aboveBar";
-        color = "#26A69A";
-        shape = "arrowDown";
-        text = "平多";
-      } else {
+        // 买入平空
         position = "belowBar";
-        color = "#EF5350";
+        color = "#26A69A";
         shape = "arrowUp";
-        text = "平空";
+        text = "空平";
+      } else {
+        // 卖出平多
+        position = "aboveBar";
+        color = "#EF5350";
+        shape = "arrowDown";
+        text = "多平";
       }
     }
 
@@ -699,11 +704,11 @@ export default function KlineChart({ data, trades, loading }: Props) {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="text-[#26A69A]">▲</span>
-          <span>开多</span>
+          <span>多开/空平</span>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-slate-500">
           <span className="text-[#EF5350]">▼</span>
-          <span>开空</span>
+          <span>空开/多平</span>
         </div>
       </div>
     </QlPanel>
