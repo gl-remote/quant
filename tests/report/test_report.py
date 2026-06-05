@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from data import DataManager  # noqa: E402
 from data.store import DataStore  # noqa: E402
 from common.constants import STATUS_SUCCESS, STATUS_FAILED  # noqa: E402
+from common.types import BacktestResult  # noqa: E402
 from conftest import insert_full_backtest  # noqa: E402
 
 
@@ -58,12 +59,13 @@ class TestFormatSingleReport:
         from report import format_single_report
         dm = DataManager()
         dm._store = DataStore(temp_db_path)
-        bt_id = dm._store.insert_backtest_detailed(
-            symbol='DCE.bad', strategy='ma', status=STATUS_FAILED,
-            error_message='数据不足无法回测', statistics={},
-            engine_config={}, params={},
-            start_date=None, end_date=None,
+        result = BacktestResult(
+            symbol='DCE.bad',
+            strategy='ma',
+            status=STATUS_FAILED,
+            error_message='数据不足无法回测',
         )
+        bt_id = dm._store.insert_backtest_detailed(result)
         text = format_single_report(dm, bt_id)
         assert '失败' in text or 'failed' in text
         assert '数据不足无法回测' in text
@@ -81,14 +83,18 @@ class TestFormatSingleReport:
         from report import format_single_report
         dm = DataManager()
         dm._store = DataStore(temp_db_path)
-        bt_id = dm._store.insert_backtest_detailed(
-            symbol='DCE.m2509', strategy='ma', status=STATUS_SUCCESS,
-            error_message=None,
-            statistics={'total_trades': 3, 'end_balance': 101000.0},
-            engine_config={'initial_capital': 100000.0},
-            params={},
-            start_date='2024-01-01', end_date='2024-03-31',
+        result = BacktestResult(
+            symbol='DCE.m2509',
+            strategy='ma',
+            status=STATUS_SUCCESS,
+            start_date='2024-01-01',
+            end_date='2024-03-31',
+            total_trades=3,
+            initial_capital=100000.0,
+            end_balance=101000.0,
+            total_return=1000.0,
         )
+        bt_id = dm._store.insert_backtest_detailed(result)
         text = format_single_report(dm, bt_id)
         assert '交易日数:   0 天' in text
         assert '资金曲线' not in text

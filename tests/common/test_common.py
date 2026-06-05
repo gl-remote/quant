@@ -533,39 +533,39 @@ class TestDeathCross:
 
 class TestStopLossTriggered:
     def test_hit(self):
-        assert stop_loss_triggered(100.0, 95.0, 0.03) is True
+        assert stop_loss_triggered(100.0, 95.0, 0.03, "long") is True
 
     def test_not_hit(self):
-        assert stop_loss_triggered(100.0, 99.0, 0.03) is False
+        assert stop_loss_triggered(100.0, 99.0, 0.03, "long") is False
 
     def test_exact_boundary(self):
-        assert stop_loss_triggered(100.0, 97.0, 0.03) is True
+        assert stop_loss_triggered(100.0, 97.0, 0.03, "long") is True
 
     def test_price_rise(self):
-        assert stop_loss_triggered(100.0, 110.0, 0.03) is False
+        assert stop_loss_triggered(100.0, 110.0, 0.03, "long") is False
 
     def test_zero_entry_price(self):
-        assert stop_loss_triggered(0.0, 100.0, 0.03) is False
+        assert stop_loss_triggered(0.0, 100.0, 0.03, "long") is False
 
     def test_negative_entry_price(self):
-        assert stop_loss_triggered(-100.0, 95.0, 0.03) is False
+        assert stop_loss_triggered(-100.0, 95.0, 0.03, "long") is False
 
 
 class TestTakeProfitTriggered:
     def test_hit(self):
-        assert take_profit_triggered(100.0, 106.0, 0.05) is True
+        assert take_profit_triggered(100.0, 106.0, 0.05, "long") is True
 
     def test_not_hit(self):
-        assert take_profit_triggered(100.0, 103.0, 0.05) is False
+        assert take_profit_triggered(100.0, 103.0, 0.05, "long") is False
 
     def test_exact_boundary(self):
-        assert take_profit_triggered(100.0, 105.0, 0.05) is True
+        assert take_profit_triggered(100.0, 105.0, 0.05, "long") is True
 
     def test_price_fall(self):
-        assert take_profit_triggered(100.0, 90.0, 0.05) is False
+        assert take_profit_triggered(100.0, 90.0, 0.05, "long") is False
 
     def test_zero_entry_price(self):
-        assert take_profit_triggered(0.0, 100.0, 0.05) is False
+        assert take_profit_triggered(0.0, 100.0, 0.05, "long") is False
 
 
 # --- average_entry_price ---

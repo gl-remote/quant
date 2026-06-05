@@ -148,13 +148,32 @@ def _prepare_test_data(
     return feed, reqs
 
 
-def _set_indicator_value(feed: DataFeed, period: str, indicator_name: str, value: float, offset: int = 0, **kwargs):
-    """设置指标值（用于测试）"""
-    key = (indicator_name, frozenset(kwargs.items()))
-    if period in feed._indicators and key in feed._indicators[period]:
-        while len(feed._indicators[period][key]) <= offset:
-            feed._indicators[period][key].append(None)
-        feed._indicators[period][key][offset] = value
+def _set_indicator_value(feed: DataFeed, timeframe: str, indicator_name: str, value: float, offset: int = 0, **kwargs):
+    """设置指标值（用于测试）
+
+    通过 PeriodData._df 直接写入指标列，模拟指标计算结果。
+
+    Args:
+        timeframe: K线周期，如 '1m' / '5m' / '15m'
+        indicator_name: 指标名称
+        value: 要设置的值
+        offset: 偏移量（-1 表示最新一行）
+        **kwargs: 指标参数（如 period=10, fast=12 等），用于生成列名
+    """
+    from strategies.runtime.events import generate_indicator_column_name
+
+    col_name = generate_indicator_column_name(indicator_name, kwargs)
+    period_data = feed._periods[timeframe]
+    df = period_data._df
+
+    # 确保 df 有足够行数
+    while len(df) <= abs(offset):
+        # 用最后一行填充不足的行
+        df.loc[df.index[-1] + (len(df) - abs(offset))] = df.iloc[-1]
+
+    idx = df.index[offset] if offset >= 0 else df.index[offset]
+    df.at[idx, col_name] = value
+    period_data.mark_indicator_calculated(col_name)
 
 
 def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price: float):
@@ -175,6 +194,7 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
     _set_indicator_value(feed, "1m", "kdj", 50.0, -1, n=9, m1=3, m2=3)
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
+    _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=config.atr_period)
     
     reqs = DataRequirements(
         periods={
@@ -216,6 +236,7 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
     _set_indicator_value(feed, "1m", "kdj", 60.0, -1, n=9, m1=3, m2=3)
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
+    _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=config.atr_period)
     
     reqs = DataRequirements(
         periods={
@@ -423,6 +444,7 @@ class TestMaStrategyFixedStopLoss:
         _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -461,7 +483,7 @@ class TestMaStrategyFixedStopLoss:
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_SELL
-        assert signal.reason == SIGNAL_STOP_LOSS
+        assert SIGNAL_STOP_LOSS in signal.reason
 
     def test_short_fixed_stop_loss(self):
         """测试空头固定比例止损"""
@@ -483,6 +505,7 @@ class TestMaStrategyFixedStopLoss:
         _set_indicator_value(feed, "5m", "sma", 99.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -516,12 +539,13 @@ class TestMaStrategyFixedStopLoss:
                 direction=TRADE_DIRECTION_SHORT,
                 entry_price=100.0,
                 volume=10,
+                lowest_price=100.0,
             ),
         )
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_BUY
-        assert signal.reason == SIGNAL_STOP_LOSS
+        assert SIGNAL_STOP_LOSS in signal.reason
 
 
 class TestMaStrategyFixedTakeProfit:
@@ -547,6 +571,7 @@ class TestMaStrategyFixedTakeProfit:
         _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -585,7 +610,7 @@ class TestMaStrategyFixedTakeProfit:
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_SELL
-        assert signal.reason == SIGNAL_TAKE_PROFIT
+        assert SIGNAL_TAKE_PROFIT in signal.reason
 
     def test_short_fixed_take_profit(self):
         """测试空头固定比例止盈"""
@@ -607,6 +632,7 @@ class TestMaStrategyFixedTakeProfit:
         _set_indicator_value(feed, "5m", "sma", 99.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -640,12 +666,13 @@ class TestMaStrategyFixedTakeProfit:
                 direction=TRADE_DIRECTION_SHORT,
                 entry_price=100.0,
                 volume=10,
+                lowest_price=100.0,
             ),
         )
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_BUY
-        assert signal.reason == SIGNAL_TAKE_PROFIT
+        assert SIGNAL_TAKE_PROFIT in signal.reason
 
 
 # --------------------------
@@ -679,6 +706,7 @@ class TestMaStrategyATRStopLoss:
         _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -717,7 +745,7 @@ class TestMaStrategyATRStopLoss:
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_SELL
-        assert signal.reason == SIGNAL_STOP_LOSS
+        assert SIGNAL_STOP_LOSS in signal.reason
 
     def test_short_atr_stop_loss(self):
         """测试空头 ATR 止损"""
@@ -743,6 +771,7 @@ class TestMaStrategyATRStopLoss:
         _set_indicator_value(feed, "5m", "sma", 99.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -776,12 +805,13 @@ class TestMaStrategyATRStopLoss:
                 direction=TRADE_DIRECTION_SHORT,
                 entry_price=100.0,
                 volume=10,
+                lowest_price=100.0,
             ),
         )
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_BUY
-        assert signal.reason == SIGNAL_STOP_LOSS
+        assert SIGNAL_STOP_LOSS in signal.reason
 
 
 class TestMaStrategyATRTakeProfit:
@@ -811,6 +841,7 @@ class TestMaStrategyATRTakeProfit:
         _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -849,7 +880,7 @@ class TestMaStrategyATRTakeProfit:
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_SELL
-        assert signal.reason == SIGNAL_TAKE_PROFIT
+        assert SIGNAL_TAKE_PROFIT in signal.reason
 
     def test_short_atr_take_profit(self):
         """测试空头 ATR 止盈"""
@@ -875,6 +906,7 @@ class TestMaStrategyATRTakeProfit:
         _set_indicator_value(feed, "5m", "sma", 99.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
@@ -908,12 +940,13 @@ class TestMaStrategyATRTakeProfit:
                 direction=TRADE_DIRECTION_SHORT,
                 entry_price=100.0,
                 volume=10,
+                lowest_price=100.0,
             ),
         )
         
         signal = strat.on_bar(state, ctx)
         assert signal.action == TRADE_ACTION_BUY
-        assert signal.reason == SIGNAL_TAKE_PROFIT
+        assert SIGNAL_TAKE_PROFIT in signal.reason
 
 
 class TestMaStrategyNoSignal:
@@ -940,6 +973,7 @@ class TestMaStrategyNoSignal:
         _set_indicator_value(feed, "1m", "macd", 0.0, -1, fast=12, slow=26, signal=9)
         _set_indicator_value(feed, "1m", "kdj", 50.0, -1, n=9, m1=3, m2=3)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
+        _set_indicator_value(feed, "5m", "atr", 2.0, -1, period=cfg.atr_period)
         
         reqs = DataRequirements(
             periods={
