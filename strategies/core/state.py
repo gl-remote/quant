@@ -75,6 +75,9 @@ class State(Generic[T]):
     contract_size: int = 1
     """合约乘数，用于计算仓位大小"""
 
+    margin: float = 1.0
+    """保证金比例 (如 0.07 = 7%)，用于计算仓位大小"""
+
     # 运行时状态（由 Bridge 更新）
     position: StrategyPosition = field(default_factory=StrategyPosition)
     """当前持仓状态

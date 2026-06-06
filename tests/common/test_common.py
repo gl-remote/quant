@@ -464,6 +464,24 @@ class TestPositionSize:
         # 负价格返回 0
         assert position_size(100000.0, 0.1, -100.0, 10) == 0
 
+    # ── 保证金场景 ──
+
+    def test_margin_increases_lots(self):
+        # 豆粕: 10万×30% / (2900×10×0.07) ≈ 14 手
+        assert position_size(100000.0, 0.3, 2900.0, 10, 0.07) == 14
+
+    def test_margin_close_to_one(self):
+        # margin=1.0 等价于不改前的全款模式
+        assert position_size(100000.0, 0.1, 100.0, 10, 1.0) == 10
+
+    def test_margin_zero_fails(self):
+        # 无效保证金返回 0
+        assert position_size(100000.0, 0.1, 100.0, 10, 0.0) == 0
+
+    def test_margin_negative_fails(self):
+        # 负保证金返回 0
+        assert position_size(100000.0, 0.1, 100.0, 10, -0.1) == 0
+
 
 # --- simple_moving_average ---
 

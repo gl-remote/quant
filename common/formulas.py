@@ -208,25 +208,26 @@ def trade_cost(price: float, quantity: int,
 # ============================================================================
 
 def position_size(capital: float, position_ratio: float,
-                  price: float, contract_size: int) -> int:
+                  price: float, contract_size: int,
+                  margin: float = 1.0) -> int:
     """计算下单手数
 
-    行业标准风险控制公式:
-      手数 = capital × position_ratio / (price × contract_size)
-    资金不足以买 1 手时返回 0。
+    期货: 手数 = capital × position_ratio / (price × contract_size × margin)
+    股票: margin=1.0（等价全款，持仓 100% 保证金）
 
     Args:
         capital: 可用资金
         position_ratio: 仓位比例 (如 0.1 = 10%)
         price: 当前价格
         contract_size: 合约乘数
+        margin: 保证金比例 (如 0.07 = 7%)
 
     Returns:
         下单手数 (整数，资金不足时返回 0)
     """
-    if price <= 0 or contract_size <= 0:
+    if price <= 0 or contract_size <= 0 or margin <= 0:
         return 0
-    vol = capital * position_ratio / (price * contract_size)
+    vol = capital * position_ratio / (price * contract_size * margin)
     if vol < 1:
         return 0
     return int(vol)

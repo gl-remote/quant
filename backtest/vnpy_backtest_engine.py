@@ -428,11 +428,13 @@ class VnpyBacktestEngine:
             pt = spec.tick
             # 滑点（价格单位）: slip_tick × tick
             sl = spec.tick * spec.slip_tick
+            # 保证金比例
+            mg = spec.margin
             # 手续费：含交易所 + 期货公司加收
             # vnpy 只支持费率模式 commission = price × volume × size × rate
             # 固定元/手品种需要换算为 rate = 总手续费/手 / (均价 × 合约乘数)
             # 均价用 OHLC 四价均值比单独 close 更稳定
-            avg_price = float(df[['open','high','low','close']].values.mean()) if not df.empty else 0.0
+            avg_price = float(df[['open', 'high', 'low', 'close']].mean().mean()) if not df.empty else 0.0
             if avg_price > 0 and spec.size > 0:
                 total_per_lot = spec.commission + BROKER_ADDON_DFCF
                 if spec.is_rate:
@@ -446,11 +448,13 @@ class VnpyBacktestEngine:
                 cs = self.contract_size
                 pt = self.price_tick
                 sl = self.slippage
+                mg = 0.1
                 cr = self.commission_rate
         else:
             cs = self.contract_size
             pt = self.price_tick
             sl = self.slippage
+            mg = 0.1
             cr = self.commission_rate
 
         results: list[dict[str, Any]] = []
@@ -478,6 +482,7 @@ class VnpyBacktestEngine:
                 period=self.interval,
                 capital=self.initial_capital,
                 contract_size=cs,  # 品种级合约乘数
+                margin=mg,       # 品种级保证金比例
                 run_id=self._run_id or 0,
                 backtest_id=bt_id,
             )

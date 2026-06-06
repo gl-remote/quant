@@ -284,7 +284,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
         # ── 空仓：做多或做空入场 ──
         else:
             vol = self._calc_position_size(ctx.bar.close, state.capital, config.position_ratio,
-                                           state.contract_size)
+                                           state.contract_size, state.margin)
             if long_bias and macd_val > 0 and kdj_val < 60:
                 signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
             elif short_bias and macd_val < 0 and kdj_val > 40:
@@ -467,13 +467,14 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
     @staticmethod
     def _calc_position_size(price: float, capital: float, position_ratio: float,
-                            contract_size: int) -> int:
+                            contract_size: int, margin: float = 1.0) -> int:
         """计算仓位大小
 
         :param price: 当前价格
         :param capital: 总资金
         :param position_ratio: 仓位比例
         :param contract_size: 合约乘数
+        :param margin: 保证金比例
         :return: 手数
         """
-        return position_size(capital, position_ratio, price, contract_size)
+        return position_size(capital, position_ratio, price, contract_size, margin)

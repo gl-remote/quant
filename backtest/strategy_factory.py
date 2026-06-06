@@ -90,6 +90,7 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
+        margin: float = 1.0,
         run_id: int = 0,
         backtest_id: int = 0,
     ) -> State[Any]:
@@ -105,6 +106,7 @@ class StrategyFactory:
             period: K线周期
             capital: 初始资金
             contract_size: 合约乘数
+            margin: 保证金比例
             run_id: 运行 ID
             backtest_id: 回测记录 ID
 
@@ -117,6 +119,7 @@ class StrategyFactory:
             strategy_config=strategy_config,
             capital=capital,
             contract_size=contract_size,
+            margin=margin,
             run_id=run_id,
             backtest_id=backtest_id,
         )
@@ -153,6 +156,7 @@ class StrategyFactory:
         period: str,
         capital: float,
         contract_size: int,
+        margin: float = 1.0,
         run_id: int = 0,
         backtest_id: int = 0,
     ) -> type[VnpyBacktestBridge]:
@@ -163,9 +167,9 @@ class StrategyFactory:
         而不是策略实例（instance），引擎内部会自己调用构造函数。
         所以我们需要动态创建一个子类，在 __init__ 中注入 Strategy 和 State。
 
-        【注入流程】
-        1. 加载策略类（通过 strategy_name）
-        2. 提取策略配置类型（泛型反射）
+        流程:
+        1. 加载策略类
+        2. 通过 reflect 提取配置类型
         3. 从 strategy_params 构造配置对象
         4. 动态创建 VnpyBacktestBridge 子类
         5. 在子类的 __init__ 中注入 Strategy 和 State
@@ -177,6 +181,7 @@ class StrategyFactory:
             period: K线周期
             capital: 初始资金
             contract_size: 合约乘数
+            margin: 保证金比例
             run_id: 运行 ID
             backtest_id: 回测记录 ID
 
@@ -217,6 +222,7 @@ class StrategyFactory:
                     period=period,
                     capital=capital,
                     contract_size=contract_size,
+                    margin=margin,
                     run_id=run_id,
                     backtest_id=backtest_id,
                 )
@@ -231,6 +237,7 @@ def create_strategy_class(
     period: str,
     capital: float,
     contract_size: int,
+    margin: float = 1.0,
     run_id: int = 0,
     backtest_id: int = 0,
 ) -> type[VnpyBacktestBridge]:
@@ -242,6 +249,7 @@ def create_strategy_class(
         period=period,
         capital=capital,
         contract_size=contract_size,
+        margin=margin,
         run_id=run_id,
         backtest_id=backtest_id,
     )
