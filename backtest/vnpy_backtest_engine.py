@@ -442,6 +442,10 @@ class VnpyBacktestEngine:
                     # 固定元/手品种：总费用/手 ÷ (均价 × 合约乘数)
                     cr = total_per_lot / (avg_price * spec.size)
             else:
+                # avg_price=0 或 size=0: 全部回退到默认值，避免 cs/pt/sl 取自 spec 而 cr 取自默认的不一致
+                cs = self.contract_size
+                pt = self.price_tick
+                sl = self.slippage
                 cr = self.commission_rate
         else:
             cs = self.contract_size
