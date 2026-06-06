@@ -15,15 +15,19 @@ Strategy 是交易决策的中枢，纯决策逻辑，不持有任何状态。
   Bridge:     框架适配 + 数据转换 + 下单执行 + 状态同步 (基础设施)
 """
 
-from abc import ABC, abstractmethod
-from typing import Optional, TypeVar, Generic, Any
+from __future__ import annotations
 
-from .types import Signal, Fill
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
+
 from .state import State
-from ..runtime.requirements import DataRequirements, BarContext
+from .types import Fill, Signal
+
+if TYPE_CHECKING:
+    from ..runtime.requirements import BarContext, DataRequirements
 
 # 泛型类型变量，表示策略配置的具体类型
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class Strategy(ABC, Generic[T]):
@@ -77,7 +81,7 @@ class Strategy(ABC, Generic[T]):
 
     # ---- 数据需求声明 ----
 
-    def data_requirements(self, config: T) -> Optional[DataRequirements]:
+    def data_requirements(self, config: T) -> DataRequirements | None:
         """策略的数据需求声明，由 Bridge 在 on_init 时调用
 
         【设计目的】
@@ -185,6 +189,7 @@ class UninitializedStrategy(Strategy[Any]):
     - 用占位策略可以提供更清晰的错误信息
     - 类型检查更友好（Strategy 类型而非 Optional[Strategy]）
     """
+
     name = "_uninitialized"
     VERSION = ""
 
