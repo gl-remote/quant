@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from loguru import logger
 import re
-from typing import TYPE_CHECKING, cast, Any
+from typing import TYPE_CHECKING, cast
 
 from common.constants import COMMON_KLINE_INTERVALS
 from common.schemas import KlineDataFrame, validate_backtest_consistency
@@ -38,13 +38,6 @@ from .models import (
 
 if TYPE_CHECKING:
     from config import ConfigManager
-
-class DataManager:
-    """数据管理器（单例）
-
-    提供数据加载、保存、查询等高层接口，对外隐藏数据库实现细节。
-    所有 DataFrame 数据都经过 Pandera Schema 验证。
-    """
 
 
 def _get_attr(obj: object, key: str, default: object = None) -> object:
@@ -74,7 +67,7 @@ class DataManager:
         # 只在第一次初始化时执行
         if self._initialized:
             return
-        
+
         self._config: ConfigManager | None = config_manager
         self._store: DataStore | None = None
         self._data_cache: dict[str, KlineDataFrame] = {}
@@ -87,12 +80,13 @@ class DataManager:
             return self._config
         if self._default_config is None:
             from config import ConfigManager
+
             self._default_config = ConfigManager()
         return self._default_config
 
     def _get_data_dir(self) -> str:
         """获取数据目录"""
-        return '.quant_shared_data/csv'
+        return ".quant_shared_data/csv"
 
     def _get_filename_template(self) -> str:
         """获取文件名模板配置"""
@@ -109,7 +103,10 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().db_path or '.quant_shared_data/quant_shared.db'
+            db_path = (
+                self._get_config().get_data_config().db_path
+                or ".quant_shared_data/quant_shared.db"
+            )
             self._store = DataStore(db_path)
 
     @property
@@ -133,7 +130,7 @@ class DataManager:
         if not csv_dir.exists():
             return []
 
-        files = list(csv_dir.glob('*.csv'))
+        files = list(csv_dir.glob("*.csv"))
 
         # 从文件名提取品种名
         # 新格式: {symbol}.{provider}.{interval}.csv
@@ -144,13 +141,17 @@ class DataManager:
         for f in files:
             name = f.stem
             # 新格式: name.rsplit('.', 2) → [symbol, provider, interval]
-            parts3 = name.rsplit('.', 2)
-            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
+            parts3 = name.rsplit(".", 2)
+            if (
+                len(parts3) == 3
+                and parts3[-1] in common_intervals
+                and parts3[1] in known_providers
+            ):
                 symbols.add(parts3[0])
                 continue
 
             # 旧格式: name.rsplit('.', 1) → [symbol, interval]
-            parts2 = name.rsplit('.', 1)
+            parts2 = name.rsplit(".", 1)
             if len(parts2) == 2 and parts2[-1] in common_intervals:
                 symbols.add(parts2[0])
                 continue
@@ -174,7 +175,7 @@ class DataManager:
         if not csv_dir.exists():
             return []
 
-        files = list(csv_dir.glob('*.csv'))
+        files = list(csv_dir.glob("*.csv"))
         common_intervals = COMMON_KLINE_INTERVALS
         known_providers = set(list_sources())
 
@@ -186,11 +187,15 @@ class DataManager:
             if data_regex and not data_regex.search(filename):
                 continue
             name = f.stem
-            parts3 = name.rsplit('.', 2)
-            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
+            parts3 = name.rsplit(".", 2)
+            if (
+                len(parts3) == 3
+                and parts3[-1] in common_intervals
+                and parts3[1] in known_providers
+            ):
                 symbols.add(parts3[0])
             else:
-                parts2 = name.rsplit('.', 1)
+                parts2 = name.rsplit(".", 1)
                 if len(parts2) == 2 and parts2[-1] in common_intervals:
                     symbols.add(parts2[0])
                 else:
@@ -210,22 +215,24 @@ class DataManager:
         meta = self.store.get_metadata(symbol)
 
         if meta:
-            meta_filepath = str(meta.get('filepath', ''))
+            meta_filepath = str(meta.get("filepath", ""))
             if meta_filepath and Path(meta_filepath).exists():
                 return SymbolInfo(
                     symbol=symbol,
                     available=True,
                     filepath=meta_filepath,
-                    start_date=str(meta.get('start_date', '')),
-                    end_date=str(meta.get('end_date', '')),
-                    total_rows=int(meta.get('total_rows', 0) or 0),  # type: ignore[call-overload]  # SQLite dict
+                    start_date=str(meta.get("start_date", "")),
+                    end_date=str(meta.get("end_date", "")),
+                    total_rows=int(meta.get("total_rows", 0) or 0),  # type: ignore[call-overload]  # SQLite dict
                 )
 
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
         provider = self._get_default_provider()
-        filename = filename_template.format(symbol=symbol, provider=provider, interval='1m')
+        filename = filename_template.format(
+            symbol=symbol, provider=provider, interval="1m"
+        )
         filepath = Path(data_dir) / filename
 
         if filepath.exists():
@@ -235,8 +242,8 @@ class DataManager:
                     symbol=symbol,
                     available=True,
                     filepath=str(filepath),
-                    start_date=str(df['datetime'].min())[:10] if not df.empty else None,
-                    end_date=str(df['datetime'].max())[:10] if not df.empty else None,
+                    start_date=str(df["datetime"].min())[:10] if not df.empty else None,
+                    end_date=str(df["datetime"].max())[:10] if not df.empty else None,
                     total_rows=len(df),
                 )
 
@@ -244,7 +251,7 @@ class DataManager:
         return SymbolInfo(
             symbol=symbol,
             available=False,
-            error='数据文件不存在',
+            error="数据文件不存在",
         )
 
     def get_data_summary(self) -> DataSummary:
@@ -259,11 +266,13 @@ class DataManager:
 
     # ── 数据加载（使用 Pandera 验证）────────────────────────
 
-    def _load_csv_with_validation(self, filepath: Path) -> DataFrame[KlineSchema] | None:
+    def _load_csv_with_validation(
+        self, filepath: Path
+    ) -> DataFrame[KlineSchema] | None:
         """加载CSV文件并通过 Pandera 验证"""
         try:
             df = pd.read_csv(filepath)
-            df['datetime'] = pd.to_datetime(df['datetime'])
+            df["datetime"] = pd.to_datetime(df["datetime"])
             validated_df = KlineSchema.validate(df)
             return validated_df
         except pa.errors.SchemaError as e:
@@ -273,9 +282,14 @@ class DataManager:
             logger.exception(f"加载CSV失败 [{filepath}]: {e}")
             return None
 
-    def load_kline(self, symbols: list[str], start_date: str | None = None,
-                   end_date: str | None = None, interval: str | None = None,
-                   provider: str | None = None) -> list[tuple[str, KlineDataFrame, str]]:
+    def load_kline(
+        self,
+        symbols: list[str],
+        start_date: str | None = None,
+        end_date: str | None = None,
+        interval: str | None = None,
+        provider: str | None = None,
+    ) -> list[tuple[str, KlineDataFrame, str]]:
         """加载K线数据，返回 [(symbol, df, data_src), ...]
 
         data_src 来自 ExportMetadata 表，由导出过程注册，作为数据溯源路径。
@@ -302,7 +316,9 @@ class DataManager:
         else:
             bt_provider = self._get_default_provider()
             if bt_provider:
-                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
+                candidates = [bt_provider] + [
+                    p for p in list_sources() if p != bt_provider
+                ]
             else:
                 candidates = list_sources()
 
@@ -318,12 +334,12 @@ class DataManager:
                 continue
 
             df = pd.read_csv(data_src)
-            df['datetime'] = pd.to_datetime(df['datetime'])
+            df["datetime"] = pd.to_datetime(df["datetime"])
 
             if start_date:
-                df = df[df['datetime'] >= pd.Timestamp(start_date)]
+                df = df[df["datetime"] >= pd.Timestamp(start_date)]
             if end_date:
-                df = df[df['datetime'] <= pd.Timestamp(end_date)]
+                df = df[df["datetime"] <= pd.Timestamp(end_date)]
 
             df = cast(KlineDataFrame, df)
             self._data_cache[cache_key] = df
@@ -332,8 +348,9 @@ class DataManager:
 
         return results
 
-    def _resolve_data_src(self, symbol: str, interval: str,
-                          candidates: list[str]) -> str:
+    def _resolve_data_src(
+        self, symbol: str, interval: str, candidates: list[str]
+    ) -> str:
         """查 ExportMetadata 获取指定品种的数据源路径
 
         Raises:
@@ -342,13 +359,12 @@ class DataManager:
         for p in candidates:
             meta = self.store.get_metadata(symbol, p, interval)
             if meta:
-                fp = meta['filepath']
+                fp = meta["filepath"]
                 if not isinstance(fp, str):
                     continue
                 if not Path(fp).exists():
                     raise FileNotFoundError(
-                        f"数据源记录存在但文件缺失: {symbol} "
-                        f"provider={p} filepath={fp}"
+                        f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}"
                     )
                 return fp
         raise FileNotFoundError(
@@ -358,8 +374,12 @@ class DataManager:
 
     # ── 回测记录 ────────────────────────────────────────────
 
-    def insert_backtest(self, result: BacktestResult, run_id: int | None = None,
-                        data_src: str | None = None) -> int:
+    def insert_backtest(
+        self,
+        result: BacktestResult,
+        run_id: int | None = None,
+        data_src: str | None = None,
+    ) -> int:
         """插入完整的回测记录
 
         Args:
@@ -367,9 +387,13 @@ class DataManager:
             run_id: Run 记录 ID
             data_src: 数据源文件路径，用于报告生成时定位K线数据
         """
-        return self.store.insert_backtest_detailed(result, run_id=run_id, data_src=data_src)
+        return self.store.insert_backtest_detailed(
+            result, run_id=run_id, data_src=data_src
+        )
 
-    def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
+    def insert_backtest_trades(
+        self, backtest_id: int, trades: list[dict[str, object]]
+    ) -> int:
         """批量插入交易明细"""
         return self.store.insert_backtest_trades(backtest_id, trades)
 
@@ -377,7 +401,7 @@ class DataManager:
         self,
         symbol: str | None = None,
         strategy: str | None = None,
-        status: str = 'success',
+        status: str = "success",
         limit: int = 50,
     ) -> list[BacktestRecord]:
         """查询回测记录列表"""
@@ -391,7 +415,9 @@ class DataManager:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
 
-    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
+    def insert_backtest_daily(
+        self, backtest_id: int, daily_results: list[dict[str, object]]
+    ) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
 
@@ -422,9 +448,11 @@ class DataManager:
         trade_count = len(trades)
 
         # 2026-06-06新增: 聚合逐笔手续费用于一致性校验
-        trade_commission_sum = sum(
-            float(_get_attr(t, 'commission', 0)) for t in trades
-        ) if trades else 0.0
+        trade_commission_sum = (
+            sum(float(cast(float | int, _get_attr(t, "commission", 0))) for t in trades)
+            if trades
+            else 0.0
+        )
 
         return validate_backtest_consistency(
             total_trades=bt.total_trades,
@@ -433,10 +461,10 @@ class DataManager:
             trade_count=trade_count,
             backtest_id=backtest_id,
             # 2026-06-06 新增校验参数
-            total_days=_get_attr(bt, 'total_days'),
-            profit_days=_get_attr(bt, 'profit_days'),
-            loss_days=_get_attr(bt, 'loss_days'),
-            total_commission=_get_attr(bt, 'total_commission'),
+            total_days=cast(int | None, _get_attr(bt, "total_days")),
+            profit_days=cast(int | None, _get_attr(bt, "profit_days")),
+            loss_days=cast(int | None, _get_attr(bt, "loss_days")),
+            total_commission=cast(float | None, _get_attr(bt, "total_commission")),
             trade_commission_sum=trade_commission_sum,
         )
 
@@ -499,5 +527,10 @@ class DataManager:
     def __enter__(self) -> "DataManager":
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         self.close()

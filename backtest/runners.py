@@ -11,6 +11,8 @@ from __future__ import annotations
 from loguru import logger
 from typing import Any, TYPE_CHECKING
 
+import pandas as pd
+
 from common.schemas import KlineDataFrame
 
 from config import ConfigManager
@@ -20,10 +22,15 @@ from .optimizer import run_param_search, SearchResult
 if TYPE_CHECKING:
     from .vnpy_backtest_engine import VnpyBacktestEngine
 
-def execute_walk_forward(engine: "VnpyBacktestEngine",
-                        strategy_name: str, strategy_params: dict[str, Any],
-                        capital: float, contract_size: int,
-                        datasets: list[tuple[str, KlineDataFrame, str]]) -> tuple[dict[str, Any], str, str]:
+
+def execute_walk_forward(
+    engine: "VnpyBacktestEngine",
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    datasets: list[tuple[str, KlineDataFrame, str]],
+) -> tuple[dict[str, Any], str, str]:
     """执行 Walk-Forward 滚动验证
 
     Args:
@@ -40,21 +47,30 @@ def execute_walk_forward(engine: "VnpyBacktestEngine",
     sym = datasets[0][0]
     df = datasets[0][1]
     wf_result = engine.run_walk_forward(
-        data=df, symbol=sym,
-        strategy_name=strategy_name, strategy_params=strategy_params,
+        data=df,
+        symbol=sym,
+        strategy_name=strategy_name,
+        strategy_params=strategy_params,
     )
 
     return wf_result, strategy_name, sym
 
 
-def execute_parameter_search(engine: "VnpyBacktestEngine",
-                            strategy_name: str, strategy_params: dict[str, Any],
-                            capital: float, contract_size: int,
-                            datasets: list[tuple[str, pd.DataFrame, str]],
-                            n_trials: int, optimizer_cfg: Any, cm: ConfigManager,
-                            optimizer_arg: str | None, git_hash: str | None,
-                            dm: DataManager,
-                            run_id: int) -> SearchResult | None:
+def execute_parameter_search(
+    engine: "VnpyBacktestEngine",
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    datasets: list[tuple[str, pd.DataFrame, str]],
+    n_trials: int,
+    optimizer_cfg: Any,
+    cm: ConfigManager,
+    optimizer_arg: str | None,
+    git_hash: str | None,
+    dm: DataManager,
+    run_id: int,
+) -> SearchResult | None:
     """执行参数搜索
 
     Args:
@@ -76,11 +92,15 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
         SearchResult（如果成功执行搜索），否则 None
     """
     run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"
-    
+
     # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
     sc = cm.get_trading_config(strategy_name)
-    search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
-    
+    search_space = (
+        sc.search_space
+        or optimizer_cfg.strategy_spaces.get(strategy_name, {})
+        or optimizer_cfg.search_space
+    )
+
     if not search_space:
         logger.warning("搜索空间为空，跳过参数搜索")
         dm.store.finish_run(run_id, "skipped")
@@ -114,8 +134,12 @@ def execute_parameter_search(engine: "VnpyBacktestEngine",
         use_fixed_seed=optimizer_cfg.use_fixed_seed,
     )
 
-    logger.info("{} 完成: best={:.4f} params={} trials={}",
-                run_engine, result.best_value, result.best_params,
-                result.n_trials)
+    logger.info(
+        "{} 完成: best={:.4f} params={} trials={}",
+        run_engine,
+        result.best_value,
+        result.best_params,
+        result.n_trials,
+    )
 
     return result
