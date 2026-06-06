@@ -4,25 +4,20 @@
 
 架构: Strategy (大脑) + Bridge (四肢)
   - core/            Strategy ABC + Bar/Signal/Fill 标准化类型 + CORE_VERSION
+  - runtime/         运行时数据管理（DataFeed, PeriodData, BarContext 等）
   - utils/           策略加载、配置管理等工具函数
   - ma_strategy.py   均线交叉策略 (继承 Strategy，自主管理全部状态)
   - bridges/         框架桥接器 (vnpy / tqsdk，纯协议转换)
 
 【推荐导入方式】
-  from strategies import MaStrategyCore          # 策略核心
-  from strategies import VnpyBacktestBridge        # vn.py 回测桥接器
-  from strategies import TqsdkStrategyBridge      # 天勤桥接器
-  from strategies import Strategy, Bar, Signal    # 基类 + 数据类型
-  from strategies import CORE_VERSION             # 版本号常量
-  from strategies.utils import load_strategy      # 工具函数
-
-【不再推荐直接从 core 子模块导入】
-  包内所有模块统一从 strategies 顶层导入，
-  避免 from strategies.core / from .core.base 等内部路径依赖。
-  好处：
-  - 不依赖调用方与 core 的相对位置
-  - 如果 core/ 内部重组，导入语句不需要改动
-  - __all__ 控制导出符号，不会意外引入内部符号
+  外部调用方:
+    from strategies import MaStrategyCore          # 策略核心
+    from strategies import VnpyBacktestBridge        # vn.py 回测桥接器
+    from strategies import TqsdkStrategyBridge      # 天勤桥接器
+    from strategies import Strategy, Bar, Signal    # 基类 + 数据类型
+    from strategies import CORE_VERSION             # 版本号常量
+  包内模块:
+    使用相对导入（如 .core.xxx / .runtime.xxx），避免循环依赖。
 
 
 ============================================================
