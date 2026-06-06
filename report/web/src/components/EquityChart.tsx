@@ -42,32 +42,22 @@ export default function EquityChart({ data }: EquityChartProps) {
   const option: EChartsOption = {
     tooltip: { trigger: "axis" },
     legend: {
-      data: ["权益曲线", "回撤"],
+      data: ["权益曲线"],
       top: 0,
       textStyle: { fontSize: 12 },
     },
-    grid: { left: 60, right: 80, top: 40, bottom: 100 },
+    grid: { left: 60, right: 20, top: 40, bottom: 100 },
     xAxis: {
       type: "category" as const,
       data: data.dates,
       axisLabel: { rotate: 45, fontSize: 10 },
     },
-    yAxis: [
-      {
-        type: "value" as const,
-        name: "权益",
-        nameTextStyle: { fontSize: 11 },
-        axisLabel: { fontSize: 10, formatter: (v: number) => (v / 10000).toFixed(0) + "w" },
-      },
-      {
-        type: "value" as const,
-        name: "回撤 (%)",
-        nameTextStyle: { fontSize: 11 },
-        axisLabel: { fontSize: 10, formatter: "{value}%" },
-        max: 0,
-        min: (v: { min: number }) => Math.min(v.min * 100 * 1.2, -5),
-      },
-    ],
+    yAxis: {
+      type: "value" as const,
+      name: "权益",
+      nameTextStyle: { fontSize: 11 },
+      axisLabel: { fontSize: 10, formatter: (v: number) => (v / 10000).toFixed(0) + "w" },
+    },
     dataZoom: [
       { type: "slider" as const, xAxisIndex: 0, bottom: 10, height: 20 },
       { type: "inside" as const, xAxisIndex: 0 },
@@ -77,7 +67,6 @@ export default function EquityChart({ data }: EquityChartProps) {
         name: "权益曲线",
         type: "line",
         data: data.equity,
-        yAxisIndex: 0,
         smooth: true,
         symbol: "none",
         lineStyle: { color: "#5470c6", width: 2 },
@@ -88,24 +77,6 @@ export default function EquityChart({ data }: EquityChartProps) {
             colorStops: [
               { offset: 0, color: "rgba(84,112,198,0.15)" },
               { offset: 1, color: "rgba(84,112,198,0.02)" },
-            ],
-          },
-        },
-      },
-      {
-        name: "回撤",
-        type: "line",
-        data: data.drawdown.map((v: number) => (v * 100).toFixed(2)),
-        yAxisIndex: 1,
-        symbol: "none",
-        lineStyle: { color: "#e74c3c", width: 1.5 },
-        areaStyle: {
-          color: {
-            type: "linear" as const,
-            x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [
-              { offset: 0, color: "rgba(231,76,60,0.08)" },
-              { offset: 1, color: "rgba(231,76,60,0.2)" },
             ],
           },
         },
