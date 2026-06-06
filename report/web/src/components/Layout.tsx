@@ -46,7 +46,7 @@ export default function Layout({ children }: LayoutProps) {
       </main>
 
       <footer data-ql-id="LAY-FTR-CONTAINER" className="py-4 px-6 bg-white border-t border-slate-200 mt-auto">
-        <span className="block text-xs text-slate-400 text-center">天勤量化交易系统 · 策略回测报告</span>
+        <span className="block text-xs text-slate-400 text-center">策略工具箱 · 回测报告</span>
       </footer>
     </div>
   );

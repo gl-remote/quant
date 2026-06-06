@@ -30,7 +30,7 @@ config/
 
 ```toml
 [app]
-name = "天勤量化交易系统"
+name = "策略工具箱"
 version = "0.2.0-dev"
 log_level = "INFO"
 

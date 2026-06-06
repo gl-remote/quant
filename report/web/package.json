@@ -1,7 +1,7 @@
 {
   "name": "quant-report",
   "version": "1.0.0",
-  "description": "天勤量化回测报告前端应用",
+  "description": "策略工具箱回测报告前端应用",
   "private": true,
   "type": "module",
   "scripts": {

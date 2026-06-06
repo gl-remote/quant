@@ -36,7 +36,7 @@ def main() -> None:
     解析命令行参数并分发到对应的命令处理函数。
     """
     parser = argparse.ArgumentParser(
-        description='天勤量化均线交叉策略交易系统',
+        description='策略工具箱 - 量化策略研发工具链',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="示例: python main.py backtest --strategy ma --symbol DCE.m2509"
     )

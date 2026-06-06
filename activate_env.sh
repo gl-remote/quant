@@ -1,5 +1,5 @@
 #!/bin/bash
-# 天勤量化交易系统环境启动脚本
+# 策略工具箱环境启动脚本
 # 使用方法: source activate_env.sh  (注意：必须用 source，不能用 ./ 执行)
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

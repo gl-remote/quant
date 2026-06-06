@@ -8,7 +8,7 @@ packages = ["cli", "common", "config", "data", "backtest", "strategies", "report
 [project]
 name = "quant"
 version = "0.2.0-dev"
-description = "天勤量化交易系统 - 均线交叉策略回测与实盘"
+description = "策略工具箱 - 量化策略研发工具链"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
