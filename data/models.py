@@ -310,16 +310,20 @@ class BacktestTrade(OrmBaseModel):
     """回测交易明细（逐笔成交记录）
 
     注意: vnpy 的 TradeData 代表单笔成交(fill)，不是完整交易(trade)。
-    单笔成交中 open_price 和 close_price 取同一值 price。
-    完整交易的开仓价/平仓价需要策略层按 offset=open/close 配对组装。
+
+    open_price / close_price 语义:
+      开仓记录 (offset=open): open_price = close_price = 成交价
+      平仓记录 (offset=close):
+        open_price = 加权平均开仓价（FIFO 配对时同方向待配对开仓的 Σ(price×vol)/Σ(vol)）
+        close_price = 平仓成交价
     """
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref='trades', on_delete='CASCADE')
     datetime: DateTimeField = DateTimeField()
     symbol: CharField = CharField()
     direction: CharField = CharField()
     offset: CharField = CharField()
-    open_price: FloatField = FloatField()  # 成交价（开仓时=入场价，平仓时=出场价）
-    close_price: FloatField = FloatField()  # 同上，单笔成交时与 open_price 相同
+    open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
+    close_price: FloatField = FloatField()  # 成交价（开仓和平仓均为实际成交价）
     quantity: FloatField = FloatField()
     pnl: FloatField = FloatField()          # 净盈亏（已扣除 commission + slippage）
     commission: FloatField = FloatField()    # 该笔平仓周期总手续费（开仓侧 + 平仓侧）

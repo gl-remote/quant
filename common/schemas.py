@@ -111,8 +111,8 @@ class TradeRecordSchema(pa.DataFrameModel):
         symbol:     品种代码 (如 DCE.m2505)
         direction:  方向 (long/short)
         offset:     开平标志 (open/close/closetoday)
-        open_price: 开仓价 / 成交价
-        close_price: 平仓价 / 成交价
+        open_price: 开仓=成交价；平仓=加权平均开仓价（FIFO 配对时同方向待配对开仓的均价）
+        close_price: 成交价（开仓和平仓均为实际成交价）
         quantity:   成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
         pnl:        单笔净盈亏（已扣除 commission + slippage）
         commission: 该笔平仓周期总手续费（开仓侧 + 平仓侧）
