@@ -417,7 +417,6 @@ class DataStore:
                 rgr_ratio=result.rgr_ratio,
                 engine_config=json.dumps(result.engine_config) if result.engine_config else None,
                 data_src=data_src or result.data_src,
-                created_at=now,
                 updated_at=now,
             )
         # 写入参数（更新时先删旧参数再插入，避免重复）

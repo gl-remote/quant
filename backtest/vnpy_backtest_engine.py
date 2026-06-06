@@ -15,6 +15,7 @@ vn.py 回测引擎 (纯执行器)
 
 from __future__ import annotations
 
+from datetime import datetime
 from loguru import logger
 from typing import TYPE_CHECKING, Any
 
@@ -220,6 +221,7 @@ class VnpyBacktestEngine:
             price_tick=self.price_tick,
             contract_size=self.contract_size,
             kline_interval=self.interval,
+            created_at=datetime.now(),  # 传 Python 本地时间，与 store.py 保持一致
         )
 
     # ── 公开接口 ──────────────────────────────────────────────
@@ -510,14 +512,14 @@ class VnpyBacktestEngine:
                 # 算法概述:
                 #   1. 按时间排序所有成交记录
                 #   2. 维护开仓队列 open_queue: (direction, price, volume)，遇到 offset=open 时入队
-                #   3. 遇到 offset=close 时，先计算同方向开仓队列的加权平均开仓价
-                #      （均价 = Σ(price×volume) / Σ(volume)，作为该平仓的 open_price）
-                #   4. 按 FIFO 从队列取最旧的开仓记录配对，计算净盈亏:
+                #   3. 遇到 offset=close 时，按 FIFO 从队列取最旧的开仓记录配对，过程中同时记录
+                #      实际配对的 (开仓价, 配对量)，用于计算加权平均开仓价（一套配对，两个用途）：
                 #      a. 毛利 = (平仓价 - 开仓价) × 方向系数 × 配对量 × 合约乘数
                 #      b. commission += 开仓侧(价×量×size×rate) + 平仓侧(价×量×size×rate)
                 #      c. slippage_cost += 开仓侧(量×size×slip) + 平仓侧(量×size×slip)
                 #   5. 净盈亏(pnl) = 毛利 - 总commission - 总slippage_cost
-                #   6. 开仓记录的 pnl/commission 均为 0，费用统一挂到平仓记录上
+                #   6. 加权平均开仓价 = Σ(配对的开仓价×配对量) / Σ(配对量)（与 PnL 同源同套配对）
+                #   7. 开仓记录的 pnl/commission 均为 0，费用统一挂到平仓记录上
                 # 费用公式与 vnpy DailyResult.calculate_pnl() 完全一致
                 trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
                 # 开仓队列: (direction, price, volume)
@@ -543,23 +545,17 @@ class VnpyBacktestEngine:
                         # 开仓手续费在平仓时一并计入（完整的一开一平周期）
                         trade_commissions[i] = 0.0
                     else:
-                        # 平仓：先提取方向，用于过滤同方向开仓计算加权均价
+                        # 平仓：先提取方向
                         direction_val = getattr(trade, 'direction', None)
                         direction_str = direction_val.value if direction_val is not None and hasattr(direction_val, 'value') else str(direction_val) if direction_val else ''
                         direction = DIRECTION_MAP.get(direction_str, direction_str)
-                        # 计算当前同方向开仓队列的加权平均开仓价
-                        # 毛利只取决于总持仓量和总成本，与配对顺序无关，加权均价 = FIFO 的数学等价
-                        same_dir_queue = [(p, v) for d, p, v in open_queue if d == direction]
-                        total_cost = sum(p * v for p, v in same_dir_queue)
-                        total_vol = sum(v for _, v in same_dir_queue)
-                        avg_open_price = total_cost / total_vol if total_vol > 0 else trade_price
-                        trade_open_prices[i] = avg_open_price
 
                         # 平仓：按 FIFO 与开仓配对，计算净盈亏
                         remaining = trade_volume
                         gross_pnl = 0.0
                         total_commission = 0.0
                         total_slippage = 0.0
+                        matched_opens: list[tuple[float, float]] = []  # 记录实际配对的 (开仓价, 配对量)
 
                         # 平仓自身的手续费和滑点
                         total_commission += trade_price * trade_volume * _size * _rate
@@ -568,6 +564,7 @@ class VnpyBacktestEngine:
                         while remaining > 0 and open_queue:
                             open_dir, open_price, open_vol = open_queue[0]
                             matched_vol = min(remaining, open_vol)
+                            matched_opens.append((open_price, matched_vol))
                             price_diff = trade_price - open_price
 
                             # 毛利（价差收益）
@@ -586,6 +583,11 @@ class VnpyBacktestEngine:
                             else:
                                 open_queue[0] = (open_dir, open_price, open_vol - matched_vol)
 
+                        # 从实际 FIFO 配对记录计算加权平均开仓价（与 PnL 同源）
+                        total_matched_cost = sum(p * v for p, v in matched_opens)
+                        total_matched_vol = sum(v for _, v in matched_opens)
+                        trade_open_prices[i] = total_matched_cost / total_matched_vol if total_matched_vol > 0 else trade_price
+
                         # 净盈亏 = 毛利 - 手续费 - 滑点
                         trade_pnls[i] = gross_pnl - total_commission - total_slippage
                         trade_commissions[i] = total_commission
@@ -597,7 +599,7 @@ class VnpyBacktestEngine:
                     datetime   → datetime
                     direction  → direction (枚举值转字符串)
                     offset     → offset    (枚举值转字符串)
-                    price      → open_price（开仓=成交价，平仓=同方向加权平均开仓价）, close_price（成交价）
+                    price      → open_price（开仓=成交价，平仓=实际 FIFO 配对加权平均开仓价）, close_price（成交价）
                     volume     → quantity
                     pnl        → 净盈亏（FIFO 配对计算，已扣除 commission + slippage）
                     commission → 手续费总额（开仓侧 + 平仓侧，与 vnpy DailyResult 公式一致）
@@ -614,7 +616,8 @@ class VnpyBacktestEngine:
                   slippage  = Σ(volume × size × slippage)
 
                 调试沉淀(2026-06-06 v2):
-                - 平仓记录 open_price → 加权平均开仓价（FIFO 队列中同方向待配对开仓的 Σ(price×vol)/Σ(vol)）
+                - 平仓记录 open_price → 实际 FIFO 配对加权平均开仓价（Σ 配对的 price×vol / Σ 配对的 vol）
+                - 与 PnL 同源同套 FIFO while 循环（matched_opens 记录），避免两套配对不一致
                 - close_price → 平仓成交价（不变）
                 - (close_price - open_price) × quantity × size × direction = 毛利，pnl = 净利（已扣费用）
                 - 开仓记录 open_price = close_price = 成交价（不变）
