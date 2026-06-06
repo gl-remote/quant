@@ -32,6 +32,7 @@ from .strategy_factory import create_strategy_class
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
 from common.constants import DIRECTION_MAP, OFFSET_MAP
+from common.contract_specs import CONTRACT_SPECS, BROKER_ADDON_DFCF
 
 
 class VnpyBacktestEngine:
@@ -420,7 +421,35 @@ class VnpyBacktestEngine:
         bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
 
         data_start, data_end, total_days = calculate_date_range(df)
-        
+
+        # ── 根据品种查合约规格表，自动填充参数 ─────────────────────────
+        spec = CONTRACT_SPECS.get_symbol(symbol)
+        if spec is not None:
+            # 合约乘数 / 最小变动价位
+            cs = spec.size
+            pt = spec.tick
+            # 滑点（价格单位）: slip_tick × tick
+            sl = spec.tick * spec.slip_tick
+            # 手续费：含交易所 + 期货公司加收
+            # vnpy 只支持费率模式 commission = price × volume × size × rate
+            # 固定元/手品种需要换算为 rate = 总手续费/手 / (均价 × 合约乘数)
+            avg_price = float(df['close'].mean()) if not df.empty else 0.0
+            if avg_price > 0 and spec.size > 0:
+                total_per_lot = spec.commission + BROKER_ADDON_DFCF
+                if spec.is_rate:
+                    # 费率品种：交易所费率 + 加收元/手折算回费率
+                    cr = spec.commission + BROKER_ADDON_DFCF / (avg_price * spec.size)
+                else:
+                    # 固定元/手品种：总费用/手 ÷ (均价 × 合约乘数)
+                    cr = total_per_lot / (avg_price * spec.size)
+            else:
+                cr = self.commission_rate
+        else:
+            cs = self.contract_size
+            pt = self.price_tick
+            sl = self.slippage
+            cr = self.commission_rate
+
         results: list[dict[str, Any]] = []
         for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
             # 提前获取策略版本号
@@ -445,7 +474,7 @@ class VnpyBacktestEngine:
                 symbol=symbol,
                 period=self.interval,
                 capital=self.initial_capital,
-                contract_size=self.contract_size,
+                contract_size=cs,  # 品种级合约乘数
                 run_id=self._run_id or 0,
                 backtest_id=bt_id,
             )
@@ -465,13 +494,13 @@ class VnpyBacktestEngine:
                 interval=interval,
                 start=df['datetime'].iloc[0].to_pydatetime(),
                 end=df['datetime'].iloc[-1].to_pydatetime(),
-                rate=self.commission_rate,
-                slippage=self.slippage,
-                size=self.contract_size,
-                pricetick=self.price_tick,
+                rate=cr,        # 品种级费率（固定元/手已换算）
+                slippage=sl,    # 品种级滑点（slip_tick × tick）
+                size=cs,        # 品种级合约乘数
+                pricetick=pt,   # 品种级最小变动价位
                 capital=int(self.initial_capital),
             )
-            engine.add_strategy(strategy_cls, {'price_tick': self.price_tick})
+            engine.add_strategy(strategy_cls, {'price_tick': pt})
             engine.history_data = bars
 
             try:
@@ -503,9 +532,9 @@ class VnpyBacktestEngine:
                     trades_list = list(engine.trades.values())
 
                 # 从 vnpy 引擎读取费率参数（与 set_parameters 传入的一致）
-                _rate = self.commission_rate
-                _slip = self.slippage
-                _size = self.contract_size
+                _rate = cr
+                _slip = sl
+                _size = cs
 
                 # FIFO 配对开平仓，计算逐笔净盈亏（含费用）
                 #
