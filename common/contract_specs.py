@@ -5,10 +5,9 @@
 交易所标准参数 + 期货公司加收，按 symbol 前缀查询。
 
 期货公司加收说明:
-  东方财富期货标准: "交易所+0.01元/手"
-  broker_addon=0.01 表示每手在交易所基础上加收 1 分钱。
-  其他公司通常加收 0.1~1 元/手不等，可在 config 中按需调整。
-  对于费率品种(如螺纹钢)，同样加收固定金额（非比例）。
+  东方财富期货用户实测约 1.3 元/手（以玉米为例: 开平共 5 元，
+  交易所 1.2 元/手，加收 = 2.5 - 1.2 = 1.3 元/手单边）。
+  不同品种、不同居间人加收不同，可在调用时按需调整 broker_addon 参数。
 
 使用方法::
 
@@ -161,7 +160,7 @@ class _ContractRegistry:
         # 中国金融期货交易所 (CFFEX)
         # ════════════════════════════════════════
         self._register('if', ContractSpec(size=300, tick=0.2, commission=0.000023, is_rate=True, margin=0.12))
-        self._register('ic', ContractSpec(size=200, tick=0.2, commission=0.000023, is_rate=True, margin=0.08))
+        self._register('ic', ContractSpec(size=200, tick=0.2, commission=0.000023, is_rate=True, margin=0.12))
         self._register('ih', ContractSpec(size=300, tick=0.2, commission=0.000023, is_rate=True, margin=0.12))
         self._register('ts', ContractSpec(size=1000000, tick=0.005, commission=3.0, margin=0.005))
         self._register('tf', ContractSpec(size=1000000, tick=0.005, commission=3.0, margin=0.012))

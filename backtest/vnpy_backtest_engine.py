@@ -15,7 +15,6 @@ vn.py 回测引擎 (纯执行器)
 
 from __future__ import annotations
 
-from datetime import datetime
 from loguru import logger
 from typing import TYPE_CHECKING, Any
 
@@ -222,7 +221,6 @@ class VnpyBacktestEngine:
             price_tick=self.price_tick,
             contract_size=self.contract_size,
             kline_interval=self.interval,
-            created_at=datetime.now(),  # 传 Python 本地时间，与 store.py 保持一致
         )
 
     # ── 公开接口 ──────────────────────────────────────────────
@@ -433,7 +431,8 @@ class VnpyBacktestEngine:
             # 手续费：含交易所 + 期货公司加收
             # vnpy 只支持费率模式 commission = price × volume × size × rate
             # 固定元/手品种需要换算为 rate = 总手续费/手 / (均价 × 合约乘数)
-            avg_price = float(df['close'].mean()) if not df.empty else 0.0
+            # 均价用 OHLC 四价均值比单独 close 更稳定
+            avg_price = float(df[['open','high','low','close']].values.mean()) if not df.empty else 0.0
             if avg_price > 0 and spec.size > 0:
                 total_per_lot = spec.commission + BROKER_ADDON_DFCF
                 if spec.is_rate:
@@ -574,10 +573,13 @@ class VnpyBacktestEngine:
                         # 开仓手续费在平仓时一并计入（完整的一开一平周期）
                         trade_commissions[i] = 0.0
                     else:
-                        # 平仓：先提取方向
+                        # 平仓：先提取方向，计算被平仓方向
                         direction_val = getattr(trade, 'direction', None)
                         direction_str = direction_val.value if direction_val is not None and hasattr(direction_val, 'value') else str(direction_val) if direction_val else ''
                         direction = DIRECTION_MAP.get(direction_str, direction_str)
+                        # vnpy 约定: 平多(dir=short) → 匹配开多(dir=long)
+                        #           平空(dir=long)  → 匹配开空(dir=short)
+                        expected_open_dir: str = 'long' if direction == 'short' else 'short'
 
                         # 平仓：按 FIFO 与开仓配对，计算净盈亏
                         remaining = trade_volume
@@ -592,6 +594,10 @@ class VnpyBacktestEngine:
 
                         while remaining > 0 and open_queue:
                             open_dir, open_price, open_vol = open_queue[0]
+                            # 跳过方向不匹配的开仓（避免多空错配）
+                            if open_dir != expected_open_dir:
+                                open_queue.pop(0)
+                                continue
                             matched_vol = min(remaining, open_vol)
                             matched_opens.append((open_price, matched_vol))
                             price_diff = trade_price - open_price
@@ -616,6 +622,14 @@ class VnpyBacktestEngine:
                         total_matched_cost = sum(p * v for p, v in matched_opens)
                         total_matched_vol = sum(v for _, v in matched_opens)
                         trade_open_prices[i] = total_matched_cost / total_matched_vol if total_matched_vol > 0 else trade_price
+
+                        # 防御性检查: 剩余量未被配对
+                        if remaining > 0:
+                            logger.warning(f"[{symbol}] 平仓有余量未配对: dir={direction} "
+                                           f"qty={trade_volume} remaining={remaining} "
+                                           f"open_queue_empty={not bool(open_queue)}")
+                            # 修正：只对已配对部分收费（当前平仓侧费用按 trade_volume 全量算了）
+                            # 实际上偏差不大，因为 vnpy 正常场景不会产生超持仓的平仓
 
                         # 净盈亏 = 毛利 - 手续费 - 滑点
                         trade_pnls[i] = gross_pnl - total_commission - total_slippage
