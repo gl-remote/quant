@@ -15,38 +15,38 @@
 - 懒加载按需计算，避免不必要的开销
 """
 
+from datetime import datetime as dt
 import json
 import os
-from collections.abc import Callable
-from datetime import datetime as dt
+
+from loguru import logger
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
-from loguru import logger
 
 from .events import (
-    REGISTERED_CONVERTERS,
-    REGISTERED_INDICATOR_FUNCS,
     Event,
     IndicatorCalcMode,
+    REGISTERED_CONVERTERS,
+    REGISTERED_INDICATOR_FUNCS,
     generate_indicator_column_name,
     register_indicator_func,
 )
-from .indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
-from .types import Bar
+from ..core.types import Bar
+from ..core.indicators import sma_func, ema_func, rsi_func, macd_func, kdj_func, atr_func
 
 
-def _parse_source_from_symbol(symbol: str) -> str | None:
+def _parse_source_from_symbol(symbol: str) -> Optional[str]:
     """从symbol解析source，如 "CZCE.sr509" -> source="CZCE"
 
     :param symbol: 交易品种
     :return: source，解析失败返回None
     """
-    if "." in symbol:
-        return symbol.split(".")[0]
+    if '.' in symbol:
+        return symbol.split('.')[0]
     return None
 
 
@@ -56,7 +56,6 @@ _OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
 # 检查 pyarrow 是否可用（parquet 必需），避免回测因缺少依赖而全挂
 try:
     import pyarrow  # noqa: F401
-
     _PARQUET_OK = True
 except ImportError:
     _PARQUET_OK = False
@@ -76,7 +75,7 @@ class DataFeed:
     - 回测前统一注册所有指标，避免实时计算的不同步问题
     """
 
-    def __init__(self, symbol: str, source: str | None = None):
+    def __init__(self, symbol: str, source: Optional[str] = None):
         """初始化单个品种的多周期数据管理器
 
         :param symbol: 交易品种，如 "btc_usdt" 或 "CZCE.sr509"
@@ -89,22 +88,25 @@ class DataFeed:
             self.source = source
 
         # 周期数据管理
-        self._periods: dict[str, PeriodData] = {}
+        self._periods: Dict[str, PeriodData] = {}
 
         # 事件数据管理
-        self._events = pd.DataFrame(columns=["type", "symbol", "reason", "period", "data"])
-        self._events = self._events.astype(
-            {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
-        )
+        self._events = pd.DataFrame(columns=['type', 'symbol', 'reason', 'period', 'data'])
+        self._events = self._events.astype({
+            'type': 'string',
+            'symbol': 'string',
+            'reason': 'string',
+            'period': 'string'
+        })
 
         # 并发控制
 
         # 指标注册配置
-        self._registered_indicators: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+        self._registered_indicators: Dict[str, List[Tuple[str, Dict[str, Any]]]] = {}
 
         # 周期转换配置
-        self._period_conversions: dict[tuple[str, str], Callable[..., list[Bar]]] = REGISTERED_CONVERTERS.copy()
-        self._derived_periods: dict[str, str] = {}
+        self._period_conversions: Dict[Tuple[str, str], Callable[..., List[Bar]]] = REGISTERED_CONVERTERS.copy()
+        self._derived_periods: Dict[str, str] = {}
 
         # 数据追踪字段（类似数据库表）
         self._created_at = pd.Timestamp.now()
@@ -160,7 +162,7 @@ class DataFeed:
 
         self._registered_indicators[period_name].append((indicator_name, params))
 
-    def load_history_data(self, period: str, bars: list[Bar], events: list[Event] | None = None) -> None:
+    def load_history_data(self, period: str, bars: List[Bar], events: Optional[List[Event]] = None) -> None:
         """批量加载历史数据（用于回测初始化）
 
         幂等加载：按数据范围智能处理重复调用
@@ -202,7 +204,7 @@ class DataFeed:
         if events:
             self.append_events(events)
 
-    def load_history_df(self, period: str, df: pd.DataFrame, events: list[Event] | None = None) -> None:
+    def load_history_df(self, period: str, df: pd.DataFrame, events: Optional[List[Event]] = None) -> None:
         """从 DataFrame 直接加载历史数据（避免 Bar 转换开销）
 
         幂等加载：按数据范围智能处理重复调用
@@ -254,16 +256,13 @@ class DataFeed:
         :param event: 事件对象
         """
         event_time = pd.Timestamp(event.timestamp)
-        new_row = pd.Series(
-            {
-                "type": event.type,
-                "symbol": event.symbol,
-                "reason": event.reason,
-                "period": event.period,
-                "data": event.data,
-            },
-            name=event_time,
-        )
+        new_row = pd.Series({
+            'type': event.type,
+            'symbol': event.symbol,
+            'reason': event.reason,
+            'period': event.period,
+            'data': event.data
+        }, name=event_time)
 
         if len(self._events) == 0:
             self._events = new_row.to_frame().T
@@ -273,7 +272,7 @@ class DataFeed:
         self._event_count += 1
         self._last_updated_at = pd.Timestamp.now()
 
-    def append_events(self, events: list[Event]) -> None:
+    def append_events(self, events: List[Event]) -> None:
         """批量追加事件数据
 
         :param events: 事件列表
@@ -283,19 +282,17 @@ class DataFeed:
 
         event_dicts = []
         for event in events:
-            event_dicts.append(
-                {
-                    "datetime": pd.Timestamp(event.timestamp),
-                    "type": event.type,
-                    "symbol": event.symbol,
-                    "reason": event.reason,
-                    "period": event.period,
-                    "data": event.data,
-                }
-            )
+            event_dicts.append({
+                'datetime': pd.Timestamp(event.timestamp),
+                'type': event.type,
+                'symbol': event.symbol,
+                'reason': event.reason,
+                'period': event.period,
+                'data': event.data
+            })
 
         new_df = pd.DataFrame(event_dicts)
-        new_df = new_df.set_index("datetime")
+        new_df = new_df.set_index('datetime')
 
         if len(self._events) == 0:
             self._events = new_df
@@ -305,13 +302,10 @@ class DataFeed:
         self._event_count += len(events)
         self._last_updated_at = pd.Timestamp.now()
 
-    def get_events(
-        self,
-        start_time: pd.Timestamp | dt | None = None,
-        end_time: pd.Timestamp | dt | None = None,
-        event_type: str | None = None,
-        period: str | None = None,
-    ) -> list[Event]:
+    def get_events(self, start_time: Optional[Union[pd.Timestamp, dt]] = None,
+                   end_time: Optional[Union[pd.Timestamp, dt]] = None,
+                   event_type: Optional[str] = None,
+                   period: Optional[str] = None) -> List[Event]:
         """获取指定时间范围内的事件
 
         :param start_time: 开始时间（可选）
@@ -326,16 +320,16 @@ class DataFeed:
         mask = pd.Series([True] * len(self._events), index=self._events.index)
 
         if start_time is not None:
-            mask &= self._events.index >= pd.Timestamp(start_time)
+            mask &= (self._events.index >= pd.Timestamp(start_time))
 
         if end_time is not None:
-            mask &= self._events.index <= pd.Timestamp(end_time)
+            mask &= (self._events.index <= pd.Timestamp(end_time))
 
         if event_type is not None:
-            mask &= self._events["type"] == event_type
+            mask &= (self._events['type'] == event_type)
 
         if period is not None:
-            mask &= (self._events["period"] == period) | (self._events["period"].isna())
+            mask &= ((self._events['period'] == period) | (self._events['period'].isna()))
 
         events_df = self._events[mask]
 
@@ -343,17 +337,17 @@ class DataFeed:
         for _, row in events_df.iterrows():
             event = Event(
                 timestamp=row.name.to_pydatetime(),
-                type=row["type"],
-                symbol=row["symbol"],
-                reason=row.get("reason", ""),
-                period=row.get("period"),
-                data=row.get("data"),
+                type=row['type'],
+                symbol=row['symbol'],
+                reason=row.get('reason', ''),
+                period=row.get('period'),
+                data=row.get('data')
             )
             events.append(event)
 
         return events
 
-    def get_events_at_bar(self, bar_time: pd.Timestamp | dt, period: str) -> list[Event]:
+    def get_events_at_bar(self, bar_time: Union[pd.Timestamp, dt], period: str) -> List[Event]:
         """获取指定K线时间范围内的所有事件（包括全局事件和该周期的特定事件）
 
         【事件时间归属规则】
@@ -374,7 +368,7 @@ class DataFeed:
         # 更精确的实现需要解析period计算时间区间
         return self.get_events(end_time=bar_time)
 
-    def update_bar(self, bar: Bar, period: str, events: list[Event] | None = None) -> None:
+    def update_bar(self, bar: Bar, period: str, events: Optional[List[Event]] = None) -> None:
         """更新一根K线
 
         :param bar: 新K线数据
@@ -470,9 +464,11 @@ class DataFeed:
         Path(feeds_dir).mkdir(parents=True, exist_ok=True)
 
         # 构建 _meta.json
-        indicators_serializable: dict[str, list[dict[str, Any]]] = {}
+        indicators_serializable: Dict[str, List[Dict[str, Any]]] = {}
         for pn, ind_list in self._registered_indicators.items():
-            indicators_serializable[pn] = [{"name": n, "params": p} for n, p in ind_list]
+            indicators_serializable[pn] = [
+                {"name": n, "params": p} for n, p in ind_list
+            ]
         meta = {
             "symbol": self.symbol,
             "source": self.source,
@@ -511,7 +507,7 @@ class DataFeed:
         if not os.path.isfile(meta_path):
             raise FileNotFoundError(f"元数据文件不存在: {meta_path}")
 
-        with open(meta_path, encoding="utf-8") as f:
+        with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
 
         feed = cls(symbol=meta["symbol"])
@@ -541,7 +537,7 @@ class DataFeed:
 
         return feed
 
-    def get_period(self, period_name: str) -> PeriodData | None:
+    def get_period(self, period_name: str) -> Optional[PeriodData]:
         """获取指定周期的PeriodData实例（高级用法）
 
         :param period_name: 周期名称
@@ -549,9 +545,8 @@ class DataFeed:
         """
         return self._periods.get(period_name)
 
-    def get_data(
-        self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1, timeout: float | None = None
-    ) -> PeriodDataView | None:
+    def get_data(self, period_name: str, current_time: Union[pd.Timestamp, dt], lookback_bars: int = 1,
+                 timeout: Optional[float] = None) -> Optional[PeriodDataView]:
         """获取指定周期截止指定时间的逻辑视图
 
         指标懒加载：首次调用时自动计算注册指标，后续复用缓存。
@@ -579,15 +574,14 @@ class DataFeed:
 
 # ==================== 辅助函数 ====================
 
-
-def _bars_to_df(bars: list[Bar]) -> pd.DataFrame:
+def _bars_to_df(bars: List[Bar]) -> pd.DataFrame:
     """将 Bar 列表转为 DataFrame，索引为 datetime"""
     data = {
-        "open": [b.open for b in bars],
-        "high": [b.high for b in bars],
-        "low": [b.low for b in bars],
-        "close": [b.close for b in bars],
-        "volume": [b.volume for b in bars],
+        'open': [b.open for b in bars],
+        'high': [b.high for b in bars],
+        'low': [b.low for b in bars],
+        'close': [b.close for b in bars],
+        'volume': [b.volume for b in bars],
     }
     df = pd.DataFrame(data, index=[pd.Timestamp(b.datetime) for b in bars])
     return df
@@ -596,9 +590,9 @@ def _bars_to_df(bars: list[Bar]) -> pd.DataFrame:
 def build_context(
     data_feed: DataFeed,
     requirements: DataRequirements,
-    current_time: pd.Timestamp | dt,
+    current_time: Union[pd.Timestamp, dt],
     bar: Bar,
-    timeout: float | None = None,
+    timeout: Optional[float] = None
 ) -> BarContext:
     """构造 BarContext 上下文对象
 
@@ -608,7 +602,7 @@ def build_context(
     3. 从 DataFeed 获取当前时间范围内的事件（按 requirements.events 配置筛选）
     4. 构造并返回 BarContext 对象
     """
-    multi: dict[str, PeriodDataView] = {}
+    multi: Dict[str, PeriodDataView] = {}
 
     # 获取多周期数据
     for period, req in requirements.periods.items():
@@ -617,7 +611,7 @@ def build_context(
             multi[period] = view
 
     # 获取事件（不需要事件时直接跳过，节省锁和 DataFrame 操作）
-    events: list[Event] = []
+    events: List[Event] = []
     events_req = requirements.events
 
     if events_req.include_global_events or events_req.include_period_events:
@@ -636,8 +630,9 @@ def build_context(
                     include = True
 
             # 检查事件类型白名单
-            if include and events_req.event_types and event.type not in events_req.event_types:
-                include = False
+            if include and events_req.event_types:
+                if event.type not in events_req.event_types:
+                    include = False
 
             if include:
                 events.append(event)
@@ -645,20 +640,51 @@ def build_context(
     # 使用传入的 bar，不再从 multi 中提取
     bar.symbol = data_feed.symbol
 
-    return BarContext(symbol=data_feed.symbol, bar=bar, multi=multi, events=events)
+    return BarContext(
+        symbol=data_feed.symbol,
+        bar=bar,
+        multi=multi,
+        events=events
+    )
 
 
 # ==================== 默认指标注册 ====================
 # 指标实现见 core/indicators.py（sma_func, ema_func, rsi_func）
 
 # 注册默认指标
-register_indicator_func("sma", sma_func, IndicatorCalcMode.BATCH, description="简单移动平均线 (Simple Moving Average)")
 register_indicator_func(
-    "ema", ema_func, IndicatorCalcMode.BATCH, description="指数移动平均线 (Exponential Moving Average)"
+    'sma',
+    sma_func,
+    IndicatorCalcMode.BATCH,
+    description='简单移动平均线 (Simple Moving Average)'
 )
-register_indicator_func("rsi", rsi_func, IndicatorCalcMode.BATCH, description="相对强弱指标 (Relative Strength Index)")
 register_indicator_func(
-    "macd", macd_func, IndicatorCalcMode.BATCH, description="MACD快慢线差值 (Moving Average Convergence Divergence)"
+    'ema',
+    ema_func,
+    IndicatorCalcMode.BATCH,
+    description='指数移动平均线 (Exponential Moving Average)'
 )
-register_indicator_func("kdj", kdj_func, IndicatorCalcMode.BATCH, description="KDJ随机指标J值")
-register_indicator_func("atr", atr_func, IndicatorCalcMode.BATCH, description="平均真实波幅 (Average True Range)")
+register_indicator_func(
+    'rsi',
+    rsi_func,
+    IndicatorCalcMode.BATCH,
+    description='相对强弱指标 (Relative Strength Index)'
+)
+register_indicator_func(
+    'macd',
+    macd_func,
+    IndicatorCalcMode.BATCH,
+    description='MACD快慢线差值 (Moving Average Convergence Divergence)'
+)
+register_indicator_func(
+    'kdj',
+    kdj_func,
+    IndicatorCalcMode.BATCH,
+    description='KDJ随机指标J值'
+)
+register_indicator_func(
+    'atr',
+    atr_func,
+    IndicatorCalcMode.BATCH,
+    description='平均真实波幅 (Average True Range)'
+)

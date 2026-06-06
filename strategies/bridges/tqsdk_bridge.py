@@ -8,21 +8,19 @@
 所有交易状态由 State 管理，Bridge 通过 notify_fill 同步。
 """
 
-from datetime import datetime
-from typing import Any, TypeVar, cast
-
 from loguru import logger
+from datetime import datetime
+from typing import Any, cast, TypeVar, Generic
 
+from strategies import Strategy, Bar, Signal, Fill, State
+
+T = TypeVar('T')
+from strategies.runtime import BarContext
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT
-from common.schemas import KlineDataFrame
-from common.tqsdk_imports import tqsdk
 from common.types import PositionDirection
+from common.schemas import KlineDataFrame
 from common.typing import check_types
-
-from ..runtime import Bar, BarContext, Fill, Signal, State, Strategy
-
-T = TypeVar("T")
-
+from common.tqsdk_imports import tqsdk
 
 def _to_datetime(raw_dt: int) -> datetime:
     """将 tqsdk kline_serial 的 datetime 转为 Python datetime
@@ -36,7 +34,7 @@ def _to_datetime(raw_dt: int) -> datetime:
     return datetime.fromtimestamp(raw_dt / 1_000_000_000)
 
 
-class TqsdkStrategyBridge[T]:
+class TqsdkStrategyBridge(Generic[T]):
     """天勤策略桥接器 — 纯协议转换层
 
     调用流程:
@@ -118,7 +116,7 @@ class TqsdkStrategyBridge[T]:
 
     def notify_fill(self, signal: Signal, fill_price: float) -> None:
         """通知 Strategy 订单成交，同步更新 State"""
-        from ..runtime.types import StrategyPosition
+        from strategies.core.types import StrategyPosition
 
         fill = Fill(
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -181,14 +179,8 @@ class TqsdkStrategyBridge[T]:
                     bar_log_count += 1
                     if signal.action:
                         diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
-                        logger.debug(
-                            "[{}] signal={} reason={} vol={} | {}",
-                            self.symbol,
-                            signal.action,
-                            signal.reason,
-                            signal.volume,
-                            diag_str,
-                        )
+                        logger.debug("[{}] signal={} reason={} vol={} | {}",
+                                    self.symbol, signal.action, signal.reason, signal.volume, diag_str)
                     elif bar_log_count % 100 == 1:
                         if signal.diagnostics:
                             diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
@@ -227,7 +219,9 @@ class TqsdkStrategyBridge[T]:
                 self.api.close()
             fills_count = len(self._state.fills)
             sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
-            logger.debug(f"策略停止: fills={fills_count} sells={sells}")
+            logger.debug(
+                f"策略停止: fills={fills_count} sells={sells}"
+            )
 
     def run(self, symbol: str | None = None, auth: Any | None = None) -> None:
         auth = self._ensure_auth(auth, symbol or "")

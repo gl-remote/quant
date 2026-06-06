@@ -16,13 +16,16 @@
     set_cached_feed(symbol, feed, meta['min_dt'], meta['max_dt'])
 """
 
+from typing import Dict, Optional, Tuple
+
 from .data_feed import DataFeed
 
+
 # 模块级缓存: symbol -> (DataFeed, min_dt, max_dt)
-_cache: dict[str, tuple[DataFeed, str, str]] = {}
+_cache: Dict[str, Tuple[DataFeed, str, str]] = {}
 
 
-def get_cached_feed(symbol: str, min_dt: str, max_dt: str) -> DataFeed | None:
+def get_cached_feed(symbol: str, min_dt: str, max_dt: str) -> Optional[DataFeed]:
     """从内存缓存获取 DataFeed
 
     只有 symbol 和源数据日期范围完全匹配时才命中。

@@ -19,32 +19,32 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
+from loguru import logger
+from datetime import datetime
 import json
 import os
-from datetime import datetime
-from typing import Any, cast
+from typing import Any, Optional, cast
 
 import pandas as pd
-from loguru import logger
 from vnpy_ctastrategy import CtaTemplate
 
+from strategies import Bar, Signal, Fill, Strategy, UninitializedStrategy, State
+from strategies.core.types import StrategyPosition
+from strategies.runtime import DataFeed, DataRequirements
+from strategies.runtime.cache import get_cached_feed, set_cached_feed
+from strategies.runtime.requirements import BarContext
+from strategies.runtime.period import PeriodDataView
 from common.constants import (
-    DIRECTION_MAP,
-    OFFSET_MAP,
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
     TRADE_OFFSET_OPEN,
+    DIRECTION_MAP,
+    OFFSET_MAP,
 )
-from common.types import PositionDirection, TradeAction
+from common.types import TradeAction, PositionDirection
 from data.manager import DataManager
-
-from ..runtime import Bar, DataFeed, DataRequirements, Fill, Signal, State, Strategy, UninitializedStrategy
-from ..runtime.cache import get_cached_feed, set_cached_feed
-from ..runtime.period import PeriodDataView
-from ..runtime.requirements import BarContext
-from ..runtime.types import StrategyPosition
 
 
 class VnpyBacktestBridge(CtaTemplate):
@@ -86,7 +86,7 @@ class VnpyBacktestBridge(CtaTemplate):
         super().__init__(*args, **kwargs)
         self._core: Strategy[Any] = UninitializedStrategy()
         self._state: State[Any] = State(symbol="", period="", strategy_config=None)
-        self._requirements: DataRequirements | None = None
+        self._requirements: Optional[DataRequirements] = None
         self._data_feed: Any = None
         self._ctx_cache: dict[pd.Timestamp, BarContext] = {}
         self.entry_price: float = 0.0
@@ -131,7 +131,10 @@ class VnpyBacktestBridge(CtaTemplate):
         fills_count = len(self._state.fills)
         sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
         buys = fills_count - sells
-        logger.debug(f"[{self.strategy_name}] 策略停止 | fills={fills_count} buys={buys} sells={sells}")
+        logger.debug(
+            f"[{self.strategy_name}] 策略停止 | "
+            f"fills={fills_count} buys={buys} sells={sells}"
+        )
         self.write_log(f"策略停止: fills={fills_count} buys={buys} sells={sells}")
 
     def _log_data_feed_summary(self, label: str = "") -> None:
@@ -154,7 +157,10 @@ class VnpyBacktestBridge(CtaTemplate):
                 continue
             # 已注册指标配置
             indicators = self._data_feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
-            ind_names = [f"{n}({','.join(f'{k}={v}' for k, v in p.items())})" for n, p in indicators]
+            ind_names = [
+                f"{n}({','.join(f'{k}={v}' for k, v in p.items())})"
+                for n, p in indicators
+            ]
             # 已计算完成的指标列（实际在 _df 中的列名）
             ohlcv = {"open", "high", "low", "close", "volume"}
             calc_cols = [c for c in df.columns if c not in ohlcv]
@@ -188,7 +194,9 @@ class VnpyBacktestBridge(CtaTemplate):
         dm = DataManager()
         meta = dm.store.get_metadata(self._state.symbol, interval=main_period)
         if meta and meta.get("min_dt") and meta.get("max_dt"):
-            cached = get_cached_feed(self._state.symbol, str(meta["min_dt"]), str(meta["max_dt"]))
+            cached = get_cached_feed(
+                self._state.symbol, str(meta["min_dt"]), str(meta["max_dt"])
+            )
             if cached is not None:
                 logger.debug("[{}] 内存缓存命中，跳过 parquet I/O", self.strategy_name)
                 return cached
@@ -236,7 +244,7 @@ class VnpyBacktestBridge(CtaTemplate):
         meta_path = os.path.join(feeds_dir, "_meta.json")
         if os.path.isfile(meta_path):
             try:
-                with open(meta_path, encoding="utf-8") as f:
+                with open(meta_path, "r", encoding="utf-8") as f:
                     pm = json.load(f)
                 periods = pm.get("periods", [])
                 if periods:
@@ -324,7 +332,10 @@ class VnpyBacktestBridge(CtaTemplate):
 
         # 补充缺失指标（仅注册，不计算）
         for pn, inds in self._requirements.indicators.items():
-            cached = {(n, tuple(sorted(p.items()))) for n, p in feed._registered_indicators.get(pn, [])}  # pyright: ignore[reportPrivateUsage]
+            cached = {
+                (n, tuple(sorted(p.items())))
+                for n, p in feed._registered_indicators.get(pn, [])
+            }  # pyright: ignore[reportPrivateUsage]
             for ind in inds:
                 key = (ind.name, tuple(sorted(ind.params.items())))
                 if key not in cached:
@@ -375,7 +386,9 @@ class VnpyBacktestBridge(CtaTemplate):
         for period in self._requirements.periods:
             if period == main_period:
                 continue
-            results = dm.load_kline([self._state.symbol], interval=period, end_date=end_date)
+            results = dm.load_kline(
+                [self._state.symbol], interval=period, end_date=end_date
+            )
             for _symbol, df, _data_src in results:
                 if len(df) > 0:
                     data_feed.load_history_df(period, df.set_index("datetime"))
@@ -387,7 +400,9 @@ class VnpyBacktestBridge(CtaTemplate):
                         end_date,
                     )
                 else:
-                    logger.warning("[{}] 加载数据为空: period={}", self.strategy_name, period)
+                    logger.warning(
+                        "[{}] 加载数据为空: period={}", self.strategy_name, period
+                    )
 
     def _build_ctx_cache(self) -> None:
         """预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
@@ -463,7 +478,9 @@ class VnpyBacktestBridge(CtaTemplate):
             if bar.low < pos.lowest_price:
                 pos.lowest_price = bar.low
 
-    def _log_bar_diagnostics(self, bar_time: pd.Timestamp, signal: Signal, close_price: float) -> None:
+    def _log_bar_diagnostics(
+        self, bar_time: pd.Timestamp, signal: Signal, close_price: float
+    ) -> None:
         """统一诊断日志 — 有信号逐条打，无信号百条采样
 
         :param bar_time: K线时间
@@ -487,10 +504,14 @@ class VnpyBacktestBridge(CtaTemplate):
             )
         elif self._bar_log_count % 100 == 1:
             if signal.diagnostics:
-                diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+                diag_str = " ".join(
+                    f"{k}={v:.4f}" for k, v in signal.diagnostics.items()
+                )
             else:
                 diag_str = f"close={close_price:.4f}"
-            logger.debug("[{}] {} no signal | {}", self.strategy_name, bar_time, diag_str)
+            logger.debug(
+                "[{}] {} no signal | {}", self.strategy_name, bar_time, diag_str
+            )
 
     def on_bar(self, bar: Any) -> None:
         """vnpy K线回调 — 从预构造缓存中 O(1) 获取上下文
@@ -513,8 +534,12 @@ class VnpyBacktestBridge(CtaTemplate):
             # 2. 调用 strategy
             signal = self._core.on_bar(self._state, ctx)
         else:
-            if len(self._ctx_cache) == 0 and not getattr(self, "_warned_empty_cache", False):
-                logger.warning("[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name)
+            if len(self._ctx_cache) == 0 and not getattr(
+                self, "_warned_empty_cache", False
+            ):
+                logger.warning(
+                    "[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name
+                )
                 self._warned_empty_cache = True
             signal = Signal()
 
@@ -577,7 +602,11 @@ class VnpyBacktestBridge(CtaTemplate):
             if hasattr(direction, "value"):
                 is_long = DIRECTION_MAP.get(direction.value, "") == TRADE_DIRECTION_LONG
             else:
-                is_long = (str(direction).upper() == TRADE_DIRECTION_LONG) if isinstance(direction, str) else False
+                is_long = (
+                    (str(direction).upper() == TRADE_DIRECTION_LONG)
+                    if isinstance(direction, str)
+                    else False
+                )
 
             # vnpy 的 offset：OPEN=开仓, CLOSE=平仓
             offset = getattr(trade, "offset", None)
@@ -678,25 +707,33 @@ class VnpyBacktestBridge(CtaTemplate):
                 return
             self.buy(price, volume)
             self.entry_price = price
-            logger.debug(f"[{self.strategy_name}] {bar_time} 买入开多 @{price:.2f} x{volume}")
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} 买入开多 @{price:.2f} x{volume}"
+            )
         elif is_short:
             volume = signal.volume
             if volume <= 0:
                 return
             self.short(price, volume)
             self.entry_price = price
-            logger.debug(f"[{self.strategy_name}] {bar_time} 卖出开空 @{price:.2f} x{volume}")
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} 卖出开空 @{price:.2f} x{volume}"
+            )
         elif is_cover:
             pos = abs(self.pos)
             if pos <= 0:
                 return
             self.cover(price, pos)
             self.entry_price = 0.0
-            logger.debug(f"[{self.strategy_name}] {bar_time} {signal.reason}买入平空 @{price:.2f}")
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} {signal.reason}买入平空 @{price:.2f}"
+            )
         else:
             pos = abs(self.pos)
             if pos <= 0:
                 return
             self.sell(price, pos)
             self.entry_price = 0.0
-            logger.debug(f"[{self.strategy_name}] {bar_time} {signal.reason}卖出平多 @{price:.2f}")
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} {signal.reason}卖出平多 @{price:.2f}"
+            )

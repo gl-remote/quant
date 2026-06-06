@@ -8,4 +8,4 @@ try:
 except ImportError:
     TqsdkStrategyBridge = None  # type: ignore[assignment, misc]
 
-__all__ = ["VnpyBacktestBridge", "TqsdkStrategyBridge"]
+__all__ = ['VnpyBacktestBridge', 'TqsdkStrategyBridge']

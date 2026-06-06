@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 策略动态加载模块
 
@@ -8,12 +9,12 @@ import importlib
 from pathlib import Path
 from typing import Any
 
+from strategies import Strategy
 from common.constants import STRATEGY_MA
 
-from ..runtime import Strategy
 
-
-def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> Strategy:
+def load_strategy(strategy_name: str | None = None,
+                  **strategy_kwargs: Any) -> Strategy:
     """根据名称动态加载策略实例
 
     支持三种传入方式:
@@ -36,23 +37,28 @@ def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> S
         strategy_name = STRATEGY_MA
 
     name = strategy_name
-    if name.endswith(".py"):
+    if name.endswith('.py'):
         name = name[:-3]
-    if not name.endswith("_strategy"):
+    if not name.endswith('_strategy'):
         name = f"{name}_strategy"
 
     strategies_dir = Path(__file__).parent.parent
     strategy_file = strategies_dir / f"{name}.py"
 
     if not strategy_file.exists():
-        available = [f.stem for f in strategies_dir.glob("*_strategy.py")]
-        raise FileNotFoundError(f"策略文件 {name}.py 不存在，可用策略: {', '.join(available)}")
+        available = [f.stem for f in strategies_dir.glob('*_strategy.py')]
+        raise FileNotFoundError(
+            f"策略文件 {name}.py 不存在，可用策略: {', '.join(available)}"
+        )
 
     module = importlib.import_module(f"strategies.{name}")
 
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
-        if isinstance(attr, type) and issubclass(attr, Strategy) and attr is not Strategy and attr_name != "Strategy":
+        if (isinstance(attr, type) and
+                issubclass(attr, Strategy) and
+                attr is not Strategy and
+                attr_name != 'Strategy'):
             if strategy_kwargs:
                 return attr(**strategy_kwargs)
             return attr()
