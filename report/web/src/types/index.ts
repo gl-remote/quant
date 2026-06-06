@@ -140,6 +140,8 @@ export interface EquityData {
   dates: string[];           // 日期数组
   equity: number[];           // 资金数组
   drawdown: number[];       // 回撤数组
+  max_ddpercent?: number;    // 最大回撤百分比 [vnpy]
+  initial_capital?: number;   // 初始资金
 }
 
 /**

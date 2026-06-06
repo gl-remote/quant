@@ -34,9 +34,11 @@ export default function EquityChart({ data }: EquityChartProps) {
   const totalReturn = startEq
     ? ((data.equity[data.equity.length - 1] / startEq - 1) * 100).toFixed(2)
     : "0";
-  const maxDD = data.drawdown.length
-    ? (Math.min(...data.drawdown) * 100).toFixed(2)
-    : "0";
+  const maxDD = data.max_ddpercent !== undefined && data.max_ddpercent !== null
+    ? Math.abs(data.max_ddpercent).toFixed(2)
+    : data.drawdown.length
+      ? (Math.abs(Math.min(...data.drawdown)) * 100).toFixed(2)
+      : "0";
   const endEq = data.equity[data.equity.length - 1]?.toFixed(2) || "0";
 
   const option: EChartsOption = {

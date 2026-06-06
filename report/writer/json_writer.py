@@ -92,6 +92,8 @@ def export_equity_json(output_dir: str, run_id: int) -> None:
             continue
         equity = dm.get_equity_data(int(s_id))  # type: ignore[call-overload]
         if equity:
+            equity['max_ddpercent'] = s.get('max_ddpercent', 0)  # type: ignore[arg-type]
+            equity['initial_capital'] = s.get('initial_capital')  # type: ignore[arg-type]
             result[str(s["symbol"])] = equity
     _write_json(output_dir, f"r{run_id}/data/equity.json", result)
 
