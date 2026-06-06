@@ -551,7 +551,7 @@ class DataStore:
             equity = float(daily.get('balance', daily.get('equity', 0.0)))  # type: ignore[arg-type]
             if equity > peak:
                 peak = equity
-            drawdown = equity - peak if peak != 0 else 0.0
+            drawdown = (equity - peak) / peak if peak > 0 else 0.0
 
             rows.append({
                 'backtest_id': backtest_id,
