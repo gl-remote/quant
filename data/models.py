@@ -323,7 +323,7 @@ class BacktestTrade(OrmBaseModel):
     direction: CharField = CharField()
     offset: CharField = CharField()
     open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
-    close_price: FloatField = FloatField()  # 成交价（开仓和平仓均为实际成交价）
+    close_price: FloatField = FloatField()  # 实际成交价（开仓/平仓均为此笔的执行价格）
     quantity: FloatField = FloatField()
     pnl: FloatField = FloatField()          # 净盈亏（已扣除 commission + slippage）
     commission: FloatField = FloatField()    # 该笔平仓周期总手续费（开仓侧 + 平仓侧）
