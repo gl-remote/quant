@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """基于 Optuna 的参数优化引擎
 
 提供统一的参数优化接口，支持网格搜索和贝叶斯搜索两种模式。
@@ -40,12 +39,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-import pandas as pd
-
 import optuna
+import pandas as pd
 from loguru import logger
-
-
 
 
 @dataclass
@@ -97,7 +93,7 @@ class OptunaOptimizer:
       1. **Grid Search** (网格)：穷举搜索空间的所有组合
       2. **Bayesian Search** (贝叶斯)：使用 TPESampler 进行智能采样
 
-    注意：本优化器强制单线程执行，因为底层 vnpy BacktestingEngine 
+    注意：本优化器强制单线程执行，因为底层 vnpy BacktestingEngine
     非线程安全，SQLite 也不支持多线程并发写入。
 
     目标函数：最大化 Calmar 比率平均值（年化收益/最大回撤，取各品种均值）
@@ -152,7 +148,7 @@ class OptunaOptimizer:
             low = config.get("low", 0)
             high = config.get("high", 10)
             step = config.get("step", 1)
-            
+
             if ptype == "categorical":
                 grid_space[param_name] = config.get("choices", [])
             else:
@@ -189,17 +185,21 @@ class OptunaOptimizer:
             ]
             score = float(sum(calmars) / len(calmars)) if calmars else -999.0
 
-            trial_index.append({
-                'search_params': params,
-                'value': score,
-                'engine_results': engine_results,
-                'strategy_params': merged_params,
-                'strategy_name': self._strategy_name,
-            })
+            trial_index.append(
+                {
+                    "search_params": params,
+                    "value": score,
+                    "engine_results": engine_results,
+                    "strategy_params": merged_params,
+                    "strategy_name": self._strategy_name,
+                }
+            )
 
             logger.info(
                 "Trial {:3d}/{} | score={:.4f} | {}",
-                trial.number + 1, n_trials, score,
+                trial.number + 1,
+                n_trials,
+                score,
                 {k: v for k, v in params.items()},
             )
 
@@ -211,7 +211,7 @@ class OptunaOptimizer:
         # 创建 study（SQLite 持久化 或 仅内存）
         storage: str | None = None
         if self._study_db_path:
-            if self._study_db_path.startswith('sqlite:///'):
+            if self._study_db_path.startswith("sqlite:///"):
                 storage = self._study_db_path
             else:
                 db_path = os.path.abspath(self._study_db_path)
@@ -244,8 +244,7 @@ class OptunaOptimizer:
         )
 
         # 严格单线程：n_jobs=1, show_progress_bar=False
-        study.optimize(objective, n_trials=n_trials, n_jobs=1,
-                      show_progress_bar=False)
+        study.optimize(objective, n_trials=n_trials, n_jobs=1, show_progress_bar=False)
 
         result.best_params = study.best_params
         result.best_value = study.best_value or 0.0
@@ -255,7 +254,10 @@ class OptunaOptimizer:
 
         logger.info(
             "Optuna 优化完成: best_value={:.4f} best_params={} study={} seed={}",
-            result.best_value, result.best_params, self._study_name, self._actual_seed,
+            result.best_value,
+            result.best_params,
+            self._study_name,
+            self._actual_seed,
         )
         return result
 
@@ -272,17 +274,22 @@ class OptunaOptimizer:
             stype = spec.get("type", "int")
             if stype == "int":
                 params[name] = trial.suggest_int(
-                    name, int(spec["low"]), int(spec["high"]),
+                    name,
+                    int(spec["low"]),
+                    int(spec["high"]),
                     step=int(spec.get("step", 1)),
                 )
             elif stype == "float":
                 params[name] = trial.suggest_float(
-                    name, float(spec["low"]), float(spec["high"]),
+                    name,
+                    float(spec["low"]),
+                    float(spec["high"]),
                     step=float(spec.get("step", 0.01)) if spec.get("step") else None,
                 )
             elif stype == "categorical":
                 params[name] = trial.suggest_categorical(
-                    name, spec.get("choices", []),
+                    name,
+                    spec.get("choices", []),
                 )
         return params
 

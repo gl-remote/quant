@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """内部存储层 - 数据库操作实现（对外隐藏）
 
 提供数据库连接管理和CRUD操作，被DataManager调用，
@@ -7,38 +6,39 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
+import pandera.pandas as pa
+
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false, reportArgumentType=false
 # pyright: reportAttributeAccessIssue=false, reportUnusedCallResult=false
 # 注：以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
 # 字段描述符访问、`dict[str, object]` 查询返回值都会产生误报。
-
 from loguru import logger
-from pathlib import Path
-from datetime import datetime
-import json
 
-import pandas as pd
-import pandera.pandas as pa
+import common.constants as constants
+from common.schemas import (
+    BacktestDailySchema,
+    TradeRecordSchema,
+)
+from common.types import BacktestResult
 
 from .models import (
-    database,
-    Run,
-    RunStudy,
+    Backtest,
+    BacktestDaily,
+    BacktestParam,
+    BacktestRecord,
+    BacktestTrade,
     ExportMetadata,
     OperationLog,
-    Backtest,
-    BacktestParam,
-    BacktestTrade,
-    BacktestDaily,
-    BacktestRecord,
+    Run,
+    RunStudy,
     TradeRecord,
-)
-import common.constants as constants
-from common.types import BacktestResult
-from common.schemas import (
-    TradeRecordSchema,
-    BacktestDailySchema,
+    database,
 )
 
 
@@ -100,18 +100,14 @@ class DataStore:
             cursor = database.execute_sql("PRAGMA table_info(runs)")
             columns = [row[1] for row in cursor.fetchall()]
             if "use_fixed_seed" not in columns:
-                database.execute_sql(
-                    "ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0"
-                )
+                database.execute_sql("ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0")
             if "random_seed" not in columns:
                 database.execute_sql("ALTER TABLE runs ADD COLUMN random_seed INTEGER")
             # ── backtest_trades 表 ───────────────────────────
             cursor2 = database.execute_sql("PRAGMA table_info(backtest_trades)")
             cols2 = [row[1] for row in cursor2.fetchall()]
             if "reason" not in cols2:
-                database.execute_sql(
-                    "ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(512) DEFAULT ''"
-                )
+                database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(512) DEFAULT ''")
             # ── backtests 表（2026-06-06 新增 vnpy 全量字段）────
             cursor3 = database.execute_sql("PRAGMA table_info(backtests)")
             bt_cols = [row[1] for row in cursor3.fetchall()]
@@ -134,9 +130,7 @@ class DataStore:
             }
             for col_name, col_type in _bt_alter.items():
                 if col_name not in bt_cols:
-                    database.execute_sql(
-                        f"ALTER TABLE backtests ADD COLUMN {col_name} {col_type}"
-                    )
+                    database.execute_sql(f"ALTER TABLE backtests ADD COLUMN {col_name} {col_type}")
 
             # ── backtest_daily 表（2026-06-06 新增 vnpy 日度字段）────
             cursor4 = database.execute_sql("PRAGMA table_info(backtest_daily)")
@@ -149,9 +143,7 @@ class DataStore:
             }
             for col_name, col_type in _bd_alter.items():
                 if col_name not in bd_cols:
-                    database.execute_sql(
-                        f"ALTER TABLE backtest_daily ADD COLUMN {col_name} {col_type}"
-                    )
+                    database.execute_sql(f"ALTER TABLE backtest_daily ADD COLUMN {col_name} {col_type}")
         except Exception as e:
             logger.warning(f"数据库迁移失败: {e}")
 
@@ -213,9 +205,7 @@ class DataStore:
 
     def get_logs(self, limit: int = 100) -> list[dict[str, object]]:
         """查询操作日志"""
-        rows = list(
-            OperationLog.select().order_by(OperationLog.id.desc()).limit(limit).dicts()
-        )
+        rows = list(OperationLog.select().order_by(OperationLog.id.desc()).limit(limit).dicts())
         for row in rows:
             for field in ["created_at", "updated_at"]:
                 if row.get(field) is not None:
@@ -326,13 +316,9 @@ class DataStore:
         """关联 run 与 Optuna study"""
         RunStudy.get_or_create(run_id=run_id, study_name=study_name)
 
-    def update_run_seed(
-        self, run_id: int, use_fixed_seed: bool, random_seed: int
-    ) -> None:
+    def update_run_seed(self, run_id: int, use_fixed_seed: bool, random_seed: int) -> None:
         """更新运行记录的随机种子"""
-        Run.update(
-            use_fixed_seed=1 if use_fixed_seed else 0, random_seed=random_seed
-        ).where(Run.id == run_id).execute()
+        Run.update(use_fixed_seed=1 if use_fixed_seed else 0, random_seed=random_seed).where(Run.id == run_id).execute()
 
     # ── 回测记录操作 ────────────────────────────────────────────────
 
@@ -415,9 +401,7 @@ class DataStore:
             bt.ewm_sharpe = result.ewm_sharpe
             bt.rgr_ratio = result.rgr_ratio
             # ── 元数据 ────────────────────────────────────────
-            bt.engine_config = (
-                json.dumps(result.engine_config) if result.engine_config else None
-            )
+            bt.engine_config = json.dumps(result.engine_config) if result.engine_config else None
             bt.data_src = data_src or result.data_src
             bt.updated_at = now
             bt.save()
@@ -474,9 +458,7 @@ class DataStore:
                 # ── 进阶指标（vnpy 输出）───────────────────────────
                 ewm_sharpe=result.ewm_sharpe,
                 rgr_ratio=result.rgr_ratio,
-                engine_config=json.dumps(result.engine_config)
-                if result.engine_config
-                else None,
+                engine_config=json.dumps(result.engine_config) if result.engine_config else None,
                 data_src=data_src or result.data_src,
                 updated_at=now,
             )
@@ -487,14 +469,10 @@ class DataStore:
                 # 更新路径：删除旧参数
                 BacktestParam.delete().where(BacktestParam.backtest == bt).execute()
             for name, value in params.items():
-                BacktestParam.create(
-                    backtest=bt, param_name=name, param_value=float(value)
-                )
+                BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
         return bt.id  # type: ignore[no-any-return]
 
-    def insert_backtest_trades(
-        self, backtest_id: int, trades: list[dict[str, object]]
-    ) -> int:
+    def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细
 
         输入 trades 字段名必须与 ORM BacktestTrade 对齐:
@@ -589,15 +567,11 @@ class DataStore:
             for dt_field in ("datetime", "created_at"):
                 if row.get(dt_field) is not None:
                     row[dt_field] = str(row[dt_field])
-            row["backtest_id"] = (
-                row.pop("backtest_id") if "backtest_id" in row else backtest_id
-            )
+            row["backtest_id"] = row.pop("backtest_id") if "backtest_id" in row else backtest_id
             records.append(TradeRecord(**row))
         return records
 
-    def insert_backtest_daily(
-        self, backtest_id: int, daily_results: list[dict[str, object]]
-    ) -> int:
+    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         now = datetime.now()
         rows: list[dict[str, object]] = []
@@ -608,9 +582,7 @@ class DataStore:
             dt = daily.get("date", daily.get("datetime"))
             if not dt:
                 continue
-            date_str = (
-                str(dt).split(" ")[0] if " " in str(dt) else str(dt).split("T")[0]
-            )
+            date_str = str(dt).split(" ")[0] if " " in str(dt) else str(dt).split("T")[0]
 
             # vnpy calculate_result() 输出键名为 net_pnl；daily_return 为旧版键名兼容
             net_pnl = _f(daily.get("net_pnl", daily.get("daily_return", 0.0)))
@@ -725,9 +697,7 @@ class DataStore:
             )
         return result
 
-    def _filter_by_best_trial(
-        self, backtests: list[dict[str, object]], run_id: int
-    ) -> list[dict[str, object]]:
+    def _filter_by_best_trial(self, backtests: list[dict[str, object]], run_id: int) -> list[dict[str, object]]:
         """过滤出全局最优 trial 对应的回测记录"""
         import json as _j
 
@@ -818,9 +788,7 @@ class DataStore:
                     "ewm_sharpe": _f(r["ewm_sharpe"] or 0),
                     "rgr_ratio": _f(r["rgr_ratio"] or 0),
                     "ret_cls": "badge-green" if total_return > 0 else "badge-red",
-                    "sr_cls": "badge-green"
-                    if _f(r["sharpe_ratio"] or 0) > 0
-                    else "badge-red",
+                    "sr_cls": "badge-green" if _f(r["sharpe_ratio"] or 0) > 0 else "badge-red",
                     "data_src": r["data_src"],
                     "start_date": r["start_date"],
                     "end_date": r["end_date"],
@@ -830,11 +798,7 @@ class DataStore:
 
     def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
         """获取某 run 下所有回测记录（含参数和日线数据，仅全局最优参数组合）"""
-        backtests = list(
-            Backtest.select()
-            .where(Backtest.run_id == run_id, Backtest.status == "success")
-            .dicts()
-        )
+        backtests = list(Backtest.select().where(Backtest.run_id == run_id, Backtest.status == "success").dicts())
 
         backtests = self._filter_by_best_trial(backtests, run_id)
 
@@ -843,9 +807,7 @@ class DataStore:
             bt_id = _i(bt["id"])
 
             params = list(
-                BacktestParam.select(
-                    BacktestParam.param_name, BacktestParam.param_value
-                )
+                BacktestParam.select(BacktestParam.param_name, BacktestParam.param_value)
                 .where(BacktestParam.backtest == bt_id)
                 .order_by(BacktestParam.param_name)
                 .dicts()
@@ -891,10 +853,7 @@ class DataStore:
                     "kline_interval": bt["kline_interval"],
                     "strategy_version": bt["strategy_version"],
                     "git_hash": bt["git_hash"],
-                    "params": [
-                        {"name": p["param_name"], "value": p["param_value"]}
-                        for p in params
-                    ],
+                    "params": [{"name": p["param_name"], "value": p["param_value"]} for p in params],
                     "daily": daily,
                 }
             )
@@ -935,11 +894,7 @@ class DataStore:
 
     def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
         """获取 Optuna 优化数据"""
-        study_rows = list(
-            RunStudy.select(RunStudy.study_name)
-            .where(RunStudy.run_id == run_id)
-            .dicts()
-        )
+        study_rows = list(RunStudy.select(RunStudy.study_name).where(RunStudy.run_id == run_id).dicts())
         if not study_rows:
             return None
 
@@ -950,7 +905,7 @@ class DataStore:
                 """
                 SELECT t.number, tv.value FROM trials t
                 LEFT JOIN trial_values tv ON t.trial_id = tv.trial_id
-                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) 
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
                   AND t.state='COMPLETE'
                 ORDER BY t.number
             """,
@@ -963,7 +918,7 @@ class DataStore:
                 """
                 SELECT t.number, tp.param_name, tp.param_value
                 FROM trials t JOIN trial_params tp ON t.trial_id = tp.trial_id
-                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) 
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
                   AND t.state='COMPLETE'
                 ORDER BY t.number, tp.param_name
             """,
@@ -980,7 +935,7 @@ class DataStore:
                 WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
                   AND tv.value=(
                       SELECT MIN(tv2.value) FROM trial_values tv2
-                      JOIN trials t2 ON tv2.trial_id=t2.trial_id 
+                      JOIN trials t2 ON tv2.trial_id=t2.trial_id
                       WHERE t2.study_id=(SELECT study_id FROM studies WHERE study_name=?))
             """,
                 (study_name, study_name),
@@ -1028,12 +983,8 @@ class DataStore:
                 return False
             # 先删关联数据，再删主记录 (虽然有 CASCADE，显式删除更安全)
             with database.atomic():
-                BacktestDaily.delete().where(
-                    BacktestDaily.backtest_id == backtest_id
-                ).execute()
-                BacktestTrade.delete().where(
-                    BacktestTrade.backtest_id == backtest_id
-                ).execute()
+                BacktestDaily.delete().where(BacktestDaily.backtest_id == backtest_id).execute()
+                BacktestTrade.delete().where(BacktestTrade.backtest_id == backtest_id).execute()
                 bt.delete_instance()
             logger.info(f"已删除回测记录 id={backtest_id} 及其关联数据")
             return True

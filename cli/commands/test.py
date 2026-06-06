@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 策略测试命令模块
 
@@ -11,24 +10,26 @@
 """
 
 import argparse
-from loguru import logger
 from datetime import datetime
 
+from loguru import logger
+
+from common.constants import (
+    DEFAULT_SMA_LONG,
+    DEFAULT_SMA_SHORT,
+    DEFAULT_STOP_LOSS_RATIO,
+    DEFAULT_TAKE_PROFIT_RATIO,
+    LOG_STATUS_ERROR,
+    LOG_STATUS_INFO,
+    LOG_STATUS_SUCCESS,
+    TRADE_ACTION_BUY,
+    TRADE_ACTION_SELL,
+)
 from config import ConfigManager
 from data import DataManager
 from strategies import Bar, Fill
-from strategies.utils import load_strategy, apply_strategy_config, get_strategy_class_name
-from common.constants import (
-    TRADE_ACTION_BUY,
-    TRADE_ACTION_SELL,
-    LOG_STATUS_INFO,
-    LOG_STATUS_SUCCESS,
-    LOG_STATUS_ERROR,
-    DEFAULT_SMA_SHORT,
-    DEFAULT_SMA_LONG,
-    DEFAULT_STOP_LOSS_RATIO,
-    DEFAULT_TAKE_PROFIT_RATIO,
-)
+from strategies.utils import apply_strategy_config, get_strategy_class_name, load_strategy
+
 
 def cmd_test(args: argparse.Namespace):
     """执行策略测试命令
@@ -49,7 +50,7 @@ def cmd_test(args: argparse.Namespace):
     logger.info("=" * 60)
     logger.info(f"测试模式 - 策略: {cls_name}")
     logger.info("=" * 60)
-    dm.store.log('test', f"开始: strategy={cls_name}", status=LOG_STATUS_INFO)
+    dm.store.log("test", f"开始: strategy={cls_name}", status=LOG_STATUS_INFO)
 
     try:
         tc = cm.get_trading_config()
@@ -60,41 +61,48 @@ def cmd_test(args: argparse.Namespace):
             f"止盈={tc.get('take_profit_ratio', DEFAULT_TAKE_PROFIT_RATIO):.0%}"
         )
 
-        bar1 = Bar(symbol="TEST", datetime=datetime(2026, 1, 1),
-                   open=10, high=15, low=10, close=15, volume=1000)
+        bar1 = Bar(symbol="TEST", datetime=datetime(2026, 1, 1), open=10, high=15, low=10, close=15, volume=1000)
         fills: list[Fill] = []
         signal1 = strategy.on_bar(bar1)
-        logger.info(
-            f"信号1: action={signal1.action} reason={signal1.reason} "
-            f"volume={signal1.volume}"
-        )
+        logger.info(f"信号1: action={signal1.action} reason={signal1.reason} volume={signal1.volume}")
 
         if signal1.action == TRADE_ACTION_BUY:
-            fills.append(Fill(
-                timestamp=str(bar1.datetime), symbol=bar1.symbol,
-                action=TRADE_ACTION_BUY, price=bar1.close, volume=signal1.volume,
-                reason=signal1.reason))
+            fills.append(
+                Fill(
+                    timestamp=str(bar1.datetime),
+                    symbol=bar1.symbol,
+                    action=TRADE_ACTION_BUY,
+                    price=bar1.close,
+                    volume=signal1.volume,
+                    reason=signal1.reason,
+                )
+            )
             strategy.on_fill(fills[-1])
 
-            bar2 = Bar(symbol="TEST", datetime=datetime(2026, 1, 2),
-                       open=15, high=16, low=13, close=13.5, volume=500)
+            bar2 = Bar(symbol="TEST", datetime=datetime(2026, 1, 2), open=15, high=16, low=13, close=13.5, volume=500)
             signal2 = strategy.on_bar(bar2)
             logger.info(f"信号2: action={signal2.action} reason={signal2.reason}")
 
             if signal2.action == TRADE_ACTION_SELL:
-                fills.append(Fill(
-                    timestamp=str(bar2.datetime), symbol=bar2.symbol,
-                    action=TRADE_ACTION_SELL, price=bar2.close, volume=signal1.volume,
-                    reason=signal2.reason))
+                fills.append(
+                    Fill(
+                        timestamp=str(bar2.datetime),
+                        symbol=bar2.symbol,
+                        action=TRADE_ACTION_SELL,
+                        price=bar2.close,
+                        volume=signal1.volume,
+                        reason=signal2.reason,
+                    )
+                )
                 strategy.on_fill(fills[-1])
 
         sells = [f for f in fills if f.action == TRADE_ACTION_SELL]
         logger.info(f"绩效: 交易{sells.__len__()}次")
-        dm.store.log('test', f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)
+        dm.store.log("test", f"完成: strategy={cls_name}", status=LOG_STATUS_SUCCESS)
         logger.info("\n" + "=" * 60)
         logger.info("测试模式完成")
         logger.info("=" * 60)
     except Exception as e:
         logger.error(f"测试失败: {e}")
-        dm.store.log('test', f"失败: {e}", status=LOG_STATUS_ERROR)
+        dm.store.log("test", f"失败: {e}", status=LOG_STATUS_ERROR)
         raise

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据管理器 - 统一数据访问入口
 
 提供简洁的高层数据接口，外部模块只需通过此类与data模块交互，
@@ -13,28 +12,28 @@
 
 from __future__ import annotations
 
-from loguru import logger
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
+
+import pandas as pd
+import pandera.pandas as pa
+from loguru import logger
+from pandera.typing import DataFrame
 
 from common.constants import COMMON_KLINE_INTERVALS
 from common.schemas import KlineDataFrame, validate_backtest_consistency
 from common.types import BacktestResult
-import pandas as pd
-from pathlib import Path
 
-import pandera.pandas as pa
-from pandera.typing import DataFrame
-
-from .store import DataStore
 from .datasource import list_sources
 from .models import (
-    KlineSchema,
     BacktestRecord,
-    TradeRecord,
-    SymbolInfo,
     DataSummary,
+    KlineSchema,
+    SymbolInfo,
+    TradeRecord,
 )
+from .store import DataStore
 
 if TYPE_CHECKING:
     from config import ConfigManager
@@ -103,10 +102,7 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = (
-                self._get_config().get_data_config().db_path
-                or ".quant_shared_data/quant_shared.db"
-            )
+            db_path = self._get_config().get_data_config().db_path or ".quant_shared_data/quant_shared.db"
             self._store = DataStore(db_path)
 
     @property
@@ -142,11 +138,7 @@ class DataManager:
             name = f.stem
             # 新格式: name.rsplit('.', 2) → [symbol, provider, interval]
             parts3 = name.rsplit(".", 2)
-            if (
-                len(parts3) == 3
-                and parts3[-1] in common_intervals
-                and parts3[1] in known_providers
-            ):
+            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
                 symbols.add(parts3[0])
                 continue
 
@@ -188,11 +180,7 @@ class DataManager:
                 continue
             name = f.stem
             parts3 = name.rsplit(".", 2)
-            if (
-                len(parts3) == 3
-                and parts3[-1] in common_intervals
-                and parts3[1] in known_providers
-            ):
+            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
                 symbols.add(parts3[0])
             else:
                 parts2 = name.rsplit(".", 1)
@@ -230,9 +218,7 @@ class DataManager:
         filename_template = self._get_filename_template()
 
         provider = self._get_default_provider()
-        filename = filename_template.format(
-            symbol=symbol, provider=provider, interval="1m"
-        )
+        filename = filename_template.format(symbol=symbol, provider=provider, interval="1m")
         filepath = Path(data_dir) / filename
 
         if filepath.exists():
@@ -266,9 +252,7 @@ class DataManager:
 
     # ── 数据加载（使用 Pandera 验证）────────────────────────
 
-    def _load_csv_with_validation(
-        self, filepath: Path
-    ) -> DataFrame[KlineSchema] | None:
+    def _load_csv_with_validation(self, filepath: Path) -> DataFrame[KlineSchema] | None:
         """加载CSV文件并通过 Pandera 验证"""
         try:
             df = pd.read_csv(filepath)
@@ -316,9 +300,7 @@ class DataManager:
         else:
             bt_provider = self._get_default_provider()
             if bt_provider:
-                candidates = [bt_provider] + [
-                    p for p in list_sources() if p != bt_provider
-                ]
+                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
             else:
                 candidates = list_sources()
 
@@ -348,9 +330,7 @@ class DataManager:
 
         return results
 
-    def _resolve_data_src(
-        self, symbol: str, interval: str, candidates: list[str]
-    ) -> str:
+    def _resolve_data_src(self, symbol: str, interval: str, candidates: list[str]) -> str:
         """查 ExportMetadata 获取指定品种的数据源路径
 
         Raises:
@@ -363,14 +343,9 @@ class DataManager:
                 if not isinstance(fp, str):
                     continue
                 if not Path(fp).exists():
-                    raise FileNotFoundError(
-                        f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}"
-                    )
+                    raise FileNotFoundError(f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}")
                 return fp
-        raise FileNotFoundError(
-            f"ExportMetadata 中找不到 {symbol} "
-            f"(interval={interval}, candidates={candidates})"
-        )
+        raise FileNotFoundError(f"ExportMetadata 中找不到 {symbol} (interval={interval}, candidates={candidates})")
 
     # ── 回测记录 ────────────────────────────────────────────
 
@@ -387,13 +362,9 @@ class DataManager:
             run_id: Run 记录 ID
             data_src: 数据源文件路径，用于报告生成时定位K线数据
         """
-        return self.store.insert_backtest_detailed(
-            result, run_id=run_id, data_src=data_src
-        )
+        return self.store.insert_backtest_detailed(result, run_id=run_id, data_src=data_src)
 
-    def insert_backtest_trades(
-        self, backtest_id: int, trades: list[dict[str, object]]
-    ) -> int:
+    def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
         return self.store.insert_backtest_trades(backtest_id, trades)
 
@@ -415,9 +386,7 @@ class DataManager:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
 
-    def insert_backtest_daily(
-        self, backtest_id: int, daily_results: list[dict[str, object]]
-    ) -> int:
+    def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
 
@@ -449,9 +418,7 @@ class DataManager:
 
         # 2026-06-06新增: 聚合逐笔手续费用于一致性校验
         trade_commission_sum = (
-            sum(float(cast(float | int, _get_attr(t, "commission", 0))) for t in trades)
-            if trades
-            else 0.0
+            sum(float(cast(float | int, _get_attr(t, "commission", 0))) for t in trades) if trades else 0.0
         )
 
         return validate_backtest_consistency(
@@ -524,7 +491,7 @@ class DataManager:
             self._store.close()
             logger.info("数据库连接已关闭")
 
-    def __enter__(self) -> "DataManager":
+    def __enter__(self) -> DataManager:
         return self
 
     def __exit__(

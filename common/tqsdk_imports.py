@@ -4,16 +4,18 @@
 如果 tqsdk 版本升级导致 API 变动，只需更新此文件。
 """
 
-from loguru import logger
 from typing import Any
+
+from loguru import logger
+
 
 class TqsdkImports:
     """天勤 SDK 延迟导入管理器 — 单例使用
 
-    用法:
-tqsdk = TqsdkImports()
-        if tqsdk.ensure():
-            api = tqsdk.TqApi(...)
+        用法:
+    tqsdk = TqsdkImports()
+            if tqsdk.ensure():
+                api = tqsdk.TqApi(...)
     """
 
     def __init__(self) -> None:
@@ -28,8 +30,9 @@ tqsdk = TqsdkImports()
         if self._loaded:
             return True
         try:
-            from tqsdk import TqApi, TqAuth, TargetPosTask, TqBacktest
+            from tqsdk import TargetPosTask, TqApi, TqAuth, TqBacktest
             from tqsdk.exceptions import BacktestFinished
+
             self.TqApi = TqApi
             self.TqAuth = TqAuth
             self.TargetPosTask = TargetPosTask

@@ -9,10 +9,10 @@
 
 from __future__ import annotations
 
-from loguru import logger
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import pandas as pd
+from loguru import logger
 
 if TYPE_CHECKING:
     from vnpy.trader.constant import Interval
@@ -28,14 +28,16 @@ def _init_interval_map() -> dict[str, Interval]:
         return INTERVAL_MAP
     from vnpy.trader.constant import Interval
 
-    INTERVAL_MAP.update({
-        '1m': getattr(Interval, 'MINUTE', Interval.MINUTE),
-        '5m': getattr(Interval, 'MINUTE_5', Interval.MINUTE),
-        '15m': getattr(Interval, 'MINUTE_15', Interval.MINUTE),
-        '30m': getattr(Interval, 'MINUTE_30', Interval.MINUTE),
-        '1h': Interval.HOUR,
-        'd': Interval.DAILY,
-    })
+    INTERVAL_MAP.update(
+        {
+            "1m": getattr(Interval, "MINUTE", Interval.MINUTE),
+            "5m": getattr(Interval, "MINUTE_5", Interval.MINUTE),
+            "15m": getattr(Interval, "MINUTE_15", Interval.MINUTE),
+            "30m": getattr(Interval, "MINUTE_30", Interval.MINUTE),
+            "1h": Interval.HOUR,
+            "d": Interval.DAILY,
+        }
+    )
     return INTERVAL_MAP
 
 
@@ -48,10 +50,10 @@ def resolve_interval(interval_str: str) -> Interval:
     Returns:
         vnpy Interval 枚举值
     """
-    return _init_interval_map().get(interval_str, _init_interval_map()['d'])
+    return _init_interval_map().get(interval_str, _init_interval_map()["d"])
 
 
-def calculate_date_range(df: pd.DataFrame) -> Tuple[str, str, int]:
+def calculate_date_range(df: pd.DataFrame) -> tuple[str, str, int]:
     """从 DataFrame 计算日期范围和总天数
 
     Args:
@@ -60,8 +62,8 @@ def calculate_date_range(df: pd.DataFrame) -> Tuple[str, str, int]:
     Returns:
         (start_date, end_date, total_days) 元组
     """
-    data_start = str(df['datetime'].iloc[0])[:10]
-    data_end = str(df['datetime'].iloc[-1])[:10]
+    data_start = str(df["datetime"].iloc[0])[:10]
+    data_end = str(df["datetime"].iloc[-1])[:10]
     start_dt = pd.to_datetime(data_start)
     end_dt = pd.to_datetime(data_end)
     total_days = (end_dt - start_dt).days + 1
@@ -88,10 +90,10 @@ def df_to_vnpy_datalines(
     Returns:
         vnpy BarData 对象列表
     """
-    from vnpy.trader.object import BarData
     from vnpy.trader.constant import Exchange, Interval
+    from vnpy.trader.object import BarData
 
-    required_cols = {'datetime', 'open', 'high', 'low', 'close', 'volume'}
+    required_cols = {"datetime", "open", "high", "low", "close", "volume"}
     missing = required_cols - set(df.columns)
     if missing:
         raise ValueError(f"数据缺少必要列: {missing}")
@@ -103,16 +105,16 @@ def df_to_vnpy_datalines(
         BarData(
             symbol=pure_symbol,
             exchange=exchange,
-            datetime=pd.Timestamp(row['datetime']).to_pydatetime(),
+            datetime=pd.Timestamp(row["datetime"]).to_pydatetime(),
             interval=bar_interval,
-            open_price=row['open'],
-            high_price=row['high'],
-            low_price=row['low'],
-            close_price=row['close'],
-            volume=row['volume'],
+            open_price=row["open"],
+            high_price=row["high"],
+            low_price=row["low"],
+            close_price=row["close"],
+            volume=row["volume"],
             gateway_name="CSV",
         )
-        for row in df.to_dict(orient='records')
+        for row in df.to_dict(orient="records")
     ]
 
     logger.debug(f"转换完成: {len(bars)} 条 BarData")

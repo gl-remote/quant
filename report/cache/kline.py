@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """K 线数据转换缓存
 
 以 (symbol, csv_path, csv_mtime) 的 md5 为 key，
@@ -10,9 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from loguru import logger
 import os
 from pathlib import Path
+
+from loguru import logger
+
 
 class KlineCache:
     """K 线数据转换缓存
@@ -40,7 +41,7 @@ class KlineCache:
         cache_file = self._cache_dir / f"{key}.json"
         if not cache_file.exists():
             return None
-        with open(cache_file, "r", encoding="utf-8") as f:
+        with open(cache_file, encoding="utf-8") as f:
             return json.load(f)  # type: ignore[no-any-return]
 
     def put(self, symbol: str, csv_path: str, interval: str, data: dict) -> None:
@@ -49,9 +50,7 @@ class KlineCache:
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, default=str)
 
-    def copy_to(
-        self, symbol: str, csv_path: str, interval: str, dest: Path
-    ) -> bool:
+    def copy_to(self, symbol: str, csv_path: str, interval: str, dest: Path) -> bool:
         """将缓存文件复制到目标路径，成功返回 True"""
         data = self.get(symbol, csv_path, interval)
         if data is None:
@@ -64,6 +63,7 @@ class KlineCache:
     def clear(self) -> None:
         """清空所有缓存"""
         import shutil
+
         if self._cache_dir.exists():
             shutil.rmtree(self._cache_dir)
             self._cache_dir.mkdir(parents=True, exist_ok=True)

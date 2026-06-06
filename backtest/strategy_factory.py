@@ -21,10 +21,11 @@
 from __future__ import annotations
 
 import typing
-from dataclasses import fields as dc_fields, is_dataclass
+from dataclasses import fields as dc_fields
+from dataclasses import is_dataclass
 from typing import TYPE_CHECKING, Any
 
-from strategies import Strategy, State
+from strategies import State, Strategy
 from strategies.utils import load_strategy
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ class StrategyFactory:
             TypeError: 无法提取配置类型时抛出
         """
         config_cls: type | None = None
-        for base in getattr(strategy_cls, '__orig_bases__', []):
+        for base in getattr(strategy_cls, "__orig_bases__", []):
             origin = typing.get_origin(base)
             if origin is not None and issubclass(origin, Strategy):
                 args = typing.get_args(base)
@@ -77,10 +78,7 @@ class StrategyFactory:
                     config_cls = args[0]
                     break
         if config_cls is None:
-            raise TypeError(
-                f"无法从 {strategy_cls.__name__} 提取策略配置类型，"
-                f"请确保策略类继承自 Strategy[ConfigType]"
-            )
+            raise TypeError(f"无法从 {strategy_cls.__name__} 提取策略配置类型，请确保策略类继承自 Strategy[ConfigType]")
         return config_cls
 
     @staticmethod
@@ -196,14 +194,11 @@ class StrategyFactory:
 
         # 步骤2: 提取配置类型并构造配置对象（过滤非策略参数）
         config_cls = StrategyFactory.extract_config_type(strategy_cls)
-        filtered_params = StrategyFactory._filter_params_to_config(
-            strategy_params, config_cls
-        )
+        filtered_params = StrategyFactory._filter_params_to_config(strategy_params, config_cls)
         strategy_config = config_cls(**filtered_params)
 
         # 步骤3: 动态创建注入子类
         class _InjectedStrategy(VnpyBacktestBridge):
-
             def _load_default_core(self, _setting: object | None = None) -> None:
                 """禁用默认加载，因为我们会在 __init__ 中注入"""
                 pass

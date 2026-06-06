@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 vn.py 回测引擎 (纯执行器)
 
@@ -15,23 +14,22 @@ vn.py 回测引擎 (纯执行器)
 
 from __future__ import annotations
 
-from loguru import logger
 from typing import Any, cast
 
 import pandas as pd
+from loguru import logger
 
-from strategies.utils import serialize_strategy_params
-from config.app_config import BacktestConfig
-from data.manager import DataManager
-
-from .data_utils import df_to_vnpy_datalines, resolve_interval, calculate_date_range
-from .results import aggregate_walk_forward
-from .strategy_factory import create_strategy_class
-
+from common.constants import DIRECTION_MAP, OFFSET_MAP
+from common.contract_specs import BROKER_ADDON_DFCF, CONTRACT_SPECS
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
-from common.constants import DIRECTION_MAP, OFFSET_MAP
-from common.contract_specs import CONTRACT_SPECS, BROKER_ADDON_DFCF
+from config.app_config import BacktestConfig
+from data.manager import DataManager
+from strategies.utils import serialize_strategy_params
+
+from .data_utils import calculate_date_range, df_to_vnpy_datalines, resolve_interval
+from .results import aggregate_walk_forward
+from .strategy_factory import create_strategy_class
 
 
 class VnpyBacktestEngine:
@@ -65,13 +63,9 @@ class VnpyBacktestEngine:
         self.interval: str = backtest_config.interval
 
         if self.initial_capital <= 0:
-            raise ValueError(
-                f"initial_capital 必须大于 0，当前: {self.initial_capital}"
-            )
+            raise ValueError(f"initial_capital 必须大于 0，当前: {self.initial_capital}")
         if not (0 <= self.commission_rate < 1):
-            raise ValueError(
-                f"commission_rate 必须在 [0, 1) 范围内，当前: {self.commission_rate}"
-            )
+            raise ValueError(f"commission_rate 必须在 [0, 1) 范围内，当前: {self.commission_rate}")
         if self.slippage < 0:
             raise ValueError(f"slippage 不能为负数，当前: {self.slippage}")
         if self.price_tick <= 0:
@@ -138,18 +132,14 @@ class VnpyBacktestEngine:
             total_days=total_days,
             # ── 核心绩效指标（vnpy calculate_statistics 直接输出）───
             # vnpy 键名为 total_trade_count；total_trades 为旧版兼容 fallback
-            total_trades=stats.get("total_trade_count", stats.get("total_trades", 0))
-            or 0,
+            total_trades=stats.get("total_trade_count", stats.get("total_trades", 0)) or 0,
             total_return=stats.get("total_return", 0.0) or 0.0,
-            end_balance=stats.get("end_balance", self.initial_capital)
-            or self.initial_capital,
+            end_balance=stats.get("end_balance", self.initial_capital) or self.initial_capital,
             annual_return=stats.get("annual_return"),
             sharpe_ratio=stats.get("sharpe_ratio"),
             max_drawdown=stats.get("max_drawdown"),
             max_ddpercent=stats.get("max_ddpercent"),
-            max_drawdown_duration=stats.get(
-                "max_drawdown_duration", stats.get("max_ddpercent_duration", 0)
-            ),
+            max_drawdown_duration=stats.get("max_drawdown_duration", stats.get("max_ddpercent_duration", 0)),
             daily_std=stats.get("return_std", stats.get("daily_std")),
             return_drawdown_ratio=stats.get("return_drawdown_ratio"),
             # ── 盈亏汇总（vnpy 直接输出）───────────────────────
@@ -249,10 +239,7 @@ class VnpyBacktestEngine:
         """
         logger.info(f"{'=' * 60}")
         logger.info(f"启动 vn.py 回测: {len(pairs)} 个配对")
-        logger.info(
-            f"资金={self.initial_capital:,.0f} "
-            f"费率={self.commission_rate:.4%} 滑点={self.slippage}"
-        )
+        logger.info(f"资金={self.initial_capital:,.0f} 费率={self.commission_rate:.4%} 滑点={self.slippage}")
         logger.info(f"{'=' * 60}")
 
         from collections import defaultdict
@@ -275,13 +262,9 @@ class VnpyBacktestEngine:
             logger.info(f"\n>>> 品种: {symbol} ({len(strategy_names)} 个策略)")
 
             data_start, data_end, total_days = calculate_date_range(df)
-            logger.debug(
-                f"数据: {len(df)} 条, {data_start} ~ {data_end}, 共 {total_days} 天"
-            )
+            logger.debug(f"数据: {len(df)} 条, {data_start} ~ {data_end}, 共 {total_days} 天")
 
-            batch_results = self._run_backtest(
-                df, symbol, strategy_names, strategy_params_list
-            )
+            batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list)
             for i, r in enumerate(batch_results):
                 stats = r.get("statistics", {})
                 daily = r.get("daily_results", [])
@@ -292,13 +275,9 @@ class VnpyBacktestEngine:
                     self._create_backtest_result(
                         symbol=sym,
                         backtest_id=r.get("bt_id"),
-                        strategy_name=strategy_names[i]
-                        if i < len(strategy_names)
-                        else "unknown",
+                        strategy_name=strategy_names[i] if i < len(strategy_names) else "unknown",
                         strategy_version=r.get("strategy_version"),
-                        strategy_params=serialize_strategy_params(strategy_config)
-                        if strategy_config
-                        else {},
+                        strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
                         error=error,
                         data_start=data_start,
                         data_end=data_end,
@@ -336,16 +315,14 @@ class VnpyBacktestEngine:
         Returns:
             walk_forward 结果字典
         """
-        from .walk_forward import walk_forward_split_by_ratio, walk_forward_split
+        from .walk_forward import walk_forward_split, walk_forward_split_by_ratio
 
         if data is None or data.empty:
             return {"success": False, "error": "数据为空", "windows": 0}
 
         if train_size is not None and val_size is not None and test_size is not None:
             step_val = step or max(1, test_size // 2)
-            windows = walk_forward_split(
-                data, train_size, val_size, test_size, step_val
-            )
+            windows = walk_forward_split(data, train_size, val_size, test_size, step_val)
         else:
             windows = walk_forward_split_by_ratio(data)
 
@@ -436,8 +413,8 @@ class VnpyBacktestEngine:
               - statistics, daily_results, strategy_config, strategy_version
               - error (如果失败)
         """
-        from vnpy_ctastrategy.backtesting import BacktestingEngine
         from vnpy.trader.constant import Exchange
+        from vnpy_ctastrategy.backtesting import BacktestingEngine
 
         c = parse_contract(symbol)
         if c is None:
@@ -465,11 +442,7 @@ class VnpyBacktestEngine:
             # vnpy 只支持费率模式 commission = price × volume × size × rate
             # 固定元/手品种需要换算为 rate = 总手续费/手 / (均价 × 合约乘数)
             # 均价用 OHLC 四价均值比单独 close 更稳定
-            avg_price = (
-                float(df[["open", "high", "low", "close"]].mean().mean())
-                if not df.empty
-                else 0.0
-            )
+            avg_price = float(df[["open", "high", "low", "close"]].mean().mean()) if not df.empty else 0.0
             if avg_price > 0 and spec.size > 0:
                 total_per_lot = spec.commission + BROKER_ADDON_DFCF
                 if spec.is_rate:
@@ -493,7 +466,7 @@ class VnpyBacktestEngine:
             cr = self.commission_rate
 
         results: list[dict[str, Any]] = []
-        for strategy_name, strategy_params in zip(strategy_names, strategy_params_list):
+        for strategy_name, strategy_params in zip(strategy_names, strategy_params_list, strict=False):
             # 提前获取策略版本号
             from strategies import load_strategy
 
@@ -596,16 +569,12 @@ class VnpyBacktestEngine:
                 #   6. 加权平均开仓价 = Σ(配对的开仓价×配对量) / Σ(配对量)（与 PnL 同源同套配对）
                 #   7. 开仓记录的 pnl/commission 均为 0，费用统一挂到平仓记录上
                 # 费用公式与 vnpy DailyResult.calculate_pnl() 完全一致
-                trades_list.sort(
-                    key=lambda t: t.datetime.timestamp() if t.datetime else 0
-                )
+                trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
                 # 开仓队列: (direction, price, volume)
                 open_queue: list[tuple[str, float, float]] = []
                 trade_pnls: list[float] = [0.0] * len(trades_list)
                 trade_commissions: list[float] = [0.0] * len(trades_list)
-                trade_open_prices: list[float] = [0.0] * len(
-                    trades_list
-                )  # 开仓价（开仓=成交价，平仓=加权平均开仓价）
+                trade_open_prices: list[float] = [0.0] * len(trades_list)  # 开仓价（开仓=成交价，平仓=加权平均开仓价）
 
                 for i, trade in enumerate(trades_list):
                     offset_val = getattr(trade, "offset", None)
@@ -624,8 +593,7 @@ class VnpyBacktestEngine:
                         direction_val = getattr(trade, "direction", None)
                         direction_str = (
                             direction_val.value
-                            if direction_val is not None
-                            and hasattr(direction_val, "value")
+                            if direction_val is not None and hasattr(direction_val, "value")
                             else str(direction_val)
                             if direction_val
                             else ""
@@ -633,9 +601,7 @@ class VnpyBacktestEngine:
                         direction = DIRECTION_MAP.get(direction_str, direction_str)
                         open_queue.append((direction, trade_price, trade_volume))
                         trade_pnls[i] = 0.0
-                        trade_open_prices[i] = (
-                            trade_price  # 开仓记录 open_price = 自己的成交价
-                        )
+                        trade_open_prices[i] = trade_price  # 开仓记录 open_price = 自己的成交价
                         # 开仓手续费在平仓时一并计入（完整的一开一平周期）
                         trade_commissions[i] = 0.0
                     else:
@@ -643,8 +609,7 @@ class VnpyBacktestEngine:
                         direction_val = getattr(trade, "direction", None)
                         direction_str = (
                             direction_val.value
-                            if direction_val is not None
-                            and hasattr(direction_val, "value")
+                            if direction_val is not None and hasattr(direction_val, "value")
                             else str(direction_val)
                             if direction_val
                             else ""
@@ -652,18 +617,14 @@ class VnpyBacktestEngine:
                         direction = DIRECTION_MAP.get(direction_str, direction_str)
                         # vnpy 约定: 平多(dir=short) → 匹配开多(dir=long)
                         #           平空(dir=long)  → 匹配开空(dir=short)
-                        expected_open_dir: str = (
-                            "long" if direction == "short" else "short"
-                        )
+                        expected_open_dir: str = "long" if direction == "short" else "short"
 
                         # 平仓：按 FIFO 与开仓配对，计算净盈亏
                         remaining = trade_volume
                         gross_pnl = 0.0
                         total_commission = 0.0
                         total_slippage = 0.0
-                        matched_opens: list[
-                            tuple[float, float]
-                        ] = []  # 记录实际配对的 (开仓价, 配对量)
+                        matched_opens: list[tuple[float, float]] = []  # 记录实际配对的 (开仓价, 配对量)
 
                         # 平仓自身的手续费和滑点
                         total_commission += trade_price * trade_volume * _size * _rate
@@ -703,9 +664,7 @@ class VnpyBacktestEngine:
                         total_matched_cost = sum(p * v for p, v in matched_opens)
                         total_matched_vol = sum(v for _, v in matched_opens)
                         trade_open_prices[i] = (
-                            total_matched_cost / total_matched_vol
-                            if total_matched_vol > 0
-                            else trade_price
+                            total_matched_cost / total_matched_vol if total_matched_vol > 0 else trade_price
                         )
 
                         # 防御性检查: 剩余量未被配对
@@ -776,9 +735,7 @@ class VnpyBacktestEngine:
                         "symbol": symbol,
                         "direction": direction,
                         "offset": offset,
-                        "open_price": trade_open_prices[
-                            i
-                        ],  # 开仓=成交价，平仓=加权平均开仓价
+                        "open_price": trade_open_prices[i],  # 开仓=成交价，平仓=加权平均开仓价
                         "close_price": price_val,  # 成交价（开仓/平仓均为实际成交价）
                         "quantity": quantity_val,
                         "pnl": trade_pnls[i],
@@ -792,24 +749,14 @@ class VnpyBacktestEngine:
                 # 注意：formatted_trades 包含开仓(pnl=0)和平仓(有实际pnl)，只统计有实际盈亏的平仓交易
                 if formatted_trades:
                     # 只取有实际盈亏的交易（排除开仓 pnl=0 和持平 pnl=0）
-                    closed_trades = [
-                        t for t in formatted_trades if cast(float, t["pnl"]) != 0
-                    ]
+                    closed_trades = [t for t in formatted_trades if cast(float, t["pnl"]) != 0]
                     win_list = [t for t in closed_trades if cast(float, t["pnl"]) > 0]
                     loss_list = [t for t in closed_trades if cast(float, t["pnl"]) < 0]
                     win_cnt = len(win_list)
                     loss_cnt = len(loss_list)
                     total_trade_cnt = win_cnt + loss_cnt  # 有实际盈亏的笔数，非总成交数
-                    avg_win_val = (
-                        sum(cast(float, t["pnl"]) for t in win_list) / win_cnt
-                        if win_cnt
-                        else 0
-                    )
-                    avg_loss_val = (
-                        abs(sum(cast(float, t["pnl"]) for t in loss_list) / loss_cnt)
-                        if loss_cnt
-                        else 0
-                    )
+                    avg_win_val = sum(cast(float, t["pnl"]) for t in win_list) / win_cnt if win_cnt else 0
+                    avg_loss_val = abs(sum(cast(float, t["pnl"]) for t in loss_list) / loss_cnt) if loss_cnt else 0
 
                     # 最大连续盈利/亏损（基于平仓时间顺序）
                     # 注意：此处遍历 formatted_trades（含 pnl=0 的开仓），
@@ -835,18 +782,12 @@ class VnpyBacktestEngine:
                     statistics["loss_trades"] = loss_cnt
                     statistics["average_win"] = avg_win_val
                     statistics["average_loss"] = avg_loss_val
-                    statistics["win_rate"] = (
-                        win_cnt / total_trade_cnt if total_trade_cnt else 0
-                    )
-                    statistics["win_loss_ratio"] = (
-                        avg_win_val / avg_loss_val if avg_loss_val > 0 else 0
-                    )
+                    statistics["win_rate"] = win_cnt / total_trade_cnt if total_trade_cnt else 0
+                    statistics["win_loss_ratio"] = avg_win_val / avg_loss_val if avg_loss_val > 0 else 0
                     statistics["max_consecutive_win"] = max_consecutive_win
                     statistics["max_consecutive_loss"] = max_consecutive_loss
 
-                logger.info(
-                    f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录"
-                )
+                logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
             except Exception as e:
                 logger.exception(
                     f"回测执行异常 [{symbol}][{strategy_name}]: {e}",

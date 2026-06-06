@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 """天勤 TqSdk 数据源 — 从原 exporter 抽离的 K 线获取逻辑"""
 
 from __future__ import annotations
 
-from loguru import logger
+import contextlib
 from datetime import datetime
 from typing import ClassVar
 
 import pandas as pd
+from loguru import logger
 
 from .base import BaseDataSource, Qlib_COLUMNS
+
 
 class TqSdkDataSource(BaseDataSource):
     """天勤量化 (TqSdk) 数据源
@@ -124,6 +125,7 @@ class TqSdkDataSource(BaseDataSource):
     ) -> pd.DataFrame:
         """单次 tqsdk 拉取：以 end_dt 为锚点，preload 往回拿 ~10000 条"""
         from datetime import timedelta
+
         from common.tqsdk_imports import tqsdk
 
         if not tqsdk.ensure():
@@ -135,24 +137,16 @@ class TqSdkDataSource(BaseDataSource):
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None  # type: ignore[attr-defined]
 
-        api = tqsdk.TqApi(
-            backtest=tqsdk.TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth
-        )
+        api = tqsdk.TqApi(backtest=tqsdk.TqBacktest(start_dt=start_dt, end_dt=end_dt), auth=auth)
 
-        klines = api.get_kline_serial(
-            symbol, duration_seconds=kline_period, data_length=self._MAX_DATA_LENGTH
-        )
+        klines = api.get_kline_serial(symbol, duration_seconds=kline_period, data_length=self._MAX_DATA_LENGTH)
 
-        try:
+        with contextlib.suppress(tqsdk.BacktestFinished):
             api.wait_update()
-        except tqsdk.BacktestFinished:
-            pass
 
         rows = []
         for i in range(len(klines)):
-            ts = datetime.fromtimestamp(
-                klines["datetime"].iloc[i] / 10**9
-            )
+            ts = datetime.fromtimestamp(klines["datetime"].iloc[i] / 10**9)
             row = {
                 "datetime": ts.strftime("%Y-%m-%d %H:%M:%S"),
                 "open": float(klines["open"].iloc[i]),

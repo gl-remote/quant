@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 报告生成编排模块 — export JSON → 数据写入 → 前端构建
 
@@ -10,30 +9,30 @@ from __future__ import annotations
 
 import hashlib  # 用于计算文件哈希
 import json  # 用于JSON序列化
-from loguru import logger  # 用于日志记录
 import os  # 用于操作系统相关操作
 import subprocess  # 用于执行子进程
+from collections.abc import Callable
 from pathlib import Path  # 用于路径操作
-from typing import Callable
 
-import pandas as pd  # 用于数据处理
+from loguru import logger  # 用于日志记录
 
 from data import DataManager  # 导入数据管理器
+
 from .cache import BuildCache  # 导入统一缓存管理器
-from .writer.json_writer import _build_kline_dict
 from .writer import (  # 导入数据写入模块
-    export_run_json,
-    export_summary_json,
     export_backtests_json,
     export_equity_json,
     export_kline_json,
     export_optuna_json,
+    export_run_json,
+    export_summary_json,
     export_trades_json,
     write_nav_json,
 )
-
+from .writer.json_writer import _build_kline_dict
 
 _data_manager: DataManager | None = None
+
 
 def get_data_manager() -> DataManager:
     """获取数据管理器实例（延迟初始化）"""
@@ -61,63 +60,45 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
         incremental: 是否启用增量构建（默认启用）
     """
     import time
+
     start_time = time.time()
     success_count = 0
     fail_count = 0
     skip_count = 0
     failed_tasks = []
     has_data_change = False
-    
-    logger.info("开始构建报告: run_id=%d, output_dir=%s, incremental=%s", 
-                run_id, output_dir, incremental)
-    
+
+    logger.info("开始构建报告: run_id=%d, output_dir=%s, incremental=%s", run_id, output_dir, incremental)
+
     dm = get_data_manager()
     cache = BuildCache(output_dir) if incremental else None
 
     if incremental and cache:
         executed_count = 0
-        if _export_with_incremental(
-            cache, dm, output_dir, run_id, "run", 
-            lambda: dm.get_run_info(run_id)
-        ):
+        if _export_with_incremental(cache, dm, output_dir, run_id, "run", lambda: dm.get_run_info(run_id)):
+            executed_count += 1
+            has_data_change = True
+        if _export_with_incremental(cache, dm, output_dir, run_id, "summary", lambda: dm.get_run_summary(run_id)):
             executed_count += 1
             has_data_change = True
         if _export_with_incremental(
-            cache, dm, output_dir, run_id, "summary",
-            lambda: dm.get_run_summary(run_id)
+            cache, dm, output_dir, run_id, "backtests", lambda: dm.get_backtests_for_run(run_id)
         ):
             executed_count += 1
             has_data_change = True
-        if _export_with_incremental(
-            cache, dm, output_dir, run_id, "backtests",
-            lambda: dm.get_backtests_for_run(run_id)
-        ):
+        if _export_equity_with_incremental(cache, dm, output_dir, run_id):
             executed_count += 1
             has_data_change = True
-        if _export_equity_with_incremental(
-            cache, dm, output_dir, run_id
-        ):
+        if _export_kline_with_incremental(cache, dm, output_dir, run_id):
             executed_count += 1
             has_data_change = True
-        if _export_kline_with_incremental(
-            cache, dm, output_dir, run_id
-        ):
+        if _export_with_incremental(cache, dm, output_dir, run_id, "optuna", lambda: dm.get_optuna_data(run_id)):
             executed_count += 1
             has_data_change = True
-        if _export_with_incremental(
-            cache, dm, output_dir, run_id, "optuna",
-            lambda: dm.get_optuna_data(run_id)
-        ):
+        if _export_trades_with_incremental(cache, dm, output_dir, run_id):
             executed_count += 1
             has_data_change = True
-        if _export_trades_with_incremental(
-            cache, dm, output_dir, run_id
-        ):
-            executed_count += 1
-            has_data_change = True
-        if _export_nav_with_incremental(
-            cache, dm, output_dir
-        ):
+        if _export_nav_with_incremental(cache, dm, output_dir):
             executed_count += 1
             has_data_change = True
         skip_count = 8 - executed_count
@@ -133,7 +114,7 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
         success_count = 8
         skip_count = 0
         has_data_change = True
-    
+
     # 构建前端
     try:
         build_frontend(output_dir)
@@ -156,11 +137,10 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
             failed_tasks.append(("写入入口HTML", str(e)))
     else:
         logger.info("○ 数据未变更，跳过写入入口HTML")
-    
+
     duration = time.time() - start_time
-    logger.info("报告构建结束: 成功=%d, 跳过=%d, 失败=%d, 耗时=%.2fs", 
-                success_count, skip_count, fail_count, duration)
-    
+    logger.info("报告构建结束: 成功=%d, 跳过=%d, 失败=%d, 耗时=%.2fs", success_count, skip_count, fail_count, duration)
+
     if failed_tasks:
         logger.warning("失败任务列表:")
         for task_name, error in failed_tasks:
@@ -177,7 +157,7 @@ def _export_with_incremental(
 ) -> bool:
     """
     使用增量检查导出数据
-    
+
     Returns:
         bool: 数据是否实际执行了导出
     """
@@ -208,7 +188,7 @@ def _export_equity_with_incremental(
         equity = dm.get_equity_data(int(s_id))  # type: ignore[call-overload]
         if equity:
             equity_data[str(s["symbol"])] = equity
-    
+
     if cache.needs_update("equity", run_id, equity_data):
         logger.info("→ 导出 equity（数据已变更）")
         export_equity_json(output_dir, run_id)
@@ -227,44 +207,46 @@ def _export_kline_with_incremental(
 ) -> bool:
     """导出 kline 数据（使用 KlineCache 复用转换结果）"""
     from .cache import KlineCache
+
     summary = dm.get_run_summary(run_id)
     kline_changed = False
     cache_instance = KlineCache(output_dir)
-    
+
     for s in summary:
         symbol = str(s["symbol"])
         if not s.get("id"):
             continue
-        
+
         data_src = str(s.get("data_src", ""))
         start_date = str(s.get("start_date")) if s.get("start_date") else None
         end_date = str(s.get("end_date")) if s.get("end_date") else None
         interval = str(s.get("kline_interval") or "1m")
         dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.{interval}.json"
-        
+
         if not data_src:
             continue
-        
+
         # 尝试从缓存复制
         if cache_instance.copy_to(symbol, data_src, interval, dest):
             logger.debug("K线缓存命中: %s", symbol)
             continue
-        
+
         # 缓存未命中，需要转换
         if not Path(data_src).exists():
             logger.warning("K线数据源不存在: %s → %s", symbol, data_src)
             continue
-        
+
         kline_dict = _build_kline_dict(data_src, symbol, interval, start_date, end_date)
         if kline_dict:
             cache_instance.put(symbol, data_src, interval, kline_dict)
             dest.parent.mkdir(parents=True, exist_ok=True)
             import json
+
             with open(dest, "w", encoding="utf-8") as f:
                 json.dump(kline_dict, f, ensure_ascii=False, default=str)
             logger.info("→ K线已导出: %s", symbol)
             kline_changed = True
-    
+
     if kline_changed:
         cache.update_fingerprint("kline", run_id, {"symbols": len(summary)})
     return kline_changed
@@ -291,23 +273,25 @@ def _export_trades_with_incremental(
             direction = t.direction
             if "." in str(direction):
                 direction = str(direction).split(".")[-1]
-            
+
             offset = t.offset
             if "." in str(offset):
                 offset = str(offset).split(".")[-1]
-            
-            trades_data[symbol].append({
-                "datetime": t.datetime,
-                "symbol": t.symbol,
-                "direction": direction,
-                "offset": offset,
-                "open_price": t.open_price,
-                "close_price": t.close_price,
-                "quantity": t.quantity,
-                "pnl": t.pnl,
-                "commission": t.commission,
-            })
-    
+
+            trades_data[symbol].append(
+                {
+                    "datetime": t.datetime,
+                    "symbol": t.symbol,
+                    "direction": direction,
+                    "offset": offset,
+                    "open_price": t.open_price,
+                    "close_price": t.close_price,
+                    "quantity": t.quantity,
+                    "pnl": t.pnl,
+                    "commission": t.commission,
+                }
+            )
+
     if cache.needs_update("trades", run_id, trades_data):
         logger.info("→ 导出 trades（数据已变更）")
         export_trades_json(output_dir, run_id)
@@ -361,9 +345,9 @@ def _dispatch_export(data_type: str, output_dir: str, run_id: int) -> None:
 def build_frontend(output_dir: str) -> None:
     """
     检查 React 源码 hash，必要时触发 npm run build
-    
+
     使用 BuildCache 统一管理前端构建缓存，支持增量构建。
-    
+
     Args:
         output_dir: 输出目录
     """
@@ -375,7 +359,7 @@ def build_frontend(output_dir: str) -> None:
         return
 
     cache = BuildCache(output_dir)
-    
+
     if not cache.needs_frontend_rebuild(web_dir):
         logger.info("前端源码未变更，跳过构建")
         return
@@ -392,11 +376,9 @@ def build_frontend(output_dir: str) -> None:
         },
     )
     assets_dir.mkdir(parents=True, exist_ok=True)
-    cache.set_frontend_hash(
-        cache.compute_dir_hash(web_dir / "src") + 
-        cache.compute_dir_hash(web_dir / "public")
-    )
+    cache.set_frontend_hash(cache.compute_dir_hash(web_dir / "src") + cache.compute_dir_hash(web_dir / "public"))
     logger.info("前端构建完成")
+
 
 def write_entry_html(output_dir: str) -> None:
     """
@@ -409,7 +391,7 @@ def write_entry_html(output_dir: str) -> None:
     1. JS 代码 → <script> 标签内联
     2. CSS 样式 → <style> 标签内联（通过 JS 注入）
     3. JSON 数据 → window.__DATA__ 变量
-    
+
     Args:
         output_dir: 输出目录
     """
@@ -444,23 +426,23 @@ def write_entry_html(output_dir: str) -> None:
 
     # 生成完全内联的 HTML
     html_parts = [
-        '<!DOCTYPE html>',
+        "<!DOCTYPE html>",
         '<html lang="zh-CN">',
-        '<head>',
+        "<head>",
         '<meta charset="UTF-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1.0">',
-        '<title>量化回测监控</title>',
+        "<title>量化回测监控</title>",
         # CSS 内联
-        css_content and f'<style>{css_content}</style>' or '',
-        '</head>',
-        '<body>',
+        css_content and f"<style>{css_content}</style>" or "",
+        "</head>",
+        "<body>",
         '<div id="root"></div>',
         # JSON 数据预加载
         preload_script,
         # 主 JS 代码内联
-        f'<script>{js_content}</script>',
-        '</body>',
-        '</html>',
+        f"<script>{js_content}</script>",
+        "</body>",
+        "</html>",
     ]
 
     # 写入HTML文件
@@ -536,7 +518,7 @@ def _collect_json(
 ) -> None:
     """
     收集指定目录下的所有JSON文件
-    
+
     Args:
         data_dir: 数据目录
         prefix: 键前缀
@@ -545,7 +527,7 @@ def _collect_json(
     for f in sorted(data_dir.glob("*.json")):
         key = f"{prefix}/{f.name}"  # 构建数据键
         try:
-            with open(f, "r", encoding="utf-8") as fh:
+            with open(f, encoding="utf-8") as fh:
                 data_map[key] = json.load(fh)
         except Exception as e:
             logger.warning("预加载失败 [%s]: %s", key, e)
@@ -557,7 +539,7 @@ def _collect_json(
 def _write_json(output_dir: str, rel_path: str, data: object) -> None:
     """
     将数据写入JSON文件
-    
+
     Args:
         output_dir: 输出目录
         rel_path: 相对路径
@@ -572,10 +554,10 @@ def _write_json(output_dir: str, rel_path: str, data: object) -> None:
 def _compute_dir_hash(directory: Path) -> str:
     """
     计算目录下所有文件的哈希值
-    
+
     Args:
         directory: 目录路径
-        
+
     Returns:
         MD5哈希字符串
     """
@@ -592,15 +574,16 @@ def _compute_dir_hash(directory: Path) -> str:
 def _find_built_file(directory: Path, glob_pattern: str) -> str | None:
     """
     查找最新的构建文件
-    
+
     Args:
         directory: 目录路径
         glob_pattern: 匹配模式
-        
+
     Returns:
         最新文件的文件名，没有找到返回None
     """
     import glob as _glob
+
     matches = sorted(
         _glob.glob(str(directory / glob_pattern)),
         key=lambda p: Path(p).stat().st_mtime,  # 按修改时间排序
@@ -612,7 +595,7 @@ def _find_built_file(directory: Path, glob_pattern: str) -> str | None:
 def _clean_old_bundles(assets_dir: Path) -> None:
     """
     清理旧的构建文件
-    
+
     Args:
         assets_dir: 资源目录
     """
@@ -625,15 +608,15 @@ def _clean_old_bundles(assets_dir: Path) -> None:
 def _write_fallback_html(output_dir: str) -> None:
     """
     生成降级 HTML：不依赖前端构建，纯文本导航
-    
+
     Args:
         output_dir: 输出目录
     """
     html = (
         '<!DOCTYPE html>\n<html lang="zh-CN">\n'
         '<head><meta charset="UTF-8"><title>量化回测监控</title></head>\n'
-        '<body>\n<h1>量化回测监控</h1>\n'
-        '<p>前端资源未构建。请先执行 <code>cd report/web && npm run build</code></p>\n'
-        '</body>\n</html>'
+        "<body>\n<h1>量化回测监控</h1>\n"
+        "<p>前端资源未构建。请先执行 <code>cd report/web && npm run build</code></p>\n"
+        "</body>\n</html>"
     )
     (Path(output_dir) / "index.html").write_text(html, encoding="utf-8")

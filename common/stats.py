@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 统计聚合工具 (纯函数)
 
@@ -17,6 +16,7 @@ import numpy as np
 
 class SummaryStats(TypedDict):
     """compute_summary_stats 的返回值"""
+
     mean: float
     median: float
     std: float
@@ -33,6 +33,7 @@ class SymbolSummary(TypedDict):
     从 run_full_pipeline 返回的 performance/risk 字段中提取，
     所有值均为数值类型，用于排名、聚合统计和格式化输出。
     """
+
     symbol: str
     total_return: float
     annual_return: float

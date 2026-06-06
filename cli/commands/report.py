@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 回测数据管理命令
 
@@ -12,11 +11,13 @@
 
 import argparse
 import sys
+
 from loguru import logger
 
 from config import ConfigManager
 from data import DataManager
 from report import format_single_report, format_summary_report
+
 
 def cmd_report(args: argparse.Namespace):
     """回测数据管理入口
@@ -88,7 +89,7 @@ def _cmd_build(run_id: int | None = None) -> None:
             print("没有找到运行记录")
             return
         for r in runs:
-            rid = r['id']
+            rid = r["id"]
             print(f"  → 重建 r{rid}...")
             build_all(output_dir="output", run_id=rid, incremental=False)
     print("完成。")
@@ -100,7 +101,7 @@ def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
     print("   此操作不可撤销！\n")
 
     confirm = input("   确认删除？[y/N] ").strip().lower()
-    if confirm not in ('y', 'yes'):
+    if confirm not in ("y", "yes"):
         print("   已取消。")
         return
 

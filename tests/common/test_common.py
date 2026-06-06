@@ -8,33 +8,34 @@
 """
 
 import pytest
-from common.metrics import calc_max_drawdown, calc_sharpe_ratio
-from common.stats import compute_summary_stats, rank_by_key
-from common.formatting import format_pct, format_float, ensure_float, parse_percentage
+
+from common.formatting import ensure_float, format_float, format_pct, parse_percentage
 from common.formulas import (
-    calculate_fifo_profit,
-    total_return,
     annualized_return,
-    win_rate,
-    profit_factor,
-    trade_cost,
-    position_size,
-    simple_moving_average,
-    golden_cross,
+    average_entry_price,
+    avg_trades_per_day,
+    calculate_fifo_profit,
+    convert_annual_factor,
     death_cross,
+    drawdown_at_point,
+    golden_cross,
+    position_size,
+    profit_factor,
+    profitable_ratio,
+    simple_moving_average,
     stop_loss_triggered,
     take_profit_triggered,
-    average_entry_price,
-    drawdown_at_point,
-    avg_trades_per_day,
-    profitable_ratio,
-    convert_annual_factor,
+    total_return,
+    trade_cost,
+    win_rate,
 )
-
+from common.metrics import calc_max_drawdown, calc_sharpe_ratio
+from common.stats import compute_summary_stats, rank_by_key
 
 # ═══════════════════════════════════════════════════════════
 # common/metrics.py — 绩效指标
 # ═══════════════════════════════════════════════════════════
+
 
 class TestCalcMaxDrawdown:
     def test_empty_list(self):
@@ -92,10 +93,8 @@ class TestCalcSharpeRatio:
         assert sr < 0
 
     def test_custom_annual_factor(self):
-        sr_daily = calc_sharpe_ratio(
-            [100.0, 101.0, 102.0, 103.0], annual_factor=252)
-        sr_hourly = calc_sharpe_ratio(
-            [100.0, 101.0, 102.0, 103.0], annual_factor=252 * 24)
+        sr_daily = calc_sharpe_ratio([100.0, 101.0, 102.0, 103.0], annual_factor=252)
+        sr_hourly = calc_sharpe_ratio([100.0, 101.0, 102.0, 103.0], annual_factor=252 * 24)
         assert sr_hourly > sr_daily
 
     def test_integer_inputs(self):
@@ -107,67 +106,65 @@ class TestCalcSharpeRatio:
 # common/stats.py — 统计聚合
 # ═══════════════════════════════════════════════════════════
 
+
 class TestComputeSummaryStats:
     def test_empty_list(self):
         assert compute_summary_stats([]) == {}
 
     def test_single_value(self):
         s = compute_summary_stats([42.0])
-        assert s['mean'] == 42.0
-        assert s['median'] == 42.0
-        assert s['std'] == 0.0
-        assert s['count'] == 1
+        assert s["mean"] == 42.0
+        assert s["median"] == 42.0
+        assert s["std"] == 0.0
+        assert s["count"] == 1
 
     def test_positive_negative_counts(self):
         s = compute_summary_stats([1.0, -2.0, 3.0, -4.0, 0.0])
-        assert s['positive_count'] == 2
-        assert s['negative_count'] == 2
-        assert s['count'] == 5
+        assert s["positive_count"] == 2
+        assert s["negative_count"] == 2
+        assert s["count"] == 5
 
     def test_all_zeros(self):
         s = compute_summary_stats([0.0, 0.0, 0.0])
-        assert s['positive_count'] == 0
-        assert s['negative_count'] == 0
-        assert s['mean'] == 0.0
+        assert s["positive_count"] == 0
+        assert s["negative_count"] == 0
+        assert s["mean"] == 0.0
 
     def test_mixed_values(self):
         s = compute_summary_stats([0.1, 0.2, 0.3, 0.4])
-        assert s['mean'] == pytest.approx(0.25)
-        assert s['count'] == 4
+        assert s["mean"] == pytest.approx(0.25)
+        assert s["count"] == 4
 
 
 class TestRankByKeyFlat:
     def test_descending_default(self):
-        items = [{'id': 'A', 'ret': 0.3}, {'id': 'B', 'ret': 0.1},
-                 {'id': 'C', 'ret': 0.2}]
-        ranked = rank_by_key(items, 'ret')
-        assert [r['id'] for r in ranked] == ['A', 'C', 'B']
+        items = [{"id": "A", "ret": 0.3}, {"id": "B", "ret": 0.1}, {"id": "C", "ret": 0.2}]
+        ranked = rank_by_key(items, "ret")
+        assert [r["id"] for r in ranked] == ["A", "C", "B"]
 
     def test_ascending(self):
-        items = [{'id': 'A', 'dd': 0.05}, {'id': 'B', 'dd': 0.15},
-                 {'id': 'C', 'dd': 0.08}]
-        ranked = rank_by_key(items, 'dd', reverse=False)
-        assert [r['id'] for r in ranked] == ['A', 'C', 'B']
+        items = [{"id": "A", "dd": 0.05}, {"id": "B", "dd": 0.15}, {"id": "C", "dd": 0.08}]
+        ranked = rank_by_key(items, "dd", reverse=False)
+        assert [r["id"] for r in ranked] == ["A", "C", "B"]
 
     def test_skips_none_value(self):
-        items = [{'id': 'A', 'ret': 0.3}, {'id': 'B', 'ret': None},
-                 {'id': 'C', 'ret': 0.1}]
-        ranked = rank_by_key(items, 'ret')
+        items = [{"id": "A", "ret": 0.3}, {"id": "B", "ret": None}, {"id": "C", "ret": 0.1}]
+        ranked = rank_by_key(items, "ret")
         assert len(ranked) == 2
-        assert ranked[0]['id'] == 'A'
+        assert ranked[0]["id"] == "A"
 
     def test_empty_list(self):
-        assert rank_by_key([], 'any') == []
+        assert rank_by_key([], "any") == []
 
     def test_missing_key(self):
-        items = [{'id': 'A', 'ret': 0.3}, {'id': 'B'}]
-        ranked = rank_by_key(items, 'ret')
+        items = [{"id": "A", "ret": 0.3}, {"id": "B"}]
+        ranked = rank_by_key(items, "ret")
         assert len(ranked) == 1
-        assert ranked[0]['id'] == 'A'
+        assert ranked[0]["id"] == "A"
 
     def test_returns_original_objects(self):
-        item = {'id': 'X', 'val': 42}
-        ranked = rank_by_key([item], 'val')
+        item = {"id": "X", "val": 42}
+        ranked = rank_by_key([item], "val")
         assert ranked[0] is item
 
 
@@ -175,55 +172,56 @@ class TestRankByKeyFlat:
 # common/formatting.py — 安全格式化
 # ═══════════════════════════════════════════════════════════
 
+
 class TestFormatPct:
     def test_none(self):
-        assert format_pct(None) == 'N/A'
+        assert format_pct(None) == "N/A"
 
     def test_ratio(self):
-        assert format_pct(0.15) == '15.00%'
-        assert format_pct(0.0) == '0.00%'
+        assert format_pct(0.15) == "15.00%"
+        assert format_pct(0.0) == "0.00%"
 
     def test_percentage_value_normalized(self):
-        assert format_pct(0.15) == '15.00%'
+        assert format_pct(0.15) == "15.00%"
 
     def test_large_percentage(self):
-        assert format_pct(1.5) == '150.00%'
+        assert format_pct(1.5) == "150.00%"
 
     def test_negative_ratio(self):
-        assert format_pct(-0.08) == '-8.00%'
+        assert format_pct(-0.08) == "-8.00%"
 
     def test_negative_percentage(self):
-        assert format_pct(-0.08) == '-8.00%'
+        assert format_pct(-0.08) == "-8.00%"
 
     def test_edge_at_one(self):
-        assert format_pct(1.0) == '100.00%'
+        assert format_pct(1.0) == "100.00%"
 
     def test_edge_at_negative_one(self):
-        assert format_pct(-1.0) == '-100.00%'
+        assert format_pct(-1.0) == "-100.00%"
 
     def test_zero(self):
-        assert format_pct(0.0) == '0.00%'
+        assert format_pct(0.0) == "0.00%"
 
 
 class TestFormatFloat:
     def test_none(self):
-        assert format_float(None) == 'N/A'
+        assert format_float(None) == "N/A"
 
     def test_default_fmt(self):
-        assert format_float(0.15) == '0.15'
-        assert format_float(1.0) == '1.00'
+        assert format_float(0.15) == "0.15"
+        assert format_float(1.0) == "1.00"
 
     def test_custom_fmt(self):
-        assert format_float(0.15, '.4f') == '0.1500'
+        assert format_float(0.15, ".4f") == "0.1500"
 
     def test_integer_input(self):
-        assert format_float(3, '.2f') == '3.00'
+        assert format_float(3, ".2f") == "3.00"
 
     def test_large_number_with_comma(self):
-        assert format_float(15000, ',.0f') == '15,000'
+        assert format_float(15000, ",.0f") == "15,000"
 
     def test_negative_value(self):
-        assert format_float(-3.5, '.1f') == '-3.5'
+        assert format_float(-3.5, ".1f") == "-3.5"
 
 
 class TestEnsureFloat:
@@ -238,18 +236,18 @@ class TestEnsureFloat:
         assert ensure_float(42) == 42.0
 
     def test_string_conversion(self):
-        assert ensure_float('3.14') == 3.14
+        assert ensure_float("3.14") == 3.14
 
     def test_string_int(self):
-        assert ensure_float('100') == 100.0
+        assert ensure_float("100") == 100.0
 
 
 class TestParsePercentage:
     def test_string_with_percent(self):
-        assert parse_percentage('15.00%') == pytest.approx(0.15)
+        assert parse_percentage("15.00%") == pytest.approx(0.15)
 
     def test_string_negative(self):
-        assert parse_percentage('-8.50%') == pytest.approx(-0.085)
+        assert parse_percentage("-8.50%") == pytest.approx(-0.085)
 
     def test_float_input(self):
         assert parse_percentage(0.42) == 0.42
@@ -258,7 +256,7 @@ class TestParsePercentage:
         assert parse_percentage(1) == 1.0
 
     def test_zero_string(self):
-        assert parse_percentage('0.00%') == 0.0
+        assert parse_percentage("0.00%") == 0.0
 
 
 # ═══════════════════════════════════════════════════════════
@@ -267,39 +265,40 @@ class TestParsePercentage:
 
 # --- calculate_fifo_profit ---
 
+
 class TestCalculateFifoProfit:
     def _make_fill(self, action: str, price: float, volume: int) -> dict:
-        return {'action': action, 'price': price, 'volume': volume}
+        return {"action": action, "price": price, "volume": volume}
 
     def test_one_buy_one_sell_profit(self):
         fills = [
-            self._make_fill('buy', 10.0, 100),
-            self._make_fill('sell', 12.0, 100),
+            self._make_fill("buy", 10.0, 100),
+            self._make_fill("sell", 12.0, 100),
         ]
         assert calculate_fifo_profit(fills) == 200.0
 
     def test_one_buy_one_sell_loss(self):
         fills = [
-            self._make_fill('buy', 10.0, 100),
-            self._make_fill('sell', 8.0, 100),
+            self._make_fill("buy", 10.0, 100),
+            self._make_fill("sell", 8.0, 100),
         ]
         assert calculate_fifo_profit(fills) == -200.0
 
     def test_two_buys_one_sell_partial_match(self):
         fills = [
-            self._make_fill('buy', 10.0, 50),
-            self._make_fill('buy', 11.0, 50),
-            self._make_fill('sell', 12.0, 80),
+            self._make_fill("buy", 10.0, 50),
+            self._make_fill("buy", 11.0, 50),
+            self._make_fill("sell", 12.0, 80),
         ]
         expected = (12 - 10) * 50 + (12 - 11) * 30
         assert calculate_fifo_profit(fills) == pytest.approx(expected)
 
     def test_two_buys_two_sells(self):
         fills = [
-            self._make_fill('buy', 10.0, 50),
-            self._make_fill('buy', 11.0, 50),
-            self._make_fill('sell', 12.0, 50),
-            self._make_fill('sell', 13.0, 50),
+            self._make_fill("buy", 10.0, 50),
+            self._make_fill("buy", 11.0, 50),
+            self._make_fill("sell", 12.0, 50),
+            self._make_fill("sell", 13.0, 50),
         ]
         assert calculate_fifo_profit(fills) == 200.0
 
@@ -308,29 +307,30 @@ class TestCalculateFifoProfit:
 
     def test_sells_before_buys(self):
         fills = [
-            self._make_fill('sell', 12.0, 50),
-            self._make_fill('buy', 10.0, 100),
-            self._make_fill('sell', 13.0, 50),
+            self._make_fill("sell", 12.0, 50),
+            self._make_fill("buy", 10.0, 100),
+            self._make_fill("sell", 13.0, 50),
         ]
         assert calculate_fifo_profit(fills) == 250.0
 
     def test_only_buys(self):
-        fills = [self._make_fill('buy', 10.0, 100)]
+        fills = [self._make_fill("buy", 10.0, 100)]
         assert calculate_fifo_profit(fills) == 0.0
 
     def test_only_sells(self):
-        fills = [self._make_fill('sell', 10.0, 100)]
+        fills = [self._make_fill("sell", 10.0, 100)]
         assert calculate_fifo_profit(fills) == 0.0
 
     def test_break_even(self):
         fills = [
-            self._make_fill('buy', 10.0, 100),
-            self._make_fill('sell', 10.0, 100),
+            self._make_fill("buy", 10.0, 100),
+            self._make_fill("sell", 10.0, 100),
         ]
         assert calculate_fifo_profit(fills) == 0.0
 
 
 # --- total_return ---
+
 
 class TestTotalReturn:
     def test_positive_return(self):
@@ -359,6 +359,7 @@ class TestTotalReturn:
 
 
 # --- annualized_return ---
+
 
 class TestAnnualizedReturn:
     def test_one_year_unchanged(self):
@@ -389,6 +390,7 @@ class TestAnnualizedReturn:
 
 # --- win_rate ---
 
+
 class TestWinRate:
     def test_half_wins(self):
         assert win_rate(5, 10) == 0.5
@@ -407,6 +409,7 @@ class TestWinRate:
 
 
 # --- profit_factor ---
+
 
 class TestProfitFactor:
     def test_normal_case(self):
@@ -427,6 +430,7 @@ class TestProfitFactor:
 
 # --- trade_cost ---
 
+
 class TestTradeCost:
     def test_normal_case(self):
         result = trade_cost(100.0, 10, 0.0003, 1.0)
@@ -440,6 +444,7 @@ class TestTradeCost:
 
 
 # --- position_size ---
+
 
 class TestPositionSize:
     def test_normal_case(self):
@@ -485,6 +490,7 @@ class TestPositionSize:
 
 # --- simple_moving_average ---
 
+
 class TestSimpleMovingAverage:
     def test_normal_period(self):
         prices = [10.0, 20.0, 30.0, 40.0, 50.0]
@@ -512,6 +518,7 @@ class TestSimpleMovingAverage:
 
 
 # --- golden_cross / death_cross ---
+
 
 class TestGoldenCross:
     def test_cross_occurs(self):
@@ -548,6 +555,7 @@ class TestDeathCross:
 
 
 # --- stop_loss / take_profit ---
+
 
 class TestStopLossTriggered:
     def test_hit(self):
@@ -588,6 +596,7 @@ class TestTakeProfitTriggered:
 
 # --- average_entry_price ---
 
+
 class TestAverageEntryPrice:
     def test_add_to_position(self):
         result = average_entry_price(100, 50.0, 200, 60.0)
@@ -612,6 +621,7 @@ class TestAverageEntryPrice:
 
 # --- drawdown_at_point ---
 
+
 class TestDrawdownAtPoint:
     def test_normal_drawdown(self):
         assert drawdown_at_point(100.0, 90.0) == pytest.approx(0.1)
@@ -630,6 +640,7 @@ class TestDrawdownAtPoint:
 
 
 # --- avg_trades_per_day ---
+
 
 class TestAvgTradesPerDay:
     def test_normal(self):
@@ -651,6 +662,7 @@ class TestAvgTradesPerDay:
 
 # --- profitable_ratio ---
 
+
 class TestProfitableRatio:
     def test_half_profitable(self):
         assert profitable_ratio(5, 10) == 0.5
@@ -669,6 +681,7 @@ class TestProfitableRatio:
 
 
 # --- convert_annual_factor ---
+
 
 class TestConvertAnnualFactor:
     def test_minute_kline(self):

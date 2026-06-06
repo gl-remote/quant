@@ -4,17 +4,18 @@
 """
 
 import json
-from loguru import logger
 from pathlib import Path
 from typing import Any
-import numpy as np
+
 import pandas as pd
+from loguru import logger
 
 from data import DataManager
 from report.cache import KlineCache
 
 # 全局数据管理器实例（按需创建）
 _data_manager: DataManager | None = None
+
 
 def get_data_manager() -> DataManager:
     """获取数据管理器实例"""
@@ -23,10 +24,11 @@ def get_data_manager() -> DataManager:
         _data_manager = DataManager()
     return _data_manager
 
+
 def export_run_json(output_dir: str, run_id: int) -> None:
     """
     导出单次 run 的元信息到 JSON 文件
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
@@ -52,7 +54,7 @@ def export_run_json(output_dir: str, run_id: int) -> None:
 def export_summary_json(output_dir: str, run_id: int) -> None:
     """
     导出品汇总表（每品种最优回测记录）
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
@@ -65,7 +67,7 @@ def export_summary_json(output_dir: str, run_id: int) -> None:
 def export_backtests_json(output_dir: str, run_id: int) -> None:
     """
     导出所有回测记录完整信息（含指标、参数、日线数据）
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
@@ -78,7 +80,7 @@ def export_backtests_json(output_dir: str, run_id: int) -> None:
 def export_equity_json(output_dir: str, run_id: int) -> None:
     """
     导出资金曲线数据（每品种最优回测的日线权益/回撤）
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
@@ -92,8 +94,8 @@ def export_equity_json(output_dir: str, run_id: int) -> None:
             continue
         equity = dm.get_equity_data(int(s_id))  # type: ignore[call-overload]
         if equity:
-            equity['max_ddpercent'] = s.get('max_ddpercent', 0)  # type: ignore[arg-type]
-            equity['initial_capital'] = s.get('initial_capital')  # type: ignore[arg-type]
+            equity["max_ddpercent"] = s.get("max_ddpercent", 0)  # type: ignore[arg-type]
+            equity["initial_capital"] = s.get("initial_capital")  # type: ignore[arg-type]
             result[str(s["symbol"])] = equity
     _write_json(output_dir, f"r{run_id}/data/equity.json", result)
 
@@ -131,9 +133,7 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
             logger.warning("K线数据源不存在: %s → %s", symbol, data_src)
             continue
 
-        kline_dict = _build_kline_dict(
-            data_src, symbol, interval, start_date, end_date
-        )
+        kline_dict = _build_kline_dict(data_src, symbol, interval, start_date, end_date)
         if kline_dict:
             cache.put(symbol, data_src, interval, kline_dict)
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -145,26 +145,27 @@ def export_kline_json(output_dir: str, run_id: int) -> None:
 def export_trades_json(output_dir: str, run_id: int) -> None:
     """
     导出交易记录 JSON（取最优参数组合的所有品种的成交记录）
-    
+
     逻辑：从 Optuna study 中找到最优 trial，仅导出该 trial 对应各品种的 backtest 的成交。
     这样 K 线图上展示的是同一组最优参数在所有品种上的交易表现。
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
     """
     dm = get_data_manager()
-    
+
     # 1. 从 optuna study 找最佳 trial_index
     best_trial_index = dm.store.get_best_trial_index(run_id)
-    
+
     # 2. 遍历所有成功回测，只取最优 trial 的成交
     import json as _j
+
     from data.models import Backtest, BacktestTrade
-    
+
     all_trades: dict[str, list[dict[str, Any]]] = {}
     for bt in Backtest.select(Backtest.id, Backtest.symbol, Backtest.engine_config).where(
-        Backtest.run_id == run_id, Backtest.status == 'success'
+        Backtest.run_id == run_id, Backtest.status == "success"
     ):
         ec = bt.engine_config
         if not ec:
@@ -176,9 +177,9 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
                 continue
         else:
             cfg = ec
-        if cfg.get('trial_index') != best_trial_index:
+        if cfg.get("trial_index") != best_trial_index:
             continue
-        
+
         symbol = bt.symbol
         trades = list(BacktestTrade.select().where(BacktestTrade.backtest_id == bt.id))
         all_trades[symbol] = []
@@ -189,60 +190,64 @@ def export_trades_json(output_dir: str, run_id: int) -> None:
             offset = t.offset
             if "." in str(offset):
                 offset = str(offset).split(".")[-1]
-            all_trades[symbol].append({
-                'datetime': t.datetime,
-                'symbol': t.symbol,
-                'direction': direction,
-                'offset': offset,
-                'open_price': t.open_price,
-                'close_price': t.close_price,
-                'quantity': t.quantity,
-                'pnl': t.pnl,
-                'commission': t.commission,
-                'reason': t.reason if hasattr(t, 'reason') else '',
-            })
-    
+            all_trades[symbol].append(
+                {
+                    "datetime": t.datetime,
+                    "symbol": t.symbol,
+                    "direction": direction,
+                    "offset": offset,
+                    "open_price": t.open_price,
+                    "close_price": t.close_price,
+                    "quantity": t.quantity,
+                    "pnl": t.pnl,
+                    "commission": t.commission,
+                    "reason": t.reason if hasattr(t, "reason") else "",
+                }
+            )
+
     _write_json(output_dir, f"r{run_id}/data/trades.json", all_trades)
 
 
 def export_optuna_json(output_dir: str, run_id: int) -> None:
     """
     导出 Optuna 优化数据 JSON（含图表配置）
-    
+
     Args:
         output_dir: 输出目录
         run_id: 运行ID
     """
     import os
+
     dm = get_data_manager()
     optuna_data = dm.get_optuna_data(run_id)
     if not optuna_data:
         return
 
-    study_name = str(optuna_data.get('study_name', ''))
-    
+    study_name = str(optuna_data.get("study_name", ""))
+
     charts_spec: dict[str, Any] = {}
     if study_name:
         try:
             from report.reporter import build_optuna_spec
+
             study_db_url = f"sqlite:///{os.path.abspath(dm.store.db_path)}"
             charts_spec = build_optuna_spec(study_db_url, study_name)
         except Exception as e:
             logger.warning(f"Optuna chart spec 生成失败: {e}")
 
-    best_params_raw = optuna_data.get('best_params') or []
-    best_params_from_optuna = charts_spec.get('best_params') or []
+    best_params_raw = optuna_data.get("best_params") or []
+    best_params_from_optuna = charts_spec.get("best_params") or []
     merged_best_params = best_params_from_optuna if best_params_from_optuna else best_params_raw
 
     result = {
-        'study_name': study_name,
-        'trial_count': optuna_data.get('trial_count', 0),
-        'best_value': charts_spec.get('best_value'),
-        'best_params': merged_best_params,
-        'optimization_history': charts_spec.get('optimization_history'),
-        'param_importances': charts_spec.get('param_importances'),
-        'parallel_coordinate': charts_spec.get('parallel_coordinate'),
-        'contours': charts_spec.get('contours'),
+        "study_name": study_name,
+        "trial_count": optuna_data.get("trial_count", 0),
+        "best_value": charts_spec.get("best_value"),
+        "best_params": merged_best_params,
+        "optimization_history": charts_spec.get("optimization_history"),
+        "param_importances": charts_spec.get("param_importances"),
+        "parallel_coordinate": charts_spec.get("parallel_coordinate"),
+        "contours": charts_spec.get("contours"),
     }
     _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
 
@@ -250,7 +255,7 @@ def export_optuna_json(output_dir: str, run_id: int) -> None:
 def write_nav_json(output_dir: str) -> None:
     """
     导出全局导航数据 JSON（所有运行记录）
-    
+
     Args:
         output_dir: 输出目录
     """
@@ -262,7 +267,7 @@ def write_nav_json(output_dir: str) -> None:
 def _write_json(output_dir: str, rel_path: str, data: object) -> None:
     """
     将数据写入JSON文件
-    
+
     Args:
         output_dir: 输出目录
         rel_path: 相对路径
@@ -353,14 +358,16 @@ def _build_kline_dict(
         # 原始数据（转为 UTC Unix 时间戳）
         raw_data = []
         for _, row in df.iterrows():
-            raw_data.append({
-                "datetime": int(row["datetime"].tz_convert("UTC").timestamp()),
-                "open": float(row.get("open", 0)),
-                "high": float(row.get("high", 0)),
-                "low": float(row.get("low", 0)),
-                "close": float(row.get("close", 0)),
-                "volume": int(row.get("volume", 0)),
-            })
+            raw_data.append(
+                {
+                    "datetime": int(row["datetime"].tz_convert("UTC").timestamp()),
+                    "open": float(row.get("open", 0)),
+                    "high": float(row.get("high", 0)),
+                    "low": float(row.get("low", 0)),
+                    "close": float(row.get("close", 0)),
+                    "volume": int(row.get("volume", 0)),
+                }
+            )
 
         total = len(df)
         return {

@@ -3,36 +3,26 @@
 这个脚本演示了如何使用新的数据管理系统。
 """
 
-import sys
-import os
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-
-# 确保项目根目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 from strategies import (
-    Bar, Event, BigTradeEvent, DataFeed,
-    PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
-    build_context,
+    Bar,
+    BigTradeEvent,
+    DataFeed,
+    DataRequirements,
+    Event,
+    EventsRequirements,
+    IndicatorRequirements,
     MaStrategyCore,
+    PeriodDataView,
+    PeriodRequirements,
+    build_context,
 )
-from strategies.runtime.cache import get_cached_feed, set_cached_feed, clear_cache
 from strategies.ma_strategy import MACrossParams
-from common.constants import (
-    TRADE_ACTION_BUY,
-    TRADE_ACTION_SELL,
-    TRADE_DIRECTION_LONG,
-    SIGNAL_STOP_LOSS,
-    SIGNAL_TAKE_PROFIT,
-    SIGNAL_DEATH_CROSS,
-    SIGNAL_GOLDEN_CROSS,
-)
+from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
 
 
-def generate_test_bars(num_bars: int = 100) -> List[Bar]:
+def generate_test_bars(num_bars: int = 100) -> list[Bar]:
     """生成测试用的 K 线数据"""
     bars = []
     now = datetime.now()
@@ -42,6 +32,7 @@ def generate_test_bars(num_bars: int = 100) -> List[Bar]:
         dt = now - timedelta(minutes=num_bars - i - 1)
         # 简单的正弦曲线价格
         import math
+
         price = base_price + 10 * math.sin(i / 10)
         open_ = price + (i % 3 - 1) * 0.5
         high = price + 2.0
@@ -49,26 +40,28 @@ def generate_test_bars(num_bars: int = 100) -> List[Bar]:
         close = price
         volume = 1000 + i * 10
 
-        bars.append(Bar(
-            symbol="TEST",
-            datetime=dt,
-            open=open_,
-            high=high,
-            low=low,
-            close=close,
-            volume=volume,
-        ))
+        bars.append(
+            Bar(
+                symbol="TEST",
+                datetime=dt,
+                open=open_,
+                high=high,
+                low=low,
+                close=close,
+                volume=volume,
+            )
+        )
 
     return bars
 
 
 def make_view(
-    bars: List[Bar],
+    bars: list[Bar],
     current_time: datetime,
-    lookback_bars: Optional[int] = None,
-    indicators: Optional[Dict[str, List[float]]] = None,
-    events: Optional[List[Event]] = None,
-) -> 'PeriodDataView':
+    lookback_bars: int | None = None,
+    indicators: dict[str, list[float]] | None = None,
+    events: list[Event] | None = None,
+) -> "PeriodDataView":
     """构造测试用的 PeriodDataView（测试辅助函数）
 
     Args:
@@ -79,6 +72,7 @@ def make_view(
         events: 事件列表
     """
     import pandas as pd
+
     from strategies.runtime.period import PeriodData
 
     period_data = PeriodData("test")
@@ -95,16 +89,18 @@ def make_view(
     if events:
         event_dicts = []
         for event in events:
-            event_dicts.append({
-                'datetime': pd.Timestamp(event.timestamp),
-                'type': event.type,
-                'symbol': event.symbol,
-                'reason': event.reason,
-                'period': event.period,
-                'data': event.data
-            })
+            event_dicts.append(
+                {
+                    "datetime": pd.Timestamp(event.timestamp),
+                    "type": event.type,
+                    "symbol": event.symbol,
+                    "reason": event.reason,
+                    "period": event.period,
+                    "data": event.data,
+                }
+            )
         events_df = pd.DataFrame(event_dicts)
-        events_df = events_df.set_index('datetime')
+        events_df = events_df.set_index("datetime")
 
     if lookback_bars is None:
         lookback_bars = len(bars)
@@ -255,7 +251,9 @@ def test_make_view():
     print("3. 带指标的视图")
     closes = [bar.close for bar in bars]
     view_ind = make_view(
-        bars, latest_bar.datetime, lookback_bars=10,
+        bars,
+        latest_bar.datetime,
+        lookback_bars=10,
         indicators={"sma_5": closes, "sma_10": closes},
     )
     assert view_ind.indicator("sma_5", -1) is not None
@@ -266,16 +264,26 @@ def test_make_view():
     print("4. 带事件的视图")
     test_events = [
         BigTradeEvent(
-            timestamp=bars[5].datetime, type="big_trade", symbol="TEST",
-            price=105.0, volume=1000, direction="buy",
+            timestamp=bars[5].datetime,
+            type="big_trade",
+            symbol="TEST",
+            price=105.0,
+            volume=1000,
+            direction="buy",
         ),
         BigTradeEvent(
-            timestamp=bars[10].datetime, type="big_trade", symbol="TEST",
-            price=110.0, volume=2000, direction="sell",
+            timestamp=bars[10].datetime,
+            type="big_trade",
+            symbol="TEST",
+            price=110.0,
+            volume=2000,
+            direction="sell",
         ),
     ]
     view_evt = make_view(
-        bars, latest_bar.datetime, lookback_bars=15,
+        bars,
+        latest_bar.datetime,
+        lookback_bars=15,
         events=test_events,
     )
     view_events = view_evt.get_events()
@@ -287,7 +295,9 @@ def test_make_view():
     # 5. 带指标 + 事件的视图
     print("5. 带指标 + 事件的视图")
     view_full = make_view(
-        bars, latest_bar.datetime, lookback_bars=20,
+        bars,
+        latest_bar.datetime,
+        lookback_bars=20,
         indicators={"sma_5": closes},
         events=test_events,
     )

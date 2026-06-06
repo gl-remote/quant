@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 策略模块 — 公共 API 入口
 
 架构: Strategy (大脑) + Bridge (四肢)
-  - core/            Strategy ABC + Bar/Signal/Fill 标准化类型 + CORE_VERSION
+  - runtime/         Strategy ABC + Bar/Signal/Fill 标准化类型 + CORE_VERSION + 运行时数据管理
   - utils/           策略加载、配置管理等工具函数
   - ma_strategy.py   均线交叉策略 (继承 Strategy，自主管理全部状态)
   - bridges/         框架桥接器 (vnpy / tqsdk，纯协议转换)
@@ -16,12 +15,11 @@
   from strategies import CORE_VERSION             # 版本号常量
   from strategies.utils import load_strategy      # 工具函数
 
-【不再推荐直接从 core 子模块导入】
-  包内所有模块统一从 strategies 顶层导入，
-  避免 from strategies.core / from .core.base 等内部路径依赖。
+【包内模块导入规范】
+  包内模块使用相对导入（如 `.runtime.xxx`），外部使用 `from strategies import xxx`。
   好处：
-  - 不依赖调用方与 core 的相对位置
-  - 如果 core/ 内部重组，导入语句不需要改动
+  - 不依赖调用方与 runtime 的相对位置
+  - 如果 runtime/ 内部重组，导入语句不需要改动
   - __all__ 控制导出符号，不会意外引入内部符号
 
 
@@ -199,23 +197,33 @@
    - 组合资金曲线和绩效分析
 """
 
-
-# 策略核心与类型（来自 core）
-from .core import (
-    Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, State,
-    CORE_VERSION,
-)
-
-# 运行时数据管理（来自 runtime，与 core 同级）
+# 策略核心与类型 + 运行时数据管理（来自 runtime）
 from .runtime import (
-    Event, BigTradeEvent, NewsEvent,
+    Strategy,
+    UninitializedStrategy,
+    Bar,
+    Signal,
+    Fill,
+    StrategyPosition,
+    State,
+    CORE_VERSION,
+    Event,
+    BigTradeEvent,
+    NewsEvent,
     IndicatorCalcMode,
-    PeriodData, PeriodDataView,
+    PeriodData,
+    PeriodDataView,
     DataFeed,
-    get_cached_feed, set_cached_feed, clear_cache,
-    PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
+    get_cached_feed,
+    set_cached_feed,
+    clear_cache,
+    PeriodRequirements,
+    IndicatorRequirements,
+    EventsRequirements,
+    DataRequirements,
     BarContext,
-    register_indicator_func, register_period_converter,
+    register_indicator_func,
+    register_period_converter,
     build_context,
 )
 
@@ -243,25 +251,44 @@ except ImportError:
 
 __all__ = [
     # 版本号
-    'CORE_VERSION',
+    "CORE_VERSION",
     # 核心类型
-    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition', 'State',
+    "Strategy",
+    "UninitializedStrategy",
+    "Bar",
+    "Signal",
+    "Fill",
+    "StrategyPosition",
+    "State",
     # 数据管理类型
-    'Event', 'BigTradeEvent', 'NewsEvent',
-    'IndicatorCalcMode',
-    'PeriodData', 'PeriodDataView',
-    'DataFeed',
-    'get_cached_feed', 'set_cached_feed', 'clear_cache',
-    'PeriodRequirements', 'IndicatorRequirements', 'EventsRequirements', 'DataRequirements',
-    'BarContext',
+    "Event",
+    "BigTradeEvent",
+    "NewsEvent",
+    "IndicatorCalcMode",
+    "PeriodData",
+    "PeriodDataView",
+    "DataFeed",
+    "get_cached_feed",
+    "set_cached_feed",
+    "clear_cache",
+    "PeriodRequirements",
+    "IndicatorRequirements",
+    "EventsRequirements",
+    "DataRequirements",
+    "BarContext",
     # 辅助函数
-    'register_indicator_func', 'register_period_converter',
-    'build_context',
+    "register_indicator_func",
+    "register_period_converter",
+    "build_context",
     # 策略实现
-    'MaStrategyCore', 'MACrossParams',
+    "MaStrategyCore",
+    "MACrossParams",
     # 工具函数
-    'load_strategy', 'get_strategy_class_name',
-    'apply_strategy_config', 'serialize_strategy_params',
+    "load_strategy",
+    "get_strategy_class_name",
+    "apply_strategy_config",
+    "serialize_strategy_params",
     # 桥接器
-    'VnpyBacktestBridge', 'TqsdkStrategyBridge',
+    "VnpyBacktestBridge",
+    "TqsdkStrategyBridge",
 ]

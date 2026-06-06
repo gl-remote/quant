@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CLI 命令子包
 
@@ -12,16 +11,16 @@ CLI 命令子包
     - cmd_report:   报告生成命令
 """
 
-from cli.commands.export import cmd_export
-from cli.commands.test import cmd_test
 from cli.commands.backtest import cmd_backtest
+from cli.commands.export import cmd_export
 from cli.commands.live import cmd_live
 from cli.commands.report import cmd_report
+from cli.commands.test import cmd_test
 
 __all__ = [
-    'cmd_export',
-    'cmd_test',
-    'cmd_backtest',
-    'cmd_live',
-    'cmd_report',
+    "cmd_export",
+    "cmd_test",
+    "cmd_backtest",
+    "cmd_live",
+    "cmd_report",
 ]

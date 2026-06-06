@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据源抽象基类 — 定义统一的数据获取接口
 
 每个数据源自行处理 interval 兼容性，基类不强制。
@@ -6,15 +5,16 @@
 
 from __future__ import annotations
 
-from loguru import logger
 import time
 from abc import ABC, abstractmethod
-from typing import Callable, ClassVar
+from collections.abc import Callable
+from typing import ClassVar
 
 import pandas as pd
+from loguru import logger
 
 # amount = 成交额，源数据有则保留原始值，无则留空字符串
-Qlib_COLUMNS: list[str] = ['datetime', 'open', 'high', 'low', 'close', 'volume', 'amount']
+Qlib_COLUMNS: list[str] = ["datetime", "open", "high", "low", "close", "volume", "amount"]
 
 
 class BaseDataSource(ABC):
@@ -96,9 +96,7 @@ class BaseDataSource(ABC):
                     )
                     time.sleep(backoff)
                 else:
-                    logger.error(
-                        f"{source_name} 数据拉取失败，已重试 {self.max_retries} 次: {e}"
-                    )
+                    logger.error(f"{source_name} 数据拉取失败，已重试 {self.max_retries} 次: {e}")
 
         logger.error(f"拉取 {symbol} 数据失败，已耗尽 {self.max_retries} 次重试")
         return pd.DataFrame(columns=Qlib_COLUMNS)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CLI 模块包
 
@@ -20,19 +19,18 @@ CLI 模块包
 """
 
 # 转发导入（便于外部按 cli.xxx 直接引用）
+from common.formulas import calculate_fifo_profit
 from strategies import (
-    load_strategy,
-    get_strategy_class_name,
     apply_strategy_config,
+    get_strategy_class_name,
+    load_strategy,
     serialize_strategy_params,
 )
-from common.formulas import calculate_fifo_profit
-
 
 __all__ = [
-    'calculate_fifo_profit',
-    'load_strategy',
-    'get_strategy_class_name',
-    'apply_strategy_config',
-    'serialize_strategy_params',
+    "calculate_fifo_profit",
+    "load_strategy",
+    "get_strategy_class_name",
+    "apply_strategy_config",
+    "serialize_strategy_params",
 ]

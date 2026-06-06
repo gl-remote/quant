@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 回测模块
 
@@ -17,36 +16,36 @@
      CSV 扫描/加载已迁移至 data/manager.py (DataManager)。
 """
 
-from .vnpy_backtest_engine import VnpyBacktestEngine
-from .strategy_factory import StrategyFactory, create_strategy_class, load_strategy_and_config
 from .data_utils import df_to_vnpy_datalines, resolve_interval
-from .results import aggregate_walk_forward, WalkForwardAggregate
+from .optimizer import OptunaOptimizer, OptunaResult, SearchResult, run_param_search
+from .results import WalkForwardAggregate, aggregate_walk_forward
+from .runners import execute_parameter_search, execute_walk_forward
+from .strategy_factory import StrategyFactory, create_strategy_class, load_strategy_and_config
+from .vnpy_backtest_engine import VnpyBacktestEngine
 from .walk_forward import (
+    WindowParams,
+    validate_window_params,
     walk_forward_split,
     walk_forward_split_by_ratio,
-    validate_window_params,
-    WindowParams,
 )
-from .runners import execute_walk_forward, execute_parameter_search
-from .optimizer import run_param_search, OptunaOptimizer, OptunaResult, SearchResult
 
 __all__ = [
-    'VnpyBacktestEngine',
-    'StrategyFactory',
-    'create_strategy_class',
-    'load_strategy_and_config',
-    'df_to_vnpy_datalines',
-    'resolve_interval',
-    'aggregate_walk_forward',
-    'WalkForwardAggregate',
-    'walk_forward_split',
-    'walk_forward_split_by_ratio',
-    'validate_window_params',
-    'WindowParams',
-    'execute_walk_forward',
-    'execute_parameter_search',
-    'run_param_search',
-    'OptunaOptimizer',
-    'OptunaResult',
-    'SearchResult',
+    "VnpyBacktestEngine",
+    "StrategyFactory",
+    "create_strategy_class",
+    "load_strategy_and_config",
+    "df_to_vnpy_datalines",
+    "resolve_interval",
+    "aggregate_walk_forward",
+    "WalkForwardAggregate",
+    "walk_forward_split",
+    "walk_forward_split_by_ratio",
+    "validate_window_params",
+    "WindowParams",
+    "execute_walk_forward",
+    "execute_parameter_search",
+    "run_param_search",
+    "OptunaOptimizer",
+    "OptunaResult",
+    "SearchResult",
 ]

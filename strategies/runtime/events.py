@@ -3,17 +3,18 @@
 包含：事件类型定义、指标计算模式/函数注册、周期转换函数注册。
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime as dt
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 import pandas as pd
 
-from ..core.types import Bar
-
+from .types import Bar
 
 # ==================== 事件类型定义 ====================
+
 
 @dataclass(kw_only=True)
 class Event:
@@ -31,17 +32,19 @@ class Event:
       - None：全局事件，所有周期的 K 线都可以看到该事件
       - "1m"：周期特定事件，只在 1m 周期的 K 线中可见
     """
+
     timestamp: dt  # 事件发生的时间
     type: str  # 'big_trade' | 'news' | 'orderbook_imbalance' | 'custom'
     symbol: str  # 交易品种
     reason: str = ""  # 事件原因/描述，类似 Signal.reason
-    period: Optional[str] = None  # None 表示全局事件，否则绑定到特定周期
+    period: str | None = None  # None 表示全局事件，否则绑定到特定周期
     data: Any = None
 
 
 @dataclass(kw_only=True)
 class BigTradeEvent(Event):
     """大单成交事件"""
+
     price: float
     volume: float
     direction: str  # 'buy' | 'sell'
@@ -50,12 +53,14 @@ class BigTradeEvent(Event):
 @dataclass(kw_only=True)
 class NewsEvent(Event):
     """新闻事件"""
+
     title: str
-    content: Optional[str] = None
+    content: str | None = None
     importance: int = 1  # 1-5
 
 
 # ==================== 模块级指标计算函数注册 ====================
+
 
 class IndicatorCalcMode(Enum):
     BATCH = "batch"  # 一次性计算所有数据（默认）
@@ -67,15 +72,18 @@ class IndicatorFuncInfo:
     func: Callable[..., pd.Series]
     calc_mode: IndicatorCalcMode
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
-REGISTERED_INDICATOR_FUNCS: Dict[str, IndicatorFuncInfo] = {}
+REGISTERED_INDICATOR_FUNCS: dict[str, IndicatorFuncInfo] = {}
 
 
-def register_indicator_func(name: str, func: Callable[..., pd.Series],
-                            calc_mode: IndicatorCalcMode = IndicatorCalcMode.BATCH,
-                            description: Optional[str] = None) -> None:
+def register_indicator_func(
+    name: str,
+    func: Callable[..., pd.Series],
+    calc_mode: IndicatorCalcMode = IndicatorCalcMode.BATCH,
+    description: str | None = None,
+) -> None:
     """全局注册指标计算函数，所有 DataFeed 共享
 
     指标计算函数签名要求：
@@ -98,14 +106,11 @@ def register_indicator_func(name: str, func: Callable[..., pd.Series],
     :param description: 指标描述（可选）
     """
     REGISTERED_INDICATOR_FUNCS[name] = IndicatorFuncInfo(
-        func=func,
-        calc_mode=calc_mode,
-        name=name,
-        description=description
+        func=func, calc_mode=calc_mode, name=name, description=description
     )
 
 
-def generate_indicator_column_name(name: str, params: Dict[str, Any]) -> str:
+def generate_indicator_column_name(name: str, params: dict[str, Any]) -> str:
     """生成指标列名
 
     【参数顺序】
@@ -120,10 +125,10 @@ def generate_indicator_column_name(name: str, params: Dict[str, Any]) -> str:
 
 # ==================== 模块级周期转换函数注册 ====================
 
-REGISTERED_CONVERTERS: Dict[Tuple[str, str], Callable[..., List[Bar]]] = {}
+REGISTERED_CONVERTERS: dict[tuple[str, str], Callable[..., list[Bar]]] = {}
 
 
-def register_period_converter(source_period: str, target_period: str, func: Callable[..., List[Bar]]) -> None:
+def register_period_converter(source_period: str, target_period: str, func: Callable[..., list[Bar]]) -> None:
     """全局注册周期转换函数
 
     支持两种场景：

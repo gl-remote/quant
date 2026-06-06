@@ -7,10 +7,10 @@
   - walk_forward_split_by_ratio: WF 窗口划分 (按比例)
 """
 
-from loguru import logger
 from dataclasses import dataclass
 
 import pandas as pd
+from loguru import logger
 
 # 参数验证
 # ============================================================
@@ -26,6 +26,7 @@ class WindowParams:
         test_size: 测试集行数
         step: 滑动步长
     """
+
     train_size: int
     val_size: int
     test_size: int
@@ -59,9 +60,7 @@ def validate_window_params(
 
     min_required = train_size + val_size + test_size
     if df_len < min_required:
-        raise ValueError(
-            f"数据量不足：需要至少 {min_required} 行，当前 {df_len} 行"
-        )
+        raise ValueError(f"数据量不足：需要至少 {min_required} 行，当前 {df_len} 行")
 
     if step < 1:
         step = max(1, test_size // 2)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 策略配置管理模块
 
@@ -6,8 +5,10 @@
 """
 
 import dataclasses
-from loguru import logger
 from typing import Any
+
+from loguru import logger
+
 
 def apply_strategy_config(config: Any, config_manager: Any) -> None:
     """将配置文件中的策略参数应用到策略配置 dataclass 上
@@ -23,23 +24,16 @@ def apply_strategy_config(config: Any, config_manager: Any) -> None:
     try:
         valid_keys = {f.name for f in dataclasses.fields(config)}
     except TypeError:
-        for key, value in sc.model_dump(
-            exclude={"name", "enabled", "kline_period", "search_space"}
-        ).items():
+        for key, value in sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"}).items():
             if hasattr(config, key):
                 setattr(config, key, value)
         return
 
-    for key, value in sc.model_dump(
-        exclude={"name", "enabled", "kline_period", "search_space"}
-    ).items():
+    for key, value in sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"}).items():
         if key in valid_keys:
             setattr(config, key, value)
         else:
-            logger.warning(
-                f"忽略未识别的策略配置键: '{key}'，"
-                f"合法键: {sorted(valid_keys)}"
-            )
+            logger.warning(f"忽略未识别的策略配置键: '{key}'，合法键: {sorted(valid_keys)}")
 
 
 def serialize_strategy_params(strategy_config: Any) -> dict[str, float]:

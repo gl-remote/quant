@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """全局统一的 Pandera Schema 定义
 
 【文件职责】
@@ -39,8 +38,7 @@
 
 import pandas as pd
 import pandera.pandas as pa
-from pandera.typing import Series
-from pandera.typing import DataFrame
+from pandera.typing import DataFrame, Series
 
 
 class KlineSchema(pa.DataFrameModel):
@@ -55,6 +53,7 @@ class KlineSchema(pa.DataFrameModel):
         close: 收盘价
         volume: 成交量
     """
+
     datetime: Series[pd.Timestamp] = pa.Field(unique=True)
     open: Series[float] = pa.Field(ge=0.0)
     high: Series[float] = pa.Field(ge=0.0)
@@ -63,21 +62,21 @@ class KlineSchema(pa.DataFrameModel):
     volume: Series[int] = pa.Field(ge=0)
 
     @pa.dataframe_check
-    def check_high_greater_than_open_close(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
+    def check_high_greater_than_open_close(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]
         """验证最高价 >= 开盘价和收盘价"""
-        result: bool = bool((df['high'] >= df[['open', 'close']].max(axis=1)).all())
+        result: bool = bool((df["high"] >= df[["open", "close"]].max(axis=1)).all())
         return result
 
     @pa.dataframe_check
-    def check_low_less_than_open_close(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
+    def check_low_less_than_open_close(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]
         """验证最低价 <= 开盘价和收盘价"""
-        result: bool = bool((df['low'] <= df[['open', 'close']].min(axis=1)).all())
+        result: bool = bool((df["low"] <= df[["open", "close"]].min(axis=1)).all())
         return result
 
     @pa.dataframe_check
-    def check_price_range_valid(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
+    def check_price_range_valid(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]
         """验证价格区间有效性：low <= close <= high"""
-        result: bool = bool((df['low'] <= df['close']).all() & (df['close'] <= df['high']).all())
+        result: bool = bool((df["low"] <= df["close"]).all() & (df["close"] <= df["high"]).all())
         return result
 
     class Config:
@@ -93,13 +92,14 @@ class DailyReturnSchema(pa.DataFrameModel):
         return: 收益率
         equity: 权益值
     """
+
     date: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
-    return_: Series[float] = pa.Field(alias='return')
+    return_: Series[float] = pa.Field(alias="return")
     equity: Series[float] = pa.Field(ge=0.0)
 
     class Config:
         coerce = True
-        extra = 'allow'
+        extra = "allow"
 
 
 class TradeRecordSchema(pa.DataFrameModel):
@@ -122,10 +122,11 @@ class TradeRecordSchema(pa.DataFrameModel):
     - store 层不再做字段名兼容转换（fallback）
     - vnpy TradeData.volume → 映射为 quantity
     """
+
     datetime: Series[pd.Timestamp] = pa.Field()
     symbol: Series[str] = pa.Field()
-    direction: Series[str] = pa.Field(isin=['long', 'short'])
-    offset: Series[str] = pa.Field(isin=['open', 'close', 'closetoday'])
+    direction: Series[str] = pa.Field(isin=["long", "short"])
+    offset: Series[str] = pa.Field(isin=["open", "close", "closetoday"])
     open_price: Series[float] = pa.Field(ge=0.0)
     close_price: Series[float] = pa.Field(ge=0.0)
     quantity: Series[float] = pa.Field(ge=0.0)
@@ -152,6 +153,7 @@ class BacktestDailySchema(pa.DataFrameModel):
         slippage: 当日滑点成本
         trade_count: 当日成交笔数
     """
+
     date: Series[pd.Timestamp] = pa.Field()
     equity: Series[float] = pa.Field(ge=0.0)
     daily_return: Series[float] = pa.Field()
@@ -163,9 +165,9 @@ class BacktestDailySchema(pa.DataFrameModel):
     trade_count: Series[int] = pa.Field(ge=0, nullable=True)
 
     @pa.dataframe_check
-    def check_equity_positive(cls, df: pd.DataFrame) -> bool:  # type: ignore[misc]
+    def check_equity_positive(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]
         """验证权益值始终为正（账户未爆仓）"""
-        return bool((df['equity'] > 0).all())
+        return bool((df["equity"] > 0).all())
 
     class Config:
         coerce = True
@@ -226,10 +228,7 @@ def validate_backtest_consistency(
 
     # 1. 实际交易记录数 = total_trades（总成交笔数应一致）
     if trade_count != total_trades:
-        errors.append(
-            f"{prefix}backtest_trades 实际记录数({trade_count}) "
-            f"≠ total_trades({total_trades})"
-        )
+        errors.append(f"{prefix}backtest_trades 实际记录数({trade_count}) ≠ total_trades({total_trades})")
 
     # 2. win_trades + loss_trades ≤ total_trades（盈亏笔数是总成交的子集）
     # 差值即为开仓笔数 + 持平笔数(pnl=0)，应 >= 0 且合理
@@ -243,20 +242,11 @@ def validate_backtest_consistency(
             )
 
     # 3. 如果 total_trades > 0，则 win_trades/loss_trades 不能同时为 None
-    if total_trades > 0:
-        if win_trades is None and loss_trades is None:
-            errors.append(
-                f"{prefix}total_trades={total_trades}>0，"
-                f"但 win_trades 和 loss_trades 均为 None"
-            )
+    if total_trades > 0 and win_trades is None and loss_trades is None:
+        errors.append(f"{prefix}total_trades={total_trades}>0，但 win_trades 和 loss_trades 均为 None")
 
     # 4. 2026-06-06新增: profit_days + loss_days ≈ total_days (允许±2天)
-    if (
-        total_days is not None
-        and profit_days is not None
-        and loss_days is not None
-        and total_days > 0
-    ):
+    if total_days is not None and profit_days is not None and loss_days is not None and total_days > 0:
         day_sum = profit_days + loss_days
         if abs(day_sum - total_days) > 2:
             errors.append(

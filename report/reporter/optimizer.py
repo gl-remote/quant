@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Optuna 优化报告 — ECharts option JSON 生成
 
 输出 ECharts 标准 option 格式，前端 echarts-for-react 直接消费。
@@ -7,10 +6,11 @@
 
 from __future__ import annotations
 
-from loguru import logger
 from typing import Any
 
 import optuna
+from loguru import logger
+
 
 def build_optuna_spec(
     study_db_url: str,
@@ -44,9 +44,7 @@ def build_optuna_spec(
 
     # --- 最优结果 ---
     try:
-        result["best_params"] = [
-            {"name": k, "value": v} for k, v in study.best_params.items()
-        ]
+        result["best_params"] = [{"name": k, "value": v} for k, v in study.best_params.items()]
         result["best_value"] = study.best_value
     except Exception as e:
         logger.warning("最优参数获取失败: %s", e)
@@ -121,13 +119,13 @@ def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
             {
                 "name": "目标值",
                 "type": "scatter",
-                "data": [[n, v] for n, v in zip(nums, values)],
+                "data": [[n, v] for n, v in zip(nums, values, strict=False)],
                 "symbolSize": 6,
             },
             {
                 "name": "历史最优",
                 "type": "line",
-                "data": [[n, b] for n, b in zip(nums, best)],
+                "data": [[n, b] for n, b in zip(nums, best, strict=False)],
                 "lineStyle": {"color": "#e74c3c", "width": 2},
                 "symbol": "none",
             },
@@ -139,6 +137,7 @@ def _build_importances(study: optuna.study.Study) -> dict | None:
     """参数重要性柱状图 (用 fANOVA 计算)"""
     try:
         from optuna.importance import get_param_importances
+
         importances = get_param_importances(study)
     except Exception:
         return None
@@ -154,14 +153,20 @@ def _build_importances(study: optuna.study.Study) -> dict | None:
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
         "grid": {"left": 100, "right": 30, "top": 20, "bottom": 20},
         "xAxis": {"type": "value", "name": "重要性"},
-        "yAxis": {"type": "category", "data": names, "inverse": True,
-                  "axisLabel": {"width": 90, "overflow": "truncate"}},
-        "series": [{
-            "name": "参数重要性",
-            "type": "bar",
-            "data": vals,
-            "itemStyle": {"color": "#5470c6"},
-        }],
+        "yAxis": {
+            "type": "category",
+            "data": names,
+            "inverse": True,
+            "axisLabel": {"width": 90, "overflow": "truncate"},
+        },
+        "series": [
+            {
+                "name": "参数重要性",
+                "type": "bar",
+                "data": vals,
+                "itemStyle": {"color": "#5470c6"},
+            }
+        ],
     }
 
 
@@ -203,18 +208,22 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
     return {
         "tooltip": {},
         "parallelAxis": [
-            {"dim": i, "name": d["name"], **(d if d.get("type") else {"min": 0, "max": 1})}
-            for i, d in enumerate(dims)
+            {"dim": i, "name": d["name"], **(d if d.get("type") else {"min": 0, "max": 1})} for i, d in enumerate(dims)
         ],
         "parallel": {
-            "left": 60, "right": 60, "top": 30, "bottom": 30,
+            "left": 60,
+            "right": 60,
+            "top": 30,
+            "bottom": 30,
             "parallelAxisDefaultProps": {"nameLocation": "end", "nameGap": 10},
         },
-        "series": [{
-            "type": "parallel",
-            "data": data,
-            "lineStyle": {"width": 1, "opacity": 0.5},
-        }],
+        "series": [
+            {
+                "type": "parallel",
+                "data": data,
+                "lineStyle": {"width": 1, "opacity": 0.5},
+            }
+        ],
     }
 
 
@@ -227,8 +236,5 @@ def _build_contour(study: optuna.study.Study, trials: list[optuna.trial.FrozenTr
 
     return {
         "param_names": param_names,
-        "trials": [
-            {"params": {k: t.params.get(k) for k in param_names}, "value": t.value}
-            for t in ct
-        ],
+        "trials": [{"params": {k: t.params.get(k) for k in param_names}, "value": t.value} for t in ct],
     }

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 绩效指标计算工具 (纯函数)
 
@@ -52,7 +51,7 @@ def calc_sharpe_ratio(equity_curve: list[float], annual_factor: int = 252) -> fl
     if not np.any(mask):
         return 0.0
     diff = np.diff(arr)
-    returns = np.divide(diff[mask], prev[mask], out=np.full_like(diff[mask], 0.0), where=prev[mask]!=0)
+    returns = np.divide(diff[mask], prev[mask], out=np.full_like(diff[mask], 0.0), where=prev[mask] != 0)
     returns = returns[~np.isnan(returns) & ~np.isinf(returns)]
     if len(returns) == 0:
         return 0.0

@@ -51,17 +51,17 @@ class WalkForwardAggregate:
 
     def to_dict(self) -> dict[str, float]:
         return {
-            'return_mean': self.return_mean,
-            'return_std': self.return_std,
-            'sharpe_mean': self.sharpe_mean,
-            'sharpe_std': self.sharpe_std,
-            'max_drawdown_mean': self.max_drawdown_mean,
-            'max_drawdown_worst': self.max_drawdown_worst,
-            'win_rate_mean': self.win_rate_mean,
-            'win_rate_std': self.win_rate_std,
-            'positive_window_ratio': self.positive_window_ratio,
-            'stability_score': self.stability_score,
-            'is_oos_return_gap': self.is_oos_return_gap,
+            "return_mean": self.return_mean,
+            "return_std": self.return_std,
+            "sharpe_mean": self.sharpe_mean,
+            "sharpe_std": self.sharpe_std,
+            "max_drawdown_mean": self.max_drawdown_mean,
+            "max_drawdown_worst": self.max_drawdown_worst,
+            "win_rate_mean": self.win_rate_mean,
+            "win_rate_std": self.win_rate_std,
+            "positive_window_ratio": self.positive_window_ratio,
+            "stability_score": self.stability_score,
+            "is_oos_return_gap": self.is_oos_return_gap,
         }
 
 
@@ -86,14 +86,14 @@ def aggregate_walk_forward(
     oos_returns: list[float] = []
 
     for w in window_results:
-        stats = w.get('statistics', {})
-        is_stats = w.get('statistics_is', {})
-        returns.append(parse_percentage(stats.get('total_return', 0)))
-        sharpes.append(float(stats.get('sharpe_ratio', 0)))
-        drawdowns.append(parse_percentage(stats.get('max_drawdown', 0)))
-        win_rates.append(parse_percentage(stats.get('win_rate', 0)))
-        is_returns.append(parse_percentage(is_stats.get('total_return', 0)))
-        oos_returns.append(parse_percentage(stats.get('total_return', 0)))
+        stats = w.get("statistics", {})
+        is_stats = w.get("statistics_is", {})
+        returns.append(parse_percentage(stats.get("total_return", 0)))
+        sharpes.append(float(stats.get("sharpe_ratio", 0)))
+        drawdowns.append(parse_percentage(stats.get("max_drawdown", 0)))
+        win_rates.append(parse_percentage(stats.get("win_rate", 0)))
+        is_returns.append(parse_percentage(is_stats.get("total_return", 0)))
+        oos_returns.append(parse_percentage(stats.get("total_return", 0)))
 
     arr_returns = np.array(returns, dtype=float)
     is_mean = float(np.mean(is_returns)) if is_returns else 0.0
@@ -109,13 +109,17 @@ def aggregate_walk_forward(
         win_rate_mean=float(np.mean(win_rates)),
         win_rate_std=float(np.std(win_rates)),
         positive_window_ratio=profitable_ratio(
-            int(np.sum(arr_returns > 0)), len(arr_returns),
+            int(np.sum(arr_returns > 0)),
+            len(arr_returns),
         ),
-        stability_score=float(max(0.0, min(
-            1.0,
-            1.0 - float(np.std(arr_returns)) / max(
-                abs(float(np.mean(arr_returns))), 1e-9
-            ),
-        ))),
+        stability_score=float(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    1.0 - float(np.std(arr_returns)) / max(abs(float(np.mean(arr_returns))), 1e-9),
+                ),
+            )
+        ),
         is_oos_return_gap=is_mean - oos_mean,
     )

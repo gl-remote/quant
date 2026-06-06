@@ -27,37 +27,31 @@
 """
 
 import os
-import sys
+import tomllib  # pyright: ignore[reportMissingImports]
 from pathlib import Path
 from typing import Any, ClassVar
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # pyright: ignore[reportUnreachable]
-    import tomli as tomllib  # pyright: ignore[reportMissingImports]
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     field_validator,
-    model_validator,
 )
 
 from common.constants import (
-    DEFAULT_INITIAL_CAPITAL,
     DEFAULT_COMMISSION_RATE,
-    DEFAULT_SLIPPAGE,
-    DEFAULT_PRICE_TICK,
     DEFAULT_CONTRACT_SIZE,
+    DEFAULT_INITIAL_CAPITAL,
     DEFAULT_KLINE_PERIOD,
-    KLINE_INTERVAL_1MIN,
-    STRATEGY_MA,
+    DEFAULT_POSITION_RATIO,
+    DEFAULT_PRICE_TICK,
+    DEFAULT_SLIPPAGE,
+    DEFAULT_SMA_LONG,
+    DEFAULT_SMA_SHORT,
     DEFAULT_STOP_LOSS_RATIO,
     DEFAULT_TAKE_PROFIT_RATIO,
-    DEFAULT_POSITION_RATIO,
-    DEFAULT_SMA_SHORT,
-    DEFAULT_SMA_LONG,
+    KLINE_INTERVAL_1MIN,
+    STRATEGY_MA,
 )
 
 # ============================================================
@@ -290,9 +284,7 @@ class ProjectConfig(BaseModel):
             config_file: 可选 TOML 路径，传入时（重新）加载
         """
         global _project_config_instance
-        if _project_config_instance is None:
-            _project_config_instance = cls.load(config_file)
-        elif config_file is not None:
+        if _project_config_instance is None or config_file is not None:
             _project_config_instance = cls.load(config_file)
         return _project_config_instance
 
@@ -524,10 +516,7 @@ class ConfigManager:
         try:
             if not self._config.is_valid:
                 return False
-            for s in self._config.strategies:
-                if s.name == STRATEGY_MA and s.sma_short >= s.sma_long:
-                    return False
-            return True
+            return all(not (s.name == STRATEGY_MA and s.sma_short >= s.sma_long) for s in self._config.strategies)
         except Exception:
             return False
 

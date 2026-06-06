@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 统一回测命令模块
 
@@ -31,42 +30,43 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
-from loguru import logger
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 
-from config import ConfigManager
-from data import DataManager
+from loguru import logger
 
+from backtest import (
+    SearchResult,
+    VnpyBacktestEngine,
+    execute_parameter_search,
+    execute_walk_forward,
+)
 from common.constants import (
-    STATUS_SUCCESS,
-    STATUS_FAILED,
+    LOG_STATUS_ERROR,
     LOG_STATUS_INFO,
     LOG_STATUS_SUCCESS,
-    LOG_STATUS_ERROR,
-    MODE_SINGLE,
     MODE_BATCH,
     MODE_MULTI,
+    MODE_SINGLE,
+    STATUS_FAILED,
+    STATUS_SUCCESS,
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
 )
+from common.formulas import calculate_fifo_profit
+from common.schemas import KlineDataFrame
+from common.types import BacktestResult
+from config import ConfigManager
+from data import DataManager
+from report import build_all as build_dashboard
 from strategies.utils import (
-    load_strategy,
     get_strategy_class_name,
+    load_strategy,
     serialize_strategy_params,
 )
-from backtest import (
-    VnpyBacktestEngine,
-    execute_walk_forward,
-    execute_parameter_search,
-    SearchResult,
-)
-from report import build_all as build_dashboard
-from common.formulas import calculate_fifo_profit
-from common.types import BacktestResult
-from common.schemas import KlineDataFrame
+
 
 def get_git_hash() -> str | None:
     """获取当前 Git 提交的短哈希值（7位）
@@ -77,7 +77,7 @@ def get_git_hash() -> str | None:
     try:
         repo_root = Path(__file__).parent.parent.parent
         result = subprocess.run(
-            ['git', 'rev-parse', '--short', 'HEAD'],
+            ["git", "rev-parse", "--short", "HEAD"],
             cwd=repo_root,
             capture_output=True,
             text=True,
@@ -120,7 +120,7 @@ def cmd_backtest(args: argparse.Namespace) -> None:
         _run_batch_backtest(args, cm, dm)
 
 
-def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManager") -> None:
+def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManager) -> None:
     """使用 TqSdk 执行单标的回测
 
     Args:
@@ -128,9 +128,9 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         cm: ConfigManager 实例
         dm: DataManager 实例
     """
-    from strategies import TqsdkStrategyBridge
     from common.tqsdk_imports import tqsdk
     from common.types import BacktestResult
+    from strategies import TqsdkStrategyBridge
 
     strategy: str = args.strategy  # pyright: ignore[reportAny]
     symbol: str = args.symbol  # pyright: ignore[reportAny]
@@ -146,16 +146,15 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         sc = cm.get_trading_config(strategy)
         account = cm.get_account_info()
         bc = cm.get_backtest_config()
-        capital = capital_arg if capital_arg else bc.initial_capital
         git_hash = get_git_hash()
         strategy_core = load_strategy(strategy)
         strategy_cls = get_strategy_class_name(strategy_core)
-        strategy_version = getattr(type(strategy_core), 'VERSION', None)
-        
+        strategy_version = getattr(type(strategy_core), "VERSION", None)
+
         # 计算总天数
         try:
-            start_dt = datetime.strptime(start_date_str, '%Y-%m-%d')
-            end_dt = datetime.strptime(end_date_str, '%Y-%m-%d')
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
             total_days = (end_dt - start_dt).days + 1
         except (ValueError, TypeError):
             total_days = None
@@ -165,22 +164,28 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         capital_val = capital_arg
         logger.info(
             "回测: %s %s~%s 资金=%s strategy=%s GUI=%s",
-            symbol, start_date_str, end_date_str, capital_val, strategy_cls, gui_flag,
+            symbol,
+            start_date_str,
+            end_date_str,
+            capital_val,
+            strategy_cls,
+            gui_flag,
         )
-        dm.store.log('backtest',
-                     "开始: %s %s~%s 资金=%s strategy=%s" % (
-                         symbol, start_date_str, end_date_str,
-                         capital_val, strategy_cls,
-                     ),
-                     symbol=symbol, status=LOG_STATUS_INFO)
+        dm.store.log(
+            "backtest",
+            f"开始: {symbol} {start_date_str}~{end_date_str} 资金={capital_val} strategy={strategy_cls}",
+            symbol=symbol,
+            status=LOG_STATUS_INFO,
+        )
 
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None
         api = tqsdk.TqApi(
             backtest=tqsdk.TqBacktest(
-                start_dt=datetime.strptime(start_date_str, '%Y-%m-%d'),
-                end_dt=datetime.strptime(end_date_str, '%Y-%m-%d')
+                start_dt=datetime.strptime(start_date_str, "%Y-%m-%d"),
+                end_dt=datetime.strptime(end_date_str, "%Y-%m-%d"),
             ),
-            auth=auth, web_gui=gui_flag
+            auth=auth,
+            web_gui=gui_flag,
         )
         klines = api.get_kline_serial(symbol, duration_seconds=sc.kline_period * 60)
 
@@ -208,45 +213,49 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
         )
         print(report)
 
-        bt_id = dm.insert_backtest(BacktestResult(
-            symbol=symbol,
-            strategy=strategy_cls,
-            strategy_version=strategy_version,
-            git_hash=git_hash,
-            status=STATUS_SUCCESS,
-            total_trades=total_trades,
-            total_return=total_profit,
-            end_balance=capital_val + total_profit if capital_val else 0,
-            start_date=start_date_str,
-            end_date=end_date_str,
-            total_days=total_days,
-            initial_capital=capital_val or bc.initial_capital,
-            commission_rate=bc.commission_rate,
-            slippage=bc.slippage,
-            price_tick=bc.price_tick,
-            contract_size=bc.contract_size,
-            kline_interval=bc.interval,
-            strategy_params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
-            engine_config={'type': 'tqsdk', 'gui': gui_flag},
-        ))
+        bt_id = dm.insert_backtest(
+            BacktestResult(
+                symbol=symbol,
+                strategy=strategy_cls,
+                strategy_version=strategy_version,
+                git_hash=git_hash,
+                status=STATUS_SUCCESS,
+                total_trades=total_trades,
+                total_return=total_profit,
+                end_balance=capital_val + total_profit if capital_val else 0,
+                start_date=start_date_str,
+                end_date=end_date_str,
+                total_days=total_days,
+                initial_capital=capital_val or bc.initial_capital,
+                commission_rate=bc.commission_rate,
+                slippage=bc.slippage,
+                price_tick=bc.price_tick,
+                contract_size=bc.contract_size,
+                kline_interval=bc.interval,
+                strategy_params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
+                engine_config={"type": "tqsdk", "gui": gui_flag},
+            )
+        )
 
         if fills:
             trade_dicts = []
             for f in fills:
                 # TqSdk 字段 → ORM 标准字段映射
-                direction = 'long' if f.action == TRADE_ACTION_BUY else 'short'
-                trade_dicts.append({
-                    'datetime': f.timestamp,
-                    'symbol': f.symbol,
-                    'direction': direction,
-                    'offset': 'open',  # TqSdk 不区分开平，统一记为 open
-                    'open_price': f.price,
-                    'close_price': f.price,
-                    'quantity': f.volume,
-                    'pnl': 0.0,
-                    'commission': 0.0,
-                    'reason': f.reason,
-                })
+                direction = "long" if f.action == TRADE_ACTION_BUY else "short"
+                trade_dicts.append(
+                    {
+                        "datetime": f.timestamp,
+                        "symbol": f.symbol,
+                        "direction": direction,
+                        "offset": "open",  # TqSdk 不区分开平，统一记为 open
+                        "open_price": f.price,
+                        "close_price": f.price,
+                        "quantity": f.volume,
+                        "pnl": 0.0,
+                        "commission": 0.0,
+                        "reason": f.reason,
+                    }
+                )
             dm.insert_backtest_trades(bt_id, trade_dicts)
 
             logger.info("\n交易记录:")
@@ -255,7 +264,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
                 tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
                 logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
 
-        dm.store.log('backtest', f"完成:\n{report}", symbol=symbol, status=LOG_STATUS_SUCCESS)
+        dm.store.log("backtest", f"完成:\n{report}", symbol=symbol, status=LOG_STATUS_SUCCESS)
         print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
 
         if gui_flag and api is not None:
@@ -267,32 +276,34 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManag
                 pass
     except Exception as e:
         logger.exception(f"回测执行失败: {e}")
-        dm.store.log('backtest', f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
-        _ = dm.insert_backtest(BacktestResult(
-            symbol=symbol,
-            strategy=strategy_cls or 'unknown',
-            strategy_version=strategy_version,
-            git_hash=git_hash,
-            status=STATUS_FAILED,
-            error_message=str(e),
-            start_date=start_date_str,
-            end_date=end_date_str,
-            total_days=total_days,
-            initial_capital=capital_val or bc.initial_capital,
-            commission_rate=bc.commission_rate,
-            slippage=bc.slippage,
-            price_tick=bc.price_tick,
-            contract_size=bc.contract_size,
-            kline_interval=bc.interval,
-            engine_config={'type': 'tqsdk'},
-        ))
+        dm.store.log("backtest", f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
+        _ = dm.insert_backtest(
+            BacktestResult(
+                symbol=symbol,
+                strategy=strategy_cls or "unknown",
+                strategy_version=strategy_version,
+                git_hash=git_hash,
+                status=STATUS_FAILED,
+                error_message=str(e),
+                start_date=start_date_str,
+                end_date=end_date_str,
+                total_days=total_days,
+                initial_capital=capital_val or bc.initial_capital,
+                commission_rate=bc.commission_rate,
+                slippage=bc.slippage,
+                price_tick=bc.price_tick,
+                contract_size=bc.contract_size,
+                kline_interval=bc.interval,
+                engine_config={"type": "tqsdk"},
+            )
+        )
         raise
     finally:
         if api:
             api.close()
 
 
-def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataManager") -> None:
+def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManager) -> None:
     """使用 vn.py 执行批量回测或参数搜索
 
     编排数据加载、策略配置、引擎执行、结果持久化的完整工作流。
@@ -329,15 +340,18 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             symbol_list = dm.search_symbols(pattern_arg or "")
             if not symbol_list:
                 logger.error("未找到匹配的品种数据")
-                dm.store.log('backtest', "未找到匹配的品种数据",
-                             symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
+                dm.store.log("backtest", "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
                 return
             mode_label = MODE_BATCH
 
         mode_name = "参数搜索" if mode == "search" else "Walk-Forward"
-        logger.info("{}回测: {} 个品种 strategy={} mode={}",
-                    "批量" if mode_label == MODE_BATCH else "单品种",
-                    len(symbol_list), strategy_name, mode_name)
+        logger.info(
+            "{}回测: {} 个品种 strategy={} mode={}",
+            "批量" if mode_label == MODE_BATCH else "单品种",
+            len(symbol_list),
+            strategy_name,
+            mode_name,
+        )
 
         # ── 步骤 2: 加载批量数据 ──
         datasets = dm.load_kline(symbol_list, start_arg, end_arg, bc.interval)
@@ -348,9 +362,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         # ── 步骤 3: 加载策略配置 ──
         sc = cm.get_trading_config(strategy_name)
         # 注意: kline_period 和 search_space 不是策略参数，是数据/优化器配置
-        strategy_params = sc.model_dump(
-            exclude={"name", "enabled", "kline_period", "search_space"}
-        )
+        strategy_params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
         capital = capital_arg if capital_arg else bc.initial_capital
         contract_size = contract_size_arg if contract_size_arg else bc.contract_size
 
@@ -373,14 +385,19 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
         _sink_ids.clear()
         logs_dir = Path("output") / f"r{run_id}" / "data"
         logs_dir.mkdir(parents=True, exist_ok=True)
-        _fmt = (f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
-                "{level: <8} | {name}:{function}:{line} | {message}")
-        _sink_ids.append(logger.add(
-            logs_dir / "run.log",
-            level="DEBUG",
-            format=_fmt,
-        ))
+        _fmt = (
+            f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
+            "{level: <8} | {name}:{function}:{line} | {message}"
+        )
+        _sink_ids.append(
+            logger.add(
+                logs_dir / "run.log",
+                level="DEBUG",
+                format=_fmt,
+            )
+        )
         from common.log_config import get_stderr_sink_id
+
         _stderr_id = get_stderr_sink_id()
         if _stderr_id is not None:
             logger.remove(_stderr_id)
@@ -396,31 +413,31 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
                 datasets=datasets,
             )
             bt_id = None
-            if wf_result.get('success'):
-                bt_id = dm.insert_backtest(BacktestResult(
-                    symbol=sym,
-                    strategy=get_strategy_class_name(strategy),
-                    status=STATUS_SUCCESS,
-                    strategy_version=getattr(strategy, 'VERSION', None),
-                    git_hash=git_hash,
-                    strategy_params=serialize_strategy_params(strategy),
-                    start_date=start_arg,
-                    end_date=end_arg,
-                    engine_config={'type': 'vnpy', 'mode': 'walk-forward',
-                                   'windows': wf_result.get('windows', 0)},
-                    # walk_forward 聚合指标映射到 BacktestResult 字段
-                    sharpe_ratio=wf_result.get('aggregate', {}).get('sharpe_mean'),
-                    max_drawdown=wf_result.get('aggregate', {}).get('max_drawdown_mean'),
-                    total_return=wf_result.get('aggregate', {}).get('return_mean'),
-                    daily_std=wf_result.get('aggregate', {}).get('return_std'),
-                ), run_id=run_id, data_src=datasets[0][2])
-                logger.info(f"Walk-Forward 完成: id={bt_id}, "
-                           f"窗口={wf_result.get('windows', 0)}")
+            if wf_result.get("success"):
+                bt_id = dm.insert_backtest(
+                    BacktestResult(
+                        symbol=sym,
+                        strategy=get_strategy_class_name(strategy),
+                        status=STATUS_SUCCESS,
+                        strategy_version=getattr(strategy, "VERSION", None),
+                        git_hash=git_hash,
+                        strategy_params=serialize_strategy_params(strategy),
+                        start_date=start_arg,
+                        end_date=end_arg,
+                        engine_config={"type": "vnpy", "mode": "walk-forward", "windows": wf_result.get("windows", 0)},
+                        # walk_forward 聚合指标映射到 BacktestResult 字段
+                        sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
+                        max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
+                        total_return=wf_result.get("aggregate", {}).get("return_mean"),
+                        daily_std=wf_result.get("aggregate", {}).get("return_std"),
+                    ),
+                    run_id=run_id,
+                    data_src=datasets[0][2],
+                )
+                logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
                 if bt_id:
                     print(f"\n💡 查看报告: python main.py report --id {bt_id}")
-                    dm.store.log('backtest',
-                                f"Walk-Forward 完成: {sym}",
-                                symbol=sym, status=LOG_STATUS_SUCCESS)
+                    dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
             else:
                 logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
         else:
@@ -444,9 +461,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
             if result:
                 # 保存实际使用的随机种子
                 dm.store.update_run_seed(
-                    run_id=run_id,
-                    use_fixed_seed=optimizer_cfg.use_fixed_seed,
-                    random_seed=result.actual_seed
+                    run_id=run_id, use_fixed_seed=optimizer_cfg.use_fixed_seed, random_seed=result.actual_seed
                 )
                 # CLI 统一持久化
                 _persist_search_results(
@@ -478,8 +493,7 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: "DataMa
 
     except Exception as e:
         logger.exception(f"回测执行失败: {e}")
-        dm.store.log('backtest', f"失败: {e}",
-                     symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
+        dm.store.log("backtest", f"失败: {e}", symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
         raise
     finally:
         # 移除实时日志 sink，恢复 stderr，转 JSON 供前端
@@ -517,26 +531,25 @@ def _persist_search_results(
         backtest_ids 列表
     """
     engine_cfg = {
-        'type': 'vnpy',
-        'optimizer': search_type,
-        'study_name': study_name,
-        'study_db': dm.store.db_path,
+        "type": "vnpy",
+        "optimizer": search_type,
+        "study_name": study_name,
+        "study_db": dm.store.db_path,
     }
     all_ids: list[int] = []
     for i, trial in enumerate(result.trial_data):
-        trial_cfg = {**engine_cfg, 'trial_index': i}
-        for er in trial.get('engine_results', []):
+        trial_cfg = {**engine_cfg, "trial_index": i}
+        for er in trial.get("engine_results", []):
             # 覆盖引擎结果中的 trial 级别字段
             er.engine_config = trial_cfg
-            er.strategy_params = trial.get('strategy_params', {})
+            er.strategy_params = trial.get("strategy_params", {})
             er.git_hash = git_hash
 
             if not er.success:
                 er.status = STATUS_FAILED
-                dm.insert_backtest(er, run_id=run_id,
-                                   data_src=next(
-                                       (f for s, _, f in datasets if s == er.symbol),
-                                       None))
+                dm.insert_backtest(
+                    er, run_id=run_id, data_src=next((f for s, _, f in datasets if s == er.symbol), None)
+                )
                 continue
 
             sym = er.symbol
@@ -549,7 +562,7 @@ def _persist_search_results(
             daily = er.daily_results
             if daily:
                 dm.insert_backtest_daily(bt_id, daily)
-            
+
             # 保存交易记录
             if er.fills:
                 dm.insert_backtest_trades(bt_id, er.fills)
@@ -572,7 +585,7 @@ def _persist_search_results(
         if len(all_ids) == 1:
             print(f"\n💡 查看详细报告: python main.py report --id {all_ids[0]}")
         else:
-            ids_str = ', '.join(str(i) for i in all_ids[:10])
+            ids_str = ", ".join(str(i) for i in all_ids[:10])
             print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
 
     return all_ids

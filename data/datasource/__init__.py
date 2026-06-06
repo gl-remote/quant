@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据源抽象层 — 统一数据源接口 + 工厂/注册模式
 
 支持通过 provider 名称动态切换数据源，便于扩展新数据源。
@@ -19,12 +18,13 @@
 
 from __future__ import annotations
 
-from loguru import logger
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
+from .akshare_source import AkShareDataSource
 from .base import BaseDataSource
 from .tqsdk_source import TqSdkDataSource
-from .akshare_source import AkShareDataSource
 
 if TYPE_CHECKING:
     from config.app_config import ConfigManager
@@ -71,9 +71,7 @@ def get_data_source(
     cls = _REGISTRY.get(provider)
     if cls is None:
         available = ", ".join(_REGISTRY.keys())
-        raise ValueError(
-            f"未知数据源: {provider!r}，可用数据源: {available}"
-        )
+        raise ValueError(f"未知数据源: {provider!r}，可用数据源: {available}")
 
     return cls()
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 实盘交易命令模块
 
@@ -12,20 +11,22 @@
 
 import argparse
 import sys
+
 from loguru import logger
 
+from common.constants import (
+    LOG_STATUS_ERROR,
+    LOG_STATUS_INFO,
+    LOG_STATUS_SUCCESS,
+)
 from config import ConfigManager
 from data import DataManager
 from strategies import TqsdkStrategyBridge
 from strategies.utils import (
-    load_strategy,
     get_strategy_class_name,
+    load_strategy,
 )
-from common.constants import (
-    LOG_STATUS_INFO,
-    LOG_STATUS_SUCCESS,
-    LOG_STATUS_ERROR,
-)
+
 
 def cmd_live(args: argparse.Namespace):
     """执行实盘/模拟交易命令
@@ -47,29 +48,28 @@ def cmd_live(args: argparse.Namespace):
         account = cm.get_account_info()
         if account is None:
             logger.error("请先在 config/conf.local.toml 中配置天勤账号信息")
-            dm.store.log('live', "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
+            dm.store.log("live", "配置缺失", symbol=args.symbol, status=LOG_STATUS_ERROR)
             sys.exit(1)
 
         from common.tqsdk_imports import tqsdk
+
         if not tqsdk.ensure():
             logger.error("tqsdk 未安装，无法启动实盘模式")
             sys.exit(1)
         auth = tqsdk.TqAuth(account.api_key, account.api_secret)
-        sc = cm.get_trading_config(args.strategy)
-        bc = cm.get_backtest_config()
+        cm.get_trading_config(args.strategy)
+        cm.get_backtest_config()
         strategy = load_strategy(args.strategy)
         strategy_cls = get_strategy_class_name(strategy)
 
-        bridge = TqsdkStrategyBridge(strategy=strategy, symbol=args.symbol)\
-
+        bridge = TqsdkStrategyBridge(strategy=strategy, symbol=args.symbol)
         logger.info(f"实盘交易: {args.symbol} strategy={strategy_cls} GUI={args.gui}")
-        dm.store.log('live', f"开始: {args.symbol} strategy={strategy_cls}",
-                     symbol=args.symbol, status=LOG_STATUS_INFO)
+        dm.store.log("live", f"开始: {args.symbol} strategy={strategy_cls}", symbol=args.symbol, status=LOG_STATUS_INFO)
 
         (bridge.run_with_gui if args.gui else bridge.run)(symbol=args.symbol, auth=auth)
 
-        dm.store.log('live', f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
+        dm.store.log("live", f"结束: {args.symbol}", symbol=args.symbol, status=LOG_STATUS_SUCCESS)
     except Exception as e:
         logger.exception(f"实盘交易失败: {e}")
-        dm.store.log('live', f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
+        dm.store.log("live", f"失败: {e}", symbol=args.symbol, status=LOG_STATUS_ERROR)
         raise

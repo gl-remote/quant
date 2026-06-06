@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 安全格式化工具 (纯函数)
 
@@ -20,11 +19,11 @@ def format_pct(value: float | None) -> str:
         格式化字符串 (e.g. '15.00%') 或 'N/A'
     """
     if value is None:
-        return 'N/A'
+        return "N/A"
     return f"{float(value):.2%}"
 
 
-def format_float(value: float | None, fmt: str = '.2f') -> str:
+def format_float(value: float | None, fmt: str = ".2f") -> str:
     """安全格式化浮点数
 
     Args:
@@ -35,7 +34,7 @@ def format_float(value: float | None, fmt: str = '.2f') -> str:
         格式化字符串或 'N/A'
     """
     if value is None:
-        return 'N/A'
+        return "N/A"
     return f"{float(value):{fmt}}"
 
 
@@ -62,5 +61,5 @@ def parse_percentage(value: str | float | int) -> float:
     15       → 15.0 (不解为 0.15，调用方自行判断语义)
     """
     if isinstance(value, str):
-        return float(value.rstrip('%')) / 100.0
+        return float(value.rstrip("%")) / 100.0
     return float(value)

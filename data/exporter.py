@@ -7,17 +7,20 @@
 
 from __future__ import annotations
 
-from loguru import logger
-import pandas as pd
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pandas as pd
+from loguru import logger
+
 from common.symbol_utils import resolve_date_range
-from .manager import DataManager
+
 from .datasource import get_data_source
+from .manager import DataManager
 
 if TYPE_CHECKING:
     from config.app_config import ConfigManager
+
 
 def _build_output_path(
     symbol: str,
@@ -39,10 +42,7 @@ def _should_merge(meta: dict[str, object] | None, output_path: str) -> bool:
     if not existing_path or not Path(existing_path).exists():
         return False
     if Path(existing_path).resolve() != Path(output_path).resolve():
-        logger.info(
-            f"已有数据文件路径不匹配 ({Path(existing_path).name} ≠ "
-            f"{Path(output_path).name})，跳过合并"
-        )
+        logger.info(f"已有数据文件路径不匹配 ({Path(existing_path).name} ≠ {Path(output_path).name})，跳过合并")
         return False
     return True
 
@@ -75,6 +75,7 @@ def export_csv(
     """
     if config_manager is None:
         from config import ConfigManager
+
         config_manager = ConfigManager()
 
     if dm is None:
@@ -85,23 +86,16 @@ def export_csv(
         Path(dc.export_dir).mkdir(parents=True, exist_ok=True)
 
         # 日期范围：用户指定 > 合约自动推算
-        resolved_start, resolved_end = resolve_date_range(
-            symbol, start_date, end_date
-        )
+        resolved_start, resolved_end = resolve_date_range(symbol, start_date, end_date)
 
         # 获取数据源（需在 output_path 之前，因为文件名含 provider）
         ds = get_data_source(provider=source, config_manager=config_manager)
 
         # 确定输出路径
         if not output_path:
-            output_path = _build_output_path(
-                symbol, ds.name, interval, dc.export_dir, dc.filename_template
-            )
+            output_path = _build_output_path(symbol, ds.name, interval, dc.export_dir, dc.filename_template)
 
-        logger.info(
-            f"导出 {symbol}: {resolved_start} ~ {resolved_end} "
-            f"[数据源: {ds.name}, interval: {interval}]"
-        )
+        logger.info(f"导出 {symbol}: {resolved_start} ~ {resolved_end} [数据源: {ds.name}, interval: {interval}]")
 
         # 构建额外参数
         fetch_kwargs: dict[str, object] = {}
@@ -131,10 +125,7 @@ def export_csv(
         elif _should_merge(meta, output_path):
             assert meta is not None  # pyright 类型收窄
             filepath = str(meta["filepath"])
-            logger.debug(
-                f"发现已有数据: {filepath} ({meta['total_rows']}条, "
-                f"{meta['min_dt']}~{meta['max_dt']})"
-            )
+            logger.debug(f"发现已有数据: {filepath} ({meta['total_rows']}条, {meta['min_dt']}~{meta['max_dt']})")
             try:
                 old_df = pd.read_csv(filepath)
                 before = len(old_df)

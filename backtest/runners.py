@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 批量回测编排器
 
@@ -8,23 +7,23 @@
 
 from __future__ import annotations
 
-from loguru import logger
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
+from loguru import logger
 
 from common.schemas import KlineDataFrame
-
 from config import ConfigManager
 from data import DataManager
-from .optimizer import run_param_search, SearchResult
+
+from .optimizer import SearchResult, run_param_search
 
 if TYPE_CHECKING:
     from .vnpy_backtest_engine import VnpyBacktestEngine
 
 
 def execute_walk_forward(
-    engine: "VnpyBacktestEngine",
+    engine: VnpyBacktestEngine,
     strategy_name: str,
     strategy_params: dict[str, Any],
     capital: float,
@@ -57,7 +56,7 @@ def execute_walk_forward(
 
 
 def execute_parameter_search(
-    engine: "VnpyBacktestEngine",
+    engine: VnpyBacktestEngine,
     strategy_name: str,
     strategy_params: dict[str, Any],
     capital: float,
@@ -95,11 +94,7 @@ def execute_parameter_search(
 
     # 优先使用策略专属搜索空间 (sc.search_space)，其次使用 optimizer 配置
     sc = cm.get_trading_config(strategy_name)
-    search_space = (
-        sc.search_space
-        or optimizer_cfg.strategy_spaces.get(strategy_name, {})
-        or optimizer_cfg.search_space
-    )
+    search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
 
     if not search_space:
         logger.warning("搜索空间为空，跳过参数搜索")
