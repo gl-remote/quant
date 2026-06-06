@@ -36,7 +36,7 @@ if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
     --strategy ma \
     --mode search \
     --optimizer bayesian \
-    --trials 20 \
+    --trials 5 \
     --capital 100000 \
     --contract-size 10; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
