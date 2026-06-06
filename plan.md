@@ -88,36 +88,14 @@ main.py
 
 ## 三、已知缺陷
 
-| 编号 | 严重度 | 问题 | 位置 |
-|------|--------|------|------|
-| DEF-06 | 🔴 | 优化器可选退化解 (零交易 → 最优) | backtest/optimizer.py + `ma_strategy.py` |
-| DEF-S04 | 🟡 | 止损/止盈使用固定比例而非 ATR | `ma_strategy.py` |
-| DEF-S05 | 🟡 | 信号优先级由 if/elif 顺序隐式定义 | `ma_strategy.py` |
+| 编号 | 严重度 | 问题 | 位置 | 状态 |
+|------|--------|------|------|------|
+| DEF-06 | 🔴 | 优化器可选退化解 (零交易 → 最优) | `backtest/optimizer.py` + `ma_strategy.py` | 🟡 待修复 |
+| DEF-S05 | 🟡 | 信号优先级由 if/elif 顺序隐式定义 | `ma_strategy.py:229-280` | 🟡 待修复 |
+| DEF-07 | 🟡 | TqSdk 路径 `total_return` 存金额而非百分比、`commission` 硬编码为 0 | `cli/commands/backtest.py` | ⬜ 已记录，暂不处理（实盘路径） |
+| DEF-08 | 🟢 | 数据库旧回测数据未迁移（改算法后 win_rate/commission 等字段仍为旧值） | — | ⬜ 需重新跑回测后自动修正 |
 
-### mypy 类型检查预存问题 (已全部修复 ✅)
-
-| 编号 | 文件 | 行号 | 错误码 | 修复方式 | 状态 |
-|------|------|------|--------|----------|------|
-| MP-01 | `common/typing.py` | 9 | no-untyped-def | 添加 `f: Any) -> Any:` + `# type: ignore` | ✅ |
-| MP-02 | `common/symbol_utils.py` | 42 | no-any-return | `# type: ignore` 移至 return 语句行 | ✅ |
-| MP-03 | `common/tqsdk_imports.py` | 22 | no-untyped-def | 添加 `-> None` | ✅ |
-| MP-04 | `common/schemas.py` | 66 | misc | `# type: ignore[misc]` 从装饰器移至 def 行 | ✅ |
-| MP-05 | `common/schemas.py` | 72 | misc | 同上 | ✅ |
-| MP-06 | `common/schemas.py` | 78 | misc | 同上 | ✅ |
-| MP-07 | `data/store.py` | 292 | arg-type | `call-overload` → `arg-type`（修正错误码） | ✅ |
-| MP-08 | `data/manager.py` | 53 | no-untyped-def | 添加 `-> DataManager` | ✅ |
-| MP-09 | `data/manager.py` | 58 | has-type | 添加类属性 `_initialized: bool = False` | ✅ |
-| MP-10 | `data/manager.py` | 67 | has-type | 同上 | ✅ |
-| MP-11 | `backtest/optimizer.py` | 248 | assignment | 添加 `# type: ignore[assignment]` | ✅ |
-| MP-12 | `strategies/utils/loader.py` | 15 | no-untyped-def | 添加 `**strategy_kwargs: Any` + 导入 Any | ✅ |
-| MP-13 | `strategies/bridges/__init__.py` | 4 | misc | `# type: ignore[assignment, misc]` | ✅ |
-| MP-14 | `strategies/bridges/__init__.py` | 4 | assignment | 同上 | ✅ |
-| MP-15 | `strategies/bridges/__init__.py` | 9 | misc | `# type: ignore[assignment, misc]` | ✅ |
-| MP-16 | `strategies/bridges/__init__.py` | 9 | assignment | 同上 | ✅ |
-| MP-17 | `strategies/__init__.py` | 236 | misc | `# type: ignore[assignment, misc]` | ✅ |
-| MP-18 | `strategies/__init__.py` | 236 | assignment | 同上 | ✅ |
-| MP-19 | `strategies/__init__.py` | 241 | misc | `# type: ignore[assignment, misc]` | ✅ |
-| MP-20 | `strategies/__init__.py` | 241 | assignment | 同上 | ✅ |
+> 注：DEF-S04（止损/止盈使用固定比例而非 ATR）已在策略迭代中补全 ATR 止损/止盈/移动止盈机制，已关闭。
 
 ---
 
