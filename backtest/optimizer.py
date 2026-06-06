@@ -181,11 +181,11 @@ class OptunaOptimizer:
             pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
             engine_results = self._engine.run(pairs)
 
-            # Calmar 比率均值：年化收益 / 最大回撤（风险调整后收益）
+            # Calmar 比率：年化收益 / 最大回撤百分比（风险调整后收益）
             calmars = [
-                (r.annual_return or 0) / abs(r.max_drawdown or 0.001)
+                (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
                 for r in engine_results
-                if r.success and (r.max_drawdown or 0) != 0
+                if r.success and (r.max_ddpercent or 0) != 0
             ]
             score = float(sum(calmars) / len(calmars)) if calmars else -999.0
 
