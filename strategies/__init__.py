@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 策略模块 — 公共 API 入口
 
@@ -194,23 +193,38 @@
    - 组合资金曲线和绩效分析
 """
 
-
 # 策略核心与类型（来自 core）
 from .core import (
-    Strategy, UninitializedStrategy, Bar, Signal, Fill, StrategyPosition, State,
+    Strategy,
+    UninitializedStrategy,
+    Bar,
+    Signal,
+    Fill,
+    StrategyPosition,
+    State,
     CORE_VERSION,
+    with_stop_take_profit,
 )
 
 # 运行时数据管理（来自 runtime，与 core 同级）
 from .runtime import (
-    Event, BigTradeEvent, NewsEvent,
+    Event,
+    BigTradeEvent,
+    NewsEvent,
     IndicatorCalcMode,
-    PeriodData, PeriodDataView,
+    PeriodData,
+    PeriodDataView,
     DataFeed,
-    get_cached_feed, set_cached_feed, clear_cache,
-    PeriodRequirements, IndicatorRequirements, EventsRequirements, DataRequirements,
+    get_cached_feed,
+    set_cached_feed,
+    clear_cache,
+    PeriodRequirements,
+    IndicatorRequirements,
+    EventsRequirements,
+    DataRequirements,
     BarContext,
-    register_indicator_func, register_period_converter,
+    register_indicator_func,
+    register_period_converter,
     build_context,
 )
 
@@ -238,25 +252,46 @@ except ImportError:
 
 __all__ = [
     # 版本号
-    'CORE_VERSION',
+    "CORE_VERSION",
     # 核心类型
-    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition', 'State',
+    "Strategy",
+    "UninitializedStrategy",
+    "Bar",
+    "Signal",
+    "Fill",
+    "StrategyPosition",
+    "State",
+    # AOP 装饰器
+    "with_stop_take_profit",
     # 数据管理类型
-    'Event', 'BigTradeEvent', 'NewsEvent',
-    'IndicatorCalcMode',
-    'PeriodData', 'PeriodDataView',
-    'DataFeed',
-    'get_cached_feed', 'set_cached_feed', 'clear_cache',
-    'PeriodRequirements', 'IndicatorRequirements', 'EventsRequirements', 'DataRequirements',
-    'BarContext',
+    "Event",
+    "BigTradeEvent",
+    "NewsEvent",
+    "IndicatorCalcMode",
+    "PeriodData",
+    "PeriodDataView",
+    "DataFeed",
+    "get_cached_feed",
+    "set_cached_feed",
+    "clear_cache",
+    "PeriodRequirements",
+    "IndicatorRequirements",
+    "EventsRequirements",
+    "DataRequirements",
+    "BarContext",
     # 辅助函数
-    'register_indicator_func', 'register_period_converter',
-    'build_context',
+    "register_indicator_func",
+    "register_period_converter",
+    "build_context",
     # 策略实现
-    'MaStrategyCore', 'MACrossParams',
+    "MaStrategyCore",
+    "MACrossParams",
     # 工具函数
-    'load_strategy', 'get_strategy_class_name',
-    'apply_strategy_config', 'serialize_strategy_params',
+    "load_strategy",
+    "get_strategy_class_name",
+    "apply_strategy_config",
+    "serialize_strategy_params",
     # 桥接器
-    'VnpyBacktestBridge', 'TqsdkStrategyBridge',
+    "VnpyBacktestBridge",
+    "TqsdkStrategyBridge",
 ]

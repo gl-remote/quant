@@ -24,23 +24,28 @@
     例: ma_strategy.py → VERSION = f"{CORE_VERSION}-ma1"
 """
 
+from .base import Strategy, UninitializedStrategy
+from .decorators import with_stop_take_profit
+from .state import State
+from .types import Bar, Fill, Signal, StrategyPosition
+
 # ============================================================
 # 核心版本号
 # ============================================================
 CORE_VERSION = "v2.0.0"
 
-# ============================================================
-# 核心基类和类型
-# ============================================================
-from .base import Strategy, UninitializedStrategy
-from .types import Bar, Signal, Fill, StrategyPosition
-from .state import State
-
 __all__ = [
     # 版本号
-    'CORE_VERSION',
+    "CORE_VERSION",
     # 核心基类和类型
-    'Strategy', 'UninitializedStrategy', 'Bar', 'Signal', 'Fill', 'StrategyPosition',
+    "Strategy",
+    "UninitializedStrategy",
+    "Bar",
+    "Signal",
+    "Fill",
+    "StrategyPosition",
     # 运行时状态
-    'State',
+    "State",
+    # AOP 装饰器
+    "with_stop_take_profit",
 ]
