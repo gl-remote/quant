@@ -51,7 +51,7 @@ def build_optuna_spec(
 
     # --- optimization_history ---
     try:
-        result["optimization_history"] = _build_history(trials)
+        result["optimization_history"] = _build_history(trials, study.direction)
     except Exception as e:
         logger.warning("optimization_history 生成失败: %s", e)
         result["optimization_history"] = None
@@ -93,8 +93,16 @@ def _param_names(study: optuna.study.Study) -> list[str]:
         return []
 
 
-def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
-    """优化历史散点图：X=试验序号, Y=目标值"""
+def _build_history(
+    trials: list[optuna.trial.FrozenTrial],
+    direction: optuna.study.StudyDirection = optuna.study.StudyDirection.MAXIMIZE,
+) -> dict | None:
+    """优化历史散点图：X=试验序号, Y=目标值
+
+    Args:
+        trials: 所有 trial
+        direction: 优化方向，MAXIMIZE 追踪最大值，MINIMIZE 追踪最小值
+    """
     ct = _completed_trials(trials)
     if not ct:
         return None
@@ -102,10 +110,11 @@ def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
     nums = [t.number for t in ct]
     values: list[float] = [t.value for t in ct if t.value is not None]
 
+    maximize = direction == optuna.study.StudyDirection.MAXIMIZE
     best = []
-    best_sofar = float("inf")
+    best_sofar = float("-inf") if maximize else float("inf")
     for v in values:
-        if v < best_sofar:
+        if (v > best_sofar) if maximize else (v < best_sofar):
             best_sofar = v
         best.append(best_sofar)
 

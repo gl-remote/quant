@@ -62,13 +62,13 @@ atr_take_profit_multiplier = 1.5 # ATR 止盈倍数（盈利超过 atr * multipl
   type = "int"
   low = 10
   high = 50
-  step = 10
+  step = 5
 
   [strategies.search_space.kdj_overbought]
   type = "int"
   low = 50
   high = 90
-  step = 10
+  step = 5
 
 # 未来可扩展更多策略:
 # [[strategies]]
@@ -146,7 +146,7 @@ format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line
 [optimizer]
 enabled = true
 engine = "bayesian"                 # grid: 穷举搜索 | bayesian: 贝叶斯优化
-n_trials = 5                        # optuna 最大试验次数
+n_trials = 20                       # optuna 最大试验次数
 use_fixed_seed = false              # 是否使用固定随机种子（默认false，即随机）
 random_seed = 42                    # 固定随机种子值（仅在use_fixed_seed=true时有效）
 # 注意: n_jobs 已永久固定为 1，vnpy 引擎非线程安全，不支持并行。

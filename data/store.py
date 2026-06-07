@@ -900,6 +900,19 @@ class DataStore:
 
         study_name = study_rows[0]["study_name"]
 
+        # 读取优化方向：MAXIMIZE → 用 MAX, MINIMIZE → 用 MIN
+        direction_row = list(
+            database.execute_sql(
+                """
+                SELECT direction FROM study_directions
+                WHERE study_id=(SELECT study_id FROM studies WHERE study_name=?)
+            """,
+                (study_name,),
+            )
+        )
+        is_maximize = direction_row and direction_row[0][0] == "MAXIMIZE"
+        agg_func = "MAX" if is_maximize else "MIN"
+
         trials = list(
             database.execute_sql(
                 """
@@ -928,13 +941,13 @@ class DataStore:
 
         best = list(
             database.execute_sql(
-                """
+                f"""
                 SELECT tp.param_name, tp.param_value FROM trial_params tp
                 JOIN trial_values tv ON tp.trial_id = tv.trial_id
                 JOIN trials t ON t.trial_id = tp.trial_id
                 WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
                   AND tv.value=(
-                      SELECT MIN(tv2.value) FROM trial_values tv2
+                      SELECT {agg_func}(tv2.value) FROM trial_values tv2
                       JOIN trials t2 ON tv2.trial_id=t2.trial_id
                       WHERE t2.study_id=(SELECT study_id FROM studies WHERE study_name=?))
             """,
