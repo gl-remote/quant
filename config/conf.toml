@@ -58,6 +58,18 @@ atr_take_profit_multiplier = 1.5 # ATR 止盈倍数（盈利超过 atr * multipl
   high = 0.5
   step = 0.1
 
+  [strategies.search_space.kdj_oversold]
+  type = "int"
+  low = 10
+  high = 50
+  step = 10
+
+  [strategies.search_space.kdj_overbought]
+  type = "int"
+  low = 50
+  high = 90
+  step = 10
+
 # 未来可扩展更多策略:
 # [[strategies]]
 # name = "rsi"
