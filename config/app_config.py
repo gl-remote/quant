@@ -221,6 +221,10 @@ class ThirdPartyConfig(BaseModel):
 class AccountInfo(BaseModel):
     api_key: str
     api_secret: str
+    account_type: str = "tqsim"  # tqsim / tqkq / tqaccount
+    broker_id: str = ""  # tqaccount 时必填，如 "simnow"
+    broker_user: str = ""  # tqaccount 时必填
+    broker_password: str = ""  # tqaccount 时必填
 
 
 # ============================================================

@@ -104,6 +104,10 @@ name = "tqsdk"                  # 天勤量化
 provider = "tianqin"            # 提供商
 api_key = "PLACEHOLDER_API_KEY" # 请在 config/conf.local.toml 中填写真实密钥
 api_secret = "PLACEHOLDER_API_SECRET"
+account_type = "tqsim"          # tqsim 本地模拟 / tqkq 快期模拟 / tqaccount 实盘
+broker_id = ""                  # account_type=tqaccount 时必填
+broker_user = ""
+broker_password = ""
 enabled = true
 # 未来可扩展更多服务：
 # [[third_party.services]]

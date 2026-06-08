@@ -7,7 +7,7 @@
 #
 # 用法: bash test-signal.sh
 #       bash test-signal.sh --gui    # 启用浏览器可视化
-#       SYMBOL=DCE.c2509 bash test-signal.sh  # 自定义合约
+#       SYMBOL=SHFE.rb2609 bash test-signal.sh  # 自定义合约
 
 set -euo pipefail
 
@@ -26,7 +26,7 @@ fi
 
 # 默认参数
 STRATEGY="ma"
-SYMBOL="${SYMBOL:-SHFE.rb2509}"
+SYMBOL="${SYMBOL:-DCE.m2609}"
 GUI_FLAG="--gui"
 
 # 解析参数
@@ -49,11 +49,11 @@ echo ""
 echo "[步骤 1/1] 启动实时信号测试（Ctrl+C 停止）..."
 echo ""
 
-# 先检查合约是否在当前非交易时段，提示用户
+# 检查非交易时段提醒
 CURRENT_HOUR=$(date +%H)
 if [ "$CURRENT_HOUR" -ge 15 ] && [ "$CURRENT_HOUR" -lt 21 ]; then
     echo -e "${YELLOW}⚠ 提示: 当前为日盘收盘时段($(date +%H:%M))，天勤可能无新行情推送。"
-    echo "  建议在交易时段运行（日盘 9:00-15:00，夜盘 21:00-23:00/次日 2:30）。${NC}"
+    echo -e "  建议在交易时段运行（日盘 9:00-15:00，夜盘 21:00-23:00/次日 2:30）。${NC}"
     echo ""
 fi
 
