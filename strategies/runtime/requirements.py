@@ -25,6 +25,7 @@ class IndicatorRequirements:
 
     name: str  # 指标名
     params: dict[str, Any]  # 指标参数
+    window: int = 250  # 指标计算需要的历史K线窗口（用于增量计算时截取 tail）
 
 
 @dataclass

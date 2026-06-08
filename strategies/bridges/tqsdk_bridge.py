@@ -102,6 +102,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         # 多周期数据（run() 中初始化）
         self._klines: dict[str, KlineDataFrame] = {}
         self._data_feed: DataFeed | None = None  # 用于指标注册/计算
+        self._caught_up: bool = False  # 是否已追上实时数据
 
     @property
     def strategy(self) -> Strategy[T]:
@@ -182,6 +183,10 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
                 for period_name, klines in self._klines.items():
                     if self.api.is_changing(klines):
                         current_len = len(klines)
+                        # 首次收到实时数据时打印截面日志
+                        if not self._caught_up and current_len > prev_lens.get(period_name, 0):
+                            self._caught_up = True
+                            self._log_indicator_snapshot("追上实时数据")
                         for i in range(prev_lens[period_name], current_len):
                             signal = self._on_bar_multi(
                                 klines=klines,
@@ -269,6 +274,45 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             # 批量预计算所有指标（与回测路径相同的 calculate_all）
             self._data_feed.calculate_all()
 
+            self._log_indicator_snapshot("初始历史数据")
+
+    def _log_indicator_snapshot(self, label: str) -> None:
+        """打印当前所有周期的指标截面信息（最新一行各指标值）
+
+        日志格式示例:
+          2026-06-08 20:07:13 | 指标截面 [初始历史数据] | symbol=SHFE.rb2509
+            period=1m rows=845 latest=2026-06-08 14:59 | sma_10=3688.50 macd_12_26_9=12.34 kdj_3_3_9=45.67
+            period=5m rows=845 latest=2026-06-08 14:55 | sma_10=3689.00 macd_12_26_9=11.22 kdj_3_3_9=44.56
+            period=15m rows=840 latest=2026-06-08 14:45 | sma_40=3690.12 atr_14=8.50
+
+        :param label: 截面标记，如 "初始历史数据" 或 "追上实时数据"
+        """
+        if self._data_feed is None:
+            return
+        for period_name in sorted(self._klines):
+            pd_obj = self._data_feed.get_period(period_name)
+            if pd_obj is None or pd_obj.length == 0:
+                continue
+            latest_time = pd_obj.latest_time
+            latest_time_str = latest_time.strftime("%Y-%m-%d %H:%M") if latest_time else "N/A"
+            # 收集指标列的最新值
+            ind_cols = [c for c in pd_obj._df.columns if c not in ("open", "high", "low", "close", "volume")]  # pyright: ignore[reportPrivateUsage]
+            ind_parts = []
+            for c in sorted(ind_cols):
+                val = pd_obj.get_indicator(c, -1)
+                if val is not None:
+                    ind_parts.append(f"{c}={val:.4f}")
+            ind_str = " ".join(ind_parts) if ind_parts else "(无指标)"
+            logger.info(
+                "指标截面 [{}] | symbol={} period={} rows={} latest={} | {}",
+                label,
+                self.symbol,
+                period_name,
+                pd_obj.length,
+                latest_time_str,
+                ind_str,
+            )
+
     # ------------------------------------------------------------------ #
     #  内部方法：K线处理 & 策略驱动
     # ------------------------------------------------------------------ #
@@ -297,7 +341,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             main_pd = self._data_feed.get_period(main_period)
             if main_pd is not None:
                 main_pd.append_bar(bar)
-                self._data_feed.calculate_all()
+                self._data_feed.calculate_period(main_period)
 
         # 构造 multi 字典：PeriodDataView（策略熟悉的接口）
         multi: dict[str, Any] = {}

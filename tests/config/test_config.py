@@ -121,12 +121,16 @@ class TestValidateConfig:
 class TestAccountInfo:
     """测试 _resolve_account 逻辑：环境变量优先 + 占位符过滤"""
 
-    def test_no_services(self, base_config_dict):
+    def test_no_services(self, base_config_dict, monkeypatch):
+        monkeypatch.delenv("TQSDK_API_KEY", raising=False)
+        monkeypatch.delenv("TQSDK_API_SECRET", raising=False)
         base_config_dict.pop("third_party", None)
         result = ProjectConfig._resolve_account(base_config_dict)
         assert result.get("account") is None
 
-    def test_placeholder_values(self, base_config_dict):
+    def test_placeholder_values(self, base_config_dict, monkeypatch):
+        monkeypatch.delenv("TQSDK_API_KEY", raising=False)
+        monkeypatch.delenv("TQSDK_API_SECRET", raising=False)
         base_config_dict["third_party"] = {
             "services": [
                 {
@@ -139,7 +143,9 @@ class TestAccountInfo:
         result = ProjectConfig._resolve_account(base_config_dict)
         assert result.get("account") is None
 
-    def test_valid_keys(self, base_config_dict):
+    def test_valid_keys(self, base_config_dict, monkeypatch):
+        monkeypatch.delenv("TQSDK_API_KEY", raising=False)
+        monkeypatch.delenv("TQSDK_API_SECRET", raising=False)
         base_config_dict["third_party"] = {
             "services": [
                 {
@@ -178,6 +184,8 @@ class TestAccountInfo:
 
     def test_env_var_partial_ignored(self, monkeypatch, base_config_dict):
         """仅设置一个环境变量 → 不全则不使用，退回配置文件"""
+        monkeypatch.delenv("TQSDK_API_KEY", raising=False)
+        monkeypatch.delenv("TQSDK_API_SECRET", raising=False)
         monkeypatch.setenv("TQSDK_API_KEY", "half_env_key")
         # 不设置 TQSDK_API_SECRET
         base_config_dict["third_party"] = {

@@ -74,13 +74,13 @@ def _prepare_test_data(
         # 1m 周期（MACD + KDJ）
         feed.register_period("1m")
         feed.register_indicator("1m", "macd", fast=12, slow=26, signal=9)
-        feed.register_indicator("1m", "kdj", n=9, m1=3, m2=3)
+        feed.register_indicator("1m", "kdj", n=9, k_period=3, d_period=3)
 
         # 5m 周期（短期 SMA + MACD + KDJ）
         feed.register_period("5m")
         feed.register_indicator("5m", "sma", period=config.sma_short)
         feed.register_indicator("5m", "macd", fast=12, slow=26, signal=9)
-        feed.register_indicator("5m", "kdj", n=9, m1=3, m2=3)
+        feed.register_indicator("5m", "kdj", n=9, k_period=3, d_period=3)
 
         # 15m 周期（长期 SMA + ATR）
         feed.register_period("15m")
@@ -111,12 +111,12 @@ def _prepare_test_data(
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": config.sma_long}),
@@ -184,11 +184,11 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
     # 1m MACD > 0
     _set_indicator_value(feed, "1m", "macd", 0.1, -1, fast=12, slow=26, signal=9)
     # 1m KDJ < 20
-    _set_indicator_value(feed, "1m", "kdj", 15.0, -1, n=9, m1=3, m2=3)
+    _set_indicator_value(feed, "1m", "kdj", 15.0, -1, n=9, k_period=3, d_period=3)
     # 5m MACD > 0
     _set_indicator_value(feed, "5m", "macd", 0.1, -1, fast=12, slow=26, signal=9)
     # 5m KDJ < 20
-    _set_indicator_value(feed, "5m", "kdj", 15.0, -1, n=9, m1=3, m2=3)
+    _set_indicator_value(feed, "5m", "kdj", 15.0, -1, n=9, k_period=3, d_period=3)
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
 
@@ -201,12 +201,12 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
         indicators={
             "1m": [
                 IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
             ],
             "5m": [
                 IndicatorRequirements(name="sma", params={"period": config.sma_short}),
                 IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
             ],
             "15m": [
                 IndicatorRequirements(name="sma", params={"period": config.sma_long}),
@@ -233,11 +233,11 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
     # 1m MACD < 0
     _set_indicator_value(feed, "1m", "macd", -0.1, -1, fast=12, slow=26, signal=9)
     # 1m KDJ > 80
-    _set_indicator_value(feed, "1m", "kdj", 85.0, -1, n=9, m1=3, m2=3)
+    _set_indicator_value(feed, "1m", "kdj", 85.0, -1, n=9, k_period=3, d_period=3)
     # 5m MACD < 0
     _set_indicator_value(feed, "5m", "macd", -0.1, -1, fast=12, slow=26, signal=9)
     # 5m KDJ > 80
-    _set_indicator_value(feed, "5m", "kdj", 85.0, -1, n=9, m1=3, m2=3)
+    _set_indicator_value(feed, "5m", "kdj", 85.0, -1, n=9, k_period=3, d_period=3)
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
 
@@ -250,12 +250,12 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
         indicators={
             "1m": [
                 IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
             ],
             "5m": [
                 IndicatorRequirements(name="sma", params={"period": config.sma_short}),
                 IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
             ],
             "15m": [
                 IndicatorRequirements(name="sma", params={"period": config.sma_long}),
@@ -466,12 +466,12 @@ class TestMaStrategyFixedStopLoss:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -530,12 +530,12 @@ class TestMaStrategyFixedStopLoss:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -599,12 +599,12 @@ class TestMaStrategyFixedTakeProfit:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -663,12 +663,12 @@ class TestMaStrategyFixedTakeProfit:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -741,12 +741,12 @@ class TestMaStrategyATRStopLoss:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -809,12 +809,12 @@ class TestMaStrategyATRStopLoss:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -882,12 +882,12 @@ class TestMaStrategyATRTakeProfit:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -950,12 +950,12 @@ class TestMaStrategyATRTakeProfit:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
@@ -1008,7 +1008,7 @@ class TestMaStrategyNoSignal:
         _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=cfg.sma_short)
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "1m", "macd", 0.0, -1, fast=12, slow=26, signal=9)
-        _set_indicator_value(feed, "1m", "kdj", 50.0, -1, n=9, m1=3, m2=3)
+        _set_indicator_value(feed, "1m", "kdj", 50.0, -1, n=9, k_period=3, d_period=3)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
         reqs = DataRequirements(
@@ -1020,12 +1020,12 @@ class TestMaStrategyNoSignal:
             indicators={
                 "1m": [
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "5m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
                     IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "m1": 3, "m2": 3}),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
                 ],
                 "15m": [
                     IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),

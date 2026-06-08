@@ -58,7 +58,11 @@ def with_atr_stop_take_profit(period: str = "15m") -> Any:
             extra = DataRequirements(
                 periods={},
                 indicators={
-                    period: [IndicatorRequirements(name="atr", params={"period": config.atr_period})],
+                    period: [
+                        IndicatorRequirements(
+                            name="atr", params={"period": config.atr_period}, window=config.atr_period
+                        )
+                    ],
                 },
             )
             base.merge(extra)

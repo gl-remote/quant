@@ -174,16 +174,16 @@ class MaStrategyCore(Strategy[MACrossParams]):
             },
             indicators={
                 "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
+                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}, window=35),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}, window=9),
                 ],
                 "5m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
+                    IndicatorRequirements(name="sma", params={"period": config.sma_short}, window=config.sma_short),
+                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}, window=35),
+                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}, window=9),
                 ],
                 "15m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_long}),
+                    IndicatorRequirements(name="sma", params={"period": config.sma_long}, window=config.sma_long),
                 ],
             },
             events=EventsRequirements.no_events(),
