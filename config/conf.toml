@@ -34,6 +34,8 @@ atr_stop_loss_multiplier = 1.5 # ATR 止损倍数（亏损超过 atr * multiplie
 atr_take_profit_multiplier = 1.5 # ATR 止盈倍数（盈利超过 atr * multiplier 时止盈）
 kdj_oversold = 30             # KDJ 超卖阈值
 kdj_overbought = 70           # KDJ 超买阈值
+trailing_activation_atr = 1.0  # 移动止损激活阈值（浮盈超过 atr * 此值时激活追踪止损）
+trailing_drawdown_ratio = 0.25 # 移动止损回撤比例（从最高点回落此比例时触发平仓）
 
   # 参数搜索空间 (同时支持 grid 和 bayesian 模式)
   [strategies.search_space.atr_stop_loss_multiplier]
