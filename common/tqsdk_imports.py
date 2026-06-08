@@ -22,6 +22,9 @@ class TqsdkImports:
         self._loaded: bool = False
         self.TqApi: Any = None
         self.TqAuth: Any = None
+        self.TqSim: Any = None
+        self.TqKq: Any = None
+        self.TqAccount: Any = None
         self.TargetPosTask: Any = None
         self.TqBacktest: Any = None
         self.BacktestFinished: Any = None
@@ -30,11 +33,22 @@ class TqsdkImports:
         if self._loaded:
             return True
         try:
-            from tqsdk import TargetPosTask, TqApi, TqAuth, TqBacktest
+            from tqsdk import (
+                TargetPosTask,
+                TqAccount,
+                TqApi,
+                TqAuth,
+                TqBacktest,
+                TqKq,
+                TqSim,
+            )
             from tqsdk.exceptions import BacktestFinished
 
             self.TqApi = TqApi
             self.TqAuth = TqAuth
+            self.TqSim = TqSim
+            self.TqKq = TqKq
+            self.TqAccount = TqAccount
             self.TargetPosTask = TargetPosTask
             self.TqBacktest = TqBacktest
             self.BacktestFinished = BacktestFinished

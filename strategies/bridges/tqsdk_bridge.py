@@ -105,6 +105,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         self._klines: dict[str, KlineDataFrame] = {}
         self._data_feed: DataFeed | None = None  # 用于指标注册/计算
         self._caught_up: bool = False  # 是否已追上实时数据
+        self._api_owned: bool = False  # 是否由本 bridge 创建并负责关闭 API
 
     @property
     def strategy(self) -> Strategy[T]:
@@ -149,6 +150,139 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         except queue.Empty:
             return False
 
+    # ──────────────────────────────────────────────────
+    #  阶段 1: API 管理
+    # ──────────────────────────────────────────────────
+
+    def _ensure_api_ready(
+        self,
+        account: Any | None,
+        auth: Any | None,
+        web_gui: bool,
+    ) -> bool:
+        """确保 tqsdk API 可用 — 外部已注入则直接返回 True，否则自行创建
+
+        Returns:
+            True: API 可用，可以继续后续流程
+            False: tqsdk 模块未安装，流程终止
+        """
+        if not tqsdk.ensure():
+            logger.error("天勤量化API未安装")
+            return False
+        if self.api is None:
+            self.api = tqsdk.TqApi(account=account, auth=auth, web_gui=web_gui)
+            self._api_owned = True
+        return True
+
+    # ──────────────────────────────────────────────────
+    #  阶段 2: 初始化（订阅 → 等待历史 → 加载 → 预计算）
+    # ──────────────────────────────────────────────────
+
+    def _initialize_feed(self, symbol: str) -> None:
+        """订阅多周期行情 → 等待历史数据 → 加载到 PeriodData → 预计算指标"""
+        logger.info("[init] 订阅多周期 K线...")
+        self._subscribe_klines(symbol)
+        logger.info("[init] 订阅完成，周期列表={}".format(", ".join(self._klines.keys())))
+
+        self._wait_for_initial_data()
+        self._log_initial_klines()
+        self._init_period_data()
+
+    def _wait_for_initial_data(self) -> None:
+        """等待 tqsdk 推送第一波历史数据（异步填充 kline_serial）"""
+        t0 = time.time()
+        init_ok = self._wait_update_with_timeout(timeout=10.0)
+        elapsed = time.time() - t0
+        if init_ok:
+            logger.info(f"[init] wait_update 完成，耗时 {elapsed:.2f}s")
+            return
+        total_rows = sum(len(kl) for kl in self._klines.values())
+        logger.warning(
+            f"[init] wait_update 超时 {elapsed:.1f}s（非交易时段无行情推送），"
+            f"已获取 {total_rows} 根历史K线，继续初始化..."
+        )
+
+    def _log_initial_klines(self) -> None:
+        """打印各周期的 K 线数量和时间范围（调试信息）"""
+        for pn, klines in self._klines.items():
+            rows = len(klines)
+            logger.info(f"[init]   {pn}: {rows} 根K线")
+            if rows > 0:
+                first_ts = int(klines.iloc[0]["datetime"])
+                last_ts = int(klines.iloc[-1]["datetime"])
+                logger.info(
+                    "[init]     时间范围: {} ~ {}".format(
+                        datetime.fromtimestamp(first_ts / 1_000_000_000).strftime("%Y-%m-%d %H:%M"),
+                        datetime.fromtimestamp(last_ts / 1_000_000_000).strftime("%Y-%m-%d %H:%M"),
+                    )
+                )
+
+    # ──────────────────────────────────────────────────
+    #  阶段 3: 主循环
+    # ──────────────────────────────────────────────────
+
+    def _run_event_loop(
+        self,
+        symbol: str,
+        on_signal: Callable[[Signal, float], None] | None,
+        web_gui: bool = False,
+    ) -> None:
+        """主事件循环 — 驱动多周期 K 线 → 策略 → 信号分发
+
+        Args:
+            symbol: 合约代码
+            on_signal: 信号处理函数。None → 创建 TargetPosTask 自动下单（live）
+            web_gui: 是否启用浏览器可视化（仅用于日志提示）
+        """
+        # 仅 live 模式创建下单任务（命令即安全边界）
+        target_pos = None
+        if on_signal is None:
+            target_pos = tqsdk.TargetPosTask(self.api, symbol)
+
+        # 主循环只处理 INIT 之后新增的 bars
+        prev_lens = {name: len(kl) for name, kl in self._klines.items()}
+        suffix = "（浏览器可视化已开启）" if web_gui else ""
+        logger.info(f"开始运行策略: {symbol}，按Ctrl+C停止{suffix}")
+
+        no_data_count = 0
+        while True:
+            if not self._wait_update_with_timeout(timeout=3.0):
+                no_data_count += 1
+                if no_data_count % 20 == 0:
+                    logger.info(f"[run] 等待行情中... 已等待 {no_data_count * 3:.0f}s 无新数据（非交易时段）")
+                time.sleep(1.0)
+                continue
+            no_data_count = 0
+            self._dispatch_new_bars(prev_lens, on_signal, target_pos)
+
+    def _dispatch_new_bars(
+        self,
+        prev_lens: dict[str, int],
+        on_signal: Callable[[Signal, float], None] | None,
+        target_pos: Any,
+    ) -> None:
+        """遍历所有周期，处理本轮新增的 K 线并驱动策略 + 分发信号"""
+        for period_name, klines in self._klines.items():
+            if not self.api.is_changing(klines):
+                continue
+            current_len = len(klines)
+            if not self._caught_up and current_len > prev_lens.get(period_name, 0):
+                self._caught_up = True
+                self._log_indicator_snapshot("追上实时数据")
+            for i in range(prev_lens[period_name], current_len):
+                signal = self._on_bar_multi(klines=klines, idx=i, main_period=period_name)
+                if signal.action:
+                    close_price = float(klines.close.iloc[i])
+                    if on_signal:
+                        on_signal(signal, close_price)
+                    elif target_pos:
+                        self._execute_order(target_pos, signal, close_price)
+            prev_lens[period_name] = current_len
+
+    # ──────────────────────────────────────────────────
+    #  公开入口：组合以上三个阶段
+    # ──────────────────────────────────────────────────
+
     def run(
         self,
         symbol: str,
@@ -162,111 +296,26 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         Args:
             symbol: 合约代码 (e.g. SHFE.rb2509)
             account: tqsdk 账户对象。由 CLI 层根据配置构造:
-                - TqSim()     → 本地模拟，默认 1000 万虚拟资金
+                - TqSim()     → 本地模拟
                 - TqKq()      → 快期模拟盘
                 - TqAccount(...) → 实盘账户
-                None 则不传（等于 TqSim 默认行为，但建议显式传入）
             auth: 天勤认证 TqAuth(key, secret)。None 则用 guest
-            on_signal: 信号回调。
-                - None     → bridge 内部创建 TargetPosTask 自动下单（live 模式）
-                - callable → 由调用方处理（test 模式只打印不下单）
+            on_signal: 信号回调。None → bridge 内部 TargetPosTask 自动下单（live）
             web_gui: 是否启用浏览器可视化
+
+        行为矩阵（参见 cli/tqsdk-test-plan.md §4.1.2）:
+          on_signal=None, web_gui=False → 终端 live 模式
+          on_signal=fn,   web_gui=False → 终端 test 模式（回调打印，不下单）
         """
-        if not tqsdk.ensure():
-            logger.error("天勤量化API未安装")
+        self._api_owned = False
+        self.symbol = symbol
+
+        if not self._ensure_api_ready(account, auth, web_gui):
             return
 
-        # ── API 管理：优先用外部注入的，否则自己创建 ──
-        close_on_exit = False
-        if self.api is None:
-            self.api = tqsdk.TqApi(account=account, auth=auth, web_gui=web_gui)
-            close_on_exit = True
-
         try:
-            self.symbol = symbol
-
-            # === 多周期订阅 ===
-            logger.info("[init] 订阅多周期 K线 (1m/5m/15m)...")
-            self._subscribe_klines(symbol)
-            logger.info("[init] 订阅完成，周期列表={}".format(", ".join(self._klines.keys())))
-
-            # === 等待初始历史数据（tqsdk kline_serial 是异步填充）
-            # 用带超时的 wait_update，避免非交易时段永久阻塞
-            t0 = time.time()
-            init_ok = self._wait_update_with_timeout(timeout=10.0)
-            elapsed = time.time() - t0
-            if init_ok:
-                logger.info(f"[init] wait_update 完成，耗时 {elapsed:.2f}s")
-            else:
-                # 超时但仍可能有历史数据（get_kline_serial 已同步填充了历史），检查一下
-                total_rows = sum(len(kl) for kl in self._klines.values())
-                logger.warning(
-                    f"[init] wait_update 超时 {elapsed:.1f}s（非交易时段无行情推送），"
-                    f"已获取 {total_rows} 根历史K线，继续初始化..."
-                )
-
-            # 检查各周期数据是否都有内容
-            for pn, klines in self._klines.items():
-                rows = len(klines)
-                logger.info(f"[init]   {pn}: {rows} 根K线")
-                if rows > 0:
-                    first_ts = int(klines.iloc[0]["datetime"])
-                    last_ts = int(klines.iloc[-1]["datetime"])
-                    logger.info(
-                        "[init]     时间范围: {} ~ {}".format(
-                            datetime.fromtimestamp(first_ts / 1_000_000_000).strftime("%Y-%m-%d %H:%M"),
-                            datetime.fromtimestamp(last_ts / 1_000_000_000).strftime("%Y-%m-%d %H:%M"),
-                        )
-                    )
-
-            # === 批量加载历史数据 + 预计算指标 ===
-            self._init_period_data()
-
-            # === 下单任务（仅 live 模式创建）
-            target_pos = None
-            if on_signal is None:
-                target_pos = tqsdk.TargetPosTask(self.api, symbol)
-
-            # prev_lens 基于加载后的真实长度 — 主循环只处理 INIT 之后的 NEW bars
-            prev_lens = {name: len(kl) for name, kl in self._klines.items()}
-            log_msg = f"开始运行策略: {symbol}，按Ctrl+C停止"
-            if web_gui:
-                log_msg += "（浏览器可视化已开启）"
-            logger.info(log_msg)
-
-            # === 主循环 ===
-            no_data_count = 0
-            while True:
-                if not self._wait_update_with_timeout(timeout=3.0):
-                    # 非交易时段无新数据：缓一缓再检查
-                    no_data_count += 1
-                    if no_data_count % 20 == 0:
-                        logger.info(f"[run] 等待行情中... 已等待 {no_data_count * 3:.0f}s 无新数据（非交易时段）")
-                    time.sleep(1.0)
-                    continue
-                no_data_count = 0
-                for period_name, klines in self._klines.items():
-                    if self.api.is_changing(klines):
-                        current_len = len(klines)
-                        # 首次收到实时数据时打印截面日志
-                        if not self._caught_up and current_len > prev_lens.get(period_name, 0):
-                            self._caught_up = True
-                            self._log_indicator_snapshot("追上实时数据")
-                        for i in range(prev_lens[period_name], current_len):
-                            signal = self._on_bar_multi(
-                                klines=klines,
-                                idx=i,
-                                main_period=period_name,
-                            )
-                            if signal.action:
-                                close_price = float(klines.close.iloc[i])
-                                # 分叉点：test 回调 vs live 下单
-                                if on_signal:
-                                    on_signal(signal, close_price)
-                                elif target_pos:
-                                    self._execute_order(target_pos, signal, close_price)
-                        prev_lens[period_name] = current_len
-
+            self._initialize_feed(symbol)
+            self._run_event_loop(symbol, on_signal, web_gui)
         except KeyboardInterrupt:
             logger.info("策略已停止")
         except tqsdk.BacktestFinished:
@@ -275,7 +324,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         except Exception as e:
             logger.exception(f"策略运行错误: {e}")
         finally:
-            if close_on_exit and self.api:
+            if self._api_owned and self.api:
                 self.api.close()
             fills_count = len(self._state.fills)
             sells = len([f for f in self._state.fills if f.action == TRADE_ACTION_SELL])
@@ -301,75 +350,69 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             # 策略未声明需求时默认订阅 1 分钟线
             self._klines["1m"] = self.api.get_kline_serial(symbol, 60)
 
+    def _klines_to_dataframe(self, klines: KlineDataFrame) -> Any:
+        """将 tqsdk kline_serial DataFrame 转换为 PeriodData 可加载的格式
+
+        - datetime: int64 纳秒 → Python datetime
+        - 设置 datetime 为索引
+        """
+        df = klines.copy()
+        df["datetime"] = df["datetime"].apply(_to_datetime)
+        df.set_index("datetime", inplace=True)
+        return df
+
     def _init_period_data(self) -> None:
-        """用 tqsdk kline_serial DataFrame 初始化 DataFeed + PeriodData
+        """用 tqsdk kline_serial 初始化 DataFeed + PeriodData + 预计算指标
 
-        复用 strategies.runtime.DataFeed 和已有的指标注册/计算函数，
-        与回测路径完全相同的数据结构和计算逻辑。
+        设计: 策略声明了 data_requirements → 按声明注册周期/指标
+              无声明 → 退化为单 1m 周期无指标
 
-        前置条件: run() 已调用 _subscribe_klines 且 api.wait_update() 已执行，
-                 确保各周期的 kline_serial DataFrame 已填充满历史数据。
+        前置条件: _subscribe_klines() + _wait_for_initial_data() 已执行
         """
         reqs = self._strategy.data_requirements(self._state.strategy_config)
+        has_indicators = bool(reqs and reqs.indicators)
 
-        # 创建 DataFeed 作为指标管理容器（不涉及文件 I/O）
+        # 1. 创建 DataFeed 并注册周期 + 指标
         self._data_feed = DataFeed(symbol=self.symbol)
-
         if reqs:
-            # 1. 注册策略声明的所有周期和指标
-            period_count = 0
-            ind_count = 0
             for pn in reqs.periods:
                 self._data_feed.register_period(pn)
-                period_count += 1
-            if reqs.indicators:
+            if has_indicators:
                 for pn, ind_list in reqs.indicators.items():
                     for ind_req in ind_list:
                         self._data_feed.register_indicator(pn, ind_req.name, **ind_req.params)
-                        ind_count += 1
-            logger.info(f"[init] DataFeed: 注册 {period_count} 个周期, {ind_count} 个指标")
+            period_names = list(reqs.periods)
+        else:
+            self._data_feed.register_period("1m")
+            period_names = ["1m"]
 
-            # 2. 将每个周期的 kline_serial DataFrame 批量加载到 PeriodData
-            total_loaded = 0
-            for period_name, klines in self._klines.items():
-                pd_obj = self._data_feed.get_period(period_name)
-                if pd_obj is None:
-                    logger.warning(f"[init]   {period_name}: PeriodData 未注册，跳过")
-                    continue
-                if len(klines) == 0:
-                    logger.warning(f"[init]   {period_name}: kline 为空（tqsdk 未返回数据），跳过")
-                    continue
-                # 转换 datetime: tqsdk 是 int64 纳秒 → Python datetime
-                df = klines.copy()
-                df["datetime"] = df["datetime"].apply(_to_datetime)
-                df.set_index("datetime", inplace=True)
-                pd_obj.load_df(df)
-                logger.info(
-                    f"[init]   {period_name}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}"
-                )
-                total_loaded += len(df)
-            logger.info(f"[init]   共加载 {total_loaded} 根K线到 PeriodData")
+        logger.info(f"[init] DataFeed: 注册 {len(period_names)} 个周期")
 
-            # 3. 一次性预计算所有周期所有指标（与回测路径一致）
+        # 2. 加载各周期数据（kline_serial → PeriodData）
+        total_loaded = 0
+        for period_name in period_names:
+            if period_name not in self._klines:
+                logger.warning(f"[init]   {period_name}: 未订阅 kline_serial，跳过")
+                continue
+            klines = self._klines[period_name]
+            if len(klines) == 0:
+                logger.warning(f"[init]   {period_name}: kline 为空，跳过")
+                continue
+            pd_obj = self._data_feed.get_period(period_name)
+            if pd_obj is None:
+                continue
+            df = self._klines_to_dataframe(klines)
+            pd_obj.load_df(df)
+            total_loaded += len(df)
+            logger.info(f"[init]   {period_name}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}")
+        logger.info(f"[init]   共加载 {total_loaded} 根K线到 PeriodData")
+
+        # 3. 预计算指标（与回测路径一致，全量计算一次）
+        if has_indicators:
             t0 = time.time()
             self._data_feed.calculate_all()
             logger.info(f"[init]   指标计算完成，耗时 {time.time() - t0:.3f}s")
-
-            # 4. 打印指标截面（便于核对数据完整性）
             self._log_indicator_snapshot("初始历史数据")
-        else:
-            # 策略未声明 data_requirements 时退化为单周期最简模式
-            if "1m" in self._klines and len(self._klines["1m"]) > 0:
-                self._data_feed.register_period("1m")
-                pd_obj = self._data_feed.get_period("1m")
-                if pd_obj is None:
-                    logger.warning("[init] 1m PeriodData 注册后获取失败")
-                    return
-                df = self._klines["1m"].copy()
-                df["datetime"] = df["datetime"].apply(_to_datetime)
-                df.set_index("datetime", inplace=True)
-                pd_obj.load_df(df)
-                logger.info(f"[init] 已加载 1m 周期 {len(self._klines['1m'])} 根K线（无指标声明）")
 
     def _log_indicator_snapshot(self, label: str) -> None:
         """打印当前所有周期的指标截面信息（最新一行各指标值）
@@ -421,15 +464,16 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     #  内部方法：K线处理 & 策略驱动
     # ------------------------------------------------------------------ #
 
-    @check_types
-    def _on_bar_multi(self, klines: KlineDataFrame, idx: int, main_period: str) -> Signal:
-        """从多周期 kline_serial 构造完整 BarContext 并驱动策略
+    # ──────────────────────────────────────────────────
+    #  K 线 & 指标处理工具
+    # ──────────────────────────────────────────────────
 
-        与回测路径 VnpyBacktestBridge._build_ctx() 对称：
-          回测: DataFeed.get_data() → PeriodDataView → BarContext
-          实时: PeriodData.append_bar() + 重算最新行 → view → BarContext
+    def _kline_to_bar(self, klines: KlineDataFrame, idx: int) -> Bar:
+        """从 tqsdk kline_serial 指定行构造标准 Bar 对象
+
+        与回测路径的 Bar 构造保持一致。
         """
-        bar = Bar(
+        return Bar(
             symbol=self.symbol,
             datetime=_to_datetime(klines.datetime.iloc[idx]),
             open=float(klines.open.iloc[idx]),
@@ -439,31 +483,52 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             volume=float(klines.volume.iloc[idx]),
         )
 
-        # 更新主周期的 PeriodData 并重算指标
-        # append_bar 会清除指标缓存，calculate_all 全量重算（实时数据量小，性能可接受）
-        if self._data_feed is not None:
-            main_pd = self._data_feed.get_period(main_period)
-            if main_pd is not None:
-                main_pd.append_bar(bar)
-                self._data_feed.calculate_period(main_period)
+    def _build_multi_context(self) -> dict[str, Any]:
+        """构造多周期 PeriodDataView 字典（供 strategy.on_bar 使用）
 
-        # 构造 multi 字典：PeriodDataView（策略熟悉的接口）
+        与回测路径 VnpyBacktestBridge._build_ctx() 对称。
+        """
+        if self._data_feed is None:
+            return {}
         multi: dict[str, Any] = {}
-        if self._data_feed is not None:
-            for period_name in self._klines:
-                pd_obj = self._data_feed.get_period(period_name)
-                if pd_obj is not None and pd_obj.length > 0:
-                    # 与 VnpyBacktestBridge._build_ctx() 对称：构造 PeriodDataView
-                    pdf = pd_obj._df  # pyright: ignore[reportPrivateUsage]
-                    end_idx = len(pdf) - 1
-                    multi[period_name] = PeriodDataView(
-                        df_ref=pdf,
-                        events_ref=None,
-                        start_idx=0,
-                        end_idx=end_idx,
-                        current_time=pdf.index[-1],
-                        period=period_name,
-                    )
+        for period_name in self._klines:
+            pd_obj = self._data_feed.get_period(period_name)
+            if pd_obj is None or pd_obj.length == 0:
+                continue
+            pdf = pd_obj._df  # pyright: ignore[reportPrivateUsage]
+            end_idx = len(pdf) - 1
+            multi[period_name] = PeriodDataView(
+                df_ref=pdf,
+                events_ref=None,
+                start_idx=0,
+                end_idx=end_idx,
+                current_time=pdf.index[-1],
+                period=period_name,
+            )
+        return multi
+
+    def _update_period_and_recalc(self, period_name: str, bar: Bar) -> None:
+        """追加一根 K 线到指定周期的 PeriodData，并重算该周期指标"""
+        if self._data_feed is None:
+            return
+        pd_obj = self._data_feed.get_period(period_name)
+        if pd_obj is not None:
+            pd_obj.append_bar(bar)
+            self._data_feed.calculate_period(period_name)
+
+    # ------------------------------------------------------------------ #
+    #  内部方法：K线处理 & 策略驱动
+    # ------------------------------------------------------------------ #
+
+    @check_types
+    def _on_bar_multi(self, klines: KlineDataFrame, idx: int, main_period: str) -> Signal:
+        """从多周期 kline_serial 构造完整 BarContext 并驱动策略
+
+        流程: kline → Bar → 追加到 PeriodData → 重算指标 → 构造 context → on_bar
+        """
+        bar = self._kline_to_bar(klines, idx)
+        self._update_period_and_recalc(main_period, bar)
+        multi = self._build_multi_context()
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])
         self._update_peak_prices(bar)
@@ -488,30 +553,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
     @check_types
     def on_bar(self, kline_data: KlineDataFrame, idx: int = -1) -> Signal:
-        """处理天勤K线数据指定索引行，返回标准化 Signal（无状态版本）
+        """处理单根 K 线（无多周期、无指标计算的简化版）
 
-        无多周期数据、无指标计算，仅做基础 DataFrame → Bar → Signal 转换。
-        主要用于简单测试场景，生产环境请使用 run() 方法。
+        主要用于简单测试场景。生产环境请使用 run()。
         """
         if kline_data.empty:
             return Signal()
-
-        try:
-            last_close = float(kline_data.close.iloc[idx])
-        except Exception as e:
-            logger.exception(f"获取价格数据失败: {e}")
-            return Signal()
-
-        bar = Bar(
-            symbol=self.symbol,
-            datetime=_to_datetime(kline_data.datetime.iloc[idx]),
-            open=float(kline_data.open.iloc[idx]),
-            high=float(kline_data.high.iloc[idx]),
-            low=float(kline_data.low.iloc[idx]),
-            close=last_close,
-            volume=float(kline_data.volume.iloc[idx]),
-        )
-
+        bar = self._kline_to_bar(kline_data, idx)
         ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
         self._update_peak_prices(bar)
         return self._strategy.on_bar(self._state, ctx)
