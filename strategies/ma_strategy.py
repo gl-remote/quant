@@ -66,8 +66,8 @@ class MACrossParams:
     atr_stop_loss_multiplier: ATR 止损倍数（亏损超过 atr * multiplier 时止损）
     trailing_activation_atr: 回撤止盈激活倍数（盈利超过 atr * activation 后启动跟踪）
     trailing_drawdown_ratio: 回撤止盈触发比例（激活后从最高点回落超过此比例时止盈）
-    kdj_oversold: KDJ 超卖阈值，做多入场条件之一（kdj < 此值），默认 20
-    kdj_overbought: KDJ 超买阈值，做空入场条件之一（kdj > 此值），默认 80
+    kdj_oversold: KDJ 超卖阈值，做多入场条件之一（kdj < 此值），默认 30
+    kdj_overbought: KDJ 超买阈值，做空入场条件之一（kdj > 此值），默认 70
     """
 
     sma_short: int = DEFAULT_SMA_SHORT
