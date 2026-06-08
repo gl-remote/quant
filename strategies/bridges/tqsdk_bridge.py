@@ -295,8 +295,11 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
                 continue
             latest_time = pd_obj.latest_time
             latest_time_str = latest_time.strftime("%Y-%m-%d %H:%M") if latest_time else "N/A"
-            # 收集指标列的最新值
-            ind_cols = [c for c in pd_obj._df.columns if c not in ("open", "high", "low", "close", "volume")]  # pyright: ignore[reportPrivateUsage]
+            # 收集指标列的最新值（排除 OHLCV 和 tqsdk 元数据列）
+            skip_cols = frozenset(
+                {"open", "high", "low", "close", "volume", "id", "symbol", "duration", "open_oi", "close_oi"}
+            )
+            ind_cols = [c for c in pd_obj._df.columns if c not in skip_cols]  # pyright: ignore[reportPrivateUsage]
             ind_parts = []
             for c in sorted(ind_cols):
                 val = pd_obj.get_indicator(c, -1)
