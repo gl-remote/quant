@@ -11,4 +11,7 @@ if TYPE_CHECKING:
         """pyright 友好的 check_types 桩 — 签名保持原样，不报错"""
         return f
 else:
-    pass  # noqa: F811
+
+    def check_types(f: Any) -> Any:  # noqa: F811
+        """运行时恒等装饰器 — 不做任何检查，直接返回原函数"""
+        return f

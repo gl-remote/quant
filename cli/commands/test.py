@@ -29,11 +29,14 @@ from config import ConfigManager
 from data import DataManager
 from data.models import get_live_session_model, get_live_trade_model
 from strategies import Signal, TqsdkStrategyBridge
+from strategies.ma_strategy import MACrossParams
 from strategies.utils import apply_strategy_config, get_strategy_class_name, load_strategy
 
 
 def _get_tq_auth(cm: ConfigManager):
     """从配置读取天勤认证信息，无配置则返回 None（使用 guest 模式）"""
+    if not tqsdk.ensure():
+        return None
     account = cm.get_account_info()
     if account and account.api_key and account.api_secret:
         return tqsdk.TqAuth(account.api_key, account.api_secret)
@@ -53,20 +56,24 @@ def cmd_test(args: argparse.Namespace):
     dm = DataManager(cm)
 
     strategy = load_strategy(args.strategy)
-    apply_strategy_config(strategy, cm)
     cls_name = get_strategy_class_name(strategy)
     tc = cm.get_trading_config()
+    bc = cm.get_backtest_config()
+
+    # 创建策略配置 dataclass 并应用 TOML 参数
+    strategy_config = MACrossParams()
+    apply_strategy_config(strategy_config, cm)
 
     # 创建 State（与回测路径一致的参数来源）
     from strategies.core.state import State
 
     state = State(
         symbol=args.symbol,
-        period=f"{tc.get('kline_period', 1)}m",
-        strategy_config=strategy.config,
-        capital=float(tc.get("initial_capital", 100000)),
-        contract_size=int(tc.get("contract_size", 10)),
-        margin=float(tc.get("margin_ratio", 0.1)),
+        period=f"{tc.kline_period}m",
+        strategy_config=strategy_config,
+        capital=bc.initial_capital,
+        contract_size=bc.contract_size,
+        margin=0.1,  # 保证金比例（BacktestConfig 无此字段，取默认值）
     )
 
     bridge = TqsdkStrategyBridge(strategy=strategy, state=state)

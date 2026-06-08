@@ -62,6 +62,7 @@ from config import ConfigManager
 from data import DataManager
 from report import build_all as build_dashboard
 from strategies.utils import (
+    apply_strategy_config,
     get_strategy_class_name,
     load_strategy,
     serialize_strategy_params,
@@ -151,6 +152,12 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
         strategy_cls = get_strategy_class_name(strategy_core)
         strategy_version = getattr(type(strategy_core), "VERSION", None)
 
+        # 创建策略配置 dataclass 并应用 TOML 参数
+        from strategies.ma_strategy import MACrossParams
+
+        strategy_config = MACrossParams()
+        apply_strategy_config(strategy_config, cm)
+
         # 计算总天数
         try:
             start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
@@ -165,10 +172,10 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
         state = State(
             symbol=symbol,
             period=f"{sc.kline_period}m",
-            strategy_config=strategy_core.config,
+            strategy_config=strategy_config,
             capital=float(capital_arg) if capital_arg else float(bc.initial_capital),
             contract_size=int(bc.contract_size),
-            margin=float(bc.margin_ratio),
+            margin=0.1,  # 保证金比例（BacktestConfig 无此字段，取默认值）
         )
 
         bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
