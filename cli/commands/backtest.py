@@ -159,7 +159,19 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
         except (ValueError, TypeError):
             total_days = None
 
-        bridge = TqsdkStrategyBridge(strategy=strategy_core, symbol=symbol)
+        # 创建 State（与 test/live 路径一致的参数来源）
+        from strategies.core.state import State
+
+        state = State(
+            symbol=symbol,
+            period=f"{sc.kline_period}m",
+            strategy_config=strategy_core.config,
+            capital=float(capital_arg) if capital_arg else float(bc.initial_capital),
+            contract_size=int(bc.contract_size),
+            margin=float(bc.margin_ratio),
+        )
+
+        bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
 
         capital_val = capital_arg
         logger.info(
@@ -187,10 +199,9 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
             auth=auth,
             web_gui=gui_flag,
         )
-        klines = api.get_kline_serial(symbol, duration_seconds=sc.kline_period * 60)
-
+        # 注入预创建的回测 API（含 TqBacktest 包装），由 bridge.run() 复用
         bridge.initialize(api)
-        bridge._watch_klines(api, klines, symbol)  # pyright: ignore[reportPrivateUsage]
+        bridge.run(symbol=symbol)  # BacktestFinished 会正常传播
 
     except tqsdk.BacktestFinished:
         fills = bridge.fills  # pyright: ignore[reportPossiblyUnboundVariable]

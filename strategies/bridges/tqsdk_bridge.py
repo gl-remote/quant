@@ -199,6 +199,9 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         except KeyboardInterrupt:
             logger.info("策略已停止")
+        except tqsdk.BacktestFinished:
+            # 回测模式下 wait_update() 自然抛出，向上传播给调用方处理
+            raise
         except Exception as e:
             logger.exception(f"策略运行错误: {e}")
         finally:
