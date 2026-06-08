@@ -27,7 +27,7 @@ from common.constants import (
 from common.tqsdk_imports import tqsdk
 from config import ConfigManager
 from data import DataManager
-from data.models import get_live_session_model, get_live_trade_model
+from data.models import database, get_live_session_model, get_live_trade_model
 from strategies import TqsdkStrategyBridge
 from strategies.ma_strategy import MACrossParams
 from strategies.utils import (
@@ -97,8 +97,10 @@ def cmd_live(args: argparse.Namespace):
         dm.store.log("live", f"开始: {args.symbol} strategy={strategy_cls}", symbol=args.symbol, status=LOG_STATUS_INFO)
 
         # 数据库持久化（live 表前缀）
+        _ = dm.store  # 触发 DataStore 延迟初始化 → database.init()
         live_session_model = get_live_session_model("live_sessions")
         live_trade_model = get_live_trade_model("live_trades")  # noqa: F841 — 未来 fill 回调时使用
+        database.create_tables([live_session_model, live_trade_model], safe=True)  # type: ignore[arg-type]
         session = live_session_model.create(
             symbol=args.symbol,
             strategy="ma",

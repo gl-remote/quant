@@ -27,7 +27,7 @@ from common.constants import (
 from common.tqsdk_imports import tqsdk
 from config import ConfigManager
 from data import DataManager
-from data.models import get_live_session_model, get_live_trade_model
+from data.models import database, get_live_session_model, get_live_trade_model
 from strategies import Signal, TqsdkStrategyBridge
 from strategies.ma_strategy import MACrossParams
 from strategies.utils import apply_strategy_config, get_strategy_class_name, load_strategy
@@ -80,8 +80,10 @@ def cmd_test(args: argparse.Namespace):
     auth = _get_tq_auth(cm)
 
     # 数据库持久化（test 表前缀）
+    _ = dm.store  # 触发 DataStore 延迟初始化 → database.init()
     test_session_model = get_live_session_model("test_sessions")
     test_trade_model = get_live_trade_model("test_trades")
+    database.create_tables([test_session_model, test_trade_model], safe=True)  # type: ignore[arg-type]
     session = test_session_model.create(
         symbol=args.symbol,
         strategy="ma",

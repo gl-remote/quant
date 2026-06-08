@@ -437,7 +437,10 @@ def _make_live_session_model(table_name: str) -> type[BaseLiveModel]:
         updated_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
         class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
-            table_name = table_name
+            pass
+
+    # peewee 元类处理时嵌套类闭包变量不可见，需在类创建后设置表名
+    LiveSession._meta.table_name = table_name  # type: ignore[attr-defined]
 
     return LiveSession
 
@@ -463,7 +466,9 @@ def _make_live_trade_model(table_name: str) -> type[BaseLiveModel]:
         created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
         class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
-            table_name = table_name
+            pass
+
+    LiveTrade._meta.table_name = table_name  # type: ignore[attr-defined]
 
     return LiveTrade
 
