@@ -56,9 +56,16 @@ def main() -> None:
     p.add_argument("--output", default=None, help="自定义输出路径（可选）")
     p.add_argument("--force", action="store_true", help="强制覆盖已有CSV和元数据")
 
-    # ---- test ----
-    p = sub.add_parser("test", help="本地策略逻辑测试（不联网）")
+    # ---- test（tqsdk 实时数据信号验证，不下单）----
+    p = sub.add_parser(
+        "test",
+        help="通过天勤实时数据验证策略信号链路（不下单）",
+        description="连接天勤实时行情驱动策略，打印交易信号用于验证链路正确性。\n\n"
+        "安全保证：test 命令代码路径中不包含下单逻辑，即使账号已绑定期货公司也不会下单。",
+    )
     p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
+    p.add_argument("--symbol", required=True, help="合约代码 (e.g. SHFE.rb2509)")
+    p.add_argument("--gui", action="store_true", help="启用浏览器可视化 (默认关闭)")
 
     # ---- backtest (统一回测命令) ----
     p = sub.add_parser(
@@ -130,8 +137,15 @@ def main() -> None:
     p.add_argument("--strategy", default=None, help="按策略名称过滤")
     p.add_argument("--limit", type=int, default=20, help="列表最大条数 (默认 20)")
 
-    # ---- live ----
-    p = sub.add_parser("live", help="实盘/模拟交易")
+    # ---- live（天勤模拟/实盘交易）----
+    p = sub.add_parser(
+        "live",
+        help="天勤模拟/实盘交易（会下单，模拟/实盘取决于账号是否绑定期货公司）",
+        description="通过天勤 SDK 连接实时数据运行策略并下单。\n\n"
+        "模拟 vs 实盘：取决于天勤账号是否绑定期货公司账户。\n"
+        "  未绑定 → 模拟盘（虚拟资金，不影响真实账户）\n"
+        "  已绑定 → 实盘（真金白银，慎用！）",
+    )
     p.add_argument("--symbol", default="DCE.m2509", help="品种代码")
     p.add_argument("--gui", action="store_true", help="启用图形界面")
     p.add_argument("--config", default=None, help="配置文件路径")

@@ -377,6 +377,108 @@ class BacktestDaily(OrmBaseModel):
         table_name: str = "backtest_daily"
 
 
+# ==============================================================================
+# Live / Test 实时交易 ORM 模型（2 个 Model → 4 张物理表）
+#
+# 设计决策 (参见 cli/tqsdk-test-plan.md §8-9):
+#   - test 和 live 共用同一套字段定义，通过工厂函数指定不同表名
+#   - test 表: test_sessions / test_trades（信号验证，不下单，pnl/commission 为 NULL）
+#   - live 表: live_sessions / live_trades（实盘/模拟交易，有真实盈亏）
+#   - 安全隔离: test 命令代码路径中不包含 TargetPosTask，永远不下单
+# ==============================================================================
+
+
+class BaseLiveModel(OrmBaseModel):
+    """Live / Test 共用的基类 — 子类必须指定 table_name"""
+
+    class Meta:
+        table_name: str | None = None  # pyright: ignore[reportIncompatibleVariableOverride]
+
+
+def _make_live_session_model(table_name: str) -> type[BaseLiveModel]:
+    """工厂函数：返回映射到指定表名的 LiveSession Model
+
+    Args:
+        table_name: "test_sessions" 或 "live_sessions"
+
+    用法:
+        TestSession = get_live_session_model("test_sessions")
+        LiveSession = get_live_session_model("live_sessions")
+    """
+
+    class LiveSession(BaseLiveModel):
+        # ── 标识 ──────────────────────────────────────
+        symbol: CharField = CharField(max_length=20)  # 品种代码 (如 SHFE.rb2509)
+        strategy: CharField = CharField(max_length=50)  # 策略名称
+        strategy_version: CharField = CharField(null=True, max_length=20)
+        git_hash: CharField = CharField(null=True, max_length=40)
+        # ── 运行状态 ──────────────────────────────────
+        mode: CharField = CharField(max_length=10)  # "test" / "sim" / "live"
+        status: CharField = CharField(max_length=20)  # running / stopped / error
+        started_at: DateTimeField = DateTimeField()
+        ended_at: DateTimeField = DateTimeField(null=True)
+        # ── 金额变动（live 时实时更新，test 时为 NULL）──
+        initial_capital: FloatField = FloatField(null=True)
+        current_balance: FloatField = FloatField(null=True)
+        total_pnl: FloatField = FloatField(null=True)
+        total_commission: FloatField = FloatField(null=True)
+        total_trades: IntegerField = IntegerField(default=0)
+        # ── 信号统计（test 时填充，live 时为 0）───────
+        total_signals: IntegerField = IntegerField(default=0)
+        buy_signals: IntegerField = IntegerField(default=0)
+        sell_signals: IntegerField = IntegerField(default=0)
+        # ── 统计指标（预留）────────────────────────────
+        total_return: FloatField = FloatField(null=True)
+        sharpe_ratio: FloatField = FloatField(null=True)
+        max_drawdown: FloatField = FloatField(null=True)
+        win_rate: FloatField = FloatField(null=True)
+        # ── 元数据 ──────────────────────────────────────
+        created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+        updated_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+        class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+            table_name = table_name
+
+    return LiveSession
+
+
+def _make_live_trade_model(table_name: str) -> type[BaseLiveModel]:
+    """工厂函数：返回映射到指定表名的 LiveTrade Model
+
+    Args:
+        table_name: "test_trades" 或 "live_trades"
+    """
+
+    class LiveTrade(BaseLiveModel):
+        session_id: IntegerField = IntegerField()  # FK → LiveSession.id
+        datetime: DateTimeField = DateTimeField()  # test=信号时间, live=成交时间
+        symbol: CharField = CharField(max_length=20)
+        direction: CharField = CharField(max_length=10)  # long / short
+        offset: CharField = CharField(max_length=10)  # open / close
+        price: FloatField = FloatField()  # test=触发价, live=成交价
+        quantity: FloatField = FloatField()  # 数量（手）
+        pnl: FloatField = FloatField(null=True)  # test 时为 NULL
+        commission: FloatField = FloatField(null=True)  # test 时为 NULL
+        reason: CharField = CharField(max_length=512, default="")
+        created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+        class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+            table_name = table_name
+
+    return LiveTrade
+
+
+# 公开工厂函数（供 cli/commands/test.py 和 live.py 使用）
+def get_live_session_model(table_name: str) -> type[BaseLiveModel]:
+    """获取映射到指定表名的 LiveSession Model"""
+    return _make_live_session_model(table_name)
+
+
+def get_live_trade_model(table_name: str) -> type[BaseLiveModel]:
+    """获取映射到指定表名的 LiveTrade Model"""
+    return _make_live_trade_model(table_name)
+
+
 def init_database(db_path: str) -> None:
     """初始化数据库连接"""
     database.init(db_path)  # pyright: ignore[reportUnknownMemberType]

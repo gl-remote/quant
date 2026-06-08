@@ -282,8 +282,8 @@ class TestMACrossParams:
         assert cfg.atr_period == 14
         assert cfg.atr_stop_loss_multiplier == 2.0
         assert cfg.atr_take_profit_multiplier == 3.0
-        assert cfg.kdj_oversold == 20
-        assert cfg.kdj_overbought == 80
+        assert cfg.kdj_oversold == 30
+        assert cfg.kdj_overbought == 70
 
     def test_custom_params(self):
         cfg = MACrossParams(
