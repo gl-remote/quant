@@ -31,9 +31,12 @@ class KlineCache:
         self._cache_dir = Path(output_dir) / ".kline_cache"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
+    # 缓存版本号：数据结构变更时递增
+    _VERSION = 2
+
     def _cache_key(self, symbol: str, csv_path: str, interval: str) -> str:
         mtime = str(os.path.getmtime(csv_path)) if os.path.exists(csv_path) else "0"
-        raw = f"{symbol}|{csv_path}|{interval}|{mtime}"
+        raw = f"{symbol}|{csv_path}|{interval}|{mtime}|v{self._VERSION}"
         return hashlib.md5(raw.encode()).hexdigest()
 
     def get(self, symbol: str, csv_path: str, interval: str = "1m") -> dict | None:

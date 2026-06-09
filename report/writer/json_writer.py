@@ -279,6 +279,47 @@ def _write_json(output_dir: str, rel_path: str, data: object) -> None:
         json.dump(data, f, ensure_ascii=False, default=str)
 
 
+def _resample_kline(
+    df: pd.DataFrame,
+    rule: str,
+) -> list[dict]:
+    """对 Asia/Shanghai 时区的 DataFrame 重采样为目标周期
+
+    Args:
+        df: 含 Asia/Shanghai 时区 datetime 列的 DataFrame
+        rule: 重采样规则 (如 "5T", "15T", "1H")
+
+    Returns:
+        resampled OHLCV 数据列表 (UTC Unix timestamp)
+    """
+    df_r = df.copy()
+    df_r = df_r.set_index("datetime")
+    resampled = (
+        df_r.resample(rule)
+        .agg(
+            open=("open", "first"),
+            high=("high", "max"),
+            low=("low", "min"),
+            close=("close", "last"),
+            volume=("volume", "sum"),
+        )
+        .dropna()
+    )
+    # 转换为 UTC 时间戳输出
+    resampled.index = resampled.index.tz_convert("UTC")
+    return [
+        {
+            "datetime": int(idx.timestamp()),
+            "open": float(row.open),
+            "high": float(row.high),
+            "low": float(row.low),
+            "close": float(row.close),
+            "volume": int(row.volume),
+        }
+        for idx, row in resampled.iterrows()
+    ]
+
+
 def _build_kline_dict(
     csv_path: str,
     symbol: str,
@@ -370,6 +411,17 @@ def _build_kline_dict(
             )
 
         total = len(df)
+
+        # 多周期 K 线（5分钟 / 15分钟 / 1小时）
+        timeframes = {
+            "5m": "5min",
+            "15m": "15min",
+            "1h": "1h",
+        }
+        multi_timeframe: dict[str, list[dict]] = {}
+        for tf_name, tf_rule in timeframes.items():
+            multi_timeframe[tf_name] = _resample_kline(df, tf_rule)
+
         return {
             "symbol": symbol,
             "interval": interval,
@@ -379,6 +431,7 @@ def _build_kline_dict(
             "raw_count": total,
             "raw_downsampled": False,
             "raw_sample_max": 0,
+            "multi_timeframe": multi_timeframe,  # 5m/15m/1h 多周期数据
         }
 
     except Exception as e:

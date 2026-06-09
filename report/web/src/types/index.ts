@@ -103,7 +103,7 @@ export interface KlinePoint {
 /**
  * K线完整数据
  * 
- * 包含日线和原始数据（可能降采样）
+ * 包含日线、原始数据和多周期重采样数据（5m/15m/1h）
  */
 export interface KlineData {
   symbol: string;              // 品种代码
@@ -114,6 +114,7 @@ export interface KlineData {
   raw_count: number;          // 原始数据点数
   raw_downsampled: boolean;   // 是否已降采样
   raw_sample_max: number;     // 降采样阈值
+  multi_timeframe?: Record<string, KlinePoint[]>; // 多周期重采样数据 (5m/15m/1h)
 }
 
 /**

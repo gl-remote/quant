@@ -22,6 +22,115 @@ if TYPE_CHECKING:
     from config.app_config import ConfigManager
 
 
+def _validate_data(
+    df: pd.DataFrame,
+    symbol: str,
+    resolved_start: str,
+    resolved_end: str,
+) -> None:
+    """导出完成后对 CSV 数据进行质量验证
+
+    只 warn 不报错，避免阻塞导出流程。
+
+    Args:
+        df: 要写入 CSV 的 DataFrame（北京时间）
+        symbol: 品种代码
+        resolved_start: 请求的开始日期 YYYY-MM-DD
+        resolved_end: 请求的结束日期 YYYY-MM-DD
+    """
+    if df.empty:
+        logger.warning(f"数据验证 [{symbol}]: DataFrame 为空，跳过验证")
+        return
+
+    # 1. 时间戳解析与排序检查
+    try:
+        times = pd.to_datetime(df["datetime"])
+    except Exception as e:
+        logger.warning(f"数据验证 [{symbol}]: datetime 列解析失败 - {e}")
+        return
+
+    # 2. 时间范围覆盖检查
+    try:
+        req_start = pd.Timestamp(resolved_start)
+        req_end = pd.Timestamp(resolved_end) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+        data_start = times.min()
+        data_end = times.max()
+        if data_start > req_start:
+            logger.warning(
+                f"数据验证 [{symbol}]: 数据开始 {data_start} 晚于请求开始 {req_start}，缺失 {data_start - req_start}"
+            )
+        if data_end < req_end:
+            logger.warning(
+                f"数据验证 [{symbol}]: 数据结束 {data_end} 早于请求结束 {req_end}，缺失 {req_end - data_end}"
+            )
+    except Exception as e:
+        logger.warning(f"数据验证 [{symbol}]: 时间范围检查异常 - {e}")
+
+    # 3. OHLC 价格一致性检查
+    price_checks = 0
+    price_errors = 0
+    for _, row in df.iterrows():
+        try:
+            o, h, low_v, c = row["open"], row["high"], row["low"], row["close"]
+            if h < o or h < c or low_v > o or low_v > c:
+                price_errors += 1
+            price_checks += 1
+        except (TypeError, ValueError):
+            continue
+    if price_checks > 0 and price_errors > 0:
+        bad_pct = price_errors / price_checks * 100
+        logger.warning(
+            f"数据验证 [{symbol}]: {price_errors}/{price_checks}({bad_pct:.1f}%) "
+            f"条 OHLC 数据异常 (high<open/close 或 low>open/close)"
+        )
+
+    # 4. 成交量检查
+    try:
+        vol = pd.to_numeric(df["volume"], errors="coerce")
+        neg_vol = (vol < 0).sum()
+        if neg_vol > 0:
+            logger.warning(f"数据验证 [{symbol}]: {neg_vol} 条数据成交量为负值")
+    except Exception:
+        pass
+
+    # 5. 日内重复时间戳检查（同一天的同一分钟出现多条数据）
+    dup_mask = times.duplicated(keep=False)
+    dup_count = dup_mask.sum()
+    if dup_count > 0:
+        dup_times = times[dup_mask].unique()
+        logger.warning(
+            f"数据验证 [{symbol}]: {dup_count} 条重复时间戳，"
+            f"共 {len(dup_times)} 个不同时间点重复 (如 {dup_times[:3].tolist()})"
+        )
+
+    # 6. 时间连续性检查（检查 1m 数据是否存在 >1h 的正常交易时段间隙）
+    if len(times) >= 2:
+        sorted_times = times.sort_values()
+        gaps = sorted_times.diff().dt.total_seconds()
+        # 1m 数据相邻间隔应为 60s；跳过正常交易间隔（夜盘~白盘、日盘~午休等）
+        # 找出异常大间隔（> 2 小时）
+        large_gaps = gaps[gaps > 7200]  # > 2h
+        if len(large_gaps) > 0:
+            gap_details = []
+            for idx in large_gaps.index:
+                gap_loc = sorted_times.index.get_loc(idx)
+                if gap_loc > 0:
+                    prev_t = sorted_times.iloc[gap_loc - 1]
+                    curr_t = sorted_times.iloc[gap_loc]
+                    gap_h = large_gaps[idx] / 3600
+                    gap_details.append(f"{prev_t} → {curr_t} ({gap_h:.1f}h)")
+            if gap_details:
+                # 最多只报 3 个间隙样例
+                sample = gap_details[:3]
+                extra = f"… 共 {len(gap_details)} 处" if len(gap_details) > 3 else ""
+                logger.info(
+                    f"数据验证 [{symbol}]: {len(gap_details)} 处 >2h 的数据间隙"
+                    f"（正常交易间隙): {', '.join(sample)}{extra}"
+                )
+
+    logger.info(f"数据验证 [{symbol}]: 通过 ({len(df)} 条, {times.min()} ~ {times.max()})")
+
+
 def _build_output_path(
     symbol: str,
     provider: str,
@@ -146,6 +255,9 @@ def export_csv(
 
         new_df.to_csv(output_path, index=False)
         logger.debug(f"已写入: {output_path} ({len(new_df)}行)")
+
+        # 数据质量验证
+        _validate_data(new_df, symbol, resolved_start, resolved_end)
 
         min_dt = str(new_df["datetime"].min())
         max_dt = str(new_df["datetime"].max())

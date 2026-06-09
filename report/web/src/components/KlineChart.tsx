@@ -18,7 +18,7 @@ import { qlIdNameMap } from "@/data/qlIdMapping";
 import { SMA, MACD, Stochastic } from "lightweight-charts-indicators";
 import type { Bar } from "oakscriptjs";
 
-type ViewMode = "daily" | "raw";
+type ViewMode = "daily" | "1m" | "5m" | "15m" | "1h";
 
 interface Props {
   data: KlineData | null;
@@ -56,18 +56,15 @@ function convertToCandleData(data: KlinePoint[]): CandlestickData<Time>[] {
 
 function convertTradeToMarkers(
   trades: TradeRecord[],
-  klineData: KlinePoint[]
+  klineData: KlinePoint[],
+  currentMode: ViewMode,
 ): any[] {
   if (!trades || trades.length === 0 || !klineData || klineData.length === 0) {
     return [];
   }
 
-// 判断是否是日线模式：相邻 K 线时间差 >= 24 小时
-  const isDaily = klineData.length >= 2 &&
-    (Number(klineData[1].datetime) - Number(klineData[0].datetime)) >= 86400;
-
   // 日线不展示买卖点
-  if (isDaily) return [];
+  if (currentMode === "daily") return [];
 
   // 将 klineData 按 datetime 排序，用于二分查找归属K线
   const sortedKlines = [...klineData].sort((a, b) => Number(a.datetime) - Number(b.datetime));
@@ -75,7 +72,6 @@ function convertTradeToMarkers(
 
   // 将交易时间归一化到所属K线的时间戳
   function mapTradeToKlineTime(tradeTimestamp: number): number | null {
-    // 二分查找：找到最后一个 time <= tradeTimestamp 的K线
     let lo = 0, hi = klineTimes.length - 1;
     let result = -1;
     while (lo <= hi) {
@@ -87,18 +83,60 @@ function convertTradeToMarkers(
         hi = mid - 1;
       }
     }
-    if (result === -1) return null; // 交易早于所有K线
+    if (result === -1) return null;
     return klineTimes[result];
   }
 
-  const markers: any[] = [];
+  // 1m 使用原来的详细标注（多开/空开/空平/多平）
+  if (currentMode === "1m") {
+    const markers: any[] = [];
+    for (const trade of trades) {
+      let tradeTimestamp: number;
+      if (typeof trade.datetime === "number") {
+        tradeTimestamp = trade.datetime;
+      } else if (trade.datetime.includes(" ")) {
+        tradeTimestamp = new Date(trade.datetime.replace(" ", "T")).getTime() / 1000;
+      } else if (trade.datetime.includes("T")) {
+        tradeTimestamp = new Date(trade.datetime).getTime() / 1000;
+      } else {
+        tradeTimestamp = Number(trade.datetime);
+      }
+
+      const klineTime = mapTradeToKlineTime(tradeTimestamp);
+      if (klineTime === null) continue;
+
+      let position: "aboveBar" | "belowBar";
+      let color: string;
+      let shape: "arrowUp" | "arrowDown";
+      let text: string;
+
+      if (trade.offset === "open") {
+        if (trade.direction === "long") {
+          position = "belowBar"; color = "#26A69A"; shape = "arrowUp"; text = "多开";
+        } else {
+          position = "aboveBar"; color = "#EF5350"; shape = "arrowDown"; text = "空开";
+        }
+      } else {
+        if (trade.direction === "long") {
+          position = "belowBar"; color = "#26A69A"; shape = "arrowUp"; text = "空平";
+        } else {
+          position = "aboveBar"; color = "#EF5350"; shape = "arrowDown"; text = "多平";
+        }
+      }
+
+      markers.push({ time: klineTime as Time, position, color, shape, text });
+    }
+    return markers;
+  }
+
+  // 5m/15m/1h 使用聚合标记
+  const tradeByKline: Map<number, { buy: number; sell: number }> = new Map();
 
   for (const trade of trades) {
     let tradeTimestamp: number;
     if (typeof trade.datetime === "number") {
       tradeTimestamp = trade.datetime;
     } else if (trade.datetime.includes(" ")) {
-      // 不追加 "Z"，后端输出的是北京时间字符串，按本地时区解析
       tradeTimestamp = new Date(trade.datetime.replace(" ", "T")).getTime() / 1000;
     } else if (trade.datetime.includes("T")) {
       tradeTimestamp = new Date(trade.datetime).getTime() / 1000;
@@ -107,53 +145,50 @@ function convertTradeToMarkers(
     }
 
     const klineTime = mapTradeToKlineTime(tradeTimestamp);
-    if (klineTime === null) {
-      continue;
+    if (klineTime === null) continue;
+
+    if (!tradeByKline.has(klineTime)) {
+      tradeByKline.set(klineTime, { buy: 0, sell: 0 });
     }
+    const entry = tradeByKline.get(klineTime)!;
 
-    let position: "aboveBar" | "belowBar";
-    let color: string;
-    let shape: "arrowUp" | "arrowDown";
-    let text: string;
-
-    // direction = 交易方向(long=买入/short=卖出), offset = 开平(open=开仓/close=平仓)
-    if (trade.offset === "open") {
-      if (trade.direction === "long") {
-        // 买入开多
-        position = "belowBar";
-        color = "#26A69A";
-        shape = "arrowUp";
-        text = "多开";
-      } else {
-        // 卖出开空
-        position = "aboveBar";
-        color = "#EF5350";
-        shape = "arrowDown";
-        text = "空开";
-      }
+    if (trade.direction === "long") {
+      entry.buy += 1;
     } else {
-      if (trade.direction === "long") {
-        // 买入平空
-        position = "belowBar";
-        color = "#26A69A";
-        shape = "arrowUp";
-        text = "空平";
-      } else {
-        // 卖出平多
-        position = "aboveBar";
-        color = "#EF5350";
-        shape = "arrowDown";
-        text = "多平";
-      }
+      entry.sell += 1;
     }
+  }
 
-    markers.push({
-      time: klineTime as Time,
-      position,
-      color,
-      shape,
-      text,
-    });
+  const markers: any[] = [];
+
+  for (const [klineTime, counts] of tradeByKline.entries()) {
+    const { buy, sell } = counts;
+
+    if (buy > 0 && sell > 0) {
+      markers.push({
+        time: klineTime as Time,
+        position: "belowBar",
+        color: "#FF9800",
+        shape: "arrowUp",
+        text: "T",
+      });
+    } else if (buy > 0) {
+      markers.push({
+        time: klineTime as Time,
+        position: "belowBar",
+        color: "#26A69A",
+        shape: "arrowUp",
+        text: "多",
+      });
+    } else if (sell > 0) {
+      markers.push({
+        time: klineTime as Time,
+        position: "aboveBar",
+        color: "#EF5350",
+        shape: "arrowDown",
+        text: "空",
+      });
+    }
   }
 
   return markers;
@@ -195,7 +230,13 @@ export default function KlineChart({ data, trades, loading }: Props) {
     kdj: true,
   });
 
-  const klineData = data ? (mode === "daily" ? data.daily : data.raw) : null;
+  const klineData = data
+    ? mode === "daily"
+      ? data.daily
+      : mode === "1m"
+        ? data.raw
+        : data.multi_timeframe?.[mode] ?? data.raw
+    : null;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -537,7 +578,7 @@ export default function KlineChart({ data, trades, loading }: Props) {
         console.log("[KlineChart-DEBUG] klineData(raw) 后3条 datetime:", klineData.slice(-3).map(k => k.datetime));
       }
       if (indicators.trades && trades) {
-        const markerData = convertTradeToMarkers(trades, klineData);
+        const markerData = convertTradeToMarkers(trades, klineData, mode);
         console.log("[KlineChart-DEBUG] convertTradeToMarkers 结果:", markerData.length, "个", markerData.length > 0 ? "样本:" + JSON.stringify(markerData.slice(0, 2)) : "");
         markers.setMarkers(markerData);
       } else {
@@ -602,26 +643,22 @@ export default function KlineChart({ data, trades, loading }: Props) {
     <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100" data-ql-id="RUN-KLINE-TOOLBAR">
       <div className="flex items-center gap-2">
         <span className="text-lg font-bold text-slate-900 font-mono">{data.symbol}</span>
-        {mode === "raw" && data.raw_downsampled && (
+        {mode === "1m" && data.raw_downsampled && (
           <span className="text-[11px] px-2 py-0.5 bg-amber-50 text-amber-800 rounded">抽样显示</span>
         )}
       </div>
       <div className="flex items-center">
         <div className="flex bg-slate-100 rounded-lg p-0.5">
-          <button
-            onClick={() => setMode("daily")}
-            data-ql-id="RUN-KLINE-BTN-DAILY"
-            className={mode === "daily" ? toggleActive : toggleBtn}
-          >
-            日线
-          </button>
-          <button
-            onClick={() => setMode("raw")}
-            data-ql-id="RUN-KLINE-BTN-MINUTE"
-            className={mode === "raw" ? toggleActive : toggleBtn}
-          >
-            分钟线
-          </button>
+          {(["daily", "1h", "15m", "5m", "1m"] as ViewMode[]).map((vm) => (
+            <button
+              key={vm}
+              onClick={() => setMode(vm)}
+              data-ql-id={`RUN-KLINE-BTN-${vm.toUpperCase()}`}
+              className={mode === vm ? toggleActive : toggleBtn}
+            >
+              {vm === "daily" ? "日线" : vm === "1m" ? "1分钟" : vm}
+            </button>
+          ))}
         </div>
       </div>
       <div className="flex gap-2">
@@ -702,14 +739,33 @@ export default function KlineChart({ data, trades, loading }: Props) {
           <span className="w-2 h-2 rounded-full bg-[#EF5350]" />
           <span>阴线</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="text-[#26A69A]">▲</span>
-          <span>多开/空平</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
-          <span className="text-[#EF5350]">▼</span>
-          <span>空开/多平</span>
-        </div>
+        {mode === "1m" ? (
+          <>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-[#26A69A]">▲</span>
+              <span>多开/空平</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-[#EF5350]">▼</span>
+              <span>空开/多平</span>
+            </div>
+          </>
+        ) : mode !== "daily" ? (
+          <>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-[#26A69A]">▲</span>
+              <span>买入</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-[#EF5350]">▼</span>
+              <span>卖出</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-[#FF9800]">▲</span>
+              <span>双向(T)</span>
+            </div>
+          </>
+        ) : null}
       </div>
     </QlPanel>
   );

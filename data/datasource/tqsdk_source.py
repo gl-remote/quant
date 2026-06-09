@@ -274,8 +274,13 @@ class TqSdkDataSource(BaseDataSource):
             logger.debug(f"_fetch_once: {symbol} 过滤后为空，返回空")
             return empty_result
 
-        # 纳秒 -> datetime 字符串
-        kline_df["datetime"] = pd.to_datetime(kline_df["datetime"], unit="ns").dt.strftime("%Y-%m-%d %H:%M:%S")
+        # 纳秒 epoch → 本地时间（北京时间）字符串
+        kline_df["datetime"] = (
+            pd.to_datetime(kline_df["datetime"], unit="ns")
+            .dt.tz_localize("UTC")
+            .dt.tz_convert("Asia/Shanghai")
+            .dt.strftime("%Y-%m-%d %H:%M:%S")
+        )
 
         # 过滤 2000 年之前的脏数据
         kline_df = kline_df[kline_df["datetime"] >= "2000-01-01"]
