@@ -21,22 +21,28 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config import ConfigManager
 from data import DataManager, export_csv
 
-# ── 推荐品种：多合约覆盖不同时段 ──────────────────────────
+# ── 推荐品种：2026 年已到期合约为主，覆盖完整行情 ──
+#  原则：优先选 2026 已到期合约（01/03/05 月），数据完整，便于回测
 #  start/end 为 None 时由 parse_contract 自动推算默认日期范围
 TARGET_SYMBOLS: list[tuple[str, str | None, str | None, str]] = [
     # (symbol, start_date, end_date, 说明)
-    # 豆粕系列 — 不同月份覆盖不同行情阶段
-    ("DCE.m2505", None, None, "豆粕 2505  已到期"),
-    ("DCE.m2507", None, None, "豆粕 2507  已到期"),
-    ("DCE.m2509", None, None, "豆粕 2509  近月"),
-    ("DCE.m2601", None, None, "豆粕 2601  远月"),
-    # 同交易所高流动性品种
-    ("DCE.c2509", None, None, "玉米 2509  低波动"),
-    ("DCE.i2509", None, None, "铁矿 2509  高波动"),
-    ("DCE.p2509", None, None, "棕榈 2509  高波动"),
-    # 跨交易所
-    ("SHFE.rb2509", None, None, "螺纹 2509"),
-    ("CZCE.SR509", None, None, "白糖 509"),
+    # 豆粕系列 — 2026 已到期合约
+    ("DCE.m2601", None, None, "豆粕 2601  已到期"),
+    ("DCE.m2603", None, None, "豆粕 2603  已到期"),
+    ("DCE.m2605", None, None, "豆粕 2605  已到期"),
+    # 玉米系列 — 2026 已到期合约
+    ("DCE.c2601", None, None, "玉米 2601  已到期"),
+    ("DCE.c2603", None, None, "玉米 2603  已到期"),
+    ("DCE.c2605", None, None, "玉米 2605  已到期"),
+    # 淀粉系列 — 2026 已到期合约
+    ("DCE.cs2601", None, None, "淀粉 2601  已到期"),
+    ("DCE.cs2603", None, None, "淀粉 2603  已到期"),
+    ("DCE.cs2605", None, None, "淀粉 2605  已到期"),
+    # 其他品种做对比验证
+    ("DCE.i2601", None, None, "铁矿 2601  已到期"),
+    ("DCE.p2601", None, None, "棕榈 2601  已到期"),
+    ("SHFE.rb2601", None, None, "螺纹 2601  已到期"),
+    ("CZCE.SR601", None, None, "白糖 601  已到期"),
 ]
 
 
