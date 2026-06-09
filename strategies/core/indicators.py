@@ -21,16 +21,13 @@ def rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return ta.rsi(df["close"], length=period)
 
 
-def macd_func(df: pd.DataFrame, fast: int = 12, slow: int = 26,
-              signal: int = 9) -> pd.Series:
+def macd_func(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.Series:
     result = ta.macd(df["close"], fast=fast, slow=slow, signal=signal)
     return cast(pd.Series, result[f"MACDh_{fast}_{slow}_{signal}"])
 
 
-def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3,
-             d_period: int = 3) -> pd.Series:
-    result = ta.kdj(high=df["high"], low=df["low"], close=df["close"],
-                    length=n, signal=k_period)
+def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3, d_period: int = 3) -> pd.Series:
+    result = ta.kdj(high=df["high"], low=df["low"], close=df["close"], length=n, signal=k_period)
     # pandas-ta 的 KDJ 列名只含 length 和 signal，不含 d_period
     return cast(pd.Series, result[f"J_{n}_{k_period}"])
 

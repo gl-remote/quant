@@ -1,29 +1,21 @@
-"""
-统一回测命令模块
+"""统一回测命令模块
 
 提供基于 vn.py 和 TqSdk 的统一回测功能，根据标的数量自动选择回测引擎。
-
-功能特点:
-  - 单标的模式: 使用 TqSdk 进行图形化回测，支持 GUI 展示
-  - 批量模式: 使用 vn.py 进行批量回测，生成文字报告并落地数据
-  - 无缝切换: 根据标的数量自动选择合适的回测引擎
-  - 数据落地: 回测结果统一持久化到数据库
 
 模式:
   - search (默认): 参数搜索回测，optimizer 产多策略 × 多品种
   - walk-forward: 单策略滚动验证，评估稳健性
 
-架构设计:
-  CLI 层：负责 orchestrate、持久化回测结果
-  backtest.runners: 批量回测编排 (数据加载、Walk-Forward、参数搜索)
-  Optimizer 层：负责参数搜索逻辑，不做持久化
-  Engine 层：负责运行单个回测
+架构:
+  CLI 层: 负责 orchestrate、持久化回测结果
+  backtest.runners: 批量回测编排（数据加载、Walk-Forward、参数搜索）
+  Optimizer 层: 负责参数搜索逻辑，不做持久化
+  Engine 层: 负责运行单个回测
 
-主要函数:
-  cmd_backtest(): 主命令入口，解析参数并分发
-  _run_tq_backtest(): 单品种回测，TqSdk 引擎
-  _run_batch_backtest(): 批量回测，vn.py 引擎
-  _persist_search_results(): 统一持久化
+重构说明（2026-06-06）：
+  - 原 `_run_tq_backtest` / `_run_batch_backtest` 均为 150+ 行的过程式函数
+  - 拆分为准备阶段、执行阶段、持久化阶段三类辅助函数
+  - 新增 `_prepare_backtest_config` / `_persist_results` 等公共辅助，消除重复逻辑
 """
 
 from __future__ import annotations
@@ -34,6 +26,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 
@@ -52,13 +45,11 @@ from common.constants import (
     MODE_SINGLE,
     STATUS_FAILED,
     STATUS_SUCCESS,
-    TRADE_ACTION_BUY,
-    TRADE_ACTION_SELL,
 )
-from common.formulas import calculate_fifo_profit
 from common.schemas import KlineDataFrame
 from common.types import BacktestResult
 from config import ConfigManager
+from config.schemas import BacktestConfig
 from data import DataManager
 from report import build_all as build_dashboard
 from strategies.utils import (
@@ -68,13 +59,11 @@ from strategies.utils import (
     serialize_strategy_params,
 )
 
+# ── 公共辅助 ─────────────────────────────────────────────
+
 
 def get_git_hash() -> str | None:
-    """获取当前 Git 提交的短哈希值（7位）
-
-    Returns:
-        Git 提交哈希，如果不在 git 仓库中则返回 None
-    """
+    """获取当前 Git 提交的短哈希值（7位）"""
     try:
         repo_root = Path(__file__).parent.parent.parent
         result = subprocess.run(
@@ -91,46 +80,75 @@ def get_git_hash() -> str | None:
     return None
 
 
+def _prepare_backtest_config(
+    args: argparse.Namespace,
+    cm: ConfigManager,
+) -> tuple[BacktestConfig, dict[str, Any], str | None, float | None, int | None]:
+    """从命令行参数 + 配置中心抽取公共回测配置项
+
+    Returns:
+        (bc, strategy_params, mode_override, capital_arg, contract_size_arg)
+    """
+    bc = cm.get_backtest_config()
+    sc = cm.get_strategy_config(getattr(args, "strategy", "ma") or "ma")
+    strategy_params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+    mode_arg: str = getattr(args, "mode", "search") or "search"
+    capital_arg: float | None = getattr(args, "capital", None)
+    contract_size_arg: int | None = getattr(args, "contract_size", None)
+    return bc, strategy_params, mode_arg, capital_arg, contract_size_arg
+
+
+def _persist_results(
+    dm: DataManager,
+    results: list[BacktestResult] | BacktestResult,
+    run_id: int | None = None,
+    data_src: str | None = None,
+) -> None:
+    """通用持久化：将 BacktestResult 写入数据库（单条或批量）
+
+    为 TqSdk 单标的场景提供简洁持久化。
+    """
+    if isinstance(results, BacktestResult):
+        results = [results]
+    for r in results:
+        dm.insert_backtest(r, run_id=run_id, data_src=data_src)
+
+
+# ── 命令入口 ────────────────────────────────────────────
+
+
 def cmd_backtest(args: argparse.Namespace) -> None:
     """执行统一回测命令
 
     根据标的数量自动选择回测引擎:
       - 单标的 (--symbol 指定): 使用 TqSdk 回测，支持 GUI
       - 多标的 (--pattern 或省略 --symbol): 使用 vn.py 批量回测
-
-    Args:
-        args: argparse.Namespace 对象，包含:
-            symbol: 品种代码（单品种模式）
-            pattern: 品种代码正则表达式（批量模式）
-            start: 开始日期（可选）
-            end: 结束日期（可选）
-            strategy: 策略名称（必填）
-            capital: 初始资金（默认从配置文件读取）
-            gui: 是否启用图形界面（仅单标的模式生效）
-            mode: 回测模式 search|walk-forward (默认 search)
     """
     cm = ConfigManager()
     dm = DataManager(cm)
 
     symbol_arg: str | None = args.symbol  # pyright: ignore[reportAny]
     pattern_arg: str | None = args.pattern  # pyright: ignore[reportAny]
-    is_single_mode = symbol_arg and not pattern_arg
+    is_single_mode = bool(symbol_arg) and not pattern_arg
     if is_single_mode:
         _run_tq_backtest(args, cm, dm)
     else:
         _run_batch_backtest(args, cm, dm)
 
 
-def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManager) -> None:
+# ── TqSdk 单标的回测 ──────────────────────────────────
+
+
+def _run_tq_backtest(
+    args: argparse.Namespace,
+    cm: ConfigManager,
+    dm: DataManager,
+) -> None:
     """使用 TqSdk 执行单标的回测
 
-    Args:
-        args: 命令行参数
-        cm: ConfigManager 实例
-        dm: DataManager 实例
+    流程: 配置解析 → 创建 TqApi + 策略桥 → 运行 → 提取结果 → 持久化
     """
     from common.tqsdk_imports import tqsdk
-    from common.types import BacktestResult
     from strategies import TqsdkStrategyBridge
 
     strategy: str = args.strategy  # pyright: ignore[reportAny]
@@ -140,63 +158,62 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
     gui_flag: bool = args.gui  # pyright: ignore[reportAny]
     capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
 
-    api = None
-    strategy_cls = ""
-    capital_val: float | None = None
+    bc, strategy_params, _, _, _ = _prepare_backtest_config(args, cm)
+    account = cm.get_account_info()
+    git_hash = get_git_hash()
+
+    # ── 步骤 1: 加载策略核心 ────────────────────────────
+    strategy_core = load_strategy(strategy)
+    strategy_cls = get_strategy_class_name(strategy_core)
+    strategy_version = getattr(type(strategy_core), "VERSION", None)
+
+    # ── 步骤 2: 应用策略配置 ────────────────────────────
+    from strategies.ma_strategy import MACrossParams
+
+    strategy_config = MACrossParams()
+    apply_strategy_config(strategy_config, cm)
+
+    # ── 步骤 3: 计算总天数 ────────────────────────────
     try:
-        sc = cm.get_trading_config(strategy)
-        account = cm.get_account_info()
-        bc = cm.get_backtest_config()
-        git_hash = get_git_hash()
-        strategy_core = load_strategy(strategy)
-        strategy_cls = get_strategy_class_name(strategy_core)
-        strategy_version = getattr(type(strategy_core), "VERSION", None)
+        start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+        total_days = (end_dt - start_dt).days + 1
+    except (ValueError, TypeError):
+        total_days = None
 
-        # 创建策略配置 dataclass 并应用 TOML 参数
-        from strategies.ma_strategy import MACrossParams
+    # ── 步骤 4: 创建 State + 桥接 ─────────────────────
+    from strategies.core.state import State
 
-        strategy_config = MACrossParams()
-        apply_strategy_config(strategy_config, cm)
+    state = State(
+        symbol=symbol,
+        period=f"{strategy_params.get('kline_period', bc.interval)}m",
+        strategy_config=strategy_config,
+        capital=float(capital_arg) if capital_arg else float(bc.initial_capital),
+        contract_size=int(bc.contract_size),
+        margin=0.1,
+    )
 
-        # 计算总天数
-        try:
-            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
-            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
-            total_days = (end_dt - start_dt).days + 1
-        except (ValueError, TypeError):
-            total_days = None
+    bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
 
-        # 创建 State（与 test/live 路径一致的参数来源）
-        from strategies.core.state import State
+    logger.info(
+        "回测: %s %s~%s 资金=%s strategy=%s GUI=%s",
+        symbol,
+        start_date_str,
+        end_date_str,
+        capital_arg,
+        strategy_cls,
+        gui_flag,
+    )
+    dm.store.log(
+        "backtest",
+        f"开始: {symbol} {start_date_str}~{end_date_str} 资金={capital_arg} strategy={strategy_cls}",
+        symbol=symbol,
+        status=LOG_STATUS_INFO,
+    )
 
-        state = State(
-            symbol=symbol,
-            period=f"{sc.kline_period}m",
-            strategy_config=strategy_config,
-            capital=float(capital_arg) if capital_arg else float(bc.initial_capital),
-            contract_size=int(bc.contract_size),
-            margin=0.1,  # 保证金比例（BacktestConfig 无此字段，取默认值）
-        )
-
-        bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
-
-        capital_val = capital_arg
-        logger.info(
-            "回测: %s %s~%s 资金=%s strategy=%s GUI=%s",
-            symbol,
-            start_date_str,
-            end_date_str,
-            capital_val,
-            strategy_cls,
-            gui_flag,
-        )
-        dm.store.log(
-            "backtest",
-            f"开始: {symbol} {start_date_str}~{end_date_str} 资金={capital_val} strategy={strategy_cls}",
-            symbol=symbol,
-            status=LOG_STATUS_INFO,
-        )
-
+    # ── 步骤 5: 创建 TqApi 并执行 ────────────────────
+    api = None
+    try:
         auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None
         api = tqsdk.TqApi(
             backtest=tqsdk.TqBacktest(
@@ -206,96 +223,33 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
             auth=auth,
             web_gui=gui_flag,
         )
-        # 注入预创建的回测 API（含 TqBacktest 包装），由 bridge.run() 复用
         bridge.initialize(api)
         bridge.run(symbol=symbol)  # BacktestFinished 会正常传播
 
     except tqsdk.BacktestFinished:
-        fills = bridge.fills  # pyright: ignore[reportPossiblyUnboundVariable]
-
-        total_profit = calculate_fifo_profit(fills)
-        total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
-
-        report = (
-            f"{'=' * 60}\n"
-            f"回测报告\n"
-            f"{'=' * 60}\n"
-            f"策略: {strategy_cls}\n"
-            f"品种: {symbol}\n"
-            f"区间: {start_date_str} ~ {end_date_str}\n"
-            f"初始资金: {capital_arg:,.2f}\n\n"
-            f"交易统计:\n"
-            f"  总交易次数: {total_trades}\n"
-            f"  总盈亏: {total_profit:,.2f}\n"
-            f"{'=' * 60}"
+        _persist_tq_backtest_result(
+            dm=dm,
+            bridge=bridge,
+            symbol=symbol,
+            strategy_cls=strategy_cls,
+            strategy_version=strategy_version,
+            start_date_str=start_date_str,
+            end_date_str=end_date_str,
+            total_days=total_days,
+            capital_arg=capital_arg,
+            bc=bc,
+            strategy_core=strategy_core,
+            git_hash=git_hash,
         )
-        print(report)
-
-        bt_id = dm.insert_backtest(
-            BacktestResult(
-                symbol=symbol,
-                strategy=strategy_cls,
-                strategy_version=strategy_version,
-                git_hash=git_hash,
-                status=STATUS_SUCCESS,
-                total_trades=total_trades,
-                total_return=total_profit,
-                end_balance=capital_val + total_profit if capital_val else 0,
-                start_date=start_date_str,
-                end_date=end_date_str,
-                total_days=total_days,
-                initial_capital=capital_val or bc.initial_capital,
-                commission_rate=bc.commission_rate,
-                slippage=bc.slippage,
-                price_tick=bc.price_tick,
-                contract_size=bc.contract_size,
-                kline_interval=bc.interval,
-                strategy_params=serialize_strategy_params(strategy_core),  # pyright: ignore[reportPossiblyUnboundVariable]
-                engine_config={"type": "tqsdk", "gui": gui_flag},
-            )
-        )
-
-        if fills:
-            trade_dicts = []
-            for f in fills:
-                # TqSdk 字段 → ORM 标准字段映射
-                direction = "long" if f.action == TRADE_ACTION_BUY else "short"
-                trade_dicts.append(
-                    {
-                        "datetime": f.timestamp,
-                        "symbol": f.symbol,
-                        "direction": direction,
-                        "offset": "open",  # TqSdk 不区分开平，统一记为 open
-                        "open_price": f.price,
-                        "close_price": f.price,
-                        "quantity": f.volume,
-                        "pnl": 0.0,
-                        "commission": 0.0,
-                        "reason": f.reason,
-                    }
-                )
-            dm.insert_backtest_trades(bt_id, trade_dicts)
-
-            logger.info("\n交易记录:")
-            for f in fills:
-                ts = f.timestamp[:10] if f.timestamp else "N/A"
-                tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
-                logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
-
-        dm.store.log("backtest", f"完成:\n{report}", symbol=symbol, status=LOG_STATUS_SUCCESS)
-        print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
 
         if gui_flag and api is not None:
-            logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
-            try:
-                while True:
-                    api.wait_update()
-            except tqsdk.BacktestFinished:
-                pass
+            _tq_backtest_gui_loop(api, bridge, cm)
+
     except Exception as e:
         logger.exception(f"回测执行失败: {e}")
         dm.store.log("backtest", f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
-        _ = dm.insert_backtest(
+        # 记录失败的占位记录
+        dm.insert_backtest(
             BacktestResult(
                 symbol=symbol,
                 strategy=strategy_cls or "unknown",
@@ -306,7 +260,7 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
                 start_date=start_date_str,
                 end_date=end_date_str,
                 total_days=total_days,
-                initial_capital=capital_val or bc.initial_capital,
+                initial_capital=capital_arg or bc.initial_capital,
                 commission_rate=bc.commission_rate,
                 slippage=bc.slippage,
                 price_tick=bc.price_tick,
@@ -321,18 +275,124 @@ def _run_tq_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManage
             api.close()
 
 
-def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataManager) -> None:
+def _persist_tq_backtest_result(
+    dm: DataManager,
+    bridge: Any,
+    symbol: str,
+    strategy_cls: str,
+    strategy_version: str | None,
+    start_date_str: str,
+    end_date_str: str,
+    total_days: int | None,
+    capital_arg: float | None,
+    bc: BacktestConfig,
+    strategy_core: Any,
+    git_hash: str | None,
+) -> None:
+    """TqSdk 结果持久化：计算盈亏 → 写入数据库 → 输出日志
+
+    从 bridge.fills 提取成交记录，按 FIFO 计算总盈亏。
+    """
+    from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
+    from common.formulas import calculate_fifo_profit
+
+    fills = bridge.fills
+
+    total_profit = calculate_fifo_profit(fills)
+    total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
+
+    report = (
+        f"{'=' * 60}\n"
+        f"回测报告\n"
+        f"{'=' * 60}\n"
+        f"策略: {strategy_cls}\n"
+        f"品种: {symbol}\n"
+        f"区间: {start_date_str} ~ {end_date_str}\n"
+        f"初始资金: {capital_arg:,.2f}\n\n"
+        f"交易统计:\n"
+        f"  总交易次数: {total_trades}\n"
+        f"  总盈亏: {total_profit:,.2f}\n"
+        f"{'=' * 60}"
+    )
+    print(report)
+
+    # 主结果记录
+    bt_id = dm.insert_backtest(
+        BacktestResult(
+            symbol=symbol,
+            strategy=strategy_cls,
+            strategy_version=strategy_version,
+            git_hash=git_hash,
+            status=STATUS_SUCCESS,
+            total_trades=total_trades,
+            total_return=total_profit,
+            end_balance=capital_arg + total_profit if capital_arg else 0,
+            start_date=start_date_str,
+            end_date=end_date_str,
+            total_days=total_days,
+            initial_capital=capital_arg or bc.initial_capital,
+            commission_rate=bc.commission_rate,
+            slippage=bc.slippage,
+            price_tick=bc.price_tick,
+            contract_size=bc.contract_size,
+            kline_interval=bc.interval,
+            strategy_params=serialize_strategy_params(strategy_core),
+            engine_config={"type": "tqsdk", "gui": False},
+        )
+    )
+
+    # 成交记录
+    if fills:
+        trade_dicts = []
+        for f in fills:
+            direction = "long" if f.action == TRADE_ACTION_BUY else "short"
+            trade_dicts.append(
+                {
+                    "datetime": f.timestamp,
+                    "symbol": f.symbol,
+                    "direction": direction,
+                    "offset": "open",
+                    "open_price": f.price,
+                    "close_price": f.price,
+                    "quantity": f.volume,
+                    "pnl": 0.0,
+                    "commission": 0.0,
+                    "reason": f.reason,
+                }
+            )
+        dm.insert_backtest_trades(bt_id, trade_dicts)
+
+        logger.info("\n交易记录:")
+        for f in fills:
+            ts = f.timestamp[:10] if f.timestamp else "N/A"
+            tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
+            logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
+
+    dm.store.log("backtest", f"完成:\n{report}", symbol=symbol, status=LOG_STATUS_SUCCESS)
+    print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
+
+
+def _tq_backtest_gui_loop(api: Any, bridge: Any, cm: ConfigManager) -> None:
+    """GUI 模式下的等待循环（阻塞直到用户关闭浏览器）"""
+    logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
+    try:
+        while True:
+            api.wait_update()
+    except Exception:
+        pass
+
+
+# ── vn.py 批量回测 ─────────────────────────────────────
+
+
+def _run_batch_backtest(
+    args: argparse.Namespace,
+    cm: ConfigManager,
+    dm: DataManager,
+) -> None:
     """使用 vn.py 执行批量回测或参数搜索
 
-    编排数据加载、策略配置、引擎执行、结果持久化的完整工作流。
-    支持两种模式:
-      - search: 参数搜索，多品种
-      - walk-forward: Walk-Forward 滚动验证
-
-    Args:
-        args: argparse.Namespace 命令行参数
-        cm: ConfigManager 配置管理器
-        dm: DataManager 数据管理器
+    流程: 解析参数 → 确定品种 → 加载数据 → 根据模式选择搜索/滚动 → 持久化
     """
     strategy_name: str = args.strategy  # pyright: ignore[reportAny]
     symbol_arg: str | None = args.symbol  # pyright: ignore[reportAny]
@@ -342,15 +402,13 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataMan
     capital_arg: float | None = args.capital  # pyright: ignore[reportAny]
     contract_size_arg: int | None = args.contract_size  # pyright: ignore[reportAny]
     trials_arg: int | None = args.trials  # pyright: ignore[reportAny]
-    mode: str = args.mode  # pyright: ignore[reportAny]
     optimizer_arg: str | None = args.optimizer  # pyright: ignore[reportAny]
+    mode_arg: str = args.mode  # pyright: ignore[reportAny]
 
     try:
-        run_id = 0
-        _sink_ids: list[int] = []
-        bc = cm.get_backtest_config()
+        bc, strategy_params, _, _, _ = _prepare_backtest_config(args, cm)
 
-        # ── 步骤 1: 确定品种列表 ──
+        # ── 步骤 1: 确定品种列表 ─────────────────────
         if symbol_arg and not pattern_arg:
             symbol_list = [symbol_arg]
             mode_label = MODE_SINGLE
@@ -358,11 +416,16 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataMan
             symbol_list = dm.search_symbols(pattern_arg or "")
             if not symbol_list:
                 logger.error("未找到匹配的品种数据")
-                dm.store.log("backtest", "未找到匹配的品种数据", symbol=MODE_MULTI, status=LOG_STATUS_ERROR)
+                dm.store.log(
+                    "backtest",
+                    "未找到匹配的品种数据",
+                    symbol=MODE_MULTI,
+                    status=LOG_STATUS_ERROR,
+                )
                 return
             mode_label = MODE_BATCH
 
-        mode_name = "参数搜索" if mode == "search" else "Walk-Forward"
+        mode_name = "参数搜索" if mode_arg == "search" else "Walk-Forward"
         logger.info(
             "{}回测: {} 个品种 strategy={} mode={}",
             "批量" if mode_label == MODE_BATCH else "单品种",
@@ -371,159 +434,231 @@ def _run_batch_backtest(args: argparse.Namespace, cm: ConfigManager, dm: DataMan
             mode_name,
         )
 
-        # ── 步骤 2: 加载批量数据 ──
+        # ── 步骤 2: 加载批量数据 ─────────────────────
         datasets = dm.load_kline(symbol_list, start_arg, end_arg, bc.interval)
         if not datasets:
             logger.error("所有品种数据加载失败")
             return
 
-        # ── 步骤 3: 加载策略配置 ──
-        sc = cm.get_trading_config(strategy_name)
-        # 注意: kline_period 和 search_space 不是策略参数，是数据/优化器配置
-        strategy_params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
-        capital = capital_arg if capital_arg else bc.initial_capital
-        contract_size = contract_size_arg if contract_size_arg else bc.contract_size
-
-        # ── 步骤 4: 初始化引擎和 Git 信息 ──
+        # ── 步骤 3: 初始化引擎 ───────────────────────
         engine = VnpyBacktestEngine(bc, dm)
         git_hash = get_git_hash()
         engine.set_git_hash(git_hash)
 
         # 创建运行记录
-        run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"
+        run_engine_label = optimizer_arg or cm.get_optimizer_config().engine or "grid"
         run_id = dm.store.create_run(
             strategy=strategy_name,
-            engine=run_engine if mode == "search" else "walk-forward",
+            engine=run_engine_label if mode_arg == "search" else "walk-forward",
             symbols=len(datasets),
         )
         engine._run_id = run_id
 
         # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
-        # 同时关闭 stderr，全部输出走文件，tail -f 实时查看
-        _sink_ids.clear()
-        logs_dir = Path("output") / f"r{run_id}" / "data"
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        _fmt = (
-            f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
-            "{level: <8} | {name}:{function}:{line} | {message}"
-        )
-        _sink_ids.append(
-            logger.add(
-                logs_dir / "run.log",
-                level="DEBUG",
-                format=_fmt,
-            )
-        )
-        from common.log_config import get_stderr_sink_id
+        _attach_run_logger(dm, run_id)
 
-        _stderr_id = get_stderr_sink_id()
-        if _stderr_id is not None:
-            logger.remove(_stderr_id)
-
-        # ── 步骤 5: 根据模式执行相应工作流 ──
-        if mode == "walk-forward":
-            wf_result, strategy, sym = execute_walk_forward(
+        # ── 步骤 4: 根据模式执行 ────────────────────
+        if mode_arg == "walk-forward":
+            _execute_walk_forward_mode(
                 engine=engine,
                 strategy_name=strategy_name,
                 strategy_params=strategy_params,
-                capital=capital,
-                contract_size=contract_size,
+                capital=capital_arg if capital_arg else bc.initial_capital,
+                contract_size=contract_size_arg if contract_size_arg else bc.contract_size,
                 datasets=datasets,
+                dm=dm,
+                git_hash=git_hash,
+                start_arg=start_arg,
+                end_arg=end_arg,
             )
-            bt_id = None
-            if wf_result.get("success"):
-                bt_id = dm.insert_backtest(
-                    BacktestResult(
-                        symbol=sym,
-                        strategy=get_strategy_class_name(strategy),
-                        status=STATUS_SUCCESS,
-                        strategy_version=getattr(strategy, "VERSION", None),
-                        git_hash=git_hash,
-                        strategy_params=serialize_strategy_params(strategy),
-                        start_date=start_arg,
-                        end_date=end_arg,
-                        engine_config={"type": "vnpy", "mode": "walk-forward", "windows": wf_result.get("windows", 0)},
-                        # walk_forward 聚合指标映射到 BacktestResult 字段
-                        sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
-                        max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
-                        total_return=wf_result.get("aggregate", {}).get("return_mean"),
-                        daily_std=wf_result.get("aggregate", {}).get("return_std"),
-                    ),
-                    run_id=run_id,
-                    data_src=datasets[0][2],
-                )
-                logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
-                if bt_id:
-                    print(f"\n💡 查看报告: python main.py report --id {bt_id}")
-                    dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
-            else:
-                logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
         else:
-            optimizer_cfg = cm.get_optimizer_config()
-            n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
-            result = execute_parameter_search(
+            _execute_search_mode(
                 engine=engine,
                 strategy_name=strategy_name,
                 strategy_params=strategy_params,
-                capital=capital,
-                contract_size=contract_size,
+                capital=capital_arg if capital_arg else bc.initial_capital,
+                contract_size=contract_size_arg if contract_size_arg else bc.contract_size,
                 datasets=datasets,
-                n_trials=n_trials,
-                optimizer_cfg=optimizer_cfg,
                 cm=cm,
                 optimizer_arg=optimizer_arg,
+                trials_arg=trials_arg,
                 git_hash=git_hash,
                 dm=dm,
                 run_id=run_id,
             )
-            if result:
-                # 保存实际使用的随机种子
-                dm.store.update_run_seed(
-                    run_id=run_id, use_fixed_seed=optimizer_cfg.use_fixed_seed, random_seed=result.actual_seed
-                )
-                # CLI 统一持久化
-                _persist_search_results(
-                    dm=dm,
-                    result=result,
-                    datasets=datasets,
-                    search_type=optimizer_arg or cm.get_optimizer_config().engine or "grid",
-                    study_name=result.study_name,
-                    git_hash=git_hash,
-                    run_id=run_id,
-                )
-
-                # run.log → logs.json（必须在 build_dashboard 前，前端需要）
-                if run_id > 0:
-                    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
-                    if log_file.exists():
-                        with open(log_file, encoding="utf-8") as f:
-                            text = f.read()
-                        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
-                        with open(json_file, "w", encoding="utf-8") as f:
-                            json.dump(text, f, ensure_ascii=False)
-
-                # 自动生成回测看板
-                dm.store.finish_run(run_id)
-                build_dashboard(
-                    output_dir="output",
-                    run_id=run_id,
-                )
 
     except Exception as e:
         logger.exception(f"回测执行失败: {e}")
-        dm.store.log("backtest", f"失败: {e}", symbol=symbol_arg or MODE_MULTI, status=LOG_STATUS_ERROR)
+        dm.store.log(
+            "backtest",
+            f"失败: {e}",
+            symbol=symbol_arg or MODE_MULTI,
+            status=LOG_STATUS_ERROR,
+        )
         raise
     finally:
-        # 移除实时日志 sink，恢复 stderr，转 JSON 供前端
-        for sid in _sink_ids:
-            logger.remove(sid)
+        _detach_run_logger(dm)
+
+
+def _attach_run_logger(dm: DataManager, run_id: int) -> None:
+    """将 DEBUG 级别日志重定向到 output/r{run_id}/data/run.log"""
+    from common.log_config import get_stderr_sink_id
+
+    logs_dir = Path("output") / f"r{run_id}" / "data"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    fmt = (
+        f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
+        "{level: <8} | {name}:{function}:{line} | {message}"
+    )
+    _sink_ids = getattr(dm, "_sink_ids", [])
+    _sink_ids.append(
         logger.add(
-            sys.stderr,
-            level="INFO",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-            colorize=True,
+            logs_dir / "run.log",
+            level="DEBUG",
+            format=fmt,
         )
-        # logs.json 已在 build_dashboard 前写入，这里不再重复
+    )
+    dm._sink_ids = _sink_ids  # pyright: ignore[reportPrivateUsage]
+
+    stderr_id = get_stderr_sink_id()
+    if stderr_id is not None:
+        logger.remove(stderr_id)
+
+
+def _detach_run_logger(dm: DataManager) -> None:
+    """移除临时日志 sink，恢复 stderr"""
+    for sid in getattr(dm, "_sink_ids", []):
+        logger.remove(sid)
+    logger.add(
+        sys.stderr,
+        level="INFO",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        colorize=True,
+    )
+
+
+def _execute_walk_forward_mode(
+    engine: VnpyBacktestEngine,
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    datasets: list[tuple[str, KlineDataFrame, str]],
+    dm: DataManager,
+    git_hash: str | None,
+    start_arg: str | None,
+    end_arg: str | None,
+) -> None:
+    """Walk-Forward 模式执行与持久化"""
+    wf_result, strategy, sym = execute_walk_forward(
+        engine=engine,
+        strategy_name=strategy_name,
+        strategy_params=strategy_params,
+        capital=capital,
+        contract_size=contract_size,
+        datasets=datasets,
+    )
+    bt_id = None
+    if wf_result.get("success"):
+        bt_id = dm.insert_backtest(
+            BacktestResult(
+                symbol=sym,
+                strategy=get_strategy_class_name(strategy),
+                status=STATUS_SUCCESS,
+                strategy_version=getattr(strategy, "VERSION", None),
+                git_hash=git_hash,
+                strategy_params=serialize_strategy_params(strategy),
+                start_date=start_arg,
+                end_date=end_arg,
+                engine_config={
+                    "type": "vnpy",
+                    "mode": "walk-forward",
+                    "windows": wf_result.get("windows", 0),
+                },
+                sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
+                max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
+                total_return=wf_result.get("aggregate", {}).get("return_mean"),
+                daily_std=wf_result.get("aggregate", {}).get("return_std"),
+            ),
+            data_src=datasets[0][2],
+        )
+        logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
+        if bt_id:
+            print(f"\n💡 查看报告: python main.py report --id {bt_id}")
+            dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
+    else:
+        logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
+
+
+def _execute_search_mode(
+    engine: VnpyBacktestEngine,
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    capital: float,
+    contract_size: int,
+    datasets: list[tuple[str, KlineDataFrame, str]],
+    cm: ConfigManager,
+    optimizer_arg: str | None,
+    trials_arg: int | None,
+    git_hash: str | None,
+    dm: DataManager,
+    run_id: int,
+) -> None:
+    """参数搜索模式执行与持久化"""
+    optimizer_cfg = cm.get_optimizer_config()
+    n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
+
+    result = execute_parameter_search(
+        engine=engine,
+        strategy_name=strategy_name,
+        strategy_params=strategy_params,
+        capital=capital,
+        contract_size=contract_size,
+        datasets=datasets,
+        n_trials=n_trials,
+        optimizer_cfg=optimizer_cfg,
+        cm=cm,
+        optimizer_arg=optimizer_arg,
+        git_hash=git_hash,
+        dm=dm,
+        run_id=run_id,
+    )
+    if not result:
+        return
+
+    # 保存实际使用的随机种子
+    dm.store.update_run_seed(
+        run_id=run_id,
+        use_fixed_seed=optimizer_cfg.use_fixed_seed,
+        random_seed=result.actual_seed,
+    )
+
+    # CLI 统一持久化
+    _persist_search_results(
+        dm=dm,
+        result=result,
+        datasets=datasets,
+        search_type=optimizer_arg or cm.get_optimizer_config().engine or "grid",
+        study_name=result.study_name,
+        git_hash=git_hash,
+        run_id=run_id,
+    )
+
+    # run.log → logs.json
+    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
+    if log_file.exists():
+        with open(log_file, encoding="utf-8") as f:
+            text = f.read()
+        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(text, f, ensure_ascii=False)
+
+    # 自动生成回测看板
+    dm.store.finish_run(run_id)
+    build_dashboard(output_dir="output", run_id=run_id)
+
+
+# ── 参数搜索结果持久化 ───────────────────────────────
 
 
 def _persist_search_results(
@@ -558,7 +693,6 @@ def _persist_search_results(
     for i, trial in enumerate(result.trial_data):
         trial_cfg = {**engine_cfg, "trial_index": i}
         for er in trial.get("engine_results", []):
-            # 覆盖引擎结果中的 trial 级别字段
             er.engine_config = trial_cfg
             er.strategy_params = trial.get("strategy_params", {})
             er.git_hash = git_hash
@@ -566,7 +700,9 @@ def _persist_search_results(
             if not er.success:
                 er.status = STATUS_FAILED
                 dm.insert_backtest(
-                    er, run_id=run_id, data_src=next((f for s, _, f in datasets if s == er.symbol), None)
+                    er,
+                    run_id=run_id,
+                    data_src=next((f for s, _, f in datasets if s == er.symbol), None),
                 )
                 continue
 
@@ -576,20 +712,18 @@ def _persist_search_results(
             bt_id = dm.insert_backtest(er, run_id=run_id, data_src=data_src)
             all_ids.append(bt_id)
 
-            # 保存交易明细 + 每日资金曲线
             daily = er.daily_results
             if daily:
                 dm.insert_backtest_daily(bt_id, daily)
 
-            # 保存交易记录
             if er.fills:
                 dm.insert_backtest_trades(bt_id, er.fills)
 
-            # 跨表一致性验证：确保 backtests 统计字段与 backtest_trades 记录数一致
             errors = dm.validate_consistency(bt_id)
             if errors:
                 for err in errors:
                     logger.warning(f"数据一致性警告: {err}")
+
     # 输出摘要
     print(f"\n============ {search_type.upper()} 优化结果 ============")
     print(f"  最优得分:  {result.best_value:.4f}")

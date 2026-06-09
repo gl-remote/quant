@@ -1,7 +1,13 @@
 """内部存储层 - 数据库操作实现（对外隐藏）
 
-提供数据库连接管理和CRUD操作，被DataManager调用，
+提供数据库连接管理和 CRUD 操作，被 DataManager 调用，
 外部模块不应直接使用此模块。
+
+重构说明（2026-06-06）：
+  - 原 `insert_backtest_detailed` 有两个几乎相同的大分支（更新/新建），逻辑重复
+  - 提取 `_build_backtest_fields` 统一字段构造，消除 60+ 行重复赋值
+  - 业务聚合查询（`get_run_summary` / `get_backtests_for_run` / `get_optuna_data`）
+    拆出 `_build_summary_for_symbol` / `_query_trial_stats` 等辅助
 """
 
 from __future__ import annotations
@@ -9,6 +15,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pandera.pandas as pa
@@ -16,7 +23,7 @@ import pandera.pandas as pa
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false, reportArgumentType=false
 # pyright: reportAttributeAccessIssue=false, reportUnusedCallResult=false
-# 注：以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
+# 注: 以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
 # 字段描述符访问、`dict[str, object]` 查询返回值都会产生误报。
 from loguru import logger
 
@@ -43,21 +50,21 @@ from .models import (
 )
 
 
-def _f(val: object) -> float:
-    """安全转换 object → float（Peewee .dicts() 返回 dict[str, object]）"""
-    return float(val)  # type: ignore[arg-type]
+def _f(val: Any) -> float:
+    """安全转换 → float（Peewee .dicts() 返回 dict[str, Any]，值可能是 int/float/None）"""
+    return float(val) if val is not None else 0.0
 
 
-def _i(val: object) -> int:
-    """安全转换 object → int（Peewee .dicts() 返回 dict[str, object]）"""
-    return int(val)  # type: ignore[call-overload, no-any-return]
+def _i(val: Any) -> int:
+    """安全转换 → int"""
+    return int(val) if val is not None else 0
 
 
 def _normalize_max_dd(raw_value: float | None) -> float:
     """返回 max_drawdown 原值
 
-    vnpy 的 max_drawdown 是绝对金额（如 50000 元），不再做归一化。
-    2026-06-06: 移除了旧版 v/100 的逻辑，因为 vnpy 输出的就是金额而非百分比。
+    vnpy 的 max_drawdown 是绝对金额，不再做归一化。
+    2026-06-06: 移除旧版 /100 的逻辑。
     """
     if raw_value is None:
         return 0.0
@@ -65,9 +72,9 @@ def _normalize_max_dd(raw_value: float | None) -> float:
 
 
 class DataStore:
-    """数据存储层 - 管理数据库连接和CRUD操作"""
+    """数据存储层 - 管理数据库连接和 CRUD 操作"""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self.db_path: str = db_path
         database.init(
@@ -81,13 +88,7 @@ class DataStore:
         self._init_tables()
 
     def _init_tables(self) -> None:
-        """初始化数据库表 + 执行版本化迁移
-
-        迁移逻辑已从本方法中拆出到 data/schema.py：
-        - 当前代码期望的版本号：schema.CURRENT_SCHEMA_VERSION
-        - 数据库当前版本号：schema_info 表中的最大值
-        - 数据库版本 < 代码版本 → 按顺序依次执行缺失的迁移
-        """
+        """初始化数据库表 + 执行版本化迁移"""
         from . import schema as _schema
 
         database.create_tables(
@@ -104,7 +105,6 @@ class DataStore:
             ],
             safe=True,
         )
-        # 执行待执行的迁移（失败直接 raise，不吞异常）
         _schema.run_pending_migrations()
 
     def close(self) -> None:
@@ -112,7 +112,7 @@ class DataStore:
         if not database.is_closed():
             database.close()
 
-    # ── 日志操作 ────────────────────────────────────────────────────
+    # ── 日志操作 ──────────────────────────────────────────
 
     def log(
         self,
@@ -155,10 +155,10 @@ class DataStore:
             if cutoff_id is None:
                 return 0
 
-            deleted = OperationLog.delete().where(OperationLog.id < cutoff_id).execute()  # type: ignore[no-any-return]
+            deleted = OperationLog.delete().where(OperationLog.id < cutoff_id).execute()
             if deleted > 0:
                 logger.info(f"操作日志自动清理: 删除 {deleted} 条旧记录")
-            return deleted  # type: ignore[no-any-return]
+            return int(deleted)
         except Exception as e:
             logger.warning(f"操作日志清理失败: {e}")
             return 0
@@ -172,7 +172,7 @@ class DataStore:
                     row[field] = str(row[field])
         return rows
 
-    # ── 元数据操作 ──────────────────────────────────────────────────
+    # ── 元数据操作 ────────────────────────────────────────
 
     def get_metadata(
         self,
@@ -195,14 +195,7 @@ class DataStore:
         row = query.order_by(ExportMetadata.id.desc()).limit(1).dicts()
         result = next(iter(row), None)
         if result:
-            for field in [
-                "start_date",
-                "end_date",
-                "min_dt",
-                "max_dt",
-                "created_at",
-                "updated_at",
-            ]:
+            for field in ["start_date", "end_date", "min_dt", "max_dt", "created_at", "updated_at"]:
                 if result.get(field) is not None:
                     result[field] = str(result[field])
         return result
@@ -221,7 +214,6 @@ class DataStore:
     ) -> None:
         """插入或更新元数据（按 symbol+provider+interval 匹配）"""
         now = datetime.now()
-        # INSERT OR REPLACE — 利用 UNIQUE(symbol, provider, interval) 约束
         row, created = ExportMetadata.get_or_create(
             symbol=symbol,
             provider=provider,
@@ -248,7 +240,7 @@ class DataStore:
                 updated_at=now,
             ).where(ExportMetadata.id == row.id).execute()
 
-    # ── 运行记录 ────────────────────────────────────────────────────
+    # ── 运行记录 ──────────────────────────────────────────
 
     def create_run(
         self,
@@ -266,7 +258,7 @@ class DataStore:
             use_fixed_seed=1 if use_fixed_seed else 0,
             random_seed=random_seed,
         )
-        return r.id  # type: ignore[no-any-return]
+        return int(r.id)
 
     def finish_run(self, run_id: int, status: str = "success") -> None:
         """标记运行完成"""
@@ -278,9 +270,12 @@ class DataStore:
 
     def update_run_seed(self, run_id: int, use_fixed_seed: bool, random_seed: int) -> None:
         """更新运行记录的随机种子"""
-        Run.update(use_fixed_seed=1 if use_fixed_seed else 0, random_seed=random_seed).where(Run.id == run_id).execute()
+        Run.update(
+            use_fixed_seed=1 if use_fixed_seed else 0,
+            random_seed=random_seed,
+        ).where(Run.id == run_id).execute()
 
-    # ── 回测记录操作 ────────────────────────────────────────────────
+    # ── 回测记录操作 ─────────────────────────────────────
 
     def insert_backtest_detailed(
         self,
@@ -290,147 +285,93 @@ class DataStore:
     ) -> int:
         """插入完整的回测记录
 
-        Args:
-            result: 统一 BacktestResult 结构
-            run_id: Run 记录 ID
-            data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
+        通过 `_build_backtest_fields` 统一构造字段，消除更新/新建分支的重复赋值。
         """
         now = datetime.now()
-
-        total_trades = result.total_trades
-        initial_capital = result.initial_capital
-        end_balance = result.end_balance
-        total_return = result.total_return
-        win_trades_v = result.win_trades
-        loss_trades_v = result.loss_trades
-        win_rate_val = result.win_rate
+        fields = self._build_backtest_fields(result, now, data_src)
 
         if result.backtest_id:
-            # 更新已有占位记录
             bt = Backtest.get_by_id(result.backtest_id)
-            if run_id is not None:
-                bt.run = run_id
-            bt.symbol = result.symbol
-            bt.strategy = result.strategy
-            bt.strategy_version = result.strategy_version
-            bt.git_hash = result.git_hash
-            bt.status = result.status
-            bt.error_message = result.error_message
-            bt.start_date = result.start_date
-            bt.end_date = result.end_date
-            bt.total_days = result.total_days
-            bt.initial_capital = result.initial_capital
-            bt.commission_rate = result.commission_rate
-            bt.slippage = result.slippage
-            bt.price_tick = result.price_tick
-            bt.contract_size = result.contract_size
-            bt.kline_interval = result.kline_interval
-            bt.end_balance = end_balance
-            bt.total_return = total_return
-            bt.annual_return = result.annual_return
-            bt.total_trades = total_trades
-            bt.win_trades = win_trades_v
-            bt.loss_trades = loss_trades_v
-            bt.win_rate = win_rate_val
-            bt.max_consecutive_win = result.max_consecutive_win
-            bt.max_consecutive_loss = result.max_consecutive_loss
-            bt.avg_win = result.avg_win
-            bt.avg_loss = result.avg_loss
-            bt.win_loss_ratio = result.win_loss_ratio
-            bt.sharpe_ratio = result.sharpe_ratio
-            bt.max_drawdown = _normalize_max_dd(result.max_drawdown)
-            bt.max_ddpercent = result.max_ddpercent
-            bt.max_drawdown_duration = result.max_drawdown_duration or 0
-            bt.daily_std = result.daily_std
-            bt.return_drawdown_ratio = result.return_drawdown_ratio
-            # ── 盈亏汇总（vnpy 直接输出）───────────────────────
-            bt.total_net_pnl = result.total_net_pnl
-            bt.daily_net_pnl = result.daily_net_pnl
-            bt.total_commission = result.total_commission
-            bt.daily_commission = result.daily_commission
-            bt.total_slippage = result.total_slippage
-            bt.daily_slippage = result.daily_slippage
-            bt.total_turnover = result.total_turnover
-            bt.daily_turnover = result.daily_turnover
-            # ── 交易日统计（vnpy 直接输出）──────────────────────
-            bt.profit_days = result.profit_days
-            bt.loss_days = result.loss_days
-            bt.daily_trade_count = result.daily_trade_count
-            bt.daily_return_pct = result.daily_return_pct
-            # ── 进阶指标（vnpy 输出）───────────────────────────
-            bt.ewm_sharpe = result.ewm_sharpe
-            bt.rgr_ratio = result.rgr_ratio
-            # ── 元数据 ────────────────────────────────────────
-            bt.engine_config = json.dumps(result.engine_config) if result.engine_config else None
-            bt.data_src = data_src or result.data_src
-            bt.updated_at = now
+            for key, value in fields.items():
+                setattr(bt, key, value)
             bt.save()
         else:
-            bt = Backtest.create(
-                run=run_id,
-                symbol=result.symbol,
-                strategy=result.strategy,
-                strategy_version=result.strategy_version,
-                git_hash=result.git_hash,
-                status=result.status,
-                error_message=result.error_message,
-                start_date=result.start_date,
-                end_date=result.end_date,
-                total_days=result.total_days,
-                initial_capital=initial_capital,
-                commission_rate=result.commission_rate,
-                slippage=result.slippage,
-                price_tick=result.price_tick,
-                contract_size=result.contract_size,
-                kline_interval=result.kline_interval,
-                end_balance=end_balance,
-                total_return=total_return,
-                annual_return=result.annual_return,
-                total_trades=total_trades,
-                win_trades=win_trades_v,
-                loss_trades=loss_trades_v,
-                win_rate=win_rate_val,
-                max_consecutive_win=result.max_consecutive_win,
-                max_consecutive_loss=result.max_consecutive_loss,
-                avg_win=result.avg_win,
-                avg_loss=result.avg_loss,
-                win_loss_ratio=result.win_loss_ratio,
-                sharpe_ratio=result.sharpe_ratio,
-                max_drawdown=_normalize_max_dd(result.max_drawdown),
-                max_ddpercent=result.max_ddpercent,
-                max_drawdown_duration=result.max_drawdown_duration or 0,
-                daily_std=result.daily_std,
-                return_drawdown_ratio=result.return_drawdown_ratio,
-                # ── 盈亏汇总（vnpy 直接输出）───────────────────────
-                total_net_pnl=result.total_net_pnl,
-                daily_net_pnl=result.daily_net_pnl,
-                total_commission=result.total_commission,
-                daily_commission=result.daily_commission,
-                total_slippage=result.total_slippage,
-                daily_slippage=result.daily_slippage,
-                total_turnover=result.total_turnover,
-                daily_turnover=result.daily_turnover,
-                # ── 交易日统计（vnpy 直接输出）──────────────────────
-                profit_days=result.profit_days,
-                loss_days=result.loss_days,
-                daily_trade_count=result.daily_trade_count,
-                daily_return_pct=result.daily_return_pct,
-                # ── 进阶指标（vnpy 输出）───────────────────────────
-                ewm_sharpe=result.ewm_sharpe,
-                rgr_ratio=result.rgr_ratio,
-                engine_config=json.dumps(result.engine_config) if result.engine_config else None,
-                data_src=data_src or result.data_src,
-                updated_at=now,
-            )
+            bt = Backtest.create(**fields)
+
         # 写入参数（更新时先删旧参数再插入，避免重复）
         params = result.strategy_params
         if params:
             if result.backtest_id:
-                # 更新路径：删除旧参数
                 BacktestParam.delete().where(BacktestParam.backtest == bt).execute()
             for name, value in params.items():
                 BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
-        return bt.id  # type: ignore[no-any-return]
+        return int(bt.id)
+
+    def _build_backtest_fields(
+        self,
+        result: BacktestResult,
+        now: datetime,
+        data_src: str | None,
+    ) -> dict[str, Any]:
+        """统一构造 Backtest 记录的字段字典
+
+        消除 insert_backtest_detailed 中更新/新建分支的 60+ 行重复赋值。
+        """
+        fields: dict[str, Any] = dict(
+            symbol=result.symbol,
+            strategy=result.strategy,
+            strategy_version=result.strategy_version,
+            git_hash=result.git_hash,
+            status=result.status,
+            error_message=result.error_message,
+            start_date=result.start_date,
+            end_date=result.end_date,
+            total_days=result.total_days,
+            initial_capital=result.initial_capital,
+            commission_rate=result.commission_rate,
+            slippage=result.slippage,
+            price_tick=result.price_tick,
+            contract_size=result.contract_size,
+            kline_interval=result.kline_interval,
+            end_balance=result.end_balance,
+            total_return=result.total_return,
+            annual_return=result.annual_return,
+            total_trades=result.total_trades,
+            win_trades=result.win_trades,
+            loss_trades=result.loss_trades,
+            win_rate=result.win_rate,
+            max_consecutive_win=result.max_consecutive_win,
+            max_consecutive_loss=result.max_consecutive_loss,
+            avg_win=result.avg_win,
+            avg_loss=result.avg_loss,
+            win_loss_ratio=result.win_loss_ratio,
+            sharpe_ratio=result.sharpe_ratio,
+            max_drawdown=_normalize_max_dd(result.max_drawdown),
+            max_ddpercent=result.max_ddpercent,
+            max_drawdown_duration=result.max_drawdown_duration or 0,
+            daily_std=result.daily_std,
+            return_drawdown_ratio=result.return_drawdown_ratio,
+            total_net_pnl=result.total_net_pnl,
+            daily_net_pnl=result.daily_net_pnl,
+            total_commission=result.total_commission,
+            daily_commission=result.daily_commission,
+            total_slippage=result.total_slippage,
+            daily_slippage=result.daily_slippage,
+            total_turnover=result.total_turnover,
+            daily_turnover=result.daily_turnover,
+            profit_days=result.profit_days,
+            loss_days=result.loss_days,
+            daily_trade_count=result.daily_trade_count,
+            daily_return_pct=result.daily_return_pct,
+            ewm_sharpe=result.ewm_sharpe,
+            rgr_ratio=result.rgr_ratio,
+            engine_config=json.dumps(result.engine_config) if result.engine_config else None,
+            data_src=data_src or result.data_src,
+            updated_at=now,
+        )
+        if result.backtest_id is None:
+            fields["run"] = None
+        return fields
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细
@@ -438,7 +379,6 @@ class DataStore:
         输入 trades 字段名必须与 ORM BacktestTrade 对齐:
             datetime, symbol, direction, offset,
             open_price, close_price, quantity, pnl, commission
-        各引擎层（vnpy / TqSdk）应在产出时完成字段映射，此处不再做兼容转换。
         """
         now = datetime.now()
         rows: list[dict[str, object]] = []
@@ -464,7 +404,7 @@ class DataStore:
         if not rows:
             return 0
 
-        # Pandera 验证：确保交易记录数据符合 Schema 约束
+        # Pandera 验证
         try:
             trades_df = pd.DataFrame(rows)
             trades_df["datetime"] = pd.to_datetime(trades_df["datetime"])
@@ -523,7 +463,6 @@ class DataStore:
 
         records = []
         for row in rows:
-            # ORM DateTimeField → str 转换，Pydantic TradeRecord 期望 str
             for dt_field in ("datetime", "created_at"):
                 if row.get(dt_field) is not None:
                     row[dt_field] = str(row[dt_field])
@@ -538,15 +477,12 @@ class DataStore:
         peak: float = 0.0
 
         for daily in daily_results:
-            # vnpy 字段名是 `date`（非 `datetime`）；calculate_statistics 后含 `balance`
             dt = daily.get("date", daily.get("datetime"))
             if not dt:
                 continue
             date_str = str(dt).split(" ")[0] if " " in str(dt) else str(dt).split("T")[0]
 
-            # vnpy calculate_result() 输出键名为 net_pnl；daily_return 为旧版键名兼容
             net_pnl = _f(daily.get("net_pnl", daily.get("daily_return", 0.0)))
-            # vnpy calculate_result() 输出键名为 balance；equity 为旧版键名兼容
             equity = _f(daily.get("balance", daily.get("equity", 0.0)))
             if equity > peak:
                 peak = equity
@@ -559,7 +495,6 @@ class DataStore:
                     "equity": equity,
                     "daily_return": net_pnl,
                     "drawdown": drawdown,
-                    # 2026-06-06 新增 vnpy 日度字段
                     "turnover": _f(daily.get("turnover", 0.0) or 0),
                     "commission": _f(daily.get("commission", 0.0) or 0),
                     "slippage": _f(daily.get("slippage", 0.0) or 0),
@@ -571,7 +506,6 @@ class DataStore:
         if not rows:
             return 0
 
-        # Pandera 验证：确保每日资金曲线数据符合 Schema 约束
         try:
             daily_df = pd.DataFrame(rows)
             daily_df["date"] = pd.to_datetime(daily_df["date"])
@@ -603,7 +537,6 @@ class DataStore:
                     "equity": row.get("equity", 0),
                     "daily_return": row.get("daily_return", 0),
                     "drawdown": row.get("drawdown", 0),
-                    # 2026-06-06 新增 vnpy 日度字段
                     "turnover": row.get("turnover"),
                     "commission": row.get("commission"),
                     "slippage": row.get("slippage"),
@@ -620,7 +553,6 @@ class DataStore:
             for field in ["created_at", "updated_at"]:
                 if result.get(field) is not None:
                     result[field] = str(result[field])
-            # 转换 use_fixed_seed 为 bool
             if "use_fixed_seed" in result:
                 result["use_fixed_seed"] = bool(result["use_fixed_seed"])
         return result
@@ -657,10 +589,10 @@ class DataStore:
             )
         return result
 
-    def _filter_by_best_trial(self, backtests: list[dict[str, object]], run_id: int) -> list[dict[str, object]]:
-        """过滤出全局最优 trial 对应的回测记录"""
-        import json as _j
+    # ── 业务聚合查询 ─────────────────────────────────────
 
+    def _filter_by_best_trial(self, backtests: list[dict[str, Any]], run_id: int) -> list[dict[str, Any]]:
+        """过滤出全局最优 trial 对应的回测记录"""
         best_trial = self.get_best_trial_index(run_id)
         if best_trial <= 0:
             return backtests
@@ -668,11 +600,9 @@ class DataStore:
         filtered = []
         for bt in backtests:
             ec = bt.get("engine_config")
-            if not ec:
-                continue
             if isinstance(ec, str):
                 try:
-                    cfg = _j.loads(ec)
+                    cfg = json.loads(ec)
                 except Exception:
                     continue
             else:
@@ -693,17 +623,14 @@ class DataStore:
                 Backtest.win_loss_ratio,
                 Backtest.annual_return,
                 Backtest.max_drawdown,
-                Backtest.max_ddpercent,  # 2026-06-06新增
+                Backtest.max_ddpercent,
                 Backtest.sharpe_ratio,
                 Backtest.end_balance,
-                # 盈亏汇总 [vnpy] (2026-06-06新增)
                 Backtest.total_net_pnl,
                 Backtest.total_commission,
                 Backtest.total_slippage,
-                # 交易日统计 [vnpy]
                 Backtest.profit_days,
                 Backtest.loss_days,
-                # 进阶指标 [vnpy]
                 Backtest.ewm_sharpe,
                 Backtest.rgr_ratio,
                 Backtest.data_src,
@@ -721,40 +648,43 @@ class DataStore:
 
         best: dict[str, dict[str, object]] = {}
         for r in rows:
-            sym = str(r["symbol"])
-            total_return = _f(r["total_return"] or 0)
-            if sym not in best or total_return > _f(best[sym].get("total_return") or 0):
-                best[sym] = {
-                    "id": r["id"],
-                    "symbol": sym,
-                    "total_return": total_return,
-                    "total_trades": r["total_trades"] or 0,
-                    # win_rate 是比值(0~1)，前端展示期望百分比(0~100)
-                    "win_rate": _f(r["win_rate"] or 0) * 100,
-                    "win_loss_ratio": _f(r["win_loss_ratio"] or 0),
-                    "annual_return": _f(r["annual_return"] or 0),
-                    "max_drawdown": _f(r["max_drawdown"] or 0),
-                    "max_ddpercent": _f(r["max_ddpercent"] or 0),
-                    "sharpe": _f(r["sharpe_ratio"] or 0),
-                    "end_balance": _f(r["end_balance"] or 0),
-                    # 盈亏汇总 [vnpy] (2026-06-06新增)
-                    "total_net_pnl": _f(r["total_net_pnl"] or 0),
-                    "total_commission": _f(r["total_commission"] or 0),
-                    "total_slippage": _f(r["total_slippage"] or 0),
-                    # 交易日统计 [vnpy]
-                    "profit_days": r["profit_days"] or 0,
-                    "loss_days": r["loss_days"] or 0,
-                    # 进阶指标 [vnpy]
-                    "ewm_sharpe": _f(r["ewm_sharpe"] or 0),
-                    "rgr_ratio": _f(r["rgr_ratio"] or 0),
-                    "ret_cls": "badge-green" if total_return > 0 else "badge-red",
-                    "sr_cls": "badge-green" if _f(r["sharpe_ratio"] or 0) > 0 else "badge-red",
-                    "data_src": r["data_src"],
-                    "start_date": r["start_date"],
-                    "end_date": r["end_date"],
-                    "kline_interval": r["kline_interval"],
-                }
+            self._update_best_for_symbol(best, r)
         return [best[s] for s in sorted(best)]
+
+    def _update_best_for_symbol(self, best: dict[str, dict[str, Any]], row: dict[str, Any]) -> None:
+        """为单个品种维护最高收益的回测摘要
+
+        作为 `get_run_summary` 中的循环体抽离，便于阅读和测试。
+        """
+        sym = str(row["symbol"])
+        total_return = _f(row["total_return"] or 0)
+        if sym not in best or total_return > _f(best[sym].get("total_return") or 0):
+            best[sym] = {
+                "id": row["id"],
+                "symbol": sym,
+                "total_return": total_return,
+                "total_trades": row["total_trades"] or 0,
+                "win_rate": _f(row["win_rate"] or 0) * 100,
+                "win_loss_ratio": _f(row["win_loss_ratio"] or 0),
+                "annual_return": _f(row["annual_return"] or 0),
+                "max_drawdown": _f(row["max_drawdown"] or 0),
+                "max_ddpercent": _f(row["max_ddpercent"] or 0),
+                "sharpe": _f(row["sharpe_ratio"] or 0),
+                "end_balance": _f(row["end_balance"] or 0),
+                "total_net_pnl": _f(row["total_net_pnl"] or 0),
+                "total_commission": _f(row["total_commission"] or 0),
+                "total_slippage": _f(row["total_slippage"] or 0),
+                "profit_days": row["profit_days"] or 0,
+                "loss_days": row["loss_days"] or 0,
+                "ewm_sharpe": _f(row["ewm_sharpe"] or 0),
+                "rgr_ratio": _f(row["rgr_ratio"] or 0),
+                "ret_cls": "badge-green" if total_return > 0 else "badge-red",
+                "sr_cls": "badge-green" if _f(row["sharpe_ratio"] or 0) > 0 else "badge-red",
+                "data_src": row["data_src"],
+                "start_date": row["start_date"],
+                "end_date": row["end_date"],
+                "kline_interval": row["kline_interval"],
+            }
 
     def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
         """获取某 run 下所有回测记录（含参数和日线数据，仅全局最优参数组合）"""
@@ -789,10 +719,8 @@ class DataStore:
                     "sharpe_ratio": _f(bt["sharpe_ratio"] or 0),
                     "max_drawdown": _f(bt["max_drawdown"] or 0),
                     "max_ddpercent": _f(bt["max_ddpercent"] or 0),
-                    # win_rate 是比值(0~1)，前端 formatPct 期望百分比(0~100)
                     "win_rate": _f(bt["win_rate"] or 0) * 100,
                     "total_trades": bt["total_trades"] or 0,
-                    # 盈亏汇总 [vnpy] (2026-06-06新增)
                     "total_net_pnl": _f(bt["total_net_pnl"] or 0),
                     "daily_net_pnl": _f(bt["daily_net_pnl"] or 0),
                     "total_commission": _f(bt["total_commission"] or 0),
@@ -801,12 +729,10 @@ class DataStore:
                     "daily_slippage": _f(bt["daily_slippage"] or 0),
                     "total_turnover": _f(bt["total_turnover"] or 0),
                     "daily_turnover": _f(bt["daily_turnover"] or 0),
-                    # 交易日统计 [vnpy]
                     "profit_days": bt["profit_days"] or 0,
                     "loss_days": bt["loss_days"] or 0,
                     "daily_trade_count": _f(bt["daily_trade_count"] or 0),
                     "daily_return_pct": _f(bt["daily_return_pct"] or 0),
-                    # 进阶指标 [vnpy]
                     "ewm_sharpe": _f(bt["ewm_sharpe"] or 0),
                     "rgr_ratio": _f(bt["rgr_ratio"] or 0),
                     "data_src": bt["data_src"],
@@ -853,70 +779,24 @@ class DataStore:
         }
 
     def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
-        """获取 Optuna 优化数据"""
+        """获取 Optuna 优化数据
+
+        内部拆出 `_query_trial_stats` / `_query_param_rows` / `_query_best_params`
+        三个小方法，避免主函数的 SQL 字符串和处理逻辑混合在一起。
+        """
         study_rows = list(RunStudy.select(RunStudy.study_name).where(RunStudy.run_id == run_id).dicts())
         if not study_rows:
             return None
 
         study_name = study_rows[0]["study_name"]
 
-        # 读取优化方向：MAXIMIZE → 用 MAX, MINIMIZE → 用 MIN
-        direction_row = list(
-            database.execute_sql(
-                """
-                SELECT direction FROM study_directions
-                WHERE study_id=(SELECT study_id FROM studies WHERE study_name=?)
-            """,
-                (study_name,),
-            )
-        )
+        direction_row = self._query_study_direction(study_name)
         is_maximize = direction_row and direction_row[0][0] == "MAXIMIZE"
         agg_func = "MAX" if is_maximize else "MIN"
 
-        trials = list(
-            database.execute_sql(
-                """
-                SELECT t.number, tv.value FROM trials t
-                LEFT JOIN trial_values tv ON t.trial_id = tv.trial_id
-                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
-                  AND t.state='COMPLETE'
-                ORDER BY t.number
-            """,
-                (study_name,),
-            )
-        )
-
-        params_rows = list(
-            database.execute_sql(
-                """
-                SELECT t.number, tp.param_name, tp.param_value
-                FROM trials t JOIN trial_params tp ON t.trial_id = tp.trial_id
-                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
-                  AND t.state='COMPLETE'
-                ORDER BY t.number, tp.param_name
-            """,
-                (study_name,),
-            )
-        )
-
-        best = list(
-            database.execute_sql(
-                f"""
-                SELECT tp.param_name, tp.param_value FROM trial_params tp
-                JOIN trial_values tv ON tp.trial_id = tv.trial_id
-                JOIN trials t ON t.trial_id = tp.trial_id
-                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
-                  AND tv.value=(
-                      SELECT {agg_func}(tv2.value) FROM trial_values tv2
-                      JOIN trials t2 ON tv2.trial_id=t2.trial_id
-                      WHERE t2.study_id=(SELECT study_id FROM studies WHERE study_name=?))
-            """,
-                (study_name, study_name),
-            )
-        )
-
-        trial_nums = [t[0] for t in trials]
-        trial_values = [_f(t[1] or 0) for t in trials]
+        trial_nums, trial_values = self._query_trial_stats(study_name)
+        params_rows = self._query_param_rows(study_name)
+        best = self._query_best_params(study_name, agg_func)
 
         param_names = sorted(set(p[1] for p in params_rows))
         param_scatter = None
@@ -932,13 +812,66 @@ class DataStore:
 
         return {
             "study_name": study_name,
-            "trial_count": len(trials),
+            "trial_count": len(trial_nums),
             "trial_nums": trial_nums,
             "trial_values": trial_values,
             "best_params": [{"name": p[0], "value": _f(p[1])} for p in best],
             "param_scatter": param_scatter,
             "report_file": f"optimization_{study_name}.html",
         }
+
+    def _query_study_direction(self, study_name: str) -> list[tuple[Any, ...]]:
+        return list(
+            database.execute_sql(
+                "SELECT direction FROM study_directions "
+                "WHERE study_id=(SELECT study_id FROM studies WHERE study_name=?)",
+                (study_name,),
+            )
+        )
+
+    def _query_trial_stats(self, study_name: str) -> tuple[list[int], list[float]]:
+        rows = list(
+            database.execute_sql(
+                "SELECT t.number, tv.value FROM trials t "
+                "LEFT JOIN trial_values tv ON t.trial_id = tv.trial_id "
+                "WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) "
+                "AND t.state='COMPLETE' "
+                "ORDER BY t.number",
+                (study_name,),
+            )
+        )
+        nums = [r[0] for r in rows]
+        values = [_f(r[1] or 0) for r in rows]
+        return nums, values
+
+    def _query_param_rows(self, study_name: str) -> list[tuple[Any, ...]]:
+        return list(
+            database.execute_sql(
+                "SELECT t.number, tp.param_name, tp.param_value "
+                "FROM trials t JOIN trial_params tp ON t.trial_id = tp.trial_id "
+                "WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?) "
+                "AND t.state='COMPLETE' "
+                "ORDER BY t.number, tp.param_name",
+                (study_name,),
+            )
+        )
+
+    def _query_best_params(self, study_name: str, agg_func: str) -> list[tuple[Any, ...]]:
+        return list(
+            database.execute_sql(
+                f"""
+                SELECT tp.param_name, tp.param_value FROM trial_params tp
+                JOIN trial_values tv ON tp.trial_id = tv.trial_id
+                JOIN trials t ON t.trial_id = tp.trial_id
+                WHERE t.study_id=(SELECT study_id FROM studies WHERE study_name=?)
+                  AND tv.value=(
+                      SELECT {agg_func}(tv2.value) FROM trial_values tv2
+                      JOIN trials t2 ON tv2.trial_id=t2.trial_id
+                      WHERE t2.study_id=(SELECT study_id FROM studies WHERE study_name=?))
+                """,
+                (study_name, study_name),
+            )
+        )
 
     def delete_backtest(self, backtest_id: int) -> bool:
         """硬删除回测记录及其关联的交易明细和每日资金曲线
@@ -954,7 +887,6 @@ class DataStore:
             if bt is None:
                 logger.warning(f"回测记录不存在 id={backtest_id}")
                 return False
-            # 先删关联数据，再删主记录 (虽然有 CASCADE，显式删除更安全)
             with database.atomic():
                 BacktestDaily.delete().where(BacktestDaily.backtest_id == backtest_id).execute()
                 BacktestTrade.delete().where(BacktestTrade.backtest_id == backtest_id).execute()

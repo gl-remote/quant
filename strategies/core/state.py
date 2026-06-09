@@ -15,12 +15,12 @@
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, TypeVar, Generic
+from typing import Any, Generic, TypeVar
 
-from .types import StrategyPosition, Fill
+from .types import Fill, StrategyPosition
 
 # 泛型类型变量，用于表示策略配置的具体类型
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
@@ -52,6 +52,7 @@ class State(Generic[T]):
     - position 和 fills 由 Bridge 负责更新，Strategy 只读取不修改
     - strategy_config 在运行期间不应修改（是策略参数）
     """
+
     # 基本交易标的信息
     symbol: str
     """交易标的代码，如 'rb2505'"""
@@ -90,7 +91,7 @@ class State(Generic[T]):
     - 此字段与 vnpy 的 self.pos 保持同步
     """
 
-    fills: List[Fill] = field(default_factory=list)
+    fills: list[Fill] = field(default_factory=list)
     """历史成交记录列表
 
     【数据来源】
@@ -108,7 +109,7 @@ class State(Generic[T]):
     backtest_id: int = 0
     """回测记录 ID，由 Engine 创建占位记录后注入"""
 
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
     """扩展字段，用于临时存储其他数据
 
     这是一个灵活的扩展点，可以存储任何临时需要的数据。
