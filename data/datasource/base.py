@@ -92,7 +92,8 @@ class BaseDataSource(ABC):
                     backoff: float = self.retry_backoff_base * (2 ** (attempt - 1))
                     logger.warning(
                         f"{source_name} 数据拉取失败 (第 {attempt}/{self.max_retries} 次): {e}，"
-                        f"{backoff:.0f}s 后重试..."
+                        f"{backoff:.0f}s 后重试...",
+                        exc_info=(attempt == 1),  # 第一次失败时保留完整堆栈
                     )
                     time.sleep(backoff)
                 else:
