@@ -37,6 +37,7 @@ from .models import (
     OperationLog,
     Run,
     RunStudy,
+    SchemaInfo,
     TradeRecord,
     database,
 )
@@ -80,7 +81,15 @@ class DataStore:
         self._init_tables()
 
     def _init_tables(self) -> None:
-        """初始化数据库表"""
+        """初始化数据库表 + 执行版本化迁移
+
+        迁移逻辑已从本方法中拆出到 data/schema.py：
+        - 当前代码期望的版本号：schema.CURRENT_SCHEMA_VERSION
+        - 数据库当前版本号：schema_info 表中的最大值
+        - 数据库版本 < 代码版本 → 按顺序依次执行缺失的迁移
+        """
+        from . import schema as _schema
+
         database.create_tables(
             [
                 Run,
@@ -91,61 +100,12 @@ class DataStore:
                 BacktestParam,
                 BacktestTrade,
                 BacktestDaily,
+                SchemaInfo,
             ],
             safe=True,
         )
-        # 简单的迁移逻辑：为现有数据库添加新字段
-        try:
-            # ── runs 表 ──────────────────────────────────────
-            cursor = database.execute_sql("PRAGMA table_info(runs)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if "use_fixed_seed" not in columns:
-                database.execute_sql("ALTER TABLE runs ADD COLUMN use_fixed_seed INTEGER DEFAULT 0")
-            if "random_seed" not in columns:
-                database.execute_sql("ALTER TABLE runs ADD COLUMN random_seed INTEGER")
-            # ── backtest_trades 表 ───────────────────────────
-            cursor2 = database.execute_sql("PRAGMA table_info(backtest_trades)")
-            cols2 = [row[1] for row in cursor2.fetchall()]
-            if "reason" not in cols2:
-                database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN reason VARCHAR(512) DEFAULT ''")
-            # ── backtests 表（2026-06-06 新增 vnpy 全量字段）────
-            cursor3 = database.execute_sql("PRAGMA table_info(backtests)")
-            bt_cols = [row[1] for row in cursor3.fetchall()]
-            _bt_alter = {
-                "max_ddpercent": "REAL",
-                "total_net_pnl": "REAL",
-                "daily_net_pnl": "REAL",
-                "total_commission": "REAL",
-                "daily_commission": "REAL",
-                "total_slippage": "REAL",
-                "daily_slippage": "REAL",
-                "total_turnover": "REAL",
-                "daily_turnover": "REAL",
-                "profit_days": "INTEGER",
-                "loss_days": "INTEGER",
-                "daily_trade_count": "REAL",
-                "daily_return_pct": "REAL",
-                "ewm_sharpe": "REAL",
-                "rgr_ratio": "REAL",
-            }
-            for col_name, col_type in _bt_alter.items():
-                if col_name not in bt_cols:
-                    database.execute_sql(f"ALTER TABLE backtests ADD COLUMN {col_name} {col_type}")
-
-            # ── backtest_daily 表（2026-06-06 新增 vnpy 日度字段）────
-            cursor4 = database.execute_sql("PRAGMA table_info(backtest_daily)")
-            bd_cols = [row[1] for row in cursor4.fetchall()]
-            _bd_alter = {
-                "turnover": "REAL",
-                "commission": "REAL",
-                "slippage": "REAL",
-                "trade_count": "INTEGER",
-            }
-            for col_name, col_type in _bd_alter.items():
-                if col_name not in bd_cols:
-                    database.execute_sql(f"ALTER TABLE backtest_daily ADD COLUMN {col_name} {col_type}")
-        except Exception as e:
-            logger.warning(f"数据库迁移失败: {e}")
+        # 执行待执行的迁移（失败直接 raise，不吞异常）
+        _schema.run_pending_migrations()
 
     def close(self) -> None:
         """关闭数据库连接"""

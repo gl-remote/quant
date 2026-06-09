@@ -377,6 +377,26 @@ class BacktestDaily(OrmBaseModel):
         table_name: str = "backtest_daily"
 
 
+class SchemaInfo(OrmBaseModel):
+    """数据库 schema 版本表 — 配合 data/schema.py 实现极简版本化迁移
+
+    每条记录代表一次已执行的迁移。version 单调递增，与 data/schema.py 中的
+    CURRENT_SCHEMA_VERSION / MIGRATIONS 对齐。
+
+    约定（给 AI 看）：新增迁移时必须同时更新 3 个地方：
+    1. data/models.py 中的 ORM 字段定义（改表结构）
+    2. data/schema.py 中的 CURRENT_SCHEMA_VERSION（+1）
+    3. data/schema.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
+    """
+
+    version: IntegerField = IntegerField(unique=True)
+    description: TextField = TextField()
+    applied_at: DateTimeField = DateTimeField()
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "schema_info"
+
+
 # ==============================================================================
 # Live / Test 实时交易 ORM 模型（2 个 Model → 4 张物理表）
 #
@@ -485,11 +505,28 @@ def get_live_trade_model(table_name: str) -> type[BaseLiveModel]:
 
 
 def init_database(db_path: str) -> None:
-    """初始化数据库连接"""
+    """初始化数据库连接 + 执行版本化迁移
+
+    迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
+    """
     database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
     database.create_tables(
-        [Run, RunStudy, ExportMetadata, OperationLog, Backtest, BacktestParam, BacktestTrade, BacktestDaily], safe=True
+        [
+            Run,
+            RunStudy,
+            ExportMetadata,
+            OperationLog,
+            Backtest,
+            BacktestParam,
+            BacktestTrade,
+            BacktestDaily,
+            SchemaInfo,
+        ],
+        safe=True,
     )  # pyright: ignore[reportUnknownMemberType]
+    from . import schema as _schema
+
+    _schema.run_pending_migrations()
 
 
 def close_database() -> None:
