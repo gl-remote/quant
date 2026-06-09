@@ -143,7 +143,9 @@ def _run_data_exports(
             executed = _run_custom_incremental(cache, dm, output_dir, run_id, data_type, getter, exporter)
         elif cache:
             # 通用增量检查: 基于指纹/缓存哈希对比
-            # 用默认参数 g=getter 捕获当前循环值，避免 B023 闭包陷阱
+            # 【为什么用 lambda g=getter 而不是 lambda: getter(dm, run_id)】
+            # Python 闭包捕获的是变量名而非值，普通 lambda 会指向循环最后一次的 getter（B023）。
+            # 用默认参数 g=getter 在定义时绑定当前值，每个循环产生独立的 lambda。
             executed = _export_with_incremental(
                 cache, dm, output_dir, run_id, data_type, lambda g=getter: g(dm, run_id)
             )

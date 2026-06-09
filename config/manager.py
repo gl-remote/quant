@@ -156,7 +156,17 @@ class ProjectConfig(BaseModel):
 
     @staticmethod
     def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:
-        """解析账户信息：环境变量优先，其次 TOML config"""
+        """解析账户信息：环境变量优先，其次 TOML config
+
+        【优先级规则】
+        1. 若同时设置了 TQSDK_API_KEY 和 TQSDK_API_SECRET → 使用环境变量
+        2. 否则扫描 third_party.services 找 name="tqsdk" 的条目
+        3. 找到则使用其 api_key/api_secret，但会排除 PLACEHOLDER_* / your_api_* 等占位符
+
+        【为什么只设置一个环境变量会被忽略】
+        必须两个变量都非空才会走环境变量路径；只设一个会让整条规则不触发，
+        直接回退到 TOML config。这是为了避免"半配置"状态导致的调试混乱。
+        """
         ak = os.environ.get("TQSDK_API_KEY", "")
         sk = os.environ.get("TQSDK_API_SECRET", "")
         if ak and sk:

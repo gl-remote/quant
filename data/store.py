@@ -61,10 +61,14 @@ def _i(val: Any) -> int:
 
 
 def _normalize_max_dd(raw_value: float | None) -> float:
-    """返回 max_drawdown 原值
+    """返回 max_drawdown 原值，仅做 None → 0.0 的安全转换
 
-    vnpy 的 max_drawdown 是绝对金额，不再做归一化。
-    2026-06-06: 移除旧版 /100 的逻辑。
+    【为什么存在这个函数】
+    历史上有 bug: 把 vnpy 返回的绝对金额再除以 100 做"归一化"，导致 max_drawdown 被错误缩小 100 倍。
+    这个函数作为语义标签存在: 明确告诉维护者"这里不能再做任何除法"，同时处理 None 输入。
+
+    :param raw_value: vnpy 回测引擎返回的 max_drawdown（绝对金额，单位=合约货币）
+    :return: 原值，None 时返回 0.0
     """
     if raw_value is None:
         return 0.0
@@ -592,12 +596,21 @@ class DataStore:
     # ── 业务聚合查询 ─────────────────────────────────────
 
     def _filter_by_best_trial(self, backtests: list[dict[str, Any]], run_id: int) -> list[dict[str, Any]]:
-        """过滤出全局最优 trial 对应的回测记录"""
+        """过滤出全局最优 trial 对应的回测记录
+
+        【设计意图】
+        一个 run 通常会跑多组参数（Optuna trial），报告应展示"最优参数在各品种上的表现"。
+        通过读取 Backtest.engine_config 中的 trial_index，筛选出 trial 编号等于 get_best_trial_index() 的记录。
+
+        【回退策略 — 重要】
+        - 若 best_trial <= 0（未找到优化记录）→ 原样返回全部（退化为"每个品种取自己最优"）
+        - 若过滤后得到空列表 → 原样返回全部（避免报告空白），但记录一条 warning 方便排查
+        """
         best_trial = self.get_best_trial_index(run_id)
         if best_trial <= 0:
             return backtests
 
-        filtered = []
+        filtered: list[dict[str, Any]] = []
         for bt in backtests:
             ec = bt.get("engine_config")
             if isinstance(ec, str):
@@ -609,7 +622,15 @@ class DataStore:
                 cfg = ec
             if cfg.get("trial_index") == best_trial:
                 filtered.append(bt)
-        return filtered if filtered else backtests
+
+        if not filtered:
+            logger.warning(
+                "run=%d 最优 trial=%d 在回测记录中找不到匹配，将展示全部记录（可能是 engine_config 未写入 trial_index）",
+                run_id,
+                best_trial,
+            )
+            return backtests
+        return filtered
 
     def get_run_summary(self, run_id: int) -> list[dict[str, object]]:
         """获取每品种最优回测记录（仅全局最优参数组合）"""

@@ -531,7 +531,14 @@ class VnpyBacktestBridge(CtaTemplate):
                 )
 
     def _dispatch_signal(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> bool:
-        """根据 signal.action 和当前持仓判断执行哪种交易。返回是否实际触发下单。"""
+        """根据 signal.action 和当前持仓判断执行哪种交易。返回是否实际触发下单
+
+        【不允许加仓/反向开仓 — 这是故意的】
+        当前已持有多头 (pos>0) 时收到 BUY signal → 忽略（不允许加仓）
+        当前已持有空头 (pos<0) 时收到 SELL signal → 忽略（不允许加仓）
+        策略核心只在"无持仓"时开仓，持仓后只会触发平仓信号。
+        被忽略的信号会打 debug 日志，方便排查策略逻辑问题。
+        """
         if signal.action == TRADE_ACTION_BUY:
             if self.pos == 0:
                 self._execute_trade(signal, price, bar_time, is_buy=True)
@@ -539,6 +546,12 @@ class VnpyBacktestBridge(CtaTemplate):
             if self.pos < 0:
                 self._execute_trade(signal, price, bar_time, is_cover=True)
                 return True
+            logger.debug(
+                "[%s] %s BUY signal被忽略: 已持有多头(pos=%s)，不允许加仓",
+                self.strategy_name,
+                bar_time,
+                self.pos,
+            )
             return False
 
         if signal.action == TRADE_ACTION_SELL:
@@ -548,6 +561,12 @@ class VnpyBacktestBridge(CtaTemplate):
             if self.pos == 0:
                 self._execute_trade(signal, price, bar_time, is_short=True)
                 return True
+            logger.debug(
+                "[%s] %s SELL signal被忽略: 已持有空头(pos=%s)，不允许加仓",
+                self.strategy_name,
+                bar_time,
+                self.pos,
+            )
             return False
 
         return False
