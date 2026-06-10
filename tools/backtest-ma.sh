@@ -31,13 +31,12 @@ echo ""
 echo "[步骤 1/2] 执行全量回测 + 网格搜索..."
 # 旧: --pattern "\.1m\."  (全量 1m 品种)
 #     --pattern "DCE\.m.*\.1m\." \
-#     --pattern "DCE\.m.*\.1m\." \
 if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
-    --pattern ".*" \
+    --pattern "DCE\.m.*\.1m\." \
     --strategy ma \
     --mode search \
     --optimizer bayesian \
-    --trials 20 \
+    --trials 5 \
     --capital 100000 \
     --contract-size 10; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"

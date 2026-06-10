@@ -425,15 +425,13 @@ class VnpyBacktestEngine:
         Returns:
             list[dict]，每个 dict 包含 statistics, daily_results, strategy_config, strategy_version 等
         """
-        from vnpy.trader.constant import Exchange
-
         # ── 步骤 1: 合约解析 ─────────────────────────────
         c = parse_contract(symbol)
         if c is None:
             raise ValueError(f"无法解析合约代码: {symbol!r}")
         pure_symbol = c.contract_code
         exchange_code = c.exchange
-        vt_symbol = f"{pure_symbol}.{Exchange(exchange_code).value}"
+        vt_symbol = c.vnpy_symbol
 
         # ── 步骤 2: 计算品种级参数（费率/滑点/合约乘数）───
         cs, pt, sl, mg, cr = self._resolve_contract_params(symbol, df)
@@ -462,6 +460,7 @@ class VnpyBacktestEngine:
                 # 创建 vnpy 引擎并执行回测
                 engine = self._prepare_vnpy_engine(
                     vt_symbol=vt_symbol,
+                    full_symbol=symbol,
                     interval=interval,
                     start_dt=df["datetime"].iloc[0].to_pydatetime(),
                     end_dt=df["datetime"].iloc[-1].to_pydatetime(),
@@ -580,6 +579,7 @@ class VnpyBacktestEngine:
     def _prepare_vnpy_engine(
         self,
         vt_symbol: str,
+        full_symbol: str,
         interval: Any,
         start_dt: Any,
         end_dt: Any,
@@ -602,7 +602,7 @@ class VnpyBacktestEngine:
         engine = BacktestingEngine()
 
         # vnpy print → loguru，加上下文，丢进度条
-        ctx = f"bt{bt_id}/{vt_symbol}/{strategy_name}"
+        ctx = f"bt{bt_id}/{full_symbol}/{strategy_name}"
         params_summary = ", ".join(f"{k}={v}" for k, v in strategy_params.items())
 
         def _vnpy_output(msg: str, _ctx: str = ctx) -> None:
@@ -628,7 +628,7 @@ class VnpyBacktestEngine:
         strategy_cls = create_strategy_class(
             strategy_name=strategy_name,
             strategy_params=strategy_params,
-            symbol=vt_symbol.split(".")[0],
+            symbol=full_symbol,
             period=self.interval,
             capital=capital,
             contract_size=int(size),

@@ -38,6 +38,11 @@ class ContractInfo:
         return f"{self.product}{self.year % 100:02d}{self.month:02d}"
 
     @property
+    def vnpy_symbol(self) -> str:
+        """vnpy 引擎格式，如 m2509.DCE"""
+        return f"{self.contract_code}.{self.exchange}"
+
+    @property
     def default_start(self) -> str:
         """默认导出开始日期: 交割月 - 4 个月"""
         result: str = (datetime(self.year, self.month, 1) - relativedelta(months=4)).strftime("%Y-%m-%d")
