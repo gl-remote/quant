@@ -51,6 +51,7 @@ echarts.use([
 interface EChartsChartProps {
   option: EChartsOption | null;
   style?: React.CSSProperties;
+  className?: string;
   qlId?: string;
 }
 
@@ -65,6 +66,7 @@ interface EChartsChartProps {
 export default function EChartsChart({
   option,
   style,
+  className,
   qlId,
 }: EChartsChartProps): JSX.Element | null {
   // 容器引用
@@ -115,11 +117,8 @@ export default function EChartsChart({
     <div
       ref={containerRef}
       data-ql-id={qlId}
-      style={{
-        width: "100%",
-        height: style?.height || 400,
-        ...style,
-      }}
+      className={className || "w-full h-[400px]"}
+      style={style}
     />
   );
 }

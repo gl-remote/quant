@@ -1,5 +1,5 @@
 import type { BacktestRecord } from "@/types";
-import QlPanel from "@/components/QlPanel";
+import QlPanel from "@/components/layout/QlPanel";
 
 interface Props {
   backtests: BacktestRecord[] | null;
@@ -16,7 +16,7 @@ export default function BacktestDetail({
 }: Props) {
   if (!backtests || backtests.length === 0) {
     return (
-      <QlPanel qlId="RUN-BT-EMPTY" name="回测记录详情" style={{ marginBottom: 24 }}>
+      <QlPanel qlId="RUN-BT-EMPTY" name="回测记录详情" className="mb-6">
         <div className="text-[13px] text-slate-400 py-4 text-center">暂无回测记录</div>
       </QlPanel>
     );
@@ -25,7 +25,7 @@ export default function BacktestDetail({
   const bt = backtests.find((b) => b.symbol === selectedSymbol);
   if (!bt) {
     return (
-      <QlPanel qlId="RUN-BT-EMPTY" name={`回测记录详情  ·  ${selectedSymbol}`} style={{ marginBottom: 24 }}>
+      <QlPanel qlId="RUN-BT-EMPTY" name={`回测记录详情  ·  ${selectedSymbol}`} className="mb-6">
         <div className="text-[13px] text-slate-400 py-4 text-center">未找到 "{selectedSymbol}" 的回测记录</div>
       </QlPanel>
     );
@@ -58,7 +58,7 @@ export default function BacktestDetail({
     <QlPanel
       qlId="RUN-BT-CONTAINER"
       name={`回测记录详情  ·  ${selectedSymbol}`}
-      style={{ marginBottom: 24 }}
+      className="mb-6"
     >
       <div data-ql-id="RUN-BT-METRICS" className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
         {metrics.map(([label, value]) => (

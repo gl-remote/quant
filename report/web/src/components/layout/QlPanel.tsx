@@ -1,17 +1,12 @@
 import type { ReactNode, CSSProperties } from "react";
 
 interface QlPanelProps {
-  /** data-ql-id 唯一标识 */
   qlId: string;
-  /** 行业规范名称，显示在标题栏 */
   name: string;
-  /** 面板内容 */
   children: ReactNode;
-  /** 额外样式（叠加到面板外层） */
+  className?: string;
   style?: CSSProperties;
-  /** 面板背景色，默认白色 */
   background?: string;
-  /** 紧贴模式：标题栏更矮、内边距更小，适合嵌套在已有卡片内部的子面板 */
   compact?: boolean;
 }
 
@@ -19,13 +14,17 @@ export default function QlPanel({
   qlId,
   name,
   children,
+  className = "",
   style,
   background,
   compact,
 }: QlPanelProps) {
+  const baseClass =
+    "ql-section rounded-xl border border-slate-200 overflow-hidden bg-white";
+
   return (
     <div
-      className="ql-section rounded-xl border border-slate-200 overflow-hidden bg-white"
+      className={[baseClass, className].filter(Boolean).join(" ")}
       data-ql-id={qlId}
       style={{ ...(background ? { background } : {}), ...style }}
     >

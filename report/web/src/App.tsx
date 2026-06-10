@@ -17,8 +17,8 @@
 
 import { HashRouter, Routes, Route } from "react-router-dom";
 import NavPage from "@/pages/NavPage";
-import RunPage from "@/pages/RunPage";
-import Layout from "@/components/Layout";
+import RunPage from "@/pages/run";
+import Layout from "@/components/layout/Layout";
 
 /**
  * 应用根组件

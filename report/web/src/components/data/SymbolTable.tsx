@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { SummaryItem } from "@/types";
-import QlPanel from "@/components/QlPanel";
+import QlPanel from "@/components/layout/QlPanel";
 import { qlIdNameMap } from "@/data/qlIdMapping";
 
 interface Props {
@@ -20,23 +20,17 @@ function formatNumber(v: number): string {
   return v.toLocaleString("zh-CN");
 }
 
-const columns: { key: SortKey; label: string; format: (v: any) => string }[] = [
+const columns: { key: SortKey; label: string; format: (v: any) => string; textClass?: (v: any) => string }[] = [
   { key: "symbol", label: "品种", format: (v) => String(v) },
-  // total_return 是 vnpy 输出的百分比（已乘100），直接显示
-  { key: "total_return", label: "收益率", format: (v) => `${v.toFixed(2)}%` },
-  // win_rate 基于平仓交易计算（排除开仓 pnl=0）
+  { key: "total_return", label: "收益率", format: (v) => `${v.toFixed(2)}%`, textClass: (v) => v >= 0 ? "text-green-600" : "text-red-600" },
   { key: "win_rate", label: "胜率", format: (v) => formatPct(v, 1) },
-  { key: "win_loss_ratio", label: "盈亏比", format: (v) => v.toFixed(2) },
-  // total_trades 是总成交笔数（含开仓+平仓）
+  { key: "win_loss_ratio", label: "盈亏比", format: (v) => v.toFixed(2), textClass: (v) => v >= 1 ? "text-green-600" : "text-red-600" },
   { key: "total_trades", label: "成交次数", format: formatNumber },
-  // max_drawdown 是 vnpy 输出的绝对金额(元)，格式化为货币
-  { key: "max_drawdown", label: "最大回撤(元)", format: (v) => formatNumber(v || 0) },
-  { key: "sharpe", label: "夏普比率", format: (v) => v.toFixed(2) },
-  // annual_return 也是 vnpy 百分比
-  { key: "annual_return", label: "年化收益", format: (v) => `${v.toFixed(2)}%` },
+  { key: "max_drawdown", label: "最大回撤(元)", format: (v) => formatNumber(v || 0), textClass: () => "text-red-600" },
+  { key: "sharpe", label: "夏普比率", format: (v) => v.toFixed(2), textClass: (v) => v >= 0 ? "text-green-600" : "text-red-600" },
+  { key: "annual_return", label: "年化收益", format: (v) => `${v.toFixed(2)}%`, textClass: (v) => v >= 0 ? "text-green-600" : "text-red-600" },
   { key: "end_balance", label: "最终权益", format: formatNumber },
-  // 2026-06-06 新增 vnpy 统计字段
-  { key: "total_net_pnl" as SortKey, label: "净盈亏", format: (v) => formatNumber(v || 0) },
+  { key: "total_net_pnl" as SortKey, label: "净盈亏", format: (v) => formatNumber(v || 0), textClass: (v) => (v || 0) >= 0 ? "text-green-600" : "text-red-600" },
   { key: "total_commission" as SortKey, label: "手续费", format: (v) => formatNumber(v || 0) },
   { key: "profit_days" as SortKey, label: "盈利天数", format: (v) => String(v ?? "-") },
   { key: "id", label: "回测ID", format: (v) => String(v) },
@@ -51,7 +45,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
       <QlPanel
         qlId="RUN-TBL-EMPTY"
         name={qlIdNameMap["RUN-TBL-EMPTY"]}
-        style={{ marginBottom: 28 }}
+        className="mb-7"
       >
         <div className="text-center py-10 text-slate-400">
           <div className="text-5xl mb-3">📭</div>
@@ -85,11 +79,14 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
     totalTrades: data.reduce((sum, item) => sum + item.total_trades, 0),
   };
 
+  const avgReturnClass = totalStats.avgReturn >= 0 ? "text-green-600" : "text-red-600";
+  const avgSharpeClass = totalStats.avgSharpe >= 0 ? "text-green-600" : "text-red-600";
+
   return (
     <QlPanel
       qlId="RUN-TBL-CONTAINER"
       name={qlIdNameMap["RUN-TBL-CONTAINER"]}
-      style={{ marginBottom: 28 }}
+      className="mb-7"
     >
       <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100" data-ql-id="RUN-TBL-HEADER">
         <div>
@@ -98,13 +95,13 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
         <div className="flex gap-6">
           <div className="flex flex-col items-end">
             <span className="text-[11px] text-slate-400 mb-0.5">平均收益</span>
-            <span className="text-sm font-semibold" style={{ color: totalStats.avgReturn >= 0 ? "#059669" : "#dc2626" }}>
+            <span className={`text-sm font-semibold ${avgReturnClass}`}>
               {`${totalStats.avgReturn.toFixed(2)}%`}
             </span>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-[11px] text-slate-400 mb-0.5">平均夏普</span>
-            <span className="text-sm font-semibold" style={{ color: totalStats.avgSharpe >= 0 ? "#059669" : "#dc2626" }}>
+            <span className={`text-sm font-semibold ${avgSharpeClass}`}>
               {totalStats.avgSharpe.toFixed(2)}
             </span>
           </div>
@@ -115,7 +112,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
         </div>
       </div>
 
-      <div className="overflow-x-auto max-h-[50vh] overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#cbd5e1 transparent" } as React.CSSProperties}>
+      <div className="overflow-x-auto max-h-[50vh] overflow-y-auto">
         <table className="w-full border-collapse text-[13px]" data-ql-id="RUN-TBL-TABLE">
           <thead>
             <tr>
@@ -147,47 +144,19 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
                   onClick={() => onSelect(item.symbol)}
                   className={`cursor-pointer transition-colors ${isSelected ? "bg-blue-50" : "hover:bg-slate-50"}`}
                 >
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 font-semibold text-slate-600 whitespace-nowrap">{item.symbol}</td>
-                  <td
-                    className="px-3.5 py-2.5 border-b border-slate-50 font-semibold whitespace-nowrap"
-                    style={{ color: item.total_return >= 0 ? "#059669" : "#dc2626" }}
-                  >
-                    {`${item.total_return.toFixed(2)}%`}
-                  </td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatPct(item.win_rate, 1)}</td>
-                  <td
-                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
-                    style={{ color: item.win_loss_ratio >= 1 ? "#059669" : "#dc2626" }}
-                  >
-                    {item.win_loss_ratio.toFixed(2)}
-                  </td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.total_trades)}</td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-red-600 whitespace-nowrap">
-                    {formatNumber(item.max_drawdown || 0)}
-                  </td>
-                  <td
-                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
-                    style={{ color: item.sharpe >= 0 ? "#059669" : "#dc2626" }}
-                  >
-                    {item.sharpe.toFixed(2)}
-                  </td>
-                  <td
-                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
-                    style={{ color: item.annual_return >= 0 ? "#059669" : "#dc2626" }}
-                  >
-                    {`${item.annual_return.toFixed(2)}%`}
-                  </td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{formatNumber(item.end_balance)}</td>
-                  {/* 2026-06-06 新增 vnpy 统计字段 */}
-                  <td
-                    className="px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap"
-                    style={{ color: (item.total_net_pnl || 0) >= 0 ? "#059669" : "#dc2626" }}
-                  >
-                    {formatNumber(item.total_net_pnl || 0)}
-                  </td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-500 whitespace-nowrap">{formatNumber(item.total_commission || 0)}</td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-600 whitespace-nowrap">{String(item.profit_days ?? "-")}</td>
-                  <td className="px-3.5 py-2.5 border-b border-slate-50 text-slate-400 text-xs whitespace-nowrap">{item.id}</td>
+                  {columns.map((col) => {
+                    const raw = item[col.key];
+                    const textClass = col.textClass ? col.textClass(raw) : "text-slate-600";
+                    const isFirst = col.key === "symbol";
+                    return (
+                      <td
+                        key={String(col.key)}
+                        className={`px-3.5 py-2.5 border-b border-slate-50 whitespace-nowrap ${isFirst ? "font-semibold text-slate-600" : textClass}`}
+                      >
+                        {col.format(raw)}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}

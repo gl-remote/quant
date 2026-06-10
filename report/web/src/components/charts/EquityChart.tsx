@@ -1,6 +1,6 @@
 import type { EquityData, EChartsOption } from "@/types";
-import EChartsChart from "@/components/EChartsChart";
-import QlPanel from "@/components/QlPanel";
+import EChartsChart from "@/components/charts/EChartsChart";
+import QlPanel from "@/components/layout/QlPanel";
 import { qlIdNameMap } from "@/data/qlIdMapping";
 
 interface EquityChartProps {
@@ -13,17 +13,9 @@ export default function EquityChart({ data }: EquityChartProps) {
       <QlPanel
         qlId="RUN-EQ-EMPTY"
         name={qlIdNameMap["RUN-EQ-EMPTY"]}
-        style={{ marginBottom: 28 }}
+        className="mb-7"
       >
-        <div
-          style={{
-            height: 400,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#94a3b8",
-          }}
-        >
+        <div className="h-[400px] flex items-center justify-center text-slate-400">
           暂无资金曲线数据
         </div>
       </QlPanel>
@@ -34,11 +26,12 @@ export default function EquityChart({ data }: EquityChartProps) {
   const totalReturn = startEq
     ? ((data.equity[data.equity.length - 1] / startEq - 1) * 100).toFixed(2)
     : "0";
-  const maxDD = data.max_ddpercent !== undefined && data.max_ddpercent !== null
-    ? Math.abs(data.max_ddpercent).toFixed(2)
-    : data.drawdown.length
-      ? (Math.abs(Math.min(...data.drawdown)) * 100).toFixed(2)
-      : "0";
+  const maxDD =
+    data.max_ddpercent !== undefined && data.max_ddpercent !== null
+      ? Math.abs(data.max_ddpercent).toFixed(2)
+      : data.drawdown.length
+        ? (Math.abs(Math.min(...data.drawdown)) * 100).toFixed(2)
+        : "0";
   const endEq = data.equity[data.equity.length - 1]?.toFixed(2) || "0";
 
   const option: EChartsOption = {
@@ -86,60 +79,33 @@ export default function EquityChart({ data }: EquityChartProps) {
     ],
   };
 
+  const retClass = Number(totalReturn) >= 0 ? "text-green-600" : "text-red-600";
+
   return (
     <QlPanel
       qlId="RUN-EQ-CONTAINER"
       name={qlIdNameMap["RUN-EQ-CONTAINER"]}
-      style={{ marginBottom: 28 }}
+      className="mb-7"
     >
-      <div
-        data-ql-id="RUN-EQ-METRICS"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gap: 16,
-          marginBottom: 16,
-        }}
-      >
-        <div data-ql-id="RUN-EQ-MET-TOTALRET" style={metricStyle}>
-          <div style={metricLabelStyle}>累计收益</div>
-          <div style={{ ...metricValueStyle, color: Number(totalReturn) >= 0 ? "#059669" : "#dc2626" }}>
-            {totalReturn}%
-          </div>
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div data-ql-id="RUN-EQ-MET-TOTALRET" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
+          <div className="text-xs text-slate-400 mb-1">累计收益</div>
+          <div className={`text-[20px] font-bold ${retClass}`}>{totalReturn}%</div>
         </div>
-        <div data-ql-id="RUN-EQ-MET-MAXDD" style={metricStyle}>
-          <div style={metricLabelStyle}>最大回撤</div>
-          <div style={{ ...metricValueStyle, color: "#dc2626" }}>{maxDD}%</div>
+        <div data-ql-id="RUN-EQ-MET-MAXDD" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
+          <div className="text-xs text-slate-400 mb-1">最大回撤</div>
+          <div className="text-[20px] font-bold text-red-600">{maxDD}%</div>
         </div>
-        <div data-ql-id="RUN-EQ-MET-ENDEQ" style={metricStyle}>
-          <div style={metricLabelStyle}>最终权益</div>
-          <div style={{ ...metricValueStyle, color: "#334155" }}>{endEq}</div>
+        <div data-ql-id="RUN-EQ-MET-ENDEQ" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
+          <div className="text-xs text-slate-400 mb-1">最终权益</div>
+          <div className="text-[20px] font-bold text-slate-700">{endEq}</div>
         </div>
       </div>
       <EChartsChart
         qlId="RUN-EQ-CHART"
         option={option}
-        style={{ height: 400 }}
+        className="w-full h-[400px]"
       />
     </QlPanel>
   );
 }
-
-const metricStyle: React.CSSProperties = {
-  background: "#f8fafc",
-  borderRadius: 6,
-  padding: "10px 14px",
-  textAlign: "center",
-  border: "1px solid #e2e8f0",
-};
-
-const metricLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: "#94a3b8",
-  marginBottom: 4,
-};
-
-const metricValueStyle: React.CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-};

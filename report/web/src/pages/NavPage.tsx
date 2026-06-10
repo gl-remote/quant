@@ -33,84 +33,82 @@ export default function NavPage() {
     );
   }
 
+  const completedCount = runs.filter((r) => r.status === "completed").length;
+  const totalSymbols = runs.reduce((sum, r) => sum + r.symbols, 0);
+
   return (
-    <div data-ql-id="NAV-PG-CONTAINER" className="max-w-[1200px] mx-auto">
-      <div
-        data-ql-id="NAV-PG-HERO"
-        className="flex justify-between items-center bg-gradient-to-br from-[#1e3a5f] to-[#2d5a87] rounded-xl py-10 px-10 mb-8 shadow-lg shadow-[#1e3a5f]/20"
-      >
+    <div className="max-w-[1200px] mx-auto">
+      {/* Hero */}
+      <div className="flex justify-between items-center bg-gradient-to-br from-[#1e3a5f] to-[#2d5a87] rounded-xl py-10 px-10 mb-8 shadow-lg shadow-[#1e3a5f]/20">
         <div className="text-white">
           <h1 className="text-2xl font-bold mb-2">回测报告导航</h1>
           <p className="text-sm text-white/80">共 {runs.length} 条回测记录</p>
         </div>
-        <div data-ql-id="NAV-PG-STATS" className="flex items-center gap-6">
-          <div className="flex flex-col items-center">
-            <span className="text-[28px] font-bold text-white">{runs.length}</span>
-            <span className="text-xs text-white/70 mt-1">总回测</span>
-          </div>
-          <div className="w-px h-10 bg-white/20" />
-          <div className="flex flex-col items-center">
-            <span className="text-[28px] font-bold text-white">
-              {runs.filter((r) => r.status === "completed").length}
-            </span>
-            <span className="text-xs text-white/70 mt-1">已完成</span>
-          </div>
-          <div className="w-px h-10 bg-white/20" />
-          <div className="flex flex-col items-center">
-            <span className="text-[28px] font-bold text-white">
-              {runs.reduce((sum, r) => sum + r.symbols, 0)}
-            </span>
-            <span className="text-xs text-white/70 mt-1">品种数</span>
-          </div>
+        <div className="flex items-center gap-6">
+          <Stat value={runs.length} label="总回测" />
+          <Divider />
+          <Stat value={completedCount} label="已完成" />
+          <Divider />
+          <Stat value={totalSymbols} label="品种数" />
         </div>
       </div>
 
-      <div data-ql-id="NAV-PG-CARDLIST" className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-7">
+      {/* Cards */}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-7">
         {runs.map((run) => (
-          <Link
-            key={run.id}
-            to={`/run/${run.id}`}
-            className="no-underline text-inherit"
-          >
-            <div data-ql-id={`NAV-CARD-${run.id}`} className="bg-white rounded-xl py-7 px-6 shadow-md border border-slate-100 transition-transform hover:scale-[1.02] hover:shadow-lg">
-              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
-                <div className="flex gap-2 items-center">
-                  <span className="text-sm font-bold text-slate-900">#{run.id}</span>
-                  <span
-                    className="text-[11px] font-medium px-2 py-0.5 rounded-xl"
-                    style={{
-                      backgroundColor: run.status === "completed" ? "#dcfce7" : "#fef3c7",
-                      color: run.status === "completed" ? "#166534" : "#854d0e",
-                    }}
-                  >
-                    {run.status === "completed" ? "完成" : "运行中"}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-400">{run.created}</div>
-              </div>
-
-              <div className="mb-4">
-                <div className="text-lg font-semibold text-slate-900 mb-2">{run.strategy}</div>
-                <div className="flex gap-4">
-                  <span className="flex items-center gap-1 text-[13px] text-slate-500">
-                    <span className="text-sm">⚙️</span>
-                    {run.engine}
-                  </span>
-                  <span className="flex items-center gap-1 text-[13px] text-slate-500">
-                    <span className="text-sm">📈</span>
-                    {run.symbols} 个品种
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-3 border-t border-slate-100 text-blue-600">
-                <span className="text-[13px] font-medium">查看详情</span>
-                <span className="text-base">→</span>
-              </div>
-            </div>
-          </Link>
+          <NavCard key={run.id} run={run} />
         ))}
       </div>
     </div>
   );
+}
+
+function NavCard({ run }: { run: NavItem }) {
+  const isDone = run.status === "completed";
+
+  return (
+    <Link
+      to={`/run/${run.id}`}
+      className="no-underline text-inherit block"
+    >
+      <div className="bg-white rounded-xl py-6 px-6 shadow-md border border-slate-100 transition-transform hover:scale-[1.02] hover:shadow-lg">
+        {/* Header */}
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2 items-center">
+            <span className="text-sm font-bold text-slate-900">#{run.id}</span>
+            <span
+              className={`text-[11px] font-medium px-2 py-0.5 rounded-xl ${
+                isDone ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-700"
+              }`}
+            >
+              {isDone ? "完成" : "运行中"}
+            </span>
+          </div>
+          <div className="text-xs text-slate-400">{run.created}</div>
+        </div>
+
+        {/* Body */}
+        <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">
+          {run.strategy}
+        </h3>
+        <div className="flex gap-4 text-[13px] text-slate-500">
+          <span>⚙️ {run.engine}</span>
+          <span>📈 {run.symbols} 个品种</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function Stat({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="flex flex-col items-center">
+      <span className="text-[28px] font-bold text-white">{value}</span>
+      <span className="text-xs text-white/70 mt-1">{label}</span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-10 bg-white/20" />;
 }

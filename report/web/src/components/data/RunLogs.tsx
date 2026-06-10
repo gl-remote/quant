@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { RunLogs } from "@/types";
-import QlPanel from "@/components/QlPanel";
+import QlPanel from "@/components/layout/QlPanel";
 
 interface Props {
   logs: RunLogs | null;

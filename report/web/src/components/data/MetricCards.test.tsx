@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import MetricCards from '../components/MetricCards';
-import type { BacktestRecord, RunInfo } from '../types';
+import MetricCards from './MetricCards';
+import type { BacktestRecord, RunInfo } from '../../types';
 
 describe('MetricCards', () => {
   const mockRun: RunInfo = {

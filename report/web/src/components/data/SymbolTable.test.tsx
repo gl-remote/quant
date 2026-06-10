@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import SymbolTable from '../components/SymbolTable';
-import type { SummaryItem } from '../types';
+import SymbolTable from './SymbolTable';
+import type { SummaryItem } from '../../types';
 
 describe('SymbolTable', () => {
   // vnpy 输出格式：total_return/annual_return 是百分比，max_drawdown 是金额(元)

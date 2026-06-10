@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import type { OptunaData } from "@/types";
-import EChartsChart from "@/components/EChartsChart";
-import QlPanel from "@/components/QlPanel";
+import EChartsChart from "@/components/charts/EChartsChart";
+import QlPanel from "@/components/layout/QlPanel";
 import { qlIdNameMap } from "@/data/qlIdMapping";
 
 interface OptunaChartsProps {
@@ -83,16 +83,10 @@ const paramNames = data?.contours?.param_names ?? [];
     [data?.contours, xParam, yParam],
   );
 
-  const selectStyle: React.CSSProperties = {
-    padding: "4px 8px", fontSize: 13,
-    background: "#1e293b", color: "#e2e8f0",
-    border: "1px solid #334155", borderRadius: 4,
-  };
-
   if (!data) {
     return (
       <QlPanel qlId="RUN-OPT-EMPTY" name={qlIdNameMap["RUN-OPT-EMPTY"]}>
-        <div style={{ color: "#94a3b8", textAlign: "center", padding: 24 }}>
+        <div className="text-slate-400 text-center p-6">
           暂无参数优化数据
         </div>
       </QlPanel>
@@ -106,19 +100,14 @@ const paramNames = data?.contours?.param_names ?? [];
     <div data-ql-id="RUN-OPT-CONTAINER">
       <div
         data-ql-id="RUN-OPT-HEADER"
-        style={{
-          marginBottom: 20,
-          padding: "14px 20px",
-          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-          borderRadius: 10,
-          color: "#fff",
-        }}
+        className="mb-5 py-3.5 px-5 rounded-lg text-white"
+        style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}
       >
-        <div data-ql-id="RUN-OPT-STUDYNAME" style={{ fontSize: 16, fontWeight: 600 }}>
+        <div data-ql-id="RUN-OPT-STUDYNAME" className="text-base font-semibold">
           {study_name}
         </div>
         {best_value != null && (
-          <div data-ql-id="RUN-OPT-BESTVALUE" style={{ fontSize: 14, marginTop: 4, opacity: 0.9 }}>
+          <div data-ql-id="RUN-OPT-BESTVALUE" className="text-sm mt-1 opacity-90">
             最优目标值: {Number(best_value).toFixed(4)}
           </div>
         )}
@@ -129,32 +118,21 @@ const paramNames = data?.contours?.param_names ?? [];
           qlId="RUN-OPT-BESTPARAMS"
           name={qlIdNameMap["RUN-OPT-BESTPARAMS"]}
           compact
-          style={{ marginBottom: 20 }}
+          className="mb-5"
         >
           <div
             data-ql-id="RUN-OPT-PARAMLIST"
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-              gap: 6,
-            }}
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
           >
             {best_params.map((p) => (
               <div
                 key={p.name}
                 data-ql-id={`RUN-OPT-PARAM-${p.name.toUpperCase()}`}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "6px 12px",
-                  background: "#f8fafc",
-                  borderRadius: 4,
-                  border: "1px solid #e2e8f0",
-                  fontSize: 13,
-                }}
+                className="flex justify-between py-1.5 px-3 bg-slate-50 rounded border border-slate-200 text-[13px]"
               >
-                <span style={{ color: "#94a3b8" }}>{p.name}</span>
-                <span style={{ fontWeight: 600, color: "#334155" }}>
+                <span className="text-slate-400">{p.name}</span>
+                <span className="font-semibold text-slate-700">
                   {typeof p.value === "number" ? p.value.toFixed(4) : String(p.value)}
                 </span>
               </div>
@@ -163,14 +141,14 @@ const paramNames = data?.contours?.param_names ?? [];
         </QlPanel>
       )}
 
-      <div data-ql-id="RUN-OPT-CHARTS" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div data-ql-id="RUN-OPT-CHARTS" className="flex flex-col gap-5">
         {optimization_history && (
           <QlPanel
             qlId="RUN-OPT-HISTORY"
             name={qlIdNameMap["RUN-OPT-HISTORY"]}
             compact
           >
-            <EChartsChart qlId="RUN-OPT-HISTORY-CHART" option={optimization_history} style={{ height: 350 }} />
+            <EChartsChart qlId="RUN-OPT-HISTORY-CHART" option={optimization_history} className="w-full h-[350px]" />
           </QlPanel>
         )}
         {param_importances ? (
@@ -179,7 +157,7 @@ const paramNames = data?.contours?.param_names ?? [];
             name={qlIdNameMap["RUN-OPT-IMPORTANCE"]}
             compact
           >
-            <EChartsChart qlId="RUN-OPT-IMPORTANCE-CHART" option={param_importances} style={{ height: 350 }} />
+            <EChartsChart qlId="RUN-OPT-IMPORTANCE-CHART" option={param_importances} className="w-full h-[350px]" />
           </QlPanel>
         ) : (
           <QlPanel
@@ -187,7 +165,7 @@ const paramNames = data?.contours?.param_names ?? [];
             name={qlIdNameMap["RUN-OPT-IMPORTANCE"]}
             compact
           >
-            <div style={{ color: "#94a3b8", textAlign: "center", padding: 40 }}>
+            <div className="text-slate-400 text-center py-10">
               参数重要性无法计算（trial 数量不足或目标值无显著差异）
             </div>
           </QlPanel>
@@ -198,7 +176,7 @@ const paramNames = data?.contours?.param_names ?? [];
             name={qlIdNameMap["RUN-OPT-PARALLEL"]}
             compact
           >
-            <EChartsChart qlId="RUN-OPT-PARALLEL-CHART" option={parallel_coordinate} style={{ height: 400 }} />
+            <EChartsChart qlId="RUN-OPT-PARALLEL-CHART" option={parallel_coordinate} className="w-full h-[400px]" />
           </QlPanel>
         )}
         {contours && paramNames.length > 0 && (
@@ -207,17 +185,25 @@ const paramNames = data?.contours?.param_names ?? [];
             name={qlIdNameMap["RUN-OPT-CONTOUR"]}
             compact
           >
-            <div style={{ padding: "8px 0", display: "flex", alignItems: "center", gap: 8 }}>
-              <label style={{ fontSize: 13, color: "#94a3b8" }}>X 轴</label>
-              <select value={xParam} onChange={e => setXParam(e.target.value)} style={selectStyle}>
-                {paramNames.map(n => <option key={n} value={n}>{n}</option>)}
+            <div className="py-2 flex items-center gap-2">
+              <label className="text-[13px] text-slate-400">X 轴</label>
+              <select
+                value={xParam}
+                onChange={(e) => setXParam(e.target.value)}
+                className="px-2 py-1 text-[13px] bg-slate-800 text-slate-200 border border-slate-600 rounded"
+              >
+                {paramNames.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
-              <label style={{ fontSize: 13, color: "#94a3b8" }}>Y 轴</label>
-              <select value={yParam} onChange={e => setYParam(e.target.value)} style={selectStyle}>
-                {paramNames.map(n => <option key={n} value={n}>{n}</option>)}
+              <label className="text-[13px] text-slate-400">Y 轴</label>
+              <select
+                value={yParam}
+                onChange={(e) => setYParam(e.target.value)}
+                className="px-2 py-1 text-[13px] bg-slate-800 text-slate-200 border border-slate-600 rounded"
+              >
+                {paramNames.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
             </div>
-            <EChartsChart qlId="RUN-OPT-CONTOUR-CHART" option={contourOption} style={{ height: 400 }} />
+            <EChartsChart qlId="RUN-OPT-CONTOUR-CHART" option={contourOption} className="w-full h-[400px]" />
           </QlPanel>
         )}
       </div>

@@ -1,5 +1,5 @@
 import type { BacktestRecord, RunInfo } from "@/types";
-import QlPanel from "@/components/QlPanel";
+import QlPanel from "@/components/layout/QlPanel";
 
 interface Props {
   run: RunInfo | null;
@@ -44,30 +44,28 @@ export default function MetricCards({ run, backtests }: Props) {
     0
   );
 
-  const cards = [
+  const cards: { label: string; value: string; textClass?: string }[] = [
     { label: "总品种数", value: String(uniqueSymbols) },
     {
       label: "平均收益率",
-      // total_return 是 vnpy 输出的百分比（已乘100），avgReturn 直接显示
       value: `${avgReturn.toFixed(2)}%`,
-      color: avgReturn >= 0 ? "#059669" : "#dc2626",
+      textClass: avgReturn >= 0 ? "text-green-600" : "text-red-600",
     },
     { label: "总交易次数", value: String(totalTrades) },
     {
       label: "平均夏普",
       value: avgSharpe.toFixed(2),
-      color: avgSharpe >= 0 ? "#059669" : "#dc2626",
+      textClass: avgSharpe >= 0 ? "text-green-600" : "text-red-600",
     },
-    // 2026-06-06 新增 vnpy 统计字段
     {
       label: "总净盈亏",
       value: `${totalNetPnl >= 0 ? "" : "-"}${Math.abs(totalNetPnl).toLocaleString("zh-CN")}`,
-      color: totalNetPnl >= 0 ? "#059669" : "#dc2626",
+      textClass: totalNetPnl >= 0 ? "text-green-600" : "text-red-600",
     },
     {
       label: "总手续费",
       value: totalCommission.toLocaleString("zh-CN"),
-      color: "#f59e0b",
+      textClass: "text-amber-500",
     },
   ];
 
@@ -89,13 +87,13 @@ export default function MetricCards({ run, backtests }: Props) {
     <QlPanel
       qlId="RUN-MET-CONTAINER"
       name="指标总览"
-      style={{ marginBottom: 28 }}
+      className="mb-7"
     >
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
         {cards.map((c) => (
           <div key={c.label} className="bg-slate-50 rounded-lg p-3.5 text-center" data-ql-id={qlIdMap[c.label]}>
             <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">{c.label}</div>
-            <div className="text-xl font-bold" style={{ color: c.color || "#333" }}>
+            <div className={`text-xl font-bold ${c.textClass ?? "text-slate-800"}`}>
               {c.value}
             </div>
           </div>

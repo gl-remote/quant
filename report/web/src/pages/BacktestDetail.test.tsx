@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import BacktestDetail from '../components/BacktestDetail';
+import BacktestDetail from './BacktestDetail';
 import type { BacktestRecord } from '../types';
 
 describe('BacktestDetail', () => {
