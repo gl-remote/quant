@@ -21,7 +21,6 @@ function buildContourOption(
     const v = t.value;
     if (xv === undefined || v === null) continue;
     if (xParam === yParam) {
-      // X=Y 时：展⽰参数值与目标值的关系，X=参数值, Y=目标值, color=目标值
       points.push([xv, v, v]);
     } else {
       const yv = t.params[yParam];
@@ -86,7 +85,7 @@ const paramNames = data?.contours?.param_names ?? [];
   if (!data) {
     return (
       <QlPanel qlId="RUN-OPT-EMPTY" name={qlIdNameMap["RUN-OPT-EMPTY"]}>
-        <div className="text-slate-400 text-center p-6">
+        <div className="text-text-disabled text-center p-6">
           暂无参数优化数据
         </div>
       </QlPanel>
@@ -94,13 +93,12 @@ const paramNames = data?.contours?.param_names ?? [];
   }
 
   const { study_name, best_params, best_value, optimization_history, param_importances, parallel_coordinate, contours } = data;
-  
 
   return (
     <div data-ql-id="RUN-OPT-CONTAINER">
       <div
         data-ql-id="RUN-OPT-HEADER"
-        className="mb-5 py-3.5 px-5 rounded-lg text-white"
+        className="mb-5 py-3.5 px-5 rounded-lg text-text-inverse"
         style={{ background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }}
       >
         <div data-ql-id="RUN-OPT-STUDYNAME" className="text-base font-semibold">
@@ -129,10 +127,10 @@ const paramNames = data?.contours?.param_names ?? [];
               <div
                 key={p.name}
                 data-ql-id={`RUN-OPT-PARAM-${p.name.toUpperCase()}`}
-                className="flex justify-between py-1.5 px-3 bg-slate-50 rounded border border-slate-200 text-[13px]"
+                className="flex justify-between py-1.5 px-3 bg-surface-hover rounded border border-border text-[13px]"
               >
-                <span className="text-slate-400">{p.name}</span>
-                <span className="font-semibold text-slate-700">
+                <span className="text-text-disabled">{p.name}</span>
+                <span className="font-semibold text-text-secondary">
                   {typeof p.value === "number" ? p.value.toFixed(4) : String(p.value)}
                 </span>
               </div>
@@ -165,7 +163,7 @@ const paramNames = data?.contours?.param_names ?? [];
             name={qlIdNameMap["RUN-OPT-IMPORTANCE"]}
             compact
           >
-            <div className="text-slate-400 text-center py-10">
+            <div className="text-text-disabled text-center py-10">
               参数重要性无法计算（trial 数量不足或目标值无显著差异）
             </div>
           </QlPanel>
@@ -186,19 +184,19 @@ const paramNames = data?.contours?.param_names ?? [];
             compact
           >
             <div className="py-2 flex items-center gap-2">
-              <label className="text-[13px] text-slate-400">X 轴</label>
+              <label className="text-[13px] text-text-disabled">X 轴</label>
               <select
                 value={xParam}
                 onChange={(e) => setXParam(e.target.value)}
-                className="px-2 py-1 text-[13px] bg-slate-800 text-slate-200 border border-slate-600 rounded"
+                className="px-2 py-1 text-[13px] bg-console-bg text-text-inverse-dim border border-border rounded"
               >
                 {paramNames.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>
-              <label className="text-[13px] text-slate-400">Y 轴</label>
+              <label className="text-[13px] text-text-disabled">Y 轴</label>
               <select
                 value={yParam}
                 onChange={(e) => setYParam(e.target.value)}
-                className="px-2 py-1 text-[13px] bg-slate-800 text-slate-200 border border-slate-600 rounded"
+                className="px-2 py-1 text-[13px] bg-console-bg text-text-inverse-dim border border-border rounded"
               >
                 {paramNames.map((n) => <option key={n} value={n}>{n}</option>)}
               </select>

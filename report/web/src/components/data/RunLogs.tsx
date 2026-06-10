@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Input } from "antd";
 import type { RunLogs } from "@/types";
 import QlPanel from "@/components/layout/QlPanel";
 
@@ -21,7 +22,7 @@ export default function LogViewer({ logs }: Props) {
   if (!logs) {
     return (
       <QlPanel qlId="RUN-LOGS" name="运行日志">
-        <div className="text-slate-400 text-sm py-8 text-center">该 run 无日志数据</div>
+        <div className="text-text-disabled text-sm py-8 text-center">该 run 无日志数据</div>
       </QlPanel>
     );
   }
@@ -30,23 +31,20 @@ export default function LogViewer({ logs }: Props) {
 
   return (
     <QlPanel qlId="RUN-LOGS" name={`运行日志 (${lines.length} 行)`}>
-      {/* 搜索 */}
       <div className="mb-3">
-        <input
-          type="text"
+        <Input.Search
           placeholder="搜索关键词…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="text-[13px] px-3 py-1.5 border border-slate-300 rounded-md focus:outline-none focus:border-blue-400 w-full"
+          allowClear
         />
       </div>
 
-      {/* 日志展示 */}
-      <div className="bg-slate-900 text-[12px] leading-relaxed font-mono rounded-lg p-3 max-h-[600px] overflow-auto whitespace-pre-wrap">
+      <div className="bg-console-bg text-[12px] leading-relaxed font-mono rounded-lg p-3 max-h-[600px] overflow-auto whitespace-pre-wrap">
         {lines.map((line, i) => (
           <div
             key={i}
-            className="hover:bg-white/5 px-1 rounded"
+            className="hover:bg-text-inverse/5 px-1 rounded"
             style={{ color: getLineColor(line) }}
           >
             {line}

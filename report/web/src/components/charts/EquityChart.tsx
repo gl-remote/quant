@@ -15,7 +15,7 @@ export default function EquityChart({ data }: EquityChartProps) {
         name={qlIdNameMap["RUN-EQ-EMPTY"]}
         className="mb-7"
       >
-        <div className="h-[400px] flex items-center justify-center text-slate-400">
+        <div className="h-[400px] flex items-center justify-center text-text-disabled">
           暂无资金曲线数据
         </div>
       </QlPanel>
@@ -79,7 +79,7 @@ export default function EquityChart({ data }: EquityChartProps) {
     ],
   };
 
-  const retClass = Number(totalReturn) >= 0 ? "text-green-600" : "text-red-600";
+  const retClass = Number(totalReturn) >= 0 ? "text-success" : "text-danger";
 
   return (
     <QlPanel
@@ -88,17 +88,17 @@ export default function EquityChart({ data }: EquityChartProps) {
       className="mb-7"
     >
       <div className="grid grid-cols-3 gap-4 mb-4">
-        <div data-ql-id="RUN-EQ-MET-TOTALRET" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
-          <div className="text-xs text-slate-400 mb-1">累计收益</div>
+        <div data-ql-id="RUN-EQ-MET-TOTALRET" className="bg-surface-hover rounded border border-border py-2.5 px-3.5 text-center">
+          <div className="text-xs text-text-disabled mb-1">累计收益</div>
           <div className={`text-[20px] font-bold ${retClass}`}>{totalReturn}%</div>
         </div>
-        <div data-ql-id="RUN-EQ-MET-MAXDD" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
-          <div className="text-xs text-slate-400 mb-1">最大回撤</div>
-          <div className="text-[20px] font-bold text-red-600">{maxDD}%</div>
+        <div data-ql-id="RUN-EQ-MET-MAXDD" className="bg-surface-hover rounded border border-border py-2.5 px-3.5 text-center">
+          <div className="text-xs text-text-disabled mb-1">最大回撤</div>
+          <div className="text-[20px] font-bold text-danger">{maxDD}%</div>
         </div>
-        <div data-ql-id="RUN-EQ-MET-ENDEQ" className="bg-slate-50 rounded border border-slate-200 py-2.5 px-3.5 text-center">
-          <div className="text-xs text-slate-400 mb-1">最终权益</div>
-          <div className="text-[20px] font-bold text-slate-700">{endEq}</div>
+        <div data-ql-id="RUN-EQ-MET-ENDEQ" className="bg-surface-hover rounded border border-border py-2.5 px-3.5 text-center">
+          <div className="text-xs text-text-disabled mb-1">最终权益</div>
+          <div className="text-[20px] font-bold text-text-secondary">{endEq}</div>
         </div>
       </div>
       <EChartsChart

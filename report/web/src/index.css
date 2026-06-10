@@ -1,1 +1,84 @@
 @import "tailwindcss";
+
+/* ═══════════════════════════════════════════
+   主题变量（单一事实来源）
+   Tailwind @theme 和 AntD ConfigProvider 均引用此处
+   ═══════════════════════════════════════════ */
+:root {
+  /* 品牌色 */
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+
+  /* 语义色 */
+  --color-success: #16a34a;
+  --color-success-bg: #dcfce7;
+  --color-danger: #dc2626;
+  --color-danger-bg: #fee2e2;
+  --color-warning: #d97706;
+  --color-warning-bg: #fef3c7;
+
+  /* 背景色 */
+  --color-page: #f1f5f9;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f8fafc;
+  --color-surface-alt: #f1f5f9;
+
+  /* 边框 */
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+
+  /* 文字 */
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-disabled: #94a3b8;
+  --color-text-inverse: #ffffff;
+  --color-text-inverse-muted: rgba(255, 255, 255, 0.8);
+  --color-text-inverse-dim: rgba(255, 255, 255, 0.7);
+
+  /* Hero 渐变色 */
+  --color-hero-start: #1e3a5f;
+  --color-hero-end: #2d5a87;
+
+  /* 终端/日志区背景 */
+  --color-console-bg: #0f172a;
+
+  /* 圆角 */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}
+
+/* ═══════════════════════════════════════════
+   Tailwind 主题扩展
+   让 bg-surface / text-primary / border-border 等语义类生效
+   ═══════════════════════════════════════════ */
+@theme {
+  --color-primary: var(--color-primary);
+  --color-primary-hover: var(--color-primary-hover);
+  --color-success: var(--color-success);
+  --color-success-bg: var(--color-success-bg);
+  --color-danger: var(--color-danger);
+  --color-danger-bg: var(--color-danger-bg);
+  --color-warning: var(--color-warning);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-page: var(--color-page);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-surface-alt: var(--color-surface-alt);
+  --color-border: var(--color-border);
+  --color-border-light: var(--color-border-light);
+  --color-text: var(--color-text);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-muted: var(--color-text-muted);
+  --color-text-disabled: var(--color-text-disabled);
+  --color-text-inverse: var(--color-text-inverse);
+  --color-text-inverse-muted: var(--color-text-inverse-muted);
+  --color-text-inverse-dim: var(--color-text-inverse-dim);
+  --color-hero-start: var(--color-hero-start);
+  --color-hero-end: var(--color-hero-end);
+  --color-console-bg: var(--color-console-bg);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+}

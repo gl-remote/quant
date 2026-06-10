@@ -1,6 +1,6 @@
 # report 模块 — 权责划分与模块关系
 
-> 版本: 0.3.0 | 最后更新: 2026-06-10
+> 版本: 0.4.0 | 最后更新: 2026-06-10
 
 ---
 
@@ -71,8 +71,23 @@ report/
 ├── reporter/
 │   ├── optimizer.py         # build_optuna_spec() — Optuna 图表 ECharts option 生成
 │   └── text.py              # 文本报告生成（如有）
-├── web/                     # React 前端（详见 web/DEVELOPMENT.md）
-│   └── src/ ...
+├── web/                     # React 18 + TypeScript + Tailwind v4 + AntD 前端
+│   ├── src/
+│   │   ├── App.tsx          # HashRouter + AntD ConfigProvider（CSS 变量主题统一）
+│   │   ├── index.css         # :root 主题变量 + Tailwind @theme 扩展（语义色体系）
+│   │   ├── config/           # chartConfig、qlIdMapping 等
+│   │   ├── hooks/            # useKlineChart、useFetchJson
+│   │   ├── types/            # 按领域拆分的类型文件（run/kline/backtest/equity/optuna）
+│   │   ├── utils/            # 指标计算、交易标记、时间解析
+│   │   ├── components/
+│   │   │   ├── layout/       # Layout, QlPanel
+│   │   │   ├── charts/       # KlineChart, EquityChart, OptunaCharts, EChartsChart
+│   │   │   └── data/         # SymbolTable, MetricCards, RunLogs
+│   │   └── pages/
+│   │       ├── NavPage.tsx   # 回测记录导航页
+│   │       └── run/          # 回测详情页（useRunData, RunHeader, index）
+│   ├── package.json
+│   └── vite.config.ts
 └── __init__.py              # 公开 build_all
 ```
 
@@ -150,7 +165,18 @@ build_all(output_dir, run_id)
 - 前端构建工具链升级
 - 缓存与实际数据不一致时
 
-### 6.4 调试
+### 6.4 主题与组件库
+
+**单一事实来源**：所有颜色、圆角、间距定义在 `web/src/index.css` 的 `:root` 中，Tailwind 通过 `@theme` 引用同一组 CSS 变量，AntD 通过 `ConfigProvider` 在运行时读取 CSS 变量。
+
+**语义色优先**：优先使用 `bg-surface`、`text-text-secondary`、`border-border` 等语义类名，避免直接使用 `bg-white`、`text-slate-600` 等色阶类名。如需修改主题色，只改 `:root` 一处。
+
+**AntD 替换规则**：
+- 通用展示组件（Table、Breadcrumb、Segmented、Input.Search 等）优先使用 AntD
+- 业务强相关或有多色视觉需求的组件（KlineChart、EquityChart、指标按钮）保持自建
+- AntD 的 token 自动从 CSS 变量读取，视觉风格与 Tailwind 保持一致
+
+### 6.5 调试
 
 ```python
 from loguru import logger
@@ -166,6 +192,8 @@ logger.add(sys.stderr, level="DEBUG")
 与 AI 讨论 report 模块时，提供以下上下文：
 
 > report 是报告生成模块。它从 `data/` 模块读取数据（通过 DataManager），导出为 JSON 文件，然后构建 React 前端（`web/`），最后将所有 JSON + JS 内联到单个 HTML 文件中。前端通过 `window.__DATA__` 读取数据，不使用 fetch()。时区处理：全程 UTC timestamp，显示层用 `new Date()` 转本地时区。`builder.py` 是 thin 编排层，统一创建 DataManager 实例并通过依赖注入传递给 writer 层。`build_kline_dict` 的唯一实现在 `writer/json_writer.py`，公开导出，builder 通过 import 调用。
+>
+> 前端技术栈：React 18 + TypeScript + Tailwind v4 + AntD。语义色定义在 `index.css` 的 `:root` 中，Tailwind 通过 `@theme` 引用，AntD 通过 `ConfigProvider` 读取。组件目录按职责分组（layout/charts/data），类型按领域拆分（run/kline/backtest/equity/optuna）。通用展示组件优先使用 AntD（Table、Segmented、Breadcrumb、Input.Search），业务强相关的图表组件保持自建。CSS 使用语义类名（`bg-surface`、`text-text`、`border-border`），避免色阶硬编码。
 
 ---
 

@@ -20,7 +20,7 @@ export default function QlPanel({
   compact,
 }: QlPanelProps) {
   const baseClass =
-    "ql-section rounded-xl border border-slate-200 overflow-hidden bg-white";
+    "ql-section rounded-lg border border-border overflow-hidden bg-surface";
 
   return (
     <div
@@ -29,14 +29,14 @@ export default function QlPanel({
       style={{ ...(background ? { background } : {}), ...style }}
     >
       <div
-        className={`flex items-center justify-between border-b border-slate-200 bg-gradient-to-b from-slate-50 to-slate-100 select-none ${
+        className={`flex items-center justify-between border-b border-border bg-gradient-to-b from-surface-hover to-surface-alt select-none ${
           compact ? "px-3 py-1.5" : "px-4 py-2"
         }`}
       >
-        <span className="text-[13px] font-bold text-slate-700 tracking-wide">
+        <span className="text-[13px] font-bold text-text-secondary tracking-wide">
           {name}
         </span>
-        <span className="text-[10px] font-mono text-slate-400 tracking-wider">
+        <span className="text-[10px] font-mono text-text-disabled tracking-wider">
           {qlId}
         </span>
       </div>

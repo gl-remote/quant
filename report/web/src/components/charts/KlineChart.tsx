@@ -56,8 +56,8 @@ export default function KlineChart({ data, trades, loading }: KlineChartProps) {
     return (
       <QlPanel qlId="RUN-KLINE-LOADING" name={qlIdNameMap["RUN-KLINE-LOADING"]} className="mb-7">
         <div className="flex flex-col items-center py-16">
-          <div className="w-9 h-9 border-[3px] border-slate-100 border-t-blue-600 rounded-full animate-spin" />
-          <p className="mt-3 text-sm text-slate-400">K 线数据加载中...</p>
+          <div className="w-9 h-9 border-[3px] border-surface-alt border-t-primary rounded-full animate-spin" />
+          <p className="mt-3 text-sm text-text-disabled">K 线数据加载中...</p>
         </div>
       </QlPanel>
     );
@@ -66,7 +66,7 @@ export default function KlineChart({ data, trades, loading }: KlineChartProps) {
   if (!data) {
     return (
       <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} className="mb-7">
-        <p className="text-center text-slate-400 py-10">暂无 K 线数据</p>
+        <p className="text-center text-text-disabled py-10">暂无 K 线数据</p>
       </QlPanel>
     );
   }
@@ -74,7 +74,7 @@ export default function KlineChart({ data, trades, loading }: KlineChartProps) {
   if (!klineData || klineData.length === 0) {
     return (
       <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} className="mb-7">
-        <p className="text-center text-slate-400 py-10">当前周期暂无 K 线数据，请切换周期</p>
+        <p className="text-center text-text-disabled py-10">当前周期暂无 K 线数据，请切换周期</p>
       </QlPanel>
     );
   }

@@ -49,23 +49,23 @@ export default function MetricCards({ run, backtests }: Props) {
     {
       label: "平均收益率",
       value: `${avgReturn.toFixed(2)}%`,
-      textClass: avgReturn >= 0 ? "text-green-600" : "text-red-600",
+      textClass: avgReturn >= 0 ? "text-success" : "text-danger",
     },
     { label: "总交易次数", value: String(totalTrades) },
     {
       label: "平均夏普",
       value: avgSharpe.toFixed(2),
-      textClass: avgSharpe >= 0 ? "text-green-600" : "text-red-600",
+      textClass: avgSharpe >= 0 ? "text-success" : "text-danger",
     },
     {
       label: "总净盈亏",
       value: `${totalNetPnl >= 0 ? "" : "-"}${Math.abs(totalNetPnl).toLocaleString("zh-CN")}`,
-      textClass: totalNetPnl >= 0 ? "text-green-600" : "text-red-600",
+      textClass: totalNetPnl >= 0 ? "text-success" : "text-danger",
     },
     {
       label: "总手续费",
       value: totalCommission.toLocaleString("zh-CN"),
-      textClass: "text-amber-500",
+      textClass: "text-warning",
     },
   ];
 
@@ -79,21 +79,17 @@ export default function MetricCards({ run, backtests }: Props) {
     "平均收益率": "RUN-MET-ITEM-RETURN",
     "总交易次数": "RUN-MET-ITEM-TRADES",
     "平均夏普": "RUN-MET-ITEM-SHARPE",
-    "总净盈亏": "RUN-MET-ITEM-NET-PNL",       // 2026-06-06新增
-    "总手续费": "RUN-MET-ITEM-COMMISSION",      // 2026-06-06新增
+    "总净盈亏": "RUN-MET-ITEM-NET-PNL",
+    "总手续费": "RUN-MET-ITEM-COMMISSION",
   };
 
   return (
-    <QlPanel
-      qlId="RUN-MET-CONTAINER"
-      name="指标总览"
-      className="mb-7"
-    >
+    <QlPanel qlId="RUN-MET-CONTAINER" name="指标总览" className="mb-7">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4">
         {cards.map((c) => (
-          <div key={c.label} className="bg-slate-50 rounded-lg p-3.5 text-center" data-ql-id={qlIdMap[c.label]}>
-            <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-1">{c.label}</div>
-            <div className={`text-xl font-bold ${c.textClass ?? "text-slate-800"}`}>
+          <div key={c.label} className="bg-surface-hover rounded-lg p-3.5 text-center" data-ql-id={qlIdMap[c.label]}>
+            <div className="text-[11px] text-text-disabled uppercase tracking-wider mb-1">{c.label}</div>
+            <div className={`text-xl font-bold ${c.textClass ?? "text-text"}`}>
               {c.value}
             </div>
           </div>

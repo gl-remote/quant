@@ -14,7 +14,9 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@ant-design/cssinjs": "^2.1.2",
     "@tailwindcss/vite": "^4.3.0",
+    "antd": "^6.4.3",
     "echarts": "^6.1.0",
     "lightweight-charts": "^5.2.0",
     "lightweight-charts-indicators": "^0.4.2",
