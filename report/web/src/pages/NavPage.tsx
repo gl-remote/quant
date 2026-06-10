@@ -33,7 +33,7 @@ export default function NavPage() {
     );
   }
 
-  const completedCount = runs.filter((r) => r.status === "completed").length;
+  const completedCount = runs.filter((r) => r.status === "success").length;
   const totalSymbols = runs.reduce((sum, r) => sum + r.symbols, 0);
 
   return (
@@ -63,8 +63,15 @@ export default function NavPage() {
   );
 }
 
+const STATUS_CLASS: Record<string, string> = {
+  success: "bg-green-100 text-green-800",
+  failed: "bg-red-100 text-red-800",
+  running: "bg-amber-100 text-amber-700",
+  skipped: "bg-slate-100 text-slate-600",
+};
+
 function NavCard({ run }: { run: NavItem }) {
-  const isDone = run.status === "completed";
+  const badgeClass = STATUS_CLASS[run.status] ?? "bg-slate-100 text-slate-600";
 
   return (
     <Link
@@ -72,22 +79,16 @@ function NavCard({ run }: { run: NavItem }) {
       className="no-underline text-inherit block"
     >
       <div className="bg-white rounded-xl py-6 px-6 shadow-md border border-slate-100 transition-transform hover:scale-[1.02] hover:shadow-lg">
-        {/* Header */}
         <div className="flex justify-between items-center">
           <div className="flex gap-2 items-center">
             <span className="text-sm font-bold text-slate-900">#{run.id}</span>
-            <span
-              className={`text-[11px] font-medium px-2 py-0.5 rounded-xl ${
-                isDone ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-700"
-              }`}
-            >
-              {isDone ? "完成" : "运行中"}
+            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-xl ${badgeClass}`}>
+              {run.status}
             </span>
           </div>
           <div className="text-xs text-slate-400">{run.created}</div>
         </div>
 
-        {/* Body */}
         <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">
           {run.strategy}
         </h3>
