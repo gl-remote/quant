@@ -19,58 +19,70 @@ function formatNumber(v: number): string {
 }
 
 const columns: ColumnsType<SummaryItem> = [
-  { title: "品种", dataIndex: "symbol", key: "symbol" },
+  { title: "品种", dataIndex: "symbol", key: "symbol", width: 90 },
   {
     title: "收益率", dataIndex: "total_return", key: "total_return",
     sorter: (a, b) => a.total_return - b.total_return,
     defaultSortOrder: "descend",
     render: (v: number) => <span className={v >= 0 ? "text-success" : "text-danger"}>{formatPct(v)}</span>,
+    width: 80,
   },
   {
     title: "胜率", dataIndex: "win_rate", key: "win_rate",
     render: (v: number) => formatPct(v, 1),
+    width: 65,
   },
   {
     title: "盈亏比", dataIndex: "win_loss_ratio", key: "win_loss_ratio",
     sorter: (a, b) => a.win_loss_ratio - b.win_loss_ratio,
     render: (v: number) => <span className={v >= 1 ? "text-success" : "text-danger"}>{v.toFixed(2)}</span>,
+    width: 70,
   },
   {
     title: "成交次数", dataIndex: "total_trades", key: "total_trades",
     sorter: (a, b) => a.total_trades - b.total_trades,
     render: (v: number) => formatNumber(v),
+    width: 80,
   },
   {
     title: "最大回撤(元)", dataIndex: "max_drawdown", key: "max_drawdown",
     render: (v: number) => <span className="text-danger">{formatNumber(v || 0)}</span>,
+    width: 105,
   },
   {
     title: "夏普比率", dataIndex: "sharpe", key: "sharpe",
     sorter: (a, b) => a.sharpe - b.sharpe,
     render: (v: number) => <span className={v >= 0 ? "text-success" : "text-danger"}>{v.toFixed(2)}</span>,
+    width: 80,
   },
   {
     title: "年化收益", dataIndex: "annual_return", key: "annual_return",
     render: (v: number) => <span className={v >= 0 ? "text-success" : "text-danger"}>{formatPct(v)}</span>,
+    width: 80,
   },
   {
     title: "最终权益", dataIndex: "end_balance", key: "end_balance",
     render: (v: number) => formatNumber(v),
+    width: 95,
   },
   {
     title: "净盈亏", dataIndex: "total_net_pnl", key: "total_net_pnl",
     render: (v: number) => <span className={(v || 0) >= 0 ? "text-success" : "text-danger"}>{formatNumber(v || 0)}</span>,
+    width: 95,
   },
   {
     title: "手续费", dataIndex: "total_commission", key: "total_commission",
     render: (v: number) => formatNumber(v || 0),
+    width: 85,
   },
   {
     title: "盈利天数", dataIndex: "profit_days", key: "profit_days",
     render: (v: number | null) => String(v ?? "-"),
+    width: 80,
   },
   {
     title: "回测ID", dataIndex: "id", key: "id",
+    width: 70,
   },
 ];
 
@@ -125,7 +137,7 @@ export default function SymbolTable({ data, onSelect, selectedSymbol }: Props) {
         pagination={false}
         size="small"
         sticky={{ offsetHeader: 0 }}
-        scroll={{ y: "50vh" }}
+        scroll={{ x: 1080, y: "50vh" }}
         showSorterTooltip={false}
         rowClassName={(record) => 
           `cursor-pointer ${record.symbol === selectedSymbol ? "bg-primary/5" : ""}`

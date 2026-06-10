@@ -8,6 +8,11 @@ import {
   LineSeries,
   createSeriesMarkers,
 } from "lightweight-charts";
+import {
+  SMA as SMAImpl,
+  MACD as MACDImpl,
+  Stochastic as StochasticImpl,
+} from "lightweight-charts-indicators";
 import { buildChartOptions, CHART_COLORS, INDICATOR_PARAMS, IndicatorState } from "@/config/chartConfig";
 
 /**
@@ -15,7 +20,7 @@ import { buildChartOptions, CHART_COLORS, INDICATOR_PARAMS, IndicatorState } fro
  *
  * 对外暴露一个 API 对象：
  *   - containerRef: 绑定到 DOM 容器
- *   - setKlineData(candles, volumes, indicators, trades, markers): 更新所有数据
+ *   - setKlineData(candles, volumes, bars, trades, markers): 更新所有数据
  *   - setIndicatorsVisibility(indicators): 切换指标显示/隐藏
  *
  * 图表实例创建后复用，不会因为数据更新而重建。
@@ -50,13 +55,20 @@ export function useKlineChart(): KlineChartApi {
   const kdjJRef = useRef<ISeriesApi<"Line"> | null>(null);
   const markersRef = useRef<any>(null);
 
+  // 预制数据时序问题：window.__DATA__ 同步预加载时 setKlineData 可能
+  // 在 chart 初始化之前被调用，存入此 ref 等 init 完成后自动应用。
+  const pendingArgsRef = useRef<Parameters<KlineChartApi["setKlineData"]> | null>(null);
+
   // 确保图表初始化一次
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     if (chartRef.current) return;
 
-    const chart = createChart(container, buildChartOptions(container.clientWidth));
+    // 如果容器在初始化时处于隐藏状态（display:none），clientWidth 可能为 0
+    // 先尝试获取实际宽度，兜底使用默认值
+    const initWidth = container.clientWidth > 0 ? container.clientWidth : 800;
+    const chart = createChart(container, buildChartOptions(initWidth));
 
     // ── Pane 0: 主图（蜡烛 + 成交量 + SMA） ──────────────────────
     const candlestickSeries = chart.addSeries(
@@ -152,7 +164,25 @@ export function useKlineChart(): KlineChartApi {
     markersRef.current = markers;
     chartRef.current = chart;
 
-    // resize 处理
+    // 预加载数据可能先于 chart 初始化到达，此处应用缓存的待处理数据
+    if (pendingArgsRef.current) {
+      _applyKlineData(...pendingArgsRef.current);
+      pendingArgsRef.current = null;
+    }
+
+    // 用 ResizeObserver 替代 window.resize，更精确地监听容器尺寸变化
+    // 尤其重要：当容器从 display:none 变为可见时，ResizeObserver 会触发
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chart.applyOptions({ width, height: 600 });
+        }
+      }
+    });
+    resizeObserver.observe(container);
+
+    // 兜底：window resize 时也触发 resize（确保跨 tab 切换后尺寸正确）
     const handleResize = () => {
       if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
@@ -162,29 +192,26 @@ export function useKlineChart(): KlineChartApi {
 
     return () => {
       window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       chart.remove();
       chartRef.current = null;
       markersRef.current = null;
     };
   }, []);
 
-  // ─── 对外 API ─────────────────────────────────────────────────
+  // ─── 内部：实际应用数据到图表 ────────────────────────────────────
 
-  const setKlineData: KlineChartApi["setKlineData"] = (
-    candles,
-    volumes,
-    bars,
-    trades,
-    indicators,
+  const _applyKlineData = (
+    candles: Parameters<KlineChartApi["setKlineData"]>[0],
+    volumes: Parameters<KlineChartApi["setKlineData"]>[1],
+    bars: Parameters<KlineChartApi["setKlineData"]>[2],
+    trades: Parameters<KlineChartApi["setKlineData"]>[3],
+    indicators: Parameters<KlineChartApi["setKlineData"]>[4],
   ) => {
-    if (!candlestickSeriesRef.current || !volumeSeriesRef.current) return;
+    candlestickSeriesRef.current!.setData(candles);
+    volumeSeriesRef.current!.setData(volumes);
 
-    candlestickSeriesRef.current.setData(candles);
-    volumeSeriesRef.current.setData(volumes);
-
-    // 指标按需计算并设置数据
     if (indicators.sma && smaShortSeriesRef.current && smaLongSeriesRef.current) {
-      const { SMA: SMAImpl } = require("lightweight-charts-indicators");
       const shortResult = SMAImpl.calculate(bars, {
         len: INDICATOR_PARAMS.smaShort,
         src: "close",
@@ -203,7 +230,6 @@ export function useKlineChart(): KlineChartApi {
       macdSignalRef.current &&
       macdHistogramRef.current
     ) {
-      const { MACD: MACDImpl } = require("lightweight-charts-indicators");
       const macdResult = MACDImpl.calculate(bars, {
         fastLength: INDICATOR_PARAMS.macdFast,
         slowLength: INDICATOR_PARAMS.macdSlow,
@@ -221,7 +247,6 @@ export function useKlineChart(): KlineChartApi {
     }
 
     if (indicators.kdj && kdjKRef.current && kdjDRef.current && kdjJRef.current) {
-      const { Stochastic: StochasticImpl } = require("lightweight-charts-indicators");
       const kdjResult = StochasticImpl.calculate(bars, {
         period: INDICATOR_PARAMS.kdjPeriod,
         smooth: INDICATOR_PARAMS.kdjSmooth,
@@ -245,6 +270,24 @@ export function useKlineChart(): KlineChartApi {
     if (markersRef.current) {
       markersRef.current.setMarkers(trades);
     }
+  };
+
+  // ─── 对外 API ─────────────────────────────────────────────────
+
+  const setKlineData: KlineChartApi["setKlineData"] = (
+    candles,
+    volumes,
+    bars,
+    trades,
+    indicators,
+  ) => {
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current) {
+      // 图表尚未初始化（预加载数据先到达），暂存等 init 完成后自动应用
+      pendingArgsRef.current = [candles, volumes, bars, trades, indicators];
+      return;
+    }
+
+    _applyKlineData(candles, volumes, bars, trades, indicators);
   };
 
   const setIndicatorsVisibility: KlineChartApi["setIndicatorsVisibility"] = (indicators) => {

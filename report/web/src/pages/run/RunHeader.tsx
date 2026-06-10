@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import type { RunInfo } from "@/types";
 
 export type TabId = "backtest" | "params" | "logs";
@@ -22,26 +22,14 @@ export default function RunHeader({
   activeTab,
   onTabChange,
 }: Props) {
-  const [animKey, setAnimKey] = useState(0);
-
-  const switchTab = useCallback(
-    (tab: TabId) => {
-      if (tab !== activeTab) {
-        onTabChange(tab);
-        setAnimKey((k) => k + 1);
-      }
-    },
-    [activeTab, onTabChange]
-  );
-
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent, tab: TabId) => {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
-        switchTab(tab);
+        onTabChange(tab);
       }
     },
-    [switchTab]
+    [onTabChange]
   );
 
   return (
@@ -91,7 +79,7 @@ export default function RunHeader({
           aria-controls="panel-backtest"
           tabIndex={activeTab === "backtest" ? 0 : -1}
           data-ql-id="RUN-PG-TAB-BACKTEST"
-          onClick={() => switchTab("backtest")}
+          onClick={() => onTabChange("backtest")}
           onKeyDown={(e) => handleTabKeyDown(e, "backtest")}
           className={`${tabBtn} ${activeTab === "backtest" ? tabActive : tabInactive}`}
         >
@@ -104,7 +92,7 @@ export default function RunHeader({
           aria-controls="panel-params"
           tabIndex={activeTab === "params" ? 0 : -1}
           data-ql-id="RUN-PG-TAB-PARAMS"
-          onClick={() => switchTab("params")}
+          onClick={() => onTabChange("params")}
           onKeyDown={(e) => handleTabKeyDown(e, "params")}
           disabled={!hasOptuna}
           className={`${tabBtn} ${activeTab === "params" ? tabActive : tabInactive} ${!hasOptuna ? "opacity-45 cursor-not-allowed" : ""}`}
@@ -119,7 +107,7 @@ export default function RunHeader({
           aria-controls="panel-logs"
           tabIndex={activeTab === "logs" ? 0 : -1}
           data-ql-id="RUN-PG-TAB-LOGS"
-          onClick={() => switchTab("logs")}
+          onClick={() => onTabChange("logs")}
           onKeyDown={(e) => handleTabKeyDown(e, "logs")}
           className={`${tabBtn} ${activeTab === "logs" ? tabActive : tabInactive}`}
         >

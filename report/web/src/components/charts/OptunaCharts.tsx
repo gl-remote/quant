@@ -31,6 +31,14 @@ function buildContourOption(
   }
   if (points.length === 0) return null;
 
+  // 计算 x/y 轴范围并加 10% padding，避免数据点顶到边界
+  const xs = points.map((p) => p[0]);
+  const ys = xParam === yParam ? values : points.map((p) => p[1]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const xPad = (xMax - xMin) * 0.1 || 1;
+  const yPad = (yMax - yMin) * 0.1 || 1;
+
   const minV = Math.min(...values);
   const maxV = Math.max(...values);
   return {
@@ -54,8 +62,8 @@ function buildContourOption(
       },
       calculable: true, orient: "vertical", right: 10, top: 20, bottom: 40,
     },
-    xAxis: { type: "value", name: xParam, nameLocation: "center", nameGap: 25 },
-    yAxis: { type: "value", name: xParam === yParam ? "目标值" : yParam, nameLocation: "center", nameGap: 35 },
+    xAxis: { type: "value", name: xParam, nameLocation: "center", nameGap: 25, min: xMin - xPad, max: xMax + xPad },
+    yAxis: { type: "value", name: xParam === yParam ? "目标值" : yParam, nameLocation: "center", nameGap: 35, min: yMin - yPad, max: yMax + yPad },
     grid: { left: 70, right: 60, top: 20, bottom: 40 },
     series: [{
       type: "scatter", data: points, symbolSize: 8,

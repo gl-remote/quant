@@ -22,6 +22,7 @@ export interface RunData {
   runLogs: RunLogs | null;
   tradesData: TradesData | null;
   kline: KlineData | null;
+  klineLoading: boolean;
   loading: boolean;
   hasOptuna: boolean;
   selectedSymbol: string;
@@ -91,6 +92,7 @@ export function useRunData(): RunData {
     runLogs,
     tradesData,
     kline,
+    klineLoading,
     loading,
     hasOptuna,
     selectedSymbol,

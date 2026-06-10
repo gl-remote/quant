@@ -189,8 +189,8 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
     if not param_names:
         return None
 
-    values_list = [t.value for t in ct]
-    params_list = [t.params for t in ct]
+    values_list = [t.value for t in ct if t.value is not None]
+    params_list = [t.params for t in ct if t.value is not None]
 
     dims: list[dict] = []
     # 每个参数作为维度
@@ -214,8 +214,33 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
         row.append(values_list[i])
         data.append(row)
 
+    target_dim = len(dims) - 1
     return {
         "tooltip": {},
+        "visualMap": {
+            "dimension": target_dim,
+            "min": min(values_list),
+            "max": max(values_list),
+            "inRange": {
+                "color": [
+                    "#313695",
+                    "#4575b4",
+                    "#74add1",
+                    "#abd9e9",
+                    "#fee090",
+                    "#fdae61",
+                    "#f46d43",
+                    "#d73027",
+                    "#a50026",
+                ],
+            },
+            "calculable": True,
+            "orient": "vertical",
+            "right": 10,
+            "top": 30,
+            "bottom": 40,
+            "text": ["优", "劣"],
+        },
         "parallelAxis": [
             {"dim": i, "name": d["name"], **(d if d.get("type") else {"min": 0, "max": 1})} for i, d in enumerate(dims)
         ],

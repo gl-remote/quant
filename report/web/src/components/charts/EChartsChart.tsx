@@ -80,9 +80,10 @@ export default function EChartsChart({
   useEffect(() => {
     if (!containerRef.current || !option) return;
 
-    // 初始化图表实例
+    // 初始化图表实例（如果容器在 hidden 中宽度为 0，先设置一个兜底宽度）
+    const container = containerRef.current;
     if (!chartRef.current) {
-      chartRef.current = echarts.init(containerRef.current);
+      chartRef.current = echarts.init(container);
     }
 
     // 设置图表配置
@@ -94,9 +95,20 @@ export default function EChartsChart({
     };
     window.addEventListener("resize", handleResize);
 
+    // ResizeObserver：容器从 display:none 变为可见时触发 resize
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          chartRef.current?.resize();
+        }
+      }
+    });
+    resizeObserver.observe(container);
+
     // 清理函数
     return () => {
       window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
     };
   }, [option]);
 

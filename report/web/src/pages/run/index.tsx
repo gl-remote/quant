@@ -12,7 +12,6 @@ import LogViewer from "@/components/data/RunLogs";
 export default function RunPage() {
   const data = useRunData();
   const [activeTab, setActiveTab] = useState<TabId>("backtest");
-  const [animKey, setAnimKey] = useState(0);
 
   if (data.loading) {
     return (
@@ -26,11 +25,6 @@ export default function RunPage() {
     );
   }
 
-  const handleTabChange = (tab: TabId) => {
-    setActiveTab(tab);
-    setAnimKey((k) => k + 1);
-  };
-
   return (
     <div data-ql-id="RUN-PG-CONTAINER">
       <style>{animationStyles}</style>
@@ -40,12 +34,12 @@ export default function RunPage() {
         run={data.run}
         hasOptuna={data.hasOptuna}
         activeTab={activeTab}
-        onTabChange={handleTabChange}
+        onTabChange={setActiveTab}
       />
 
       <div className="relative">
+        {/* 回测结果 */}
         <div
-          key={`backtest-${animKey}`}
           id="panel-backtest"
           role="tabpanel"
           aria-labelledby="tab-backtest"
@@ -68,7 +62,7 @@ export default function RunPage() {
                       ? data.tradesData?.[data.selectedSymbol]
                       : null
                   }
-                  loading={false}
+                  loading={data.klineLoading}
                 />
                 {data.equity &&
                   data.selectedSymbol &&
@@ -91,8 +85,8 @@ export default function RunPage() {
           </div>
         </div>
 
+        {/* 参数优化 */}
         <div
-          key={`params-${animKey}`}
           id="panel-params"
           role="tabpanel"
           aria-labelledby="tab-params"
@@ -115,8 +109,8 @@ export default function RunPage() {
           </div>
         </div>
 
+        {/* 运行日志 */}
         <div
-          key={`logs-${animKey}`}
           id="panel-logs"
           role="tabpanel"
           aria-labelledby="tab-logs"

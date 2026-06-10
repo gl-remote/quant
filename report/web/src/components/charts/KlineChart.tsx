@@ -52,32 +52,10 @@ export default function KlineChart({ data, trades, loading }: KlineChartProps) {
     setIndicatorsVisibility(indicators);
   }, [indicators, setIndicatorsVisibility]);
 
-  if (loading) {
-    return (
-      <QlPanel qlId="RUN-KLINE-LOADING" name={qlIdNameMap["RUN-KLINE-LOADING"]} className="mb-7">
-        <div className="flex flex-col items-center py-16">
-          <div className="w-9 h-9 border-[3px] border-surface-alt border-t-primary rounded-full animate-spin" />
-          <p className="mt-3 text-sm text-text-disabled">K 线数据加载中...</p>
-        </div>
-      </QlPanel>
-    );
-  }
-
-  if (!data) {
-    return (
-      <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} className="mb-7">
-        <p className="text-center text-text-disabled py-10">暂无 K 线数据</p>
-      </QlPanel>
-    );
-  }
-
-  if (!klineData || klineData.length === 0) {
-    return (
-      <QlPanel qlId="RUN-KLINE-EMPTY" name={qlIdNameMap["RUN-KLINE-EMPTY"]} className="mb-7">
-        <p className="text-center text-text-disabled py-10">当前周期暂无 K 线数据，请切换周期</p>
-      </QlPanel>
-    );
-  }
+  // 空状态/加载状态通过 overlay 显示，确保容器 div 始终在 DOM 中
+  // 这样 useKlineChart 的 init effect 才能初始化图表实例
+  const hasNoData = !data;
+  const hasNoKline = data && (!klineData || klineData.length === 0);
 
   return (
     <QlPanel
@@ -86,15 +64,36 @@ export default function KlineChart({ data, trades, loading }: KlineChartProps) {
       className="mb-7"
     >
       <KlineToolbar
-        symbol={data.symbol}
+        symbol={data?.symbol ?? ""}
         mode={mode}
         onModeChange={setMode}
         indicators={indicators}
         onIndicatorsChange={setIndicators}
-        rawDownsampled={mode === "1m" ? data.raw_downsampled : false}
+        rawDownsampled={mode === "1m" && data ? data.raw_downsampled : false}
       />
 
-      <div ref={containerRef} className="w-full h-[600px]" />
+      <div className="relative w-full h-[600px]">
+        <div ref={containerRef} className="absolute inset-0" />
+
+        {loading && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90">
+            <div className="w-9 h-9 border-[3px] border-surface-alt border-t-primary rounded-full animate-spin" />
+            <p className="mt-3 text-sm text-text-disabled">K 线数据加载中...</p>
+          </div>
+        )}
+
+        {!loading && hasNoData && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+            <p className="text-text-disabled">暂无 K 线数据</p>
+          </div>
+        )}
+
+        {!loading && hasNoKline && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90">
+            <p className="text-text-disabled">当前周期暂无 K 线数据，请切换周期</p>
+          </div>
+        )}
+      </div>
 
       <KlineLegend mode={mode} />
     </QlPanel>
