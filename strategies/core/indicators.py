@@ -3,10 +3,18 @@
 所有指标统一使用 pandas-ta 库实现。
 """
 
+import warnings
 from typing import cast
 
 import pandas as pd
-import pandas_ta as ta
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"The 'mode\.copy_on_write' option is deprecated.*",
+    category=Warning,
+    module=r"pandas_ta(\.|$)",
+)
+import pandas_ta as ta  # noqa: E402
 
 
 def sma_func(df: pd.DataFrame, period: int) -> pd.Series:
