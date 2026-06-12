@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """一键拉取近期适配数据 — 默认用 tqsdk 导出多品种 1m 分钟线
 
 用法:
@@ -11,35 +10,39 @@ from __future__ import annotations
 
 import sys
 import time
-import logging
 from pathlib import Path
 
-# 确保项目根在 sys.path
+from loguru import logger
+
+# 确保项目根在 sys.path（独立脚本运行时需要）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config import ConfigManager
 from data import DataManager, export_csv
-from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
-# ── 推荐品种：多合约覆盖不同时段 ──────────────────────────
+# ── 推荐品种：2026 年已到期合约为主，覆盖完整行情 ──
+#  原则：优先选 2026 已到期合约（01/03/05 月），数据完整，便于回测
 #  start/end 为 None 时由 parse_contract 自动推算默认日期范围
 TARGET_SYMBOLS: list[tuple[str, str | None, str | None, str]] = [
     # (symbol, start_date, end_date, 说明)
-    # 豆粕系列 — 不同月份覆盖不同行情阶段
-    ("DCE.m2505",  None, None, "豆粕 2505  已到期"),
-    ("DCE.m2507",  None, None, "豆粕 2507  已到期"),
-    ("DCE.m2509",  None, None, "豆粕 2509  近月"),
-    ("DCE.m2601",  None, None, "豆粕 2601  远月"),
-    # 同交易所高流动性品种
-    ("DCE.c2509",  None, None, "玉米 2509  低波动"),
-    ("DCE.i2509",  None, None, "铁矿 2509  高波动"),
-    ("DCE.p2509",  None, None, "棕榈 2509  高波动"),
-    # 跨交易所
-    ("SHFE.rb2509",None, None, "螺纹 2509"),
-    ("CZCE.SR509", None, None, "白糖 509"),
+    # 豆粕系列 — 2026 已到期合约
+    ("DCE.m2601", None, None, "豆粕 2601  已到期"),
+    ("DCE.m2603", None, None, "豆粕 2603  已到期"),
+    ("DCE.m2605", None, None, "豆粕 2605  已到期"),
+    # 玉米系列 — 2026 已到期合约
+    ("DCE.c2601", None, None, "玉米 2601  已到期"),
+    ("DCE.c2603", None, None, "玉米 2603  已到期"),
+    ("DCE.c2605", None, None, "玉米 2605  已到期"),
+    # 淀粉系列 — 2026 已到期合约
+    ("DCE.cs2601", None, None, "淀粉 2601  已到期"),
+    ("DCE.cs2603", None, None, "淀粉 2603  已到期"),
+    ("DCE.cs2605", None, None, "淀粉 2605  已到期"),
+    # 其他品种做对比验证
+    ("DCE.i2601", None, None, "铁矿 2601  已到期"),
+    ("DCE.p2601", None, None, "棕榈 2601  已到期"),
+    ("SHFE.rb2601", None, None, "螺纹 2601  已到期"),
+    ("CZCE.SR601", None, None, "白糖 601  已到期"),
 ]
 
 
@@ -62,9 +65,9 @@ def fetch_all(
     dc = cm.get_data_config()
     results: dict[str, dict] = {}
 
-    print(f"\n{'='*65}")
+    print(f"\n{'=' * 65}")
     print(f"  一键拉取数据  |  数据源: {source}  |  周期: {interval}")
-    print(f"{'='*65}\n")
+    print(f"{'=' * 65}\n")
 
     for i, (symbol, start, end, desc) in enumerate(TARGET_SYMBOLS, 1):
         t0 = time.time()
@@ -79,7 +82,7 @@ def fetch_all(
             results[symbol] = {"success": True, "elapsed": elapsed, "skipped": True}
             print(f"       ⏭ 跳过 (已存在 {expected_file.name})")
             continue
-        
+
         dm = DataManager(cm)
         try:
             success = export_csv(
@@ -108,32 +111,32 @@ def fetch_all(
             print(f"       ❌ 失败: {e}  ({elapsed:.1f}s)")
 
     # 汇总
-    print(f"\n{'='*65}")
+    print(f"\n{'=' * 65}")
     ok = sum(1 for r in results.values() if r.get("success"))
     skipped = sum(1 for r in results.values() if r.get("skipped"))
     new_ok = ok - skipped
     fail = sum(1 for r in results.values() if not r.get("success"))
     total_time = sum(r["elapsed"] for r in results.values())
     parts = []
-    if new_ok: parts.append(f"新拉取 {new_ok}")
-    if skipped: parts.append(f"跳过 {skipped}")
+    if new_ok:
+        parts.append(f"新拉取 {new_ok}")
+    if skipped:
+        parts.append(f"跳过 {skipped}")
     parts.append(f"失败 {fail}")
     print(f"  完成: {' / '.join(parts)}  |  耗时 {total_time:.0f}s")
-    print(f"{'='*65}\n")
+    print(f"{'=' * 65}\n")
 
     return results
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    logger.remove()
+    logger.add(sys.stderr, level="WARNING")
 
     import argparse
+
     parser = argparse.ArgumentParser(description="一键拉取近期适配数据")
-    parser.add_argument("--source", default="tqsdk", choices=["tqsdk", "akshare"],
-                        help="数据源 (默认 tqsdk)")
+    parser.add_argument("--source", default="tqsdk", choices=["tqsdk", "akshare"], help="数据源 (默认 tqsdk)")
     parser.add_argument("--interval", default="1m", help="K线周期 (默认 1m)")
     parser.add_argument("--force", action="store_true", help="强制重新拉取")
     args = parser.parse_args()

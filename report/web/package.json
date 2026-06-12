@@ -1,7 +1,7 @@
 {
   "name": "quant-report",
   "version": "1.0.0",
-  "description": "天勤量化回测报告前端应用",
+  "description": "策略工具箱回测报告前端应用",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,13 +14,18 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@ant-design/cssinjs": "^2.1.2",
     "@tailwindcss/vite": "^4.3.0",
+    "antd": "^6.4.3",
     "echarts": "^6.1.0",
     "lightweight-charts": "^5.2.0",
+    "lightweight-charts-indicators": "^0.4.2",
+    "oakscriptjs": "^0.2.8",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "technicalindicators": "^3.1.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

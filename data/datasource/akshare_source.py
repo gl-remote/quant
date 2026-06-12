@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """AkShare 数据源 — 基于 akshare 免费数据接口获取期货 K 线
 
 支持周期:
@@ -9,20 +8,17 @@
 
 from __future__ import annotations
 
-# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportAssignmentType=false
-# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingImports=false
-# 注：akshare 第三方库缺少类型存根
-
-import logging
-from typing import ClassVar, Any
+from typing import Any, ClassVar
 
 import pandas as pd
 
+# pyright: reportMissingTypeStubs=false, reportUnknownMemberType=false, reportAssignmentType=false
+# pyright: reportUnknownArgumentType=false, reportUnknownVariableType=false, reportMissingImports=false
+# 注：akshare 第三方库缺少类型存根
+from loguru import logger
+
 from .base import BaseDataSource, Qlib_COLUMNS
 
-logger = logging.getLogger(__name__)
-
-# interval → (akshare API, period 参数)
 # 分钟线接口: futures_zh_minute_sina(symbol, period)
 # 日线接口:   futures_zh_daily_sina(symbol)
 _MINUTE_PERIOD_MAP: dict[str, str] = {
@@ -69,15 +65,10 @@ class AkShareDataSource(BaseDataSource):
         """
         if interval not in _SUPPORTED_INTERVALS:
             available = ", ".join(sorted(_SUPPORTED_INTERVALS))
-            raise ValueError(
-                f"akshare 不支持周期 {interval!r}，可选周期: {available}"
-            )
+            raise ValueError(f"akshare 不支持周期 {interval!r}，可选周期: {available}")
 
         akshare_symbol = self._to_akshare_symbol(symbol)
-        logger.info(
-            f"AkShare 拉取: {symbol} → {akshare_symbol}, "
-            f"{start_date} ~ {end_date}, interval={interval}"
-        )
+        logger.debug(f"AkShare 拉取: {symbol} → {akshare_symbol}, {start_date} ~ {end_date}, interval={interval}")
 
         def _fetch() -> pd.DataFrame:
             return self._do_fetch(akshare_symbol, start_date, end_date, interval)
@@ -88,9 +79,7 @@ class AkShareDataSource(BaseDataSource):
 
         return self._to_standard_df(raw_df)
 
-    def _do_fetch(
-        self, akshare_symbol: str, start_date: str, end_date: str, interval: str
-    ) -> pd.DataFrame:
+    def _do_fetch(self, akshare_symbol: str, start_date: str, end_date: str, interval: str) -> pd.DataFrame:
         """根据 interval 调用对应的 akshare 接口"""
         import akshare as ak
 
@@ -102,8 +91,11 @@ class AkShareDataSource(BaseDataSource):
 
     @staticmethod
     def _fetch_minute(
-        ak: Any, akshare_symbol: str, period: str,
-        start_date: str, end_date: str,
+        ak: Any,
+        akshare_symbol: str,
+        period: str,
+        start_date: str,
+        end_date: str,
     ) -> pd.DataFrame:
         """通过 futures_zh_minute_sina 获取分钟线
 
@@ -117,16 +109,17 @@ class AkShareDataSource(BaseDataSource):
             raise
 
         if df is None or df.empty:
-            logger.warning(
-                f"AkShare 分钟线无数据: {akshare_symbol}, period={period}"
-            )
+            logger.warning(f"AkShare 分钟线无数据: {akshare_symbol}, period={period}")
             return pd.DataFrame(columns=Qlib_COLUMNS)
 
         return _filter_by_date(df, start_date, end_date, col="datetime")
 
     @staticmethod
     def _fetch_daily(
-        ak: Any, akshare_symbol: str, start_date: str, end_date: str,
+        ak: Any,
+        akshare_symbol: str,
+        start_date: str,
+        end_date: str,
     ) -> pd.DataFrame:
         """通过 futures_zh_daily_sina 获取日线
 
@@ -157,6 +150,7 @@ class AkShareDataSource(BaseDataSource):
         SHFE.rb2410 → RB2410
         """
         from common.symbol_utils import parse_contract
+
         c = parse_contract(symbol)
         if c:
             return c.contract_code.upper()
@@ -164,9 +158,7 @@ class AkShareDataSource(BaseDataSource):
         return symbol.split(".", 1)[-1].upper() if "." in symbol else symbol.upper()
 
 
-def _filter_by_date(
-    df: pd.DataFrame, start_date: str, end_date: str, col: str = "datetime"
-) -> pd.DataFrame:
+def _filter_by_date(df: pd.DataFrame, start_date: str, end_date: str, col: str = "datetime") -> pd.DataFrame:
     """按日期范围过滤 DataFrame
 
     start_date 包含当天 00:00:00，

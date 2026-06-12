@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Optuna 优化报告 — ECharts option JSON 生成
 
 输出 ECharts 标准 option 格式，前端 echarts-for-react 直接消费。
@@ -7,12 +6,10 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import optuna
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 def build_optuna_spec(
@@ -47,16 +44,14 @@ def build_optuna_spec(
 
     # --- 最优结果 ---
     try:
-        result["best_params"] = [
-            {"name": k, "value": v} for k, v in study.best_params.items()
-        ]
+        result["best_params"] = [{"name": k, "value": v} for k, v in study.best_params.items()]
         result["best_value"] = study.best_value
     except Exception as e:
         logger.warning("最优参数获取失败: %s", e)
 
     # --- optimization_history ---
     try:
-        result["optimization_history"] = _build_history(trials)
+        result["optimization_history"] = _build_history(trials, study.direction)
     except Exception as e:
         logger.warning("optimization_history 生成失败: %s", e)
         result["optimization_history"] = None
@@ -77,10 +72,10 @@ def build_optuna_spec(
 
     # --- contour ---
     try:
-        result["contour"] = _build_contour(study, trials)
+        result["contours"] = _build_contour(study, trials)
     except Exception as e:
         logger.warning("contour 生成失败: %s", e)
-        result["contour"] = None
+        result["contours"] = None
 
     return result
 
@@ -98,8 +93,16 @@ def _param_names(study: optuna.study.Study) -> list[str]:
         return []
 
 
-def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
-    """优化历史散点图：X=试验序号, Y=目标值"""
+def _build_history(
+    trials: list[optuna.trial.FrozenTrial],
+    direction: optuna.study.StudyDirection = optuna.study.StudyDirection.MAXIMIZE,
+) -> dict | None:
+    """优化历史散点图：X=试验序号, Y=目标值
+
+    Args:
+        trials: 所有 trial
+        direction: 优化方向，MAXIMIZE 追踪最大值，MINIMIZE 追踪最小值
+    """
     ct = _completed_trials(trials)
     if not ct:
         return None
@@ -107,30 +110,31 @@ def _build_history(trials: list[optuna.trial.FrozenTrial]) -> dict | None:
     nums = [t.number for t in ct]
     values: list[float] = [t.value for t in ct if t.value is not None]
 
+    maximize = direction == optuna.study.StudyDirection.MAXIMIZE
     best = []
-    best_sofar = float("inf")
+    best_sofar = float("-inf") if maximize else float("inf")
     for v in values:
-        if v < best_sofar:
+        if (v > best_sofar) if maximize else (v < best_sofar):
             best_sofar = v
         best.append(best_sofar)
 
     return {
         "tooltip": {"trigger": "axis"},
-        "legend": {"data": ["目标值", "历史最优"], "bottom": 0},
-        "grid": {"left": 60, "right": 30, "top": 20, "bottom": 40},
+        "legend": {"data": ["目标值", "历史最优"], "right": 20, "top": 8, "itemWidth": 18, "itemHeight": 10},
+        "grid": {"left": 60, "right": 30, "top": 36, "bottom": 40},
         "xAxis": {"type": "value", "name": "试验序号", "nameLocation": "center", "nameGap": 25},
         "yAxis": {"type": "value", "name": "目标值"},
         "series": [
             {
                 "name": "目标值",
                 "type": "scatter",
-                "data": [[n, v] for n, v in zip(nums, values)],
+                "data": [[n, v] for n, v in zip(nums, values, strict=False)],
                 "symbolSize": 6,
             },
             {
                 "name": "历史最优",
                 "type": "line",
-                "data": [[n, b] for n, b in zip(nums, best)],
+                "data": [[n, b] for n, b in zip(nums, best, strict=False)],
                 "lineStyle": {"color": "#e74c3c", "width": 2},
                 "symbol": "none",
             },
@@ -142,6 +146,7 @@ def _build_importances(study: optuna.study.Study) -> dict | None:
     """参数重要性柱状图 (用 fANOVA 计算)"""
     try:
         from optuna.importance import get_param_importances
+
         importances = get_param_importances(study)
     except Exception:
         return None
@@ -157,14 +162,20 @@ def _build_importances(study: optuna.study.Study) -> dict | None:
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
         "grid": {"left": 100, "right": 30, "top": 20, "bottom": 20},
         "xAxis": {"type": "value", "name": "重要性"},
-        "yAxis": {"type": "category", "data": names, "inverse": True,
-                  "axisLabel": {"width": 90, "overflow": "truncate"}},
-        "series": [{
-            "name": "参数重要性",
-            "type": "bar",
-            "data": vals,
-            "itemStyle": {"color": "#5470c6"},
-        }],
+        "yAxis": {
+            "type": "category",
+            "data": names,
+            "inverse": True,
+            "axisLabel": {"width": 90, "overflow": "truncate"},
+        },
+        "series": [
+            {
+                "name": "参数重要性",
+                "type": "bar",
+                "data": vals,
+                "itemStyle": {"color": "#5470c6"},
+            }
+        ],
     }
 
 
@@ -178,8 +189,8 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
     if not param_names:
         return None
 
-    values_list = [t.values for t in ct]
-    params_list = [t.params for t in ct]
+    values_list = [t.value for t in ct if t.value is not None]
+    params_list = [t.params for t in ct if t.value is not None]
 
     dims: list[dict] = []
     # 每个参数作为维度
@@ -203,58 +214,61 @@ def _build_parallel(study: optuna.study.Study, trials: list[optuna.trial.FrozenT
         row.append(values_list[i])
         data.append(row)
 
+    target_dim = len(dims) - 1
     return {
         "tooltip": {},
+        "visualMap": {
+            "dimension": target_dim,
+            "min": min(values_list),
+            "max": max(values_list),
+            "inRange": {
+                "color": [
+                    "#313695",
+                    "#4575b4",
+                    "#74add1",
+                    "#abd9e9",
+                    "#fee090",
+                    "#fdae61",
+                    "#f46d43",
+                    "#d73027",
+                    "#a50026",
+                ],
+            },
+            "calculable": True,
+            "orient": "vertical",
+            "right": 10,
+            "top": 30,
+            "bottom": 40,
+            "text": ["优", "劣"],
+        },
         "parallelAxis": [
-            {"dim": i, "name": d["name"], **(d if d.get("type") else {"min": 0, "max": 1})}
-            for i, d in enumerate(dims)
+            {"dim": i, "name": d["name"], **(d if d.get("type") else {"min": 0, "max": 1})} for i, d in enumerate(dims)
         ],
         "parallel": {
-            "left": 60, "right": 60, "top": 30, "bottom": 30,
+            "left": 60,
+            "right": 60,
+            "top": 30,
+            "bottom": 30,
             "parallelAxisDefaultProps": {"nameLocation": "end", "nameGap": 10},
         },
-        "series": [{
-            "type": "parallel",
-            "data": data,
-            "lineStyle": {"width": 1, "opacity": 0.5},
-        }],
+        "series": [
+            {
+                "type": "parallel",
+                "data": data,
+                "lineStyle": {"width": 1, "opacity": 0.5},
+            }
+        ],
     }
 
 
 def _build_contour(study: optuna.study.Study, trials: list[optuna.trial.FrozenTrial]) -> dict | None:
-    """等高线图（取前两个参数）"""
+    """等高线图 — 返回参数名和原始试验数据，前端动态选择 X/Y 轴"""
     ct = _completed_trials(trials)
     param_names = _param_names(study)
     if len(param_names) < 2 or not ct:
         return None
 
-    p1, p2 = param_names[0], param_names[1]
-    points = [(t.params.get(p1, 0), t.params.get(p2, 0), t.value) for t in ct]
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    vs: list[float] = [p[2] for p in points if p[2] is not None]
-
-    if not vs:
-        return None
-
     return {
-        "tooltip": {},
-        "visualMap": {
-            "min": min(vs), "max": max(vs),
-            "inRange": {"color": ["#313695", "#4575b4", "#74add1", "#abd9e9",
-                                  "#fee090", "#fdae61", "#f46d43", "#d73027", "#a50026"]},
-            "calculable": True,
-            "orient": "horizontal",
-            "left": "center",
-            "bottom": 0,
-        },
-        "xAxis": {"type": "value", "name": p1, "nameLocation": "center", "nameGap": 25},
-        "yAxis": {"type": "value", "name": p2, "nameLocation": "center", "nameGap": 35},
-        "grid": {"left": 70, "right": 30, "top": 20, "bottom": 50},
-        "series": [{
-            "name": f"{p1} vs {p2}",
-            "type": "scatter",
-            "data": [[xs[i], ys[i], vs[i]] for i in range(len(points))],
-            "symbolSize": 8,
-        }],
+        "param_names": param_names,
+        "trials": [{"params": {k: t.params.get(k) for k in param_names}, "value": t.value} for t in ct],
     }

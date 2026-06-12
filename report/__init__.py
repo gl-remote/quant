@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 报告生成模块 — 数据导出 + 前端构建
 主要功能：
@@ -8,14 +7,14 @@
 """
 
 # 从子模块导入核心功能
+import contextlib
+
 from .builder import build_all, write_nav_json
-from .reporter import format_single_report, format_summary_report, build_optuna_spec
+from .reporter import build_optuna_spec, format_single_report, format_summary_report
 
 # 向后兼容 - 支持旧的导入路径
-try:
-    from .reporter.text import _na_str, _get_attr
-except ImportError:
-    pass
+with contextlib.suppress(ImportError):
+    from .reporter.text import _get_attr, _na_str  # noqa: F401 — 向后兼容导出
 
 # 公开API列表，供外部模块使用
 __all__ = [

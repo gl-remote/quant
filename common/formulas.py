@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 统一量化统计计算公式库
 
@@ -18,7 +17,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
+
+from common.constants import (
+    TRADE_DIRECTION_LONG,
+    TRADE_DIRECTION_SHORT,
+)
 
 # 每交易日交易秒数 (4 小时日盘，不含夜盘)
 # 注意: 国内期货实际交易时段因夜盘而异（部分品种夜盘至 23:00，上期所品种至次日 2:30），
@@ -32,7 +37,8 @@ _SECONDS_PER_TRADING_DAY = 14400
 # FIFO 盈亏计算 (FIFO PnL Calculation)
 # ============================================================================
 
-def calculate_fifo_profit(fills: list[object]) -> float:
+
+def calculate_fifo_profit(fills: Sequence[object]) -> float:
     """按 FIFO 顺序计算已平仓交易的盈亏总额
 
     与笛卡尔积不同，此函数按先入先出规则将每笔买入与卖出匹配，
@@ -50,6 +56,7 @@ def calculate_fifo_profit(fills: list[object]) -> float:
     Returns:
         FIFO 盈亏总额 (未扣除手续费/滑点)
     """
+
     def get_attr(obj: object, attr: str) -> Any:  # pyright: ignore[reportExplicitAny, reportAny]
         if hasattr(obj, attr):
             return getattr(obj, attr)  # pyright: ignore[reportAny]
@@ -61,18 +68,18 @@ def calculate_fifo_profit(fills: list[object]) -> float:
     sell_entries: list[tuple[float, float]] = []
 
     for fill in fills:
-        action = get_attr(fill, 'action')  # pyright: ignore[reportAny]
-        price = float(get_attr(fill, 'price'))  # pyright: ignore[reportAny]
-        volume = float(get_attr(fill, 'volume'))  # pyright: ignore[reportAny]
+        action = get_attr(fill, "action")  # pyright: ignore[reportAny]
+        price = float(get_attr(fill, "price"))  # pyright: ignore[reportAny]
+        volume = float(get_attr(fill, "volume"))  # pyright: ignore[reportAny]
 
-        if action == 'buy':
+        if action == "buy":
             buy_entries.append((price, volume))
-        elif action == 'sell':
+        elif action == "sell":
             sell_entries.append((price, volume))
 
     total_profit: float = 0.0
-    bi: int = 0          # 当前待匹配买入的索引
-    bv: float = 0.0          # 当前买入剩余的未匹配量
+    bi: int = 0  # 当前待匹配买入的索引
+    bv: float = 0.0  # 当前买入剩余的未匹配量
 
     for sell_price, sell_vol in sell_entries:
         remaining: float = sell_vol
@@ -93,8 +100,8 @@ def calculate_fifo_profit(fills: list[object]) -> float:
 # 收益类指标 (Return Metrics)
 # ============================================================================
 
-def total_return(initial_capital: float, final_equity: float,
-                 min_trades: int = 1, total_trades: int = 1) -> float:
+
+def total_return(initial_capital: float, final_equity: float, min_trades: int = 1, total_trades: int = 1) -> float:
     """计算简单总收益率
 
     金融行业通用定义: (期末权益 - 期初资金) / 期初资金
@@ -113,8 +120,7 @@ def total_return(initial_capital: float, final_equity: float,
     return (final_equity - initial_capital) / initial_capital
 
 
-def annualized_return(total_ret: float, days: int,
-                      annual_factor: int = 252) -> float:
+def annualized_return(total_ret: float, days: int, annual_factor: int = 252) -> float:
     """将总收益率年化
 
     公式: (1 + R)^(252/days) - 1
@@ -137,6 +143,7 @@ def annualized_return(total_ret: float, days: int,
 # ============================================================================
 # 胜率与盈亏比 (Win Rate & Profit Factor)
 # ============================================================================
+
 
 def win_rate(win_trades: int, total_trades: int) -> float:
     """计算胜率
@@ -178,8 +185,8 @@ def profit_factor(total_win: float, total_loss: float) -> float:
 # 交易成本 (Trade Cost)
 # ============================================================================
 
-def trade_cost(price: float, quantity: int,
-               commission_rate: float, slippage: float) -> float:
+
+def trade_cost(price: float, quantity: int, commission_rate: float, slippage: float) -> float:
     """计算单边交易成本
 
     行业标准: 手续费 + 滑点
@@ -202,26 +209,26 @@ def trade_cost(price: float, quantity: int,
 # 仓位计算 (Position Sizing)
 # ============================================================================
 
-def position_size(capital: float, position_ratio: float,
-                  price: float, contract_size: int) -> int:
+
+def position_size(capital: float, position_ratio: float, price: float, contract_size: int, margin: float = 1.0) -> int:
     """计算下单手数
 
-    行业标准风险控制公式:
-      手数 = capital × position_ratio / (price × contract_size)
-    资金不足以买 1 手时返回 0。
+    期货: 手数 = capital × position_ratio / (price × contract_size × margin)
+    股票: margin=1.0（等价全款，持仓 100% 保证金）
 
     Args:
         capital: 可用资金
         position_ratio: 仓位比例 (如 0.1 = 10%)
         price: 当前价格
         contract_size: 合约乘数
+        margin: 保证金比例 (如 0.07 = 7%)
 
     Returns:
         下单手数 (整数，资金不足时返回 0)
     """
-    if price <= 0 or contract_size <= 0:
+    if price <= 0 or contract_size <= 0 or margin <= 0:
         return 0
-    vol = capital * position_ratio / (price * contract_size)
+    vol = capital * position_ratio / (price * contract_size * margin)
     if vol < 1:
         return 0
     return int(vol)
@@ -230,6 +237,7 @@ def position_size(capital: float, position_ratio: float,
 # ============================================================================
 # 均线计算 (Moving Average)
 # ============================================================================
+
 
 def simple_moving_average(prices: list[float], period: int) -> float:
     """计算简单移动平均线 (SMA)
@@ -255,8 +263,8 @@ def simple_moving_average(prices: list[float], period: int) -> float:
 # 金叉/死叉检测 (Cross Detection)
 # ============================================================================
 
-def golden_cross(prev_short: float, prev_long: float,
-                 cur_short: float, cur_long: float) -> bool:
+
+def golden_cross(prev_short: float, prev_long: float, cur_short: float, cur_long: float) -> bool:
     """检测金叉信号
 
     金叉定义: 前一时刻短期均线 <= 长期均线，当前短期均线 > 长期均线。
@@ -274,8 +282,7 @@ def golden_cross(prev_short: float, prev_long: float,
     return prev_short <= prev_long and cur_short > cur_long
 
 
-def death_cross(prev_short: float, prev_long: float,
-                cur_short: float, cur_long: float) -> bool:
+def death_cross(prev_short: float, prev_long: float, cur_short: float, cur_long: float) -> bool:
     """检测死叉信号
 
     死叉定义: 前一时刻短期均线 >= 长期均线，当前短期均线 < 长期均线。
@@ -297,52 +304,63 @@ def death_cross(prev_short: float, prev_long: float,
 # 止损/止盈检测 (Stop Loss & Take Profit)
 # ============================================================================
 
-def stop_loss_triggered(entry_price: float, current_price: float,
-                        stop_loss_ratio: float) -> bool:
+
+def stop_loss_triggered(entry_price: float, current_price: float, stop_loss_ratio: float, direction: str) -> bool:
     """检测止损条件
 
-    行业标准多头上损公式:
-      (入场价 - 当前价) / 入场价 >= 止损比例
+    行业标准公式:
+      多头: (入场价 - 当前价) / 入场价 >= 止损比例
+      空头: (当前价 - 入场价) / 入场价 >= 止损比例
 
     Args:
         entry_price: 入场价格
         current_price: 当前价格
         stop_loss_ratio: 止损比例 (如 0.03 = 3%)
+        direction: 持仓方向 (TRADE_DIRECTION_LONG or TRADE_DIRECTION_SHORT
 
     Returns:
         True 表示触发止损
     """
     if entry_price <= 0:
         return False
-    return (entry_price - current_price) / entry_price >= stop_loss_ratio
+    if direction == TRADE_DIRECTION_LONG:
+        return (entry_price - current_price) / entry_price >= stop_loss_ratio
+    elif direction == TRADE_DIRECTION_SHORT:
+        return (current_price - entry_price) / entry_price >= stop_loss_ratio
+    return False
 
 
-def take_profit_triggered(entry_price: float, current_price: float,
-                          take_profit_ratio: float) -> bool:
+def take_profit_triggered(entry_price: float, current_price: float, take_profit_ratio: float, direction: str) -> bool:
     """检测止盈条件
 
-    行业标准多头止盈公式:
-      (当前价 - 入场价) / 入场价 >= 止盈比例
+    行业标准公式:
+      多头: (当前价 - 入场价) / 入场价 >= 止盈比例
+      空头: (入场价 - 当前价) / 入场价 >= 止盈比例
 
     Args:
         entry_price: 入场价格
         current_price: 当前价格
         take_profit_ratio: 止盈比例 (如 0.05 = 5%)
+        direction: 持仓方向 (TRADE_DIRECTION_LONG or TRADE_DIRECTION_SHORT
 
     Returns:
         True 表示触发止盈
     """
     if entry_price <= 0:
         return False
-    return (current_price - entry_price) / entry_price >= take_profit_ratio
+    if direction == TRADE_DIRECTION_LONG:
+        return (current_price - entry_price) / entry_price >= take_profit_ratio
+    elif direction == TRADE_DIRECTION_SHORT:
+        return (entry_price - current_price) / entry_price >= take_profit_ratio
+    return False
 
 
 # ============================================================================
 # 持仓均价 (Average Entry Price)
 # ============================================================================
 
-def average_entry_price(old_position: int, old_price: float,
-                        new_quantity: int, new_price: float) -> float:
+
+def average_entry_price(old_position: int, old_price: float, new_quantity: int, new_price: float) -> float:
     """计算加仓后的加权平均持仓成本
 
     行业标准:
@@ -367,6 +385,7 @@ def average_entry_price(old_position: int, old_price: float,
 # 每点回撤 (Single-Point Drawdown)
 # ============================================================================
 
+
 def drawdown_at_point(peak: float, current: float) -> float:
     """计算权益曲线在某个时点的回撤率
 
@@ -387,6 +406,7 @@ def drawdown_at_point(peak: float, current: float) -> float:
 # ============================================================================
 # 日均交易 (Average Trades Per Day)
 # ============================================================================
+
 
 def avg_trades_per_day(total_trades: int, total_days: int) -> float:
     """计算日均交易次数
@@ -410,6 +430,7 @@ def avg_trades_per_day(total_trades: int, total_days: int) -> float:
 # 盈利品种占比 (Profitable Ratio)
 # ============================================================================
 
+
 def profitable_ratio(positive_count: int, total_count: int) -> float:
     """计算盈利品种占比
 
@@ -428,6 +449,7 @@ def profitable_ratio(positive_count: int, total_count: int) -> float:
 # ============================================================================
 # 年化因子换算 (Annual Factor Conversion)
 # ============================================================================
+
 
 def convert_annual_factor(kline_seconds: int) -> int:
     """根据K线周期秒数计算年化因子

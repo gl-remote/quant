@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 数据导出命令模块
 
@@ -12,12 +11,11 @@
 
 import argparse
 import sys
-import logging
+
+from loguru import logger
 
 from config import ConfigManager
 from data import DataManager, export_csv
-
-logger = logging.getLogger(__name__)
 
 
 def cmd_export(args: argparse.Namespace):
@@ -37,7 +35,7 @@ def cmd_export(args: argparse.Namespace):
     start: str | None = args.start  # pyright: ignore[reportAny]
     end: str | None = args.end  # pyright: ignore[reportAny]
     source: str | None = args.source  # pyright: ignore[reportAny]
-    interval: str = getattr(args, 'interval', '1m')  # pyright: ignore[reportAny]
+    interval: str = getattr(args, "interval", "1m")  # pyright: ignore[reportAny]
     output: str | None = args.output  # pyright: ignore[reportAny]
     force: bool = args.force  # pyright: ignore[reportAny]
 
@@ -46,8 +44,7 @@ def cmd_export(args: argparse.Namespace):
 
     date_hint = f"{start or 'auto'} ~ {end or 'auto'}"
     logger.info(f"数据导出: {symbol} {date_hint} [source={source or 'default'}, interval={interval}]")
-    dm.store.log('export', f"开始: {symbol} {date_hint} [source={source or 'default'}]",
-                 symbol=symbol, status='INFO')
+    dm.store.log("export", f"开始: {symbol} {date_hint} [source={source or 'default'}]", symbol=symbol, status="INFO")
 
     success = export_csv(
         symbol=symbol,

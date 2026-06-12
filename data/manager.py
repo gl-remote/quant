@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """数据管理器 - 统一数据访问入口
 
 提供简洁的高层数据接口，外部模块只需通过此类与data模块交互，
@@ -13,49 +12,66 @@
 
 from __future__ import annotations
 
-import logging
 import re
-from typing import TYPE_CHECKING
-
-from common.constants import COMMON_KLINE_INTERVALS
-import pandas as pd
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
+import pandas as pd
 import pandera.pandas as pa
+from loguru import logger
 from pandera.typing import DataFrame
 
-from .store import DataStore
+from common.constants import COMMON_KLINE_INTERVALS
+from common.schemas import KlineDataFrame, validate_backtest_consistency
+from common.types import BacktestResult
+
 from .datasource import list_sources
 from .models import (
-    KlineSchema,
     BacktestRecord,
-    TradeRecord,
-    SymbolInfo,
     DataSummary,
+    KlineSchema,
+    SymbolInfo,
+    TradeRecord,
 )
+from .store import DataStore
 
 if TYPE_CHECKING:
     from config import ConfigManager
 
-logger = logging.getLogger(__name__)
+
+def _get_attr(obj: object, key: str, default: object = None) -> object:
+    """获取对象属性值（兼容 dict 和 ORM model）"""
+    if hasattr(obj, key):
+        return getattr(obj, key, default)
+    return obj.get(key, default) if isinstance(obj, dict) else default
 
 
 class DataManager:
-    """数据管理器 - 统一数据访问入口
+    _instance: DataManager | None = None
+    _initialized: bool = False
 
-    提供数据加载、保存、查询等高层接口，对外隐藏数据库实现细节。
-    所有 DataFrame 数据都经过 Pandera Schema 验证。
-    """
+    def __new__(cls, config_manager: ConfigManager | None = None) -> DataManager:
+        """单例模式，保证全局只有一个实例"""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            # 初始化只执行一次
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self, config_manager: ConfigManager | None = None):
         """
         Args:
             config_manager: ConfigManager实例（可选）
         """
+        # 只在第一次初始化时执行
+        if self._initialized:
+            return
+
         self._config: ConfigManager | None = config_manager
         self._store: DataStore | None = None
-        self._data_cache: dict[str, pd.DataFrame] = {}
+        self._data_cache: dict[str, KlineDataFrame] = {}
         self._default_config: ConfigManager | None = None
+        self._initialized = True
 
     def _get_config(self) -> ConfigManager:
         """获取配置管理器（延迟初始化默认配置）"""
@@ -63,12 +79,13 @@ class DataManager:
             return self._config
         if self._default_config is None:
             from config import ConfigManager
+
             self._default_config = ConfigManager()
         return self._default_config
 
     def _get_data_dir(self) -> str:
         """获取数据目录"""
-        return '.quant_shared_data/csv'
+        return ".quant_shared_data/csv"
 
     def _get_filename_template(self) -> str:
         """获取文件名模板配置"""
@@ -85,7 +102,7 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().db_path or '.quant_shared_data/quant_shared.db'
+            db_path = self._get_config().get_data_config().db_path or ".quant_shared_data/quant_shared.db"
             self._store = DataStore(db_path)
 
     @property
@@ -109,7 +126,7 @@ class DataManager:
         if not csv_dir.exists():
             return []
 
-        files = list(csv_dir.glob('*.csv'))
+        files = list(csv_dir.glob("*.csv"))
 
         # 从文件名提取品种名
         # 新格式: {symbol}.{provider}.{interval}.csv
@@ -120,13 +137,13 @@ class DataManager:
         for f in files:
             name = f.stem
             # 新格式: name.rsplit('.', 2) → [symbol, provider, interval]
-            parts3 = name.rsplit('.', 2)
+            parts3 = name.rsplit(".", 2)
             if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
                 symbols.add(parts3[0])
                 continue
 
             # 旧格式: name.rsplit('.', 1) → [symbol, interval]
-            parts2 = name.rsplit('.', 1)
+            parts2 = name.rsplit(".", 1)
             if len(parts2) == 2 and parts2[-1] in common_intervals:
                 symbols.add(parts2[0])
                 continue
@@ -150,7 +167,7 @@ class DataManager:
         if not csv_dir.exists():
             return []
 
-        files = list(csv_dir.glob('*.csv'))
+        files = list(csv_dir.glob("*.csv"))
         common_intervals = COMMON_KLINE_INTERVALS
         known_providers = set(list_sources())
 
@@ -162,11 +179,11 @@ class DataManager:
             if data_regex and not data_regex.search(filename):
                 continue
             name = f.stem
-            parts3 = name.rsplit('.', 2)
+            parts3 = name.rsplit(".", 2)
             if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
                 symbols.add(parts3[0])
             else:
-                parts2 = name.rsplit('.', 1)
+                parts2 = name.rsplit(".", 1)
                 if len(parts2) == 2 and parts2[-1] in common_intervals:
                     symbols.add(parts2[0])
                 else:
@@ -186,22 +203,22 @@ class DataManager:
         meta = self.store.get_metadata(symbol)
 
         if meta:
-            meta_filepath = str(meta.get('filepath', ''))
+            meta_filepath = str(meta.get("filepath", ""))
             if meta_filepath and Path(meta_filepath).exists():
                 return SymbolInfo(
                     symbol=symbol,
                     available=True,
                     filepath=meta_filepath,
-                    start_date=str(meta.get('start_date', '')),
-                    end_date=str(meta.get('end_date', '')),
-                    total_rows=int(meta.get('total_rows', 0) or 0),  # type: ignore[call-overload]  # SQLite dict
+                    start_date=str(meta.get("start_date", "")),
+                    end_date=str(meta.get("end_date", "")),
+                    total_rows=int(meta.get("total_rows", 0) or 0),  # type: ignore[call-overload]  # SQLite dict
                 )
 
         data_dir = self._get_data_dir()
         filename_template = self._get_filename_template()
 
         provider = self._get_default_provider()
-        filename = filename_template.format(symbol=symbol, provider=provider, interval='1m')
+        filename = filename_template.format(symbol=symbol, provider=provider, interval="1m")
         filepath = Path(data_dir) / filename
 
         if filepath.exists():
@@ -211,8 +228,8 @@ class DataManager:
                     symbol=symbol,
                     available=True,
                     filepath=str(filepath),
-                    start_date=str(df['datetime'].min())[:10] if not df.empty else None,
-                    end_date=str(df['datetime'].max())[:10] if not df.empty else None,
+                    start_date=str(df["datetime"].min())[:10] if not df.empty else None,
+                    end_date=str(df["datetime"].max())[:10] if not df.empty else None,
                     total_rows=len(df),
                 )
 
@@ -220,7 +237,7 @@ class DataManager:
         return SymbolInfo(
             symbol=symbol,
             available=False,
-            error='数据文件不存在',
+            error="数据文件不存在",
         )
 
     def get_data_summary(self) -> DataSummary:
@@ -239,119 +256,113 @@ class DataManager:
         """加载CSV文件并通过 Pandera 验证"""
         try:
             df = pd.read_csv(filepath)
-            df['datetime'] = pd.to_datetime(df['datetime'])
+            df["datetime"] = pd.to_datetime(df["datetime"])
             validated_df = KlineSchema.validate(df)
             return validated_df
         except pa.errors.SchemaError as e:
             logger.error(f"数据验证失败 [{filepath}]: {e}")
             return None
         except Exception as e:
-            logger.error(f"加载CSV失败 [{filepath}]: {e}", exc_info=True)
+            logger.exception(f"加载CSV失败 [{filepath}]: {e}")
             return None
 
-    def load_kline(self, symbol: str, start_date: str | None = None, end_date: str | None = None,
-                   interval: str | None = None, provider: str | None = None,
-                   return_path: bool = False) -> pd.DataFrame | None | tuple[pd.DataFrame | None, str | None]:
-        """加载K线数据，返回经过 Pandera 验证的 DataFrame，失败返回 None
+    def load_kline(
+        self,
+        symbols: list[str],
+        start_date: str | None = None,
+        end_date: str | None = None,
+        interval: str | None = None,
+        provider: str | None = None,
+    ) -> list[tuple[str, KlineDataFrame, str]]:
+        """加载K线数据，返回 [(symbol, df, data_src), ...]
+
+        data_src 来自 ExportMetadata 表，由导出过程注册，作为数据溯源路径。
 
         Args:
-            symbol: 品种代码（如 'DCE.m2509'）
-            start_date: 开始日期（可选，格式 'YYYY-MM-DD'）
-            end_date: 结束日期（可选，格式 'YYYY-MM-DD'）
-            interval: K线周期（默认从配置读取）
-            provider: 数据源（默认从配置读取）
-            return_path: 为 True 时返回 (df, filepath) 元组
+            symbols: 品种代码列表（如 ['DCE.m2509', 'SHFE.rb2505']）
+            start_date: 开始日期（格式 'YYYY-MM-DD'），None 时不作下限过滤
+            end_date: 结束日期（格式 'YYYY-MM-DD'），None 时不作上限过滤
+            interval: K线周期，None 时从配置读取默认周期
+            provider: 数据源名称（如 'tqsdk'），None 时遍历所有可用源
 
         Returns:
-            经过 Pandera KlineSchema 验证的 K 线数据，或 (df, filepath) 元组，失败返回 None
+            按 symbols 顺序返回 [(symbol, DataFrame, data_src), ...]
+
+        Raises:
+            FileNotFoundError: ExportMetadata 查不到数据源或文件缺失
+            Exception: CSV 读取或解析错误
         """
-        try:
-            if interval is None:
-                interval = self._get_default_interval()
+        if interval is None:
+            interval = self._get_default_interval()
 
-            data_dir = self._get_data_dir()
-            filename_template = self._get_filename_template()
-
-            if provider:
-                candidates = [provider]
+        if provider:
+            candidates = [provider]
+        else:
+            bt_provider = self._get_default_provider()
+            if bt_provider:
+                candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
             else:
-                bt_provider = self._get_default_provider()
-                if bt_provider:
-                    candidates = [bt_provider] + [p for p in list_sources() if p != bt_provider]
-                else:
-                    candidates = list_sources()
-            filepath = None
-            matched_provider = None
-            for p in candidates:
-                fp = Path(data_dir) / filename_template.format(symbol=symbol, provider=p, interval=interval)
-                if fp.exists():
-                    filepath = fp
-                    matched_provider = p
-                    break
+                candidates = list_sources()
 
-            if filepath is None:
-                raise FileNotFoundError(
-                    f"数据文件不存在: {symbol} (interval={interval}, providers={candidates})"
-                )
+        results: list[tuple[str, KlineDataFrame, str]] = []
 
-            cache_key = f"{symbol}_{matched_provider}_{interval}_{start_date}_{end_date}"
+        for symbol in symbols:
+            data_src = self._resolve_data_src(symbol, interval, candidates)
+            cache_key = f"{symbol}_{interval}_{start_date}_{end_date}"
+
             if cache_key in self._data_cache:
                 logger.debug(f"从缓存加载数据: {symbol}")
-                cached_df = self._data_cache[cache_key]
-                if return_path:
-                    return cached_df, str(filepath)
-                return cached_df
+                results.append((symbol, self._data_cache[cache_key], data_src))
+                continue
 
-            df = pd.read_csv(filepath)
-            df['datetime'] = pd.to_datetime(df['datetime'])
+            df = pd.read_csv(data_src)
+            df["datetime"] = pd.to_datetime(df["datetime"])
 
             if start_date:
-                df = df[df['datetime'] >= pd.Timestamp(start_date)]
+                df = df[df["datetime"] >= pd.Timestamp(start_date)]
             if end_date:
-                df = df[df['datetime'] <= pd.Timestamp(end_date)]
+                df = df[df["datetime"] <= pd.Timestamp(end_date)]
 
-            self._data_cache[cache_key] = df  # pyright: ignore[reportArgumentType]  # pandas 类型噪音
-            logger.info(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+            df = cast(KlineDataFrame, df)
+            self._data_cache[cache_key] = df
+            logger.debug(f"加载K线数据: {symbol}, 共 {len(df)} 条")
+            results.append((symbol, df, data_src))
 
-            if return_path:
-                return df, str(filepath)  # pyright: ignore[reportReturnType]
-            return df  # pyright: ignore[reportReturnType]
-        except Exception as e:
-            logger.error(f"加载K线数据失败: {e}")
-            if return_path:
-                return None, None
-            return None
+        return results
+
+    def _resolve_data_src(self, symbol: str, interval: str, candidates: list[str]) -> str:
+        """查 ExportMetadata 获取指定品种的数据源路径
+
+        Raises:
+            FileNotFoundError: 查不到注册记录或文件缺失
+        """
+        for p in candidates:
+            meta = self.store.get_metadata(symbol, p, interval)
+            if meta:
+                fp = meta["filepath"]
+                if not isinstance(fp, str):
+                    continue
+                if not Path(fp).exists():
+                    raise FileNotFoundError(f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}")
+                return fp
+        raise FileNotFoundError(f"ExportMetadata 中找不到 {symbol} (interval={interval}, candidates={candidates})")
 
     # ── 回测记录 ────────────────────────────────────────────
 
-    def insert_backtest(self, symbol: str, strategy: str, status: str,
-                        error_message: str | None, statistics: dict[str, object],
-                        engine_config: dict[str, object], params: dict[str, float] | None,
-                        start_date: str | None, end_date: str | None,
-                        strategy_version: str | None = None,
-                        git_hash: str | None = None,
-                        run_id: int | None = None,
-                        data_src: str | None = None) -> int:
+    def insert_backtest(
+        self,
+        result: BacktestResult,
+        run_id: int | None = None,
+        data_src: str | None = None,
+    ) -> int:
         """插入完整的回测记录
-        
+
         Args:
-            data_src: 数据源文件路径（如 CSV 文件路径），用于报告生成时定位K线数据
+            result: 统一 BacktestResult 结构
+            run_id: Run 记录 ID
+            data_src: 数据源文件路径，用于报告生成时定位K线数据
         """
-        return self.store.insert_backtest_detailed(
-            symbol=symbol,
-            strategy=strategy,
-            status=status,
-            error_message=error_message,
-            statistics=statistics,
-            engine_config=engine_config,
-            params=params,
-            start_date=start_date,
-            end_date=end_date,
-            strategy_version=strategy_version,
-            git_hash=git_hash,
-            run_id=run_id,
-            data_src=data_src,
-        )
+        return self.store.insert_backtest_detailed(result, run_id=run_id, data_src=data_src)
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
         """批量插入交易明细"""
@@ -361,7 +372,7 @@ class DataManager:
         self,
         symbol: str | None = None,
         strategy: str | None = None,
-        status: str = 'success',
+        status: str = "success",
         limit: int = 50,
     ) -> list[BacktestRecord]:
         """查询回测记录列表"""
@@ -378,6 +389,51 @@ class DataManager:
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
+
+    def validate_consistency(self, backtest_id: int) -> list[str]:
+        """验证回测记录与交易明细之间的一致性
+
+        检查项：
+        1. win_trades + loss_trades 是否等于 total_trades
+        2. backtest_trades 表的实际记录数是否等于 total_trades
+        3. 如果 total_trades > 0，win_trades/loss_trades 不能同时为 None
+        4. (2026-06-06新增) profit_days + loss_days ≈ total_days
+        5. (2026-06-06新增) total_commission ≈ sum(trade.commission)
+
+        调试沉淀(2026-06-04):
+        - 项 2 即为本次 debug 发现的 total_trade_count vs total_trades 键名问题
+
+        Args:
+            backtest_id: 回测记录 ID
+
+        Returns:
+            错误信息列表，空列表表示验证通过
+        """
+        bt = self.get_backtest(backtest_id)
+        if bt is None:
+            return [f"回测记录 {backtest_id} 不存在"]
+
+        trades = self.query_trades(backtest_id)
+        trade_count = len(trades)
+
+        # 2026-06-06新增: 聚合逐笔手续费用于一致性校验
+        trade_commission_sum = (
+            sum(float(cast(float | int, _get_attr(t, "commission", 0))) for t in trades) if trades else 0.0
+        )
+
+        return validate_backtest_consistency(
+            total_trades=bt.total_trades,
+            win_trades=bt.win_trades,
+            loss_trades=bt.loss_trades,
+            trade_count=trade_count,
+            backtest_id=backtest_id,
+            # 2026-06-06 新增校验参数
+            total_days=cast(int | None, _get_attr(bt, "total_days")),
+            profit_days=cast(int | None, _get_attr(bt, "profit_days")),
+            loss_days=cast(int | None, _get_attr(bt, "loss_days")),
+            total_commission=cast(float | None, _get_attr(bt, "total_commission")),
+            trade_commission_sum=trade_commission_sum,
+        )
 
     def query_daily(self, backtest_id: int) -> list[dict[str, object]]:
         """查询每日资金曲线"""
@@ -435,8 +491,13 @@ class DataManager:
             self._store.close()
             logger.info("数据库连接已关闭")
 
-    def __enter__(self) -> "DataManager":
+    def __enter__(self) -> DataManager:
         return self
 
-    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         self.close()

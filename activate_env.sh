@@ -1,5 +1,5 @@
 #!/bin/bash
-# 天勤量化交易系统环境启动脚本
+# 策略工具箱环境启动脚本
 # 使用方法: source activate_env.sh  (注意：必须用 source，不能用 ./ 执行)
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
@@ -9,8 +9,18 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-CONDA_BASE="${CONDA_PREFIX:-/usr/local/Caskroom/miniconda/base}"
 ENV_NAME="quant_trading"
+
+# 如果已在目标环境中，跳过激活
+if [[ "${CONDA_DEFAULT_ENV:-}" == "$ENV_NAME" ]]; then
+    return 0 2>/dev/null || exit 0
+fi
+
+CONDA_BASE="${CONDA_PREFIX:-/usr/local/Caskroom/miniconda/base}"
+# CONDA_PREFIX 指向 envs/xxx 时回溯到 base
+if [[ "$CONDA_BASE" == */envs/* ]]; then
+    CONDA_BASE="$(dirname "$(dirname "$CONDA_BASE")")"
+fi
 
 # 检查conda是否存在
 if [ ! -f "$CONDA_BASE/bin/activate" ]; then

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 data — 统一数据访问模块
 
@@ -22,41 +21,41 @@ data — 统一数据访问模块
   4. 所有数据类型约定清晰，无需关心内部实现
 """
 
+# 从 common.schemas 导入全局统一的 Pandera Schema
+from common.schemas import (
+    DailyReturnDataFrame,
+    DailyReturnSchema,
+    KlineDataFrame,
+    KlineSchema,
+)
+
+from .datasource import get_data_source, list_sources
+from .exporter import export_csv
 from .manager import DataManager
 from .models import (
     BacktestRecord,
-    TradeRecord,
-    SymbolInfo,
     DataSummary,
-)
-from .exporter import export_csv
-from .datasource import get_data_source, list_sources
-
-# 从 common.schemas 导入全局统一的 Pandera Schema
-from common.schemas import (
-    KlineSchema,
-    DailyReturnSchema,
-    KlineDataFrame,
-    DailyReturnDataFrame,
+    SymbolInfo,
+    TradeRecord,
 )
 
 __all__ = [
     # 核心管理器
-    'DataManager',
+    "DataManager",
     # Pandera Schema（全局统一）
-    'KlineSchema',
-    'DailyReturnSchema',
+    "KlineSchema",
+    "DailyReturnSchema",
     # DataFrame 类型别名
-    'KlineDataFrame',
-    'DailyReturnDataFrame',
+    "KlineDataFrame",
+    "DailyReturnDataFrame",
     # Pydantic 模型
-    'BacktestRecord',
-    'TradeRecord',
-    'SymbolInfo',
-    'DataSummary',
+    "BacktestRecord",
+    "TradeRecord",
+    "SymbolInfo",
+    "DataSummary",
     # 导出函数
-    'export_csv',
+    "export_csv",
     # 数据源工厂
-    'get_data_source',
-    'list_sources',
+    "get_data_source",
+    "list_sources",
 ]

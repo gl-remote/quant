@@ -30,7 +30,7 @@ config/
 
 ```toml
 [app]
-name = "天勤量化交易系统"
+name = "策略工具箱"
 version = "0.2.0-dev"
 log_level = "INFO"
 
@@ -98,8 +98,11 @@ enabled = true
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `initial_capital` | float | 100000.0 | 初始资金 |
-| `commission_rate` | float | 0.0003 | 手续费率 |
-| `slippage` | float | 0.1 | 滑点 |
+| `commission_rate` | float | 0.0003 | 手续费率（如 0.0003 = 万三） |
+| `slippage` | float | 0.1 | 单边滑点（价格单位，如 0.1 元/跳） |
+| `interval` | str | "1m" | K线周期: 1m/5m/15m/30m/1h/d |
+| `price_tick` | float | 1.0 | 最小变动价位 |
+| `contract_size` | int | 10 | 合约乘数 |
 
 ### [optimizer]
 

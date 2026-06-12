@@ -1,4 +1,4 @@
-# 天勤量化交易系统 - 配置模板
+# 策略工具箱 - 配置模板
 # 使用方法：
 # 1. 复制此文件为 config/conf.local.toml
 # 2. 填写真实的配置信息
@@ -32,11 +32,14 @@ debug = true                      # 是否启用调试模式
 # ============================================================
 # [[strategies]]
 # name = "ma"
-# sma_short = 5
-# sma_long = 20
+# sma_short = 10
+# sma_long = 40
 # stop_loss_ratio = 0.03
 # take_profit_ratio = 0.05
 # position_ratio = 0.1
+# atr_period = 14
+# atr_stop_loss_multiplier = 2.0
+# atr_take_profit_multiplier = 3.0
 
 # ============================================================
 # 可选：第三方服务配置
@@ -56,6 +59,8 @@ enabled = true                    # 是否启用参数优化
 engine = "bayesian"                 # 优化引擎: "grid" 或 "bayesian"
 n_trials = 50                     # Optuna 最大试验次数
 table_prefix = "optuna_"          # Optuna 表名前缀
+use_fixed_seed = false            # 是否使用固定随机种子（默认false，即随机）
+random_seed = 42                  # 固定随机种子值（仅在use_fixed_seed=true时有效）
 
 # 全局搜索空间（适用于所有策略）
 # [optimizer.search_space]
@@ -64,10 +69,10 @@ table_prefix = "optuna_"          # Optuna 表名前缀
 
 # 策略专属搜索空间（优先于全局搜索空间）
 [optimizer.strategy_spaces.ma]
-sma_short = { type = "int", low = 5, high = 30, step = 5 }
-sma_long = { type = "int", low = 30, high = 200, step = 10 }
-stop_loss_ratio = { type = "float", low = 0.01, high = 0.05 }
-take_profit_ratio = { type = "float", low = 0.02, high = 0.1 }
+atr_stop_loss_multiplier = { type = "float", low = 1.0, high = 3.0, step = 0.5 }
+atr_take_profit_multiplier = { type = "float", low = 2.0, high = 5.0, step = 0.5 }
+trailing_activation_atr = { type = "float", low = 0.5, high = 3.0, step = 0.5 }
+trailing_drawdown_ratio = { type = "float", low = 0.05, high = 0.50, step = 0.05 }
 
 # [optimizer.strategy_spaces.rsi]
 # rsi_period = { type = "int", low = 6, high = 20 }

@@ -1,0 +1,40 @@
+# Pre-commit 钩子配置
+# 安装: pre-commit install
+# 跳过: git commit --no-verify
+#
+# 工作原理:
+#   git commit → Git 自动执行 .git/hooks/pre-commit
+#   → 该脚本读取本文件 → 按定义顺序执行各检查项
+#   → 全部通过才允许提交
+
+repos:
+  # === Python Lint + Format (ruff) ===
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      # Lint: 代码风格 + 潜在 bug 检测（自动修复能修的问题）
+      - id: ruff
+        args: [--fix]
+      # Format: 代码格式化检查
+      - id: ruff-format
+
+  # === 类型检查 (mypy) ===
+  - repo: local
+    hooks:
+      - id: mypy-check
+        name: mypy type check
+        entry: conda run -n quant_trading python -m mypy --config-file pyproject.toml common/ data/ backtest/ strategies/
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+  # === 快速冒烟测试 ===
+  - repo: local
+    hooks:
+      - id: pytest-smoke
+        name: pytest smoke test
+        entry: conda run -n quant_trading python -m pytest tests/ -q --tb=short -x
+        language: system
+        pass_filenames: false
+        always_run: true
