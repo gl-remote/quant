@@ -1,6 +1,6 @@
 # 策略工具箱
 
-![version](https://img.shields.io/badge/version-0.3.0-blue) ![python](https://img.shields.io/badge/python-3.12%2B-green) ![tests](https://img.shields.io/badge/tests-333%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-54%25-yellow)
+![version](https://img.shields.io/badge/version-0.4.0--dev-blue) ![python](https://img.shields.io/badge/python-3.12%2B-green) ![tests](https://img.shields.io/badge/tests-333%20passed-brightgreen) ![coverage](https://img.shields.io/badge/coverage-55%25-yellow)
 
 多品种量化策略研发工具链。集成回测引擎、参数优化、报告可视化、Walk-Forward 验证，覆盖从数据到策略评估的完整流程。
 
