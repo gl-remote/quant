@@ -7,7 +7,7 @@ packages = ["cli", "common", "config", "data", "backtest", "strategies", "report
 
 [project]
 name = "quant"
-version = "0.2.0-dev"
+version = "0.3.0"
 description = "策略工具箱 - 量化策略研发工具链"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -78,7 +78,7 @@ select = [
     "B",   # flake8-bugbear
     "SIM", # flake8-simplify
 ]
-ignore = ["E501", "B017", "B027", "SIM102"]
+ignore = ["E501", "B017", "B027", "SIM102", "UP046"]
 exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 
 [tool.ruff.lint.per-file-ignores]
