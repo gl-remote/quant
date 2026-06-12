@@ -13,12 +13,16 @@ describe('useFetchJson', () => {
     clearCache();
   });
 
-  it('should return loading state initially', () => {
+  it('should return loading state initially', async () => {
     const { result } = renderHook(() => useFetchJson<{ name: string }>('test.json'));
     
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(true);
     expect(result.current.error).toBeNull();
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
   });
 
   it('should load data successfully', async () => {

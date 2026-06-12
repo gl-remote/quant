@@ -61,7 +61,7 @@ describe('SymbolTable', () => {
     render(<SymbolTable data={mockSummaryItems} selectedSymbol="DCE.m2509" onSelect={() => {}} />);
     
     const row = screen.getByText('DCE.m2509').closest('tr');
-    expect(row).toHaveStyle({ background: '#eff6ff' });
+    expect(row).toHaveClass('bg-primary/5');
   });
 
   it('should display correct metrics', () => {

@@ -18,15 +18,25 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: report/web/package-lock.json
+
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
           pip install ruff mypy pytest pytest-cov pandas numpy pyyaml peewee pandera loguru optuna typing_extensions pyarrow pandas-ta akshare plotly matplotlib
           pip install -e .
 
+      - name: Install frontend dependencies
+        working-directory: report/web
+        run: npm ci
+
       - name: Lint with ruff
         run: ruff check .
-        # 不用 continue-on-error，lint 失败应阻断 CI
 
       - name: Check formatting with ruff
         run: ruff format --check .
@@ -36,3 +46,15 @@ jobs:
 
       - name: Test with pytest
         run: pytest tests/ --cov=. --cov-report=term --cov-fail-under=60
+
+      - name: Frontend lint
+        working-directory: report/web
+        run: npm run lint
+
+      - name: Frontend tests
+        working-directory: report/web
+        run: npm test -- --run
+
+      - name: Frontend build
+        working-directory: report/web
+        run: npm run build

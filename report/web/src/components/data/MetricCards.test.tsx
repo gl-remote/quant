@@ -96,28 +96,25 @@ describe('MetricCards', () => {
     expect(screen.getByText('2')).toBeInTheDocument();
   });
 
-  it('should display total trades', () => {
+  it('should display total trades from best record per symbol', () => {
     render(<MetricCards run={mockRun} backtests={mockBacktests} />);
-    expect(screen.getByText('125')).toBeInTheDocument();
+    expect(screen.getByText('80')).toBeInTheDocument();
   });
 
-  it('should display average return', () => {
+  it('should display average return from best record per symbol', () => {
     render(<MetricCards run={mockRun} backtests={mockBacktests} />);
-    // avgReturn = (10.5 + 8.3 + 15.2) / 3 = 11.33%
-    expect(screen.getByText('11.33%')).toBeInTheDocument();
+    expect(screen.getByText('12.85%')).toBeInTheDocument();
   });
 
-  it('should display average sharpe', () => {
+  it('should display average sharpe from best record per symbol', () => {
     render(<MetricCards run={mockRun} backtests={mockBacktests} />);
-    expect(screen.getByText('1.83')).toBeInTheDocument();
+    expect(screen.getByText('2.00')).toBeInTheDocument();
   });
 
   // 新增字段测试 (2026-06-06)
-  it('should display total net pnl and commission', () => {
+  it('should display total net pnl and commission from best record per symbol', () => {
     render(<MetricCards run={mockRun} backtests={mockBacktests} />);
-    // totalNetPnl = 10500 + 8300 + 15200 = 34000
-    expect(screen.getByText(/34,000/)).toBeInTheDocument();
-    // totalCommission = 350 + 280 + 420 = 1050
-    expect(screen.getByText(/1,050/)).toBeInTheDocument();
+    expect(screen.getByText(/25,700/)).toBeInTheDocument();
+    expect(screen.getByText(/770/)).toBeInTheDocument();
   });
 });

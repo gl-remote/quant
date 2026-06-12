@@ -45,8 +45,8 @@ describe('BacktestDetail', () => {
     // win_rate 已被 store *100，formatPct 显示百分比
     expect(screen.getByText('60.0%')).toBeInTheDocument();
     // 新增字段展示
-    expect(screen.getByText(/10,500/)).toBeInTheDocument();       // 净盈亏
-    expect(screen.getByText(/350/)).toBeInTheDocument();           // 手续费
+    expect(screen.getByText('10,500')).toBeInTheDocument();       // 净盈亏
+    expect(screen.getByText('350')).toBeInTheDocument();           // 手续费
     expect(screen.getByText(/5,200元/)).toBeInTheDocument();      // 最大回撤(金额)
   });
 

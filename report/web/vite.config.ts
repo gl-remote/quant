@@ -35,7 +35,7 @@ export default defineConfig({
   build: {
     outDir: process.env.VITE_OUT_DIR || "dist",
     // 单文件打包必然较大，提高 chunk 大小警告阈值
-    chunkSizeWarningLimit: 2000,
+    chunkSizeWarningLimit: 3000,
     rollupOptions: {
       output: {
         // 输出单个文件，便于内联到 HTML
