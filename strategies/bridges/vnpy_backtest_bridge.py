@@ -37,7 +37,6 @@ from common.constants import (
     TRADE_DIRECTION_SHORT,
     TRADE_OFFSET_OPEN,
 )
-from common.types import PositionDirection, TradeAction
 from data.manager import DataManager
 from strategies import Bar, Fill, Signal, State, Strategy, UninitializedStrategy
 from strategies.core.types import StrategyPosition
@@ -647,11 +646,8 @@ class VnpyBacktestBridge(CtaTemplate):
         """
         if is_open:
             # 开仓（多或空）
-            action = cast(TradeAction, TRADE_ACTION_BUY if is_long else TRADE_ACTION_SELL)
-            dir_value = cast(
-                PositionDirection,
-                TRADE_DIRECTION_LONG if is_long else TRADE_DIRECTION_SHORT,
-            )
+            action = TRADE_ACTION_BUY if is_long else TRADE_ACTION_SELL
+            dir_value = TRADE_DIRECTION_LONG if is_long else TRADE_DIRECTION_SHORT
             fill = Fill(
                 timestamp=str(dt),
                 symbol=self._state.symbol,
@@ -672,7 +668,7 @@ class VnpyBacktestBridge(CtaTemplate):
             fill = Fill(
                 timestamp=str(dt),
                 symbol=self._state.symbol,
-                action=cast(TradeAction, TRADE_ACTION_SELL),
+                action=TRADE_ACTION_SELL,
                 price=price,
                 volume=volume,
                 reason=reason,

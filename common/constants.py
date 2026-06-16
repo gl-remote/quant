@@ -5,6 +5,7 @@
 魔术字符串在代码库中的散落。
 
 本模块遵循 common/ 零依赖原则：纯常量定义，不 import 任何业务模块。
+仅允许 import 标准库（如 typing）用于类型标注。
 
 使用方式:
     from common.constants import (
@@ -23,14 +24,18 @@
     - StrategyName  策略标识名
 """
 
+from __future__ import annotations
+
+from typing import Literal
+
 # ============================================================================
 # 交易方向与动作 (Trade Direction & Action)
 # ============================================================================
 
-TRADE_ACTION_BUY = "buy"  # 买入动作
-TRADE_ACTION_SELL = "sell"  # 卖出动作
-TRADE_DIRECTION_LONG = "long"  # 多头持仓方向
-TRADE_DIRECTION_SHORT = "short"  # 空头持仓方向
+TRADE_ACTION_BUY: Literal["buy"] = "buy"  # 买入动作
+TRADE_ACTION_SELL: Literal["sell"] = "sell"  # 卖出动作
+TRADE_DIRECTION_LONG: Literal["long"] = "long"  # 多头持仓方向
+TRADE_DIRECTION_SHORT: Literal["short"] = "short"  # 空头持仓方向
 TRADE_OFFSET_OPEN = "open"  # 开仓
 TRADE_OFFSET_CLOSE = "close"  # 平仓
 

@@ -2,10 +2,9 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, cast
+from typing import Any
 
 from common.constants import SIGNAL_TRADE_COOLDOWN, TRADE_DIRECTION_LONG
-from common.types import PositionDirection
 from strategies.core.state import State
 from strategies.core.types import Fill, Signal, StrategyPosition
 from strategies.strategy_aspects import with_trade_cooldown
@@ -50,7 +49,7 @@ def _make_state(fill_time: datetime | None = None, has_position: bool = False) -
         )
 
     position = (
-        StrategyPosition(direction=cast(PositionDirection, TRADE_DIRECTION_LONG), entry_price=100, volume=1)
+        StrategyPosition(direction=TRADE_DIRECTION_LONG, entry_price=100, volume=1)
         if has_position
         else StrategyPosition()
     )

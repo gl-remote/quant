@@ -10,7 +10,7 @@
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 from common.constants import (
     DEFAULT_KDJ_OVERBOUGHT,
@@ -25,18 +25,17 @@ from common.constants import (
     TRADE_ACTION_SELL,
 )
 from common.formulas import position_size
-from common.types import TradeAction
-from strategies import (
+
+from .core import (
     CORE_VERSION,
-    BarContext,
-    DataRequirements,
-    EventsRequirements,
     Fill,
     Signal,
     State,
     Strategy,
 )
-from strategies.strategy_aspects import (
+from .runtime import DataRequirements, EventsRequirements
+from .runtime.requirements import BarContext
+from .strategy_aspects import (
     KDJ,
     MACD,
     SMA,
@@ -47,6 +46,7 @@ from strategies.strategy_aspects import (
     trend_short_when_compare,
     with_atr_stop_take_profit,
     with_stop_take_profit,
+    with_trade_cooldown,
     with_trailing_stop,
 )
 
@@ -126,6 +126,7 @@ class MACrossParams:
 @confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
 @confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
 # ── 拦截型切面声明 ──
+@with_trade_cooldown(minutes=10)
 @with_trailing_stop("15m")
 @with_atr_stop_take_profit("15m")
 @with_stop_take_profit
@@ -181,9 +182,9 @@ class MaStrategyCore(Strategy[MACrossParams]):
             )
 
             if direction_keys["long"] <= long_keys:
-                signal = Signal(action=cast(TradeAction, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
+                signal = Signal(action=TRADE_ACTION_BUY, reason="long_entry", volume=vol)
             elif direction_keys["short"] <= short_keys:
-                signal = Signal(action=cast(TradeAction, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
+                signal = Signal(action=TRADE_ACTION_SELL, reason="short_entry", volume=vol)
 
         return signal
 

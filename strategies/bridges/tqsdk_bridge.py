@@ -22,7 +22,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Generic, TypeVar, cast
+from typing import Any, Generic, TypeVar
 
 from loguru import logger
 
@@ -37,7 +37,6 @@ from common.constants import (  # noqa: E402
 )
 from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
-from common.types import PositionDirection  # noqa: E402
 from common.typing import check_types  # noqa: E402
 from strategies.runtime import BarContext, DataFeed  # noqa: E402
 from strategies.runtime.period import PeriodDataView  # noqa: E402
@@ -596,7 +595,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         if signal.action == TRADE_ACTION_BUY:
             self._state.position = StrategyPosition(
-                direction=cast(PositionDirection, TRADE_DIRECTION_LONG),
+                direction=TRADE_DIRECTION_LONG,
                 entry_price=fill_price,
                 volume=signal.volume,
                 highest_price=fill_price,
