@@ -203,7 +203,11 @@ from .core import (
     StrategyPosition,
     State,
     CORE_VERSION,
+)
+from .strategy_aspects import (
+    with_atr_stop_take_profit,
     with_stop_take_profit,
+    with_trailing_stop,
 )
 
 # 运行时数据管理（来自 runtime，与 core 同级）
@@ -261,8 +265,10 @@ __all__ = [
     "Fill",
     "StrategyPosition",
     "State",
-    # AOP 装饰器
+    # 策略切面
+    "with_atr_stop_take_profit",
     "with_stop_take_profit",
+    "with_trailing_stop",
     # 数据管理类型
     "Event",
     "BigTradeEvent",

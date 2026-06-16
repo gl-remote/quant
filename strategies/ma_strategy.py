@@ -41,7 +41,7 @@ from strategies import (
     State,
     Strategy,
 )
-from strategies.core.decorators import (
+from strategies.strategy_aspects import (
     with_atr_stop_take_profit,
     with_stop_take_profit,
     with_trailing_stop,

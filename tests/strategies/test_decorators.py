@@ -19,9 +19,9 @@ from common.constants import (
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
 )
-from strategies.core.decorators import with_stop_take_profit
 from strategies.core.state import State
 from strategies.core.types import Signal, StrategyPosition
+from strategies.strategy_aspects import with_stop_take_profit
 
 # --------------------------
 # 辅助类型

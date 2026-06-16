@@ -25,7 +25,6 @@
 """
 
 from .base import Strategy, UninitializedStrategy
-from .decorators import with_stop_take_profit
 from .state import State
 from .types import Bar, Fill, Signal, StrategyPosition
 
@@ -46,6 +45,4 @@ __all__ = [
     "StrategyPosition",
     # 运行时状态
     "State",
-    # AOP 装饰器
-    "with_stop_take_profit",
 ]

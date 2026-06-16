@@ -28,7 +28,7 @@ from strategies import (
     State,
     StrategyPosition,
 )
-from strategies.core.decorators import with_atr_stop_take_profit, with_stop_take_profit
+from strategies.strategy_aspects import with_atr_stop_take_profit, with_stop_take_profit
 
 # --------------------------
 # 辅助类型

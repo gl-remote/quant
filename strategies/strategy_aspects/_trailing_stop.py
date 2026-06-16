@@ -44,7 +44,7 @@ def with_trailing_stop(period: str = "15m") -> Any:
 
         @functools.wraps(original_dr)
         def _dr_wrapper(self: Any, config: Any) -> Any:
-            from ...runtime.requirements import DataRequirements, IndicatorRequirements
+            from ..runtime.requirements import DataRequirements, IndicatorRequirements
 
             base = original_dr(self, config)
             if base is None:
@@ -74,7 +74,7 @@ def with_trailing_stop(period: str = "15m") -> Any:
             state: Any,
             ctx: Any,
         ) -> Any:
-            from ..types import Signal as SignalType
+            from ..core.types import Signal as SignalType
 
             direction = state.position.direction
             if not direction:
