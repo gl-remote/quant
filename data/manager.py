@@ -120,38 +120,7 @@ class DataManager:
         Returns:
             品种代码列表，按字母排序
         """
-        data_dir = self._get_data_dir()
-
-        csv_dir = Path(data_dir)
-        if not csv_dir.exists():
-            return []
-
-        files = list(csv_dir.glob("*.csv"))
-
-        # 从文件名提取品种名
-        # 新格式: {symbol}.{provider}.{interval}.csv
-        # 旧格式: {symbol}.{interval}.csv
-        symbols: set[str] = set()
-        common_intervals = COMMON_KLINE_INTERVALS
-        known_providers = set(list_sources())
-        for f in files:
-            name = f.stem
-            # 新格式: name.rsplit('.', 2) → [symbol, provider, interval]
-            parts3 = name.rsplit(".", 2)
-            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
-                symbols.add(parts3[0])
-                continue
-
-            # 旧格式: name.rsplit('.', 1) → [symbol, interval]
-            parts2 = name.rsplit(".", 1)
-            if len(parts2) == 2 and parts2[-1] in common_intervals:
-                symbols.add(parts2[0])
-                continue
-
-            # 无法解析，直接用文件名
-            symbols.add(name)
-
-        return sorted(symbols)
+        return self._collect_symbols()
 
     def search_symbols(self, pattern: str) -> list[str]:
         """按正则表达式搜索可用品种
@@ -162,34 +131,41 @@ class DataManager:
         Returns:
             匹配的品种代码列表
         """
-        data_dir = self._get_data_dir()
-        csv_dir = Path(data_dir)
+        return self._collect_symbols(pattern)
+
+    def _collect_symbols(self, pattern: str | None = None) -> list[str]:
+        """从 CSV 文件名收集品种代码，可选按文件名正则过滤"""
+        csv_dir = Path(self._get_data_dir())
         if not csv_dir.exists():
             return []
 
-        files = list(csv_dir.glob("*.csv"))
-        common_intervals = COMMON_KLINE_INTERVALS
+        data_regex = re.compile(pattern) if pattern else None
+        common_intervals = set(COMMON_KLINE_INTERVALS)
         known_providers = set(list_sources())
 
-        data_regex = re.compile(pattern) if pattern else None
-
         symbols: set[str] = set()
-        for f in files:
-            filename = f.name
-            if data_regex and not data_regex.search(filename):
+        for f in csv_dir.glob("*.csv"):
+            if data_regex and not data_regex.search(f.name):
                 continue
-            name = f.stem
-            parts3 = name.rsplit(".", 2)
-            if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
-                symbols.add(parts3[0])
-            else:
-                parts2 = name.rsplit(".", 1)
-                if len(parts2) == 2 and parts2[-1] in common_intervals:
-                    symbols.add(parts2[0])
-                else:
-                    symbols.add(name)
-
+            symbols.add(self._parse_symbol_from_filename(f.stem, common_intervals, known_providers))
         return sorted(symbols)
+
+    def _parse_symbol_from_filename(
+        self,
+        name: str,
+        common_intervals: set[str],
+        known_providers: set[str],
+    ) -> str:
+        """从文件名 stem 解析品种代码，兼容新旧 CSV 命名格式"""
+        parts3 = name.rsplit(".", 2)
+        if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
+            return parts3[0]
+
+        parts2 = name.rsplit(".", 1)
+        if len(parts2) == 2 and parts2[-1] in common_intervals:
+            return parts2[0]
+
+        return name
 
     def get_symbol_info(self, symbol: str) -> SymbolInfo:
         """获取品种的详细元数据信息
