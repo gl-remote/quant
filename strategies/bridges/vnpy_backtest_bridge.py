@@ -508,6 +508,7 @@ class VnpyBacktestBridge(CtaTemplate):
         if ctx is not None:
             self._update_peak_prices(ctx.bar)
             signal = self._core.on_bar(self._state, ctx)
+            signal = self._core._finalize_signal(signal, ctx)
         else:
             if len(self._ctx_cache) == 0 and not getattr(self, "_warned_empty_cache", False):
                 logger.warning("[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name)

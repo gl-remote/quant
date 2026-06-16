@@ -152,6 +152,39 @@ class Strategy(ABC, Generic[T]):
         :param fill: 成交回执，含方向、价格、数量、时间等信息
         """
 
+    # ---- 信号后处理 ----
+
+    def _finalize_signal(self, signal: Signal, ctx: BarContext) -> Signal:
+        """框架层信号后处理 — Bridge 在 on_bar 返回后统一调用
+
+        处理所有策略共有的信号格式化逻辑，策略 on_bar 无需关心：
+          1. 将方向建议展平写入 diagnostics
+          2. 将 ctx.aspects.diagnostics 拷贝到 signal.diagnostics
+          3. 有信号时将 reason 格式化为 JSON（含 diagnostics）
+
+        :param signal: 策略 on_bar 返回的原始信号
+        :param ctx: 行情上下文（含 aspects）
+        :return: 处理后的信号
+        """
+        import json
+
+        # 展平方向建议到 diagnostics
+        ctx.aspects.flush_direction_diagnostics()
+
+        # 拷贝 diagnostics
+        signal.diagnostics = ctx.aspects.diagnostics
+
+        # 有信号时 reason 改为 JSON 格式
+        if signal.action:
+            signal.reason = json.dumps(
+                {
+                    "r": signal.reason,
+                    **signal.diagnostics,
+                }
+            )
+
+        return signal
+
     # ---- 生命周期 ----
 
     def reset(self) -> None:

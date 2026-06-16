@@ -1,20 +1,16 @@
 """均线交叉策略模块
 
-一个简单但完整的均线交叉策略实现，作为新架构的示范策略。
+使用建议型切面 DSL 声明方向判断条件，拦截型切面处理出场逻辑，
+策略 on_bar 只做纯决策（方向建议子集判断 → 入场信号）。
 
-重构背景:
-- 旧架构：Strategy 持有 config、position、fills 等所有状态
-- 新架构：State 统一持有所有运行时数据，Strategy 成为纯决策逻辑
-
-设计理念:
-- Strategy 是纯决策逻辑，不持有任何状态
-- 所有运行时数据通过 State 获取
-- 所有行情数据通过 BarContext 获取
-- Bridge 负责: 构造 Bar → 构造 ctx → 调用 on_bar(state, ctx) → 拿到 Signal → 执行下单
+架构:
+- 方向判断: confirm_long_when / confirm_short_when / trend_*_when_compare 装饰器
+- 出场逻辑: with_stop_take_profit / with_atr_stop_take_profit / with_trailing_stop
+- 信号后处理: Strategy._finalize_signal（框架层，策略无感）
 """
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast, override
+from typing import ClassVar, cast, override
 
 from common.constants import (
     DEFAULT_KDJ_OVERBOUGHT,
@@ -29,6 +25,7 @@ from common.constants import (
     TRADE_ACTION_SELL,
 )
 from common.formulas import position_size
+from common.types import TradeAction
 from strategies import (
     CORE_VERSION,
     BarContext,
@@ -135,28 +132,12 @@ class MACrossParams:
 class MaStrategyCore(Strategy[MACrossParams]):
     """均线交叉策略核心 — 纯决策逻辑
 
-    【策略逻辑】
-    - 金叉（短期均线上穿长期均线）：买入
-    - 死叉（短期均线下穿长期均线）：卖出
-    - 持仓时检查止损和止盈
-    - 空仓时只检查金叉
+    方向判断由建议型切面装饰器声明，on_bar 只需检查所有声明的理由是否满足。
+    出场逻辑由拦截型切面自动处理，信号后处理由框架层 _finalize_signal 完成。
 
-    【数据来源】
-    - 配置: state.strategy_config
-    - 持仓: state.position
-    - 资金: state.capital
-    - K线/指标: ctx.multi["1m"]
-
-    【与旧架构的区别】
-    旧架构（已废弃）:
-      - Strategy 持有 self._config、self._position、self._fills
-      - on_bar(bar, ctx)
-      - 自己管理所有状态
-
-    新架构（当前）:
-      - Strategy 不持有任何状态
-      - on_bar(state, ctx)
-      - 所有数据通过参数传入
+    决策规则:
+    - 所有 long reason key 都出现 → 买入
+    - 所有 short reason key 都出现 → 卖出
     """
 
     name: str = STRATEGY_MA
@@ -169,25 +150,13 @@ class MaStrategyCore(Strategy[MACrossParams]):
     """由建议型切面装饰器自动注册的方向 key 集合"""
 
     def __init__(self) -> None:
-        """初始化策略 — 不接收任何参数
-
-        【重构说明】
-        旧架构中 __init__ 接收 strategy_params、capital、contract_size。
-        新架构中这些都由 Bridge 放在 State 里，Strategy 不需要自己持有。
-        """
         pass
 
     # ---- Strategy 接口 ----
 
     @override
     def data_requirements(self, config: MACrossParams) -> DataRequirements | None:
-        """策略的数据需求声明
-
-        周期、lookback 和指标需求均由切面装饰器自动注册。
-
-        :param config: 策略配置
-        :return: 数据需求声明
-        """
+        """数据需求 — 周期、lookback、指标均由切面自动注册"""
         return DataRequirements(
             periods={},
             indicators={},
@@ -196,80 +165,36 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
     @override
     def on_bar(self, state: State[MACrossParams], ctx: BarContext) -> Signal:
-        """处理一根K线 — 策略决策中枢
-
-        【决策流程】
-        建议型切面已将方向理由写入 ctx.aspects.direction，
-        策略只需检查所有声明的理由是否都满足。
-
-        - 所有 long reason key 都出现 → 买入
-        - 所有 short reason key 都出现 → 卖出
-        - 出场规则由拦截型切面处理
-
-        :param state: 运行时状态
-        :param ctx: 行情上下文
-        :return: 交易决策信号
-        """
+        """空仓时检查方向建议是否全部满足，满足则入场"""
         config = state.strategy_config
         direction = state.position.direction
         signal = Signal()
 
         # ── 空仓：做多或做空入场 ──
         if not direction:
-            long_keys = ctx.aspects.direction.long.keys
-            short_keys = ctx.aspects.direction.short.keys
-            direction_keys = type(self).__direction_keys__
+            long_keys: set[str] = ctx.aspects.direction.long.keys
+            short_keys: set[str] = ctx.aspects.direction.short.keys
+            direction_keys: dict[str, set[str]] = type(self).__direction_keys__
 
-            vol = self._calc_position_size(
+            vol = self.calc_position_size(
                 ctx.bar.close, state.capital, config.position_ratio, state.contract_size, state.margin
             )
 
             if direction_keys["long"] <= long_keys:
-                signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
+                signal = Signal(action=cast(TradeAction, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
             elif direction_keys["short"] <= short_keys:
-                signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
-
-        # 填充 diagnostics：切面已写入持仓信息、指标值和方向建议
-        ctx.aspects.flush_direction_diagnostics()
-
-        signal.diagnostics = ctx.aspects.diagnostics
-
-        # 有信号时 reason 改为 JSON 格式，写入 backtest_trades 表
-        if signal.action:
-            import json
-
-            signal.reason = json.dumps(
-                {
-                    "r": signal.reason,
-                    **signal.diagnostics,
-                }
-            )
+                signal = Signal(action=cast(TradeAction, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
         return signal
 
     @override
     def on_fill(self, fill: Fill) -> None:
-        """成交回执 — Bridge 在下单成交后调用
-
-        【重要原则】
-        - State 是唯一真实的数据来源
-        - on_fill 只是通知，不应该改变任何数据
-        - Strategy 不应该自己更新持仓，应该从 state.position 读取
-
-        【本策略的处理】
-        目前这个策略不需要在成交时做任何特殊处理，所以是空实现。
-        如果策略需要在成交时触发一些逻辑，可以在这里实现。
-
-        【数据来源】
-        - state.position: 由 Bridge 在 on_trade 中更新
-        - state.fills: 由 Bridge 在 on_trade 中追加
-        """
         pass
 
     # ---- 仅保留仓位计算 ----
 
     @staticmethod
-    def _calc_position_size(
+    def calc_position_size(
         price: float, capital: float, position_ratio: float, contract_size: int, margin: float = 1.0
     ) -> int:
         """计算仓位大小

@@ -532,7 +532,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])
         self._update_peak_prices(bar)
-        return self._strategy.on_bar(self._state, ctx)
+        return self._strategy._finalize_signal(self._strategy.on_bar(self._state, ctx), ctx)
 
     def _execute_order(self, target_pos: Any, signal: Signal, price: float) -> None:
         """通过 TargetPosTask 执行下单（仅 live 模式调用）
@@ -562,7 +562,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         bar = self._kline_to_bar(kline_data, idx)
         ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
         self._update_peak_prices(bar)
-        return self._strategy.on_bar(self._state, ctx)
+        return self._strategy._finalize_signal(self._strategy.on_bar(self._state, ctx), ctx)
 
     def _update_peak_prices(self, bar: Bar) -> None:
         """更新持仓期间的 peak 价格，在调用 strategy.on_bar 前执行"""
