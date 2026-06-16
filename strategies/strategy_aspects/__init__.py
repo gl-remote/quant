@@ -16,12 +16,56 @@
             ...
 """
 
-from ._atr_stop_take import with_atr_stop_take_profit
-from ._stop_take import with_stop_take_profit
-from ._trailing_stop import with_trailing_stop
+# 协议层：基础数据结构
+# 建议型方向 DSL
+from .direction import (
+    confirm_long_when,
+    confirm_short_when,
+    trend_long_when_compare,
+    trend_short_when_compare,
+)
+
+# 指标定义
+from .indicators import KDJ, MACD, SMA
+
+# 拦截型切面
+from .interceptors import (
+    with_atr_stop_take_profit,
+    with_stop_take_profit,
+    with_trade_cooldown,
+    with_trailing_stop,
+)
+from .primitives import (
+    DirectionAdvice,
+    DirectionReason,
+    DirectionSideAdvice,
+    IndicatorSpec,
+    MetricRef,
+    StrategyAspects,
+    at,
+)
 
 __all__ = [
+    # 协议层
+    "DirectionReason",
+    "DirectionSideAdvice",
+    "DirectionAdvice",
+    "StrategyAspects",
+    "IndicatorSpec",
+    "MetricRef",
+    "at",
+    # 指标定义
+    "MACD",
+    "KDJ",
+    "SMA",
+    # 拦截型切面
     "with_stop_take_profit",
     "with_atr_stop_take_profit",
+    "with_trade_cooldown",
     "with_trailing_stop",
+    # 建议型方向 DSL
+    "confirm_long_when",
+    "confirm_short_when",
+    "trend_long_when_compare",
+    "trend_short_when_compare",
 ]

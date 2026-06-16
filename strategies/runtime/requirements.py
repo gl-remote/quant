@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ..core.types import Bar
+from ..strategy_aspects.primitives import StrategyAspects
 from .events import Event
 from .period import PeriodDataView
 
@@ -92,6 +93,9 @@ class DataRequirements:
         for period, req in other.periods.items():
             if period not in self.periods:
                 self.periods[period] = req
+            else:
+                # 取 lookback_bars 最大值
+                self.periods[period].lookback_bars = max(self.periods[period].lookback_bars, req.lookback_bars)
 
         for period, inds in other.indicators.items():
             if period not in self.indicators:
@@ -115,3 +119,5 @@ class BarContext:
     multi: dict[str, PeriodDataView]
     # 当前 bar 时间范围内的事件
     events: list[Event]
+    # 当前 bar 上由策略切面产生的临时建议和诊断
+    aspects: StrategyAspects = field(default_factory=StrategyAspects)

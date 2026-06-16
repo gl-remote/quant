@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["cli", "common", "config", "data", "backtest", "strategies", "strategies.strategy_aspects", "report"]
+packages = ["cli", "common", "config", "data", "backtest", "strategies", "strategies.strategy_aspects", "strategies.strategy_aspects.direction", "strategies.strategy_aspects.interceptors", "report"]
 
 [project]
 name = "quant"
@@ -16,8 +16,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Financial and Insurance Industry",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [

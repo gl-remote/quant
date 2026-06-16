@@ -14,7 +14,7 @@
 """
 
 from dataclasses import dataclass
-from typing import Any, cast, override
+from typing import Any, ClassVar, cast, override
 
 from common.constants import (
     DEFAULT_KDJ_OVERBOUGHT,
@@ -35,13 +35,19 @@ from strategies import (
     DataRequirements,
     EventsRequirements,
     Fill,
-    IndicatorRequirements,
-    PeriodRequirements,
     Signal,
     State,
     Strategy,
 )
 from strategies.strategy_aspects import (
+    KDJ,
+    MACD,
+    SMA,
+    at,
+    confirm_long_when,
+    confirm_short_when,
+    trend_long_when_compare,
+    trend_short_when_compare,
     with_atr_stop_take_profit,
     with_stop_take_profit,
     with_trailing_stop,
@@ -107,6 +113,20 @@ class MACrossParams:
     """KDJ 超买阈值，kdj > 此值视为超买（做空入场条件之一），默认 80"""
 
 
+# ── 建议型方向切面声明 ──
+# 装饰器从下到上执行，建议型切面在外层先评估条件写入 ctx.aspects，
+# 拦截型切面在内层先执行（有持仓时提前返回出场信号）。
+@confirm_long_when(at(MACD, "1m"), ">", 0)
+@confirm_long_when(at(MACD, "5m"), ">", 0)
+@confirm_short_when(at(MACD, "1m"), "<", 0)
+@confirm_short_when(at(MACD, "5m"), "<", 0)
+@confirm_long_when(at(KDJ, "1m"), "<", "kdj_oversold")
+@confirm_long_when(at(KDJ, "5m"), "<", "kdj_oversold")
+@confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
+@confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
+@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "15m"))
+@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "15m"))
+# ── 拦截型切面声明 ──
 @with_trailing_stop("15m")
 @with_atr_stop_take_profit("15m")
 @with_stop_take_profit
@@ -140,8 +160,11 @@ class MaStrategyCore(Strategy[MACrossParams]):
     name: str = STRATEGY_MA
     """策略名称"""
 
-    VERSION: str = f"{CORE_VERSION}-ma6"
-    """策略版本号，ma3 表示使用新架构"""
+    VERSION: str = f"{CORE_VERSION}-ma7"
+    """策略版本号，ma7 表示使用建议型切面 DSL"""
+
+    __direction_keys__: ClassVar[dict[str, set[str]]]
+    """由建议型切面装饰器自动注册的方向 key 集合"""
 
     def __init__(self) -> None:
         """初始化策略 — 不接收任何参数
@@ -158,34 +181,14 @@ class MaStrategyCore(Strategy[MACrossParams]):
     def data_requirements(self, config: MACrossParams) -> DataRequirements | None:
         """策略的数据需求声明
 
-        【本策略的需求】
-        - 主周期: 1m — MACD + KDJ
-        - 5m: SMA(config.sma_short) + MACD + KDJ — 短期均线 + 入场信号确认
-        - 15m: SMA(config.sma_long) — 长期均线方向（出场依赖的 ATR 由 @with_atr_stop_take_profit 切面自动注册）
+        周期、lookback 和指标需求均由切面装饰器自动注册。
 
         :param config: 策略配置
         :return: 数据需求声明
         """
         return DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=60),
-                "5m": PeriodRequirements(lookback_bars=max(config.sma_short, config.atr_period) + 1),
-                "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}, window=35),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}, window=9),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_short}, window=config.sma_short),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}, window=35),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}, window=9),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_long}, window=config.sma_long),
-                ],
-            },
+            periods={},
+            indicators={},
             events=EventsRequirements.no_events(),
         )
 
@@ -194,89 +197,44 @@ class MaStrategyCore(Strategy[MACrossParams]):
         """处理一根K线 — 策略决策中枢
 
         【决策流程】
+        建议型切面已将方向理由写入 ctx.aspects.direction，
+        策略只需检查所有声明的理由是否都满足。
 
-        - 5m SMA(short) 大于 15m SMA(long) 做多
-            → 1m macd > 0 && 5m macd > 0
-            → 1m kdj < kdj_oversold && 5m kdj < kdj_oversold
-            → 空仓状态 → 买入开仓
-        - 5m SMA(short) 小于 15m SMA(long) 做空
-            → 1m macd < 0 && 5m macd < 0
-            → 1m kdj > kdj_overbought && 5m kdj > kdj_overbought
-            → 空仓状态 → 卖出开仓
-        - 出场规则（持仓时，以当前持仓方向为准，按以下顺序检查）
-            - 回撤止盈由 @with_trailing_stop("15m") 切面统一处理
-            - ATR 止盈止损由 @with_atr_stop_take_profit("15m") 切面统一处理
-            - 固定比例止盈止损由 @with_stop_take_profit 切面统一处理
-            - 不检查其他退场信号，仅根据以上条件判断是否出场。
+        - 所有 long reason key 都出现 → 买入
+        - 所有 short reason key 都出现 → 卖出
+        - 出场规则由拦截型切面处理
 
         :param state: 运行时状态
         :param ctx: 行情上下文
         :return: 交易决策信号
         """
         config = state.strategy_config
-        view_1m = ctx.multi["1m"]
-        view_5m = ctx.multi["5m"]
-        view_15m = ctx.multi["15m"]
-
-        sma_short_col = f"sma_{config.sma_short}"
-        sma_long_col = f"sma_{config.sma_long}"
-        atr_col = f"atr_{config.atr_period}"
-        macd_col = "macd_12_9_26"  # fast=12, signal=9, slow=26
-        kdj_col = "kdj_3_3_9"  # d_period=3, k_period=3, n=9
-
-        def _get(view: Any, col: str, idx: int, fallback: float) -> float:
-            v = view.indicator(col, idx)
-            return v if v is not None else fallback
-
-        cur_5m_short = _get(view_5m, sma_short_col, -1, 0.0)
-        cur_15m_long = _get(view_15m, sma_long_col, -1, 0.0)
-        cur_atr_15m = _get(view_15m, atr_col, -1, 0.0)
-        macd_1m = _get(view_1m, macd_col, -1, 0.0)
-        kdj_1m = _get(view_1m, kdj_col, -1, 50.0)
-        macd_5m = _get(view_5m, macd_col, -1, 0.0)
-        kdj_5m = _get(view_5m, kdj_col, -1, 50.0)
-
-        long_bias = cur_5m_short > cur_15m_long
-        short_bias = cur_5m_short < cur_15m_long
         direction = state.position.direction
         signal = Signal()
 
         # ── 空仓：做多或做空入场 ──
         if not direction:
+            long_keys = ctx.aspects.direction.long.keys
+            short_keys = ctx.aspects.direction.short.keys
+            direction_keys = type(self).__direction_keys__
+
             vol = self._calc_position_size(
                 ctx.bar.close, state.capital, config.position_ratio, state.contract_size, state.margin
             )
-            if (
-                long_bias
-                and macd_1m > 0
-                and macd_5m > 0
-                and kdj_1m < config.kdj_oversold
-                and kdj_5m < config.kdj_oversold
-            ):
+
+            if direction_keys["long"] <= long_keys:
                 signal = Signal(action=cast(Any, TRADE_ACTION_BUY), reason="long_entry", volume=vol)
-            elif (
-                short_bias
-                and macd_1m < 0
-                and macd_5m < 0
-                and kdj_1m > config.kdj_overbought
-                and kdj_5m > config.kdj_overbought
-            ):
+            elif direction_keys["short"] <= short_keys:
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
-        # 填充 diagnostics — 按 data_requirements 中声明的指标全部记录
-        signal.diagnostics = {
-            "entry_price": state.position.entry_price,
-            "highest_price": state.position.highest_price,
-            "lowest_price": state.position.lowest_price,
-            "current_close": ctx.bar.close,
-            f"sma_{config.sma_short}": cur_5m_short,
-            f"sma_{config.sma_long}": cur_15m_long,
-            "atr_15m": cur_atr_15m,
-            "macd_1m": macd_1m,
-            "kdj_1m": kdj_1m,
-            "macd_5m": macd_5m,
-            "kdj_5m": kdj_5m,
-        }
+        # 填充 diagnostics：策略追加持仓信息，切面已写入指标值和方向建议
+        ctx.aspects.diagnostics["entry_price"] = state.position.entry_price
+        ctx.aspects.diagnostics["highest_price"] = state.position.highest_price
+        ctx.aspects.diagnostics["lowest_price"] = state.position.lowest_price
+        ctx.aspects.diagnostics["current_close"] = ctx.bar.close
+        ctx.aspects.flush_direction_diagnostics()
+
+        signal.diagnostics = ctx.aspects.diagnostics
 
         # 有信号时 reason 改为 JSON 格式，写入 backtest_trades 表
         if signal.action:

@@ -58,6 +58,7 @@ OFFSET_MAP = {
 
 SIGNAL_STOP_LOSS = "stop_loss"  # 止损触发
 SIGNAL_TAKE_PROFIT = "take_profit"  # 止盈触发
+SIGNAL_TRADE_COOLDOWN = "trade_cooldown"  # 交易冷却期阻断
 SIGNAL_DEATH_CROSS = "death_cross"  # 死叉信号
 SIGNAL_GOLDEN_CROSS = "golden_cross"  # 金叉信号
 

@@ -50,7 +50,7 @@ def with_stop_take_profit(
         state: Any,
         ctx: Any,
     ) -> Any:
-        from ..core.types import Signal
+        from ...core.types import Signal
 
         direction = state.position.direction
 
