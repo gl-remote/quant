@@ -33,7 +33,6 @@ from .core import (
     State,
     Strategy,
 )
-from .runtime import DataRequirements, EventsRequirements
 from .runtime.requirements import BarContext
 from .strategy_aspects import (
     KDJ,
@@ -154,15 +153,6 @@ class MaStrategyCore(Strategy[MACrossParams]):
         pass
 
     # ---- Strategy 接口 ----
-
-    @override
-    def data_requirements(self, config: MACrossParams) -> DataRequirements | None:
-        """数据需求 — 周期、lookback、指标均由切面自动注册"""
-        return DataRequirements(
-            periods={},
-            indicators={},
-            events=EventsRequirements.no_events(),
-        )
 
     @override
     def on_bar(self, state: State[MACrossParams], ctx: BarContext) -> Signal:

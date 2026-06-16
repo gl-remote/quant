@@ -2,10 +2,10 @@
 
 ## 本周期可覆盖
 
-### 1. data_requirements 空壳问题
+### 1. ~~data_requirements 空壳问题~~ ✅ 已完成
 **现状**：装饰器已自动注册数据需求，但 `data_requirements()` 还需返回空 `DataRequirements()`
 **目标**：框架自动合并装饰器注册的需求，策略无需实现 `data_requirements` 或返回 None 即可
-**方案**：在 `Strategy.data_requirements` 基类默认实现中，从 `__direction_keys__` / 装饰器元数据自动收集
+**方案**：`Strategy.data_requirements` 基类默认返回空 `DataRequirements`，装饰器在此基础上 merge；策略无需覆写
 
 ### 2. 分级止盈装饰器
 **现状**：只有固定比例止盈（`with_stop_take_profit`）和 ATR 止盈（`with_atr_stop_take_profit`），缺少"持仓越久止盈越宽松"的能力

@@ -95,10 +95,16 @@ class Strategy(ABC, Generic[T]):
         - 返回 DataRequirements 实例：策略需要使用数据管理架构
         - 返回 None：策略不需要额外的数据管理（自己处理数据）
 
+        【自动注册】
+        使用切面装饰器的策略无需覆写此方法——装饰器会自动包装并 merge
+        指标需求。基类默认返回空 DataRequirements，装饰器在此基础上追加。
+
         :param config: 策略配置对象，用于确定需要什么指标和参数
         :return: 数据需求声明，或 None 表示不需要
         """
-        return None
+        from ..runtime import DataRequirements, EventsRequirements
+
+        return DataRequirements(periods={}, indicators={}, events=EventsRequirements.no_events())
 
     # ---- 核心交易接口 ----
 
