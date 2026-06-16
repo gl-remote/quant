@@ -1,31 +1,20 @@
-"""建议型切面 DSL 单元测试
+"""DSL 装饰器单元测试
 
 覆盖:
-  - DirectionReason.key 生成
-  - MetricRef.name 生成
-  - DirectionSideAdvice.reasons / keys 生成
-  - BarContext 默认带有空 StrategyAspects
-  - confirm_long_when / confirm_short_when:
-    - 自动合并 data_requirements
-    - 每个装饰器最多写入一个 reason
-    - 指标满足阈值时写入对应方向的 confirm 桶
-    - 指标缺失时不写入 reason
-  - trend_long_when_compare / trend_short_when_compare:
-    - 自动合并左右指标需求
-    - 比较条件满足时写入对应方向的 trend 桶
-    - 任一侧指标缺失时不写入 reason
-    - 自动生成稳定 name
-  - __direction_keys__ 自动注册
-  - MA 策略:
-    - 原有 long entry 行为保持
-    - 原有 short entry 行为保持
+  - confirm_long_when: satisfied、not_satisfied、missing、tag、string_threshold、keys
+  - confirm_short_when: satisfied、keys
+  - trend_long_when_compare: satisfied、not_satisfied、left_missing、right_missing、tag、keys
+  - trend_short_when_compare: satisfied
+  - 多装饰器叠加: keys_merged、all_reasons
+  - data_requirements 自动合并: confirm_merges、trend_merges
+  - diagnostics 自动写入
+  - periods 自动注册
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 
-from strategies import Bar, State, StrategyAspects
-from strategies.runtime.requirements import BarContext
+from strategies import Bar, State
 from strategies.strategy_aspects import (
     KDJ,
     MACD,
@@ -36,102 +25,6 @@ from strategies.strategy_aspects import (
     trend_long_when_compare,
     trend_short_when_compare,
 )
-from strategies.strategy_aspects.primitives import (
-    DirectionAdvice,
-    DirectionReason,
-    DirectionSideAdvice,
-    IndicatorSpec,
-    MetricRef,
-)
-
-# --------------------------
-# 基础数据结构测试
-# --------------------------
-
-
-class TestDirectionReason:
-    """测试 DirectionReason"""
-
-    def test_key_equals_name(self):
-        reason = DirectionReason(role="confirm", name="macd_1m")
-        assert reason.key == "macd_1m"
-
-    def test_key_equals_name_trend(self):
-        reason = DirectionReason(role="trend", name="sma_5m_vs_sma_15m")
-        assert reason.key == "sma_5m_vs_sma_15m"
-
-    def test_frozen(self):
-        reason = DirectionReason(role="confirm", name="macd_1m")
-        try:
-            reason.name = "other"  # type: ignore[misc]
-            raise AssertionError("Should raise AttributeError")
-        except AttributeError:
-            pass
-
-    def test_detail_default_empty(self):
-        reason = DirectionReason(role="confirm", name="macd_1m")
-        assert reason.detail == {}
-
-    def test_detail_with_values(self):
-        reason = DirectionReason(role="confirm", name="macd_1m", detail={"value": 0.5, "threshold": 0})
-        assert reason.detail["value"] == 0.5
-
-
-class TestMetricRef:
-    """测试 MetricRef"""
-
-    def test_name_format(self):
-        spec = IndicatorSpec(name="macd", column="macd_12_9_26", params={"fast": 12}, window=35)
-        ref = MetricRef(period="1m", indicator=spec)
-        assert ref.name == "macd_1m"
-
-    def test_at_function(self):
-        spec = IndicatorSpec(name="sma", column="sma_10", params={"period": 10}, window=10)
-        ref = at(spec, "5m")
-        assert ref.period == "5m"
-        assert ref.name == "sma_5m"
-
-
-class TestDirectionSideAdvice:
-    """测试 DirectionSideAdvice"""
-
-    def test_empty(self):
-        advice = DirectionSideAdvice()
-        assert advice.reasons == []
-        assert advice.keys == set()
-
-    def test_reasons_flattens_trend_and_confirm(self):
-        trend_r = DirectionReason(role="trend", name="sma_5m_vs_sma_15m")
-        confirm_r = DirectionReason(role="confirm", name="macd_1m")
-        advice = DirectionSideAdvice(trend=[trend_r], confirm=[confirm_r])
-        assert advice.reasons == [trend_r, confirm_r]
-
-    def test_keys_set(self):
-        trend_r = DirectionReason(role="trend", name="sma_5m_vs_sma_15m")
-        confirm_r = DirectionReason(role="confirm", name="macd_1m")
-        advice = DirectionSideAdvice(trend=[trend_r], confirm=[confirm_r])
-        assert advice.keys == {"sma_5m_vs_sma_15m", "macd_1m"}
-
-
-class TestDirectionAdvice:
-    """测试 DirectionAdvice"""
-
-    def test_default_empty(self):
-        advice = DirectionAdvice()
-        assert advice.long.keys == set()
-        assert advice.short.keys == set()
-
-
-class TestBarContextAspects:
-    """测试 BarContext 默认带有空 StrategyAspects"""
-
-    def test_default_aspects(self):
-        bar = Bar(symbol="TEST", datetime=datetime(2024, 1, 1), open=100, high=101, low=99, close=100, volume=1000)
-        ctx = BarContext(symbol="TEST", bar=bar, multi={}, events=[])
-        assert isinstance(ctx.aspects, StrategyAspects)
-        assert ctx.aspects.direction.long.keys == set()
-        assert ctx.aspects.direction.short.keys == set()
-
 
 # --------------------------
 # 辅助类型
@@ -168,8 +61,10 @@ class _MockPeriodView:
 
 def _make_ctx(
     indicators: dict[str, dict[str, float]] | None = None,
-) -> BarContext:
+):
     """创建测试用 BarContext"""
+    from strategies.runtime.requirements import BarContext
+
     bar = Bar(symbol="TEST", datetime=datetime(2024, 1, 1), open=100, high=101, low=99, close=100, volume=1000)
     multi: dict[str, _MockPeriodView] = {}
     if indicators:
@@ -652,3 +547,240 @@ class TestDataRequirementsMerge:
         sma_15m = [i for i in reqs.indicators["15m"] if i.name == "sma"]
         assert len(sma_5m) == 1
         assert len(sma_15m) == 1
+
+
+# --------------------------
+# diagnostics 自动写入测试
+# --------------------------
+
+
+class TestDiagnosticsAutoWrite:
+    """测试切面评估时自动将指标值写入 ctx.aspects.diagnostics"""
+
+    def test_confirm_writes_metric_value_to_diagnostics(self):
+        """confirm 切面评估时自动将指标值写入 diagnostics[metric.name]"""
+
+        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}})
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        assert ctx.aspects.diagnostics["macd_1m"] == 0.5
+
+    def test_confirm_writes_metric_value_even_if_not_satisfied(self):
+        """confirm 切面条件不满足时仍然写入 diagnostics"""
+
+        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx({"1m": {"macd_12_9_26": -0.5}})
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        # 条件不满足，但指标值仍写入 diagnostics
+        assert ctx.aspects.diagnostics["macd_1m"] == -0.5
+        assert len(ctx.aspects.direction.long.confirm) == 0
+
+    def test_confirm_no_diagnostics_when_period_missing(self):
+        """confirm 切面周期缺失时不写入 diagnostics"""
+
+        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx({})
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        assert "macd_1m" not in ctx.aspects.diagnostics
+
+    def test_trend_writes_left_right_to_diagnostics(self):
+        """trend 切面评估时自动将左右指标值写入 diagnostics"""
+
+        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx(
+            {
+                "5m": {"sma_10": 100.0},
+                "15m": {"sma_40": 99.0},
+            }
+        )
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        assert ctx.aspects.diagnostics["sma_5m"] == 100.0
+        assert ctx.aspects.diagnostics["sma_15m"] == 99.0
+
+    def test_trend_writes_diagnostics_even_if_not_satisfied(self):
+        """trend 切面条件不满足时仍然写入左右指标值"""
+
+        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx(
+            {
+                "5m": {"sma_10": 98.0},
+                "15m": {"sma_40": 99.0},
+            }
+        )
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        assert ctx.aspects.diagnostics["sma_5m"] == 98.0
+        assert ctx.aspects.diagnostics["sma_15m"] == 99.0
+        assert len(ctx.aspects.direction.long.trend) == 0
+
+    def test_trend_no_diagnostics_when_one_side_missing(self):
+        """trend 切面任一侧指标缺失时不写入 diagnostics"""
+
+        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        ctx = _make_ctx(
+            {
+                "5m": {"sma_10": 100.0},
+                "15m": {},  # 缺失 sma_40
+            }
+        )
+        state = _make_state()
+        strat.on_bar(state, ctx)
+
+        assert "sma_5m" not in ctx.aspects.diagnostics
+        assert "sma_15m" not in ctx.aspects.diagnostics
+
+
+# --------------------------
+# periods 自动注册测试
+# --------------------------
+
+
+class TestPeriodsAutoRegistration:
+    """测试切面在 data_requirements 中自动注册 period（含 lookback_bars）"""
+
+    def test_confirm_registers_period_with_lookback(self):
+        """confirm 切面自动注册 period，lookback_bars = window + 1"""
+
+        from strategies import DataRequirements
+
+        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        class _S:
+            def data_requirements(self, config):
+                return DataRequirements(periods={}, indicators={})
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        reqs = strat.data_requirements(_TestParams())
+        assert reqs is not None
+        # MACD 的 window=35，所以 lookback_bars = 35 + 1 = 36
+        assert "1m" in reqs.periods
+        assert reqs.periods["1m"].lookback_bars == 36
+
+    def test_confirm_period_lookback_max_on_merge(self):
+        """confirm 切面与已有 period 合并时取 lookback_bars 最大值"""
+
+        from strategies import DataRequirements, PeriodRequirements
+
+        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        class _S:
+            def data_requirements(self, config):
+                return DataRequirements(
+                    periods={"1m": PeriodRequirements(lookback_bars=50)},
+                    indicators={},
+                )
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        reqs = strat.data_requirements(_TestParams())
+        assert reqs is not None
+        # 原有 50 vs 新注册 36，取最大值 50
+        assert reqs.periods["1m"].lookback_bars == 50
+
+    def test_trend_registers_both_periods(self):
+        """trend 切面自动注册左右两个 period"""
+
+        from strategies import DataRequirements
+
+        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        class _S:
+            def data_requirements(self, config):
+                return DataRequirements(periods={}, indicators={})
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        reqs = strat.data_requirements(_TestParams())
+        assert reqs is not None
+        # SMA(10) window=10, lookback_bars=11; SMA(40) window=40, lookback_bars=41
+        assert "5m" in reqs.periods
+        assert "15m" in reqs.periods
+        assert reqs.periods["5m"].lookback_bars == 11
+        assert reqs.periods["15m"].lookback_bars == 41
+
+    def test_trend_period_lookback_max_on_merge(self):
+        """trend 切面与已有 period 合并时取 lookback_bars 最大值"""
+
+        from strategies import DataRequirements, PeriodRequirements
+
+        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        class _S:
+            def data_requirements(self, config):
+                return DataRequirements(
+                    periods={
+                        "5m": PeriodRequirements(lookback_bars=5),
+                        "15m": PeriodRequirements(lookback_bars=100),
+                    },
+                    indicators={},
+                )
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        reqs = strat.data_requirements(_TestParams())
+        assert reqs is not None
+        # 5m: max(5, 11) = 11; 15m: max(100, 41) = 100
+        assert reqs.periods["5m"].lookback_bars == 11
+        assert reqs.periods["15m"].lookback_bars == 100

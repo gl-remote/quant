@@ -1,4 +1,4 @@
-"""新架构策略模块测试 - 验证 State 分离、纯决策逻辑
+"""MA 交叉策略集成测试 — 验证多空进场、止盈止损、ATR 止盈止损
 
 覆盖:
   - State 构造
@@ -69,23 +69,18 @@ def _prepare_test_data(
     """准备 DataFeed 和 DataRequirements 用于测试"""
     feed = DataFeed("TEST")
 
-    # 注册所有需要的周期和指标
+    # 从策略获取数据需求（切面已自动注册所有周期和指标）
+    strat = MaStrategyCore()
+    reqs = strat.data_requirements(config)
+    assert reqs is not None
+
     if use_multi_period:
-        # 1m 周期（MACD + KDJ）
-        feed.register_period("1m")
-        feed.register_indicator("1m", "macd", fast=12, slow=26, signal=9)
-        feed.register_indicator("1m", "kdj", n=9, k_period=3, d_period=3)
-
-        # 5m 周期（短期 SMA + MACD + KDJ）
-        feed.register_period("5m")
-        feed.register_indicator("5m", "sma", period=config.sma_short)
-        feed.register_indicator("5m", "macd", fast=12, slow=26, signal=9)
-        feed.register_indicator("5m", "kdj", n=9, k_period=3, d_period=3)
-
-        # 15m 周期（长期 SMA + ATR）
-        feed.register_period("15m")
-        feed.register_indicator("15m", "sma", period=config.sma_long)
-        feed.register_indicator("15m", "atr", period=config.atr_period)
+        # 注册所有需要的周期和指标（从策略数据需求中获取）
+        for period_name in reqs.periods:
+            feed.register_period(period_name)
+        for period_name, indicators in reqs.indicators.items():
+            for ind in indicators:
+                feed.register_indicator(period_name, ind.name, **ind.params)
     else:
         # 单周期模式（仅用于基础测试）
         feed.register_period("1m")
@@ -100,32 +95,8 @@ def _prepare_test_data(
 
     feed.calculate_all()
 
-    # 构建数据需求
-    if use_multi_period:
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": config.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
-    else:
+    if not use_multi_period:
+        # 单周期模式需要覆盖 reqs
         reqs = DataRequirements(
             periods={
                 "1m": PeriodRequirements(lookback_bars=max(config.sma_short, config.sma_long) + 1),
@@ -138,6 +109,7 @@ def _prepare_test_data(
             },
             events=EventsRequirements.no_events(),
         )
+
     return feed, reqs
 
 
@@ -192,29 +164,7 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
 
-    reqs = DataRequirements(
-        periods={
-            "1m": PeriodRequirements(lookback_bars=50),
-            "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
-            "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
-        },
-        indicators={
-            "1m": [
-                IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-            ],
-            "5m": [
-                IndicatorRequirements(name="sma", params={"period": config.sma_short}),
-                IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-            ],
-            "15m": [
-                IndicatorRequirements(name="sma", params={"period": config.sma_long}),
-                IndicatorRequirements(name="atr", params={"period": config.atr_period}),
-            ],
-        },
-        events=EventsRequirements.no_events(),
-    )
+    reqs = MaStrategyCore().data_requirements(config)
     return build_context(feed, reqs, latest_dt, latest_bar)
 
 
@@ -241,29 +191,7 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
     # 15m ATR
     _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
 
-    reqs = DataRequirements(
-        periods={
-            "1m": PeriodRequirements(lookback_bars=50),
-            "5m": PeriodRequirements(lookback_bars=config.sma_short + 1),
-            "15m": PeriodRequirements(lookback_bars=max(config.sma_long, config.atr_period) + 1),
-        },
-        indicators={
-            "1m": [
-                IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-            ],
-            "5m": [
-                IndicatorRequirements(name="sma", params={"period": config.sma_short}),
-                IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-            ],
-            "15m": [
-                IndicatorRequirements(name="sma", params={"period": config.sma_long}),
-                IndicatorRequirements(name="atr", params={"period": config.atr_period}),
-            ],
-        },
-        events=EventsRequirements.no_events(),
-    )
+    reqs = MaStrategyCore().data_requirements(config)
     return build_context(feed, reqs, latest_dt, latest_bar)
 
 
@@ -457,29 +385,7 @@ class TestMaStrategyFixedStopLoss:
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备多仓状态
@@ -521,29 +427,7 @@ class TestMaStrategyFixedStopLoss:
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备空仓状态
@@ -590,29 +474,7 @@ class TestMaStrategyFixedTakeProfit:
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备多仓状态
@@ -654,29 +516,7 @@ class TestMaStrategyFixedTakeProfit:
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备空仓状态
@@ -732,29 +572,7 @@ class TestMaStrategyATRStopLoss:
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备多仓状态
@@ -800,29 +618,7 @@ class TestMaStrategyATRStopLoss:
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备空仓状态
@@ -873,29 +669,7 @@ class TestMaStrategyATRTakeProfit:
         _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备多仓状态
@@ -941,29 +715,7 @@ class TestMaStrategyATRTakeProfit:
         _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=cfg.sma_long)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         # 准备空仓状态
@@ -1011,29 +763,7 @@ class TestMaStrategyNoSignal:
         _set_indicator_value(feed, "1m", "kdj", 50.0, -1, n=9, k_period=3, d_period=3)
         _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=cfg.atr_period)
 
-        reqs = DataRequirements(
-            periods={
-                "1m": PeriodRequirements(lookback_bars=50),
-                "5m": PeriodRequirements(lookback_bars=cfg.sma_short + 1),
-                "15m": PeriodRequirements(lookback_bars=max(cfg.sma_long, cfg.atr_period) + 1),
-            },
-            indicators={
-                "1m": [
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "5m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_short}),
-                    IndicatorRequirements(name="macd", params={"fast": 12, "slow": 26, "signal": 9}),
-                    IndicatorRequirements(name="kdj", params={"n": 9, "k_period": 3, "d_period": 3}),
-                ],
-                "15m": [
-                    IndicatorRequirements(name="sma", params={"period": cfg.sma_long}),
-                    IndicatorRequirements(name="atr", params={"period": cfg.atr_period}),
-                ],
-            },
-            events=EventsRequirements.no_events(),
-        )
+        reqs = strat.data_requirements(cfg)
         ctx = build_context(feed, reqs, latest_dt, latest_bar)
 
         state = State(

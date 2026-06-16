@@ -116,16 +116,18 @@ class MACrossParams:
 # ── 建议型方向切面声明 ──
 # 装饰器从下到上执行，建议型切面在外层先评估条件写入 ctx.aspects，
 # 拦截型切面在内层先执行（有持仓时提前返回出场信号）。
+# ── 做多方向切面 ──
+@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "15m"))
 @confirm_long_when(at(MACD, "1m"), ">", 0)
 @confirm_long_when(at(MACD, "5m"), ">", 0)
-@confirm_short_when(at(MACD, "1m"), "<", 0)
-@confirm_short_when(at(MACD, "5m"), "<", 0)
 @confirm_long_when(at(KDJ, "1m"), "<", "kdj_oversold")
 @confirm_long_when(at(KDJ, "5m"), "<", "kdj_oversold")
+# ── 做空方向切面 ──
+@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "15m"))
+@confirm_short_when(at(MACD, "1m"), "<", 0)
+@confirm_short_when(at(MACD, "5m"), "<", 0)
 @confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
 @confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
-@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "15m"))
-@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "15m"))
 # ── 拦截型切面声明 ──
 @with_trailing_stop("15m")
 @with_atr_stop_take_profit("15m")
@@ -227,11 +229,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
             elif direction_keys["short"] <= short_keys:
                 signal = Signal(action=cast(Any, TRADE_ACTION_SELL), reason="short_entry", volume=vol)
 
-        # 填充 diagnostics：策略追加持仓信息，切面已写入指标值和方向建议
-        ctx.aspects.diagnostics["entry_price"] = state.position.entry_price
-        ctx.aspects.diagnostics["highest_price"] = state.position.highest_price
-        ctx.aspects.diagnostics["lowest_price"] = state.position.lowest_price
-        ctx.aspects.diagnostics["current_close"] = ctx.bar.close
+        # 填充 diagnostics：切面已写入持仓信息、指标值和方向建议
         ctx.aspects.flush_direction_diagnostics()
 
         signal.diagnostics = ctx.aspects.diagnostics

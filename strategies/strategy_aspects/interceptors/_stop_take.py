@@ -54,12 +54,17 @@ def with_stop_take_profit(
 
         direction = state.position.direction
 
-        # ── 有持仓：先检查固定比例止盈止损 ──
+        # ── 有持仓：先写入持仓信息到 aspects.diagnostics，再检查止盈止损 ──
         if direction:
             config = state.strategy_config
             entry_price = state.position.entry_price
             close = ctx.bar.close
             volume = state.position.volume
+
+            ctx.aspects.diagnostics["entry_price"] = entry_price
+            ctx.aspects.diagnostics["highest_price"] = state.position.highest_price
+            ctx.aspects.diagnostics["lowest_price"] = state.position.lowest_price
+            ctx.aspects.diagnostics["current_close"] = close
 
             # 止盈检查（优先级高于止损）
             if take_profit_triggered(entry_price, close, config.take_profit_ratio, direction):

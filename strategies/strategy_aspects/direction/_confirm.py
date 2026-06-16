@@ -32,7 +32,7 @@ def _resolve_template(value: Any, config: Any) -> Any:
     # 部分模板：字符串中包含 {xxx}
     if "{" in value:
 
-        def _replace(m: re.Match) -> str:
+        def _replace(m: re.Match[str]) -> str:
             return str(getattr(config, m.group(1)))
 
         return re.sub(r"\{(\w+)\}", _replace, value)

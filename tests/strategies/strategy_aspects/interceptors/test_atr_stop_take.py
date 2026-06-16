@@ -1,4 +1,4 @@
-"""策略 AOP 装饰器测试 — 验证 with_atr_stop_take_profit 切面
+"""拦截型切面测试 — 验证 with_atr_stop_take_profit
 
 覆盖:
   - ATR 指标自动注册到 data_requirements
@@ -29,6 +29,7 @@ from strategies import (
     StrategyPosition,
 )
 from strategies.strategy_aspects import with_atr_stop_take_profit, with_stop_take_profit
+from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
 # 辅助类型
@@ -62,6 +63,7 @@ class _MockMultiCtx:
     def __init__(self, close: float, atr_value: float | None = 2.0, period: str = "15m"):
         self.bar = _MockBar(close)
         self.multi: dict[str, _MockPeriodView] = {}
+        self.aspects = StrategyAspects()
         if atr_value is not None:
             self.multi[period] = _MockPeriodView({"atr_14": atr_value})
 

@@ -1,4 +1,4 @@
-"""策略 AOP 装饰器测试 — 验证 with_stop_take_profit 切面
+"""拦截型切面测试 — 验证 with_stop_take_profit
 
 覆盖:
   - 无持仓透传
@@ -22,6 +22,7 @@ from common.constants import (
 from strategies.core.state import State
 from strategies.core.types import Signal, StrategyPosition
 from strategies.strategy_aspects import with_stop_take_profit
+from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
 # 辅助类型
@@ -48,6 +49,7 @@ class _MockCtx:
 
     def __init__(self, close: float):
         self.bar = _MockBar(close)
+        self.aspects = StrategyAspects()
 
 
 # --------------------------
