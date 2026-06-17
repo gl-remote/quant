@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import datetime as dt
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 
 from ..core.types import Bar
@@ -378,26 +379,26 @@ class PeriodData:
             self._calculated_indicators.discard(name)
             self._indicator_last_calc_idx.pop(name, None)
 
-    def apply_indicator(self, func: Callable[..., pd.Series], **params: Any) -> pd.Series:
+    def apply_indicator(self, func: Callable[..., np.ndarray], **params: Any) -> np.ndarray:
         """对内部数据应用指标计算函数
 
         封装对 self._df 的访问，外部调用者无需直接操作 _df。
 
-        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> pd.Series
+        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> np.ndarray
         :param params: 指标参数
-        :return: 计算结果 Series
+        :return: 计算结果 numpy 数组
         """
         return func(self._df, **params)
 
-    def set_indicator_column(self, name: str, series: pd.Series) -> None:
+    def set_indicator_column(self, name: str, data: np.ndarray) -> None:
         """将指标计算结果写入内部存储
 
-        封装对 self._df[name] = series 的访问，外部无需直接操作 _df。
+        封装对 self._df[name] = data 的访问，外部无需直接操作 _df。
 
         :param name: 指标列名（如 "sma_10"）
-        :param series: 指标计算结果 Series
+        :param data: 指标计算结果 numpy 数组
         """
-        self._df[name] = series
+        self._df[name] = data
 
 
 class PeriodDataView:

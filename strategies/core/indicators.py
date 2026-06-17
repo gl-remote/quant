@@ -1,44 +1,48 @@
 """内置指标计算函数
 
-所有指标统一使用 pandas-ta 库实现。
+所有指标统一使用 ta-lib C 库实现，输入输出通过 pd.DataFrame/pd.Series 边界转换。
+ta-lib 只认 numpy 数组，pandas 依赖仅限于函数边界的薄壳转换层。
 """
 
-import warnings
-from typing import cast
-
+import numpy as np
 import pandas as pd
-
-warnings.filterwarnings(
-    "ignore",
-    message=r"The 'mode\.copy_on_write' option is deprecated.*",
-    category=Warning,
-    module=r"pandas_ta(\.|$)",
-)
-import pandas_ta as ta  # noqa: E402
+import talib
+from numpy.typing import NDArray
 
 
-def sma_func(df: pd.DataFrame, period: int) -> pd.Series:
-    return ta.sma(df["close"], length=period)
+def sma_func(df: pd.DataFrame, period: int) -> NDArray[np.float64]:
+    return talib.SMA(np.asarray(df["close"], dtype=float), timeperiod=period)
 
 
-def ema_func(df: pd.DataFrame, period: int) -> pd.Series:
-    return ta.ema(df["close"], length=period)
+def ema_func(df: pd.DataFrame, period: int) -> NDArray[np.float64]:
+    return talib.EMA(np.asarray(df["close"], dtype=float), timeperiod=period)
 
 
-def rsi_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    return ta.rsi(df["close"], length=period)
+def rsi_func(df: pd.DataFrame, period: int = 14) -> NDArray[np.float64]:
+    return talib.RSI(np.asarray(df["close"], dtype=float), timeperiod=period)
 
 
-def macd_func(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> pd.Series:
-    result = ta.macd(df["close"], fast=fast, slow=slow, signal=signal)
-    return cast(pd.Series, result[f"MACDh_{fast}_{slow}_{signal}"])
+def macd_func(df: pd.DataFrame, fast: int = 12, slow: int = 26, signal: int = 9) -> NDArray[np.float64]:
+    _, _, hist = talib.MACD(np.asarray(df["close"], dtype=float), fastperiod=fast, slowperiod=slow, signalperiod=signal)
+    return hist
 
 
-def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3, d_period: int = 3) -> pd.Series:
-    result = ta.kdj(high=df["high"], low=df["low"], close=df["close"], length=n, signal=k_period)
-    # pandas-ta 的 KDJ 列名只含 length 和 signal，不含 d_period
-    return cast(pd.Series, result[f"J_{n}_{k_period}"])
+def kdj_func(df: pd.DataFrame, n: int = 9, k_period: int = 3, d_period: int = 3) -> NDArray[np.float64]:
+    k, d = talib.STOCH(
+        np.asarray(df["high"], dtype=float),
+        np.asarray(df["low"], dtype=float),
+        np.asarray(df["close"], dtype=float),
+        fastk_period=n,
+        slowk_period=k_period,
+        slowd_period=d_period,
+    )
+    return 3 * k - 2 * d
 
 
-def atr_func(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    return cast(pd.Series, ta.atr(high=df["high"], low=df["low"], close=df["close"], length=period))
+def atr_func(df: pd.DataFrame, period: int = 14) -> NDArray[np.float64]:
+    return talib.ATR(
+        np.asarray(df["high"], dtype=float),
+        np.asarray(df["low"], dtype=float),
+        np.asarray(df["close"], dtype=float),
+        timeperiod=period,
+    )

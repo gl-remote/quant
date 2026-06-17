@@ -9,7 +9,7 @@ from datetime import datetime as dt
 from enum import Enum
 from typing import Any
 
-import pandas as pd
+import numpy as np
 
 from ..core.types import Bar
 
@@ -69,7 +69,7 @@ class IndicatorCalcMode(Enum):
 
 @dataclass
 class IndicatorFuncInfo:
-    func: Callable[..., pd.Series]
+    func: Callable[..., np.ndarray]
     calc_mode: IndicatorCalcMode
     name: str
     description: str | None = None
@@ -80,7 +80,7 @@ REGISTERED_INDICATOR_FUNCS: dict[str, IndicatorFuncInfo] = {}
 
 def register_indicator_func(
     name: str,
-    func: Callable[..., pd.Series],
+    func: Callable[..., np.ndarray],
     calc_mode: IndicatorCalcMode = IndicatorCalcMode.BATCH,
     description: str | None = None,
 ) -> None:

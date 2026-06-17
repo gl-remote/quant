@@ -33,7 +33,7 @@ dependencies = [
     "akshare>=1.16",
     "loguru>=0.7",
     "pyarrow>=14",
-    "pandas-ta>=0.3",
+    "ta-lib>=0.5",
     "pandera>=0.18",
 ]
 
