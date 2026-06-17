@@ -88,10 +88,6 @@ class DataFeed:
         # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
 
-        # 数据追踪字段（类似数据库表）
-        self._created_at = pd.Timestamp.now()
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count = 0
         self._event_count = 0
 
     def register_period(self, period: str) -> PeriodData:
@@ -159,6 +155,7 @@ class DataFeed:
         if period_data.length > 0:
             existing_start = period_data.first_time
             existing_end = period_data.latest_time
+            assert existing_start is not None and existing_end is not None
 
             if new_start == existing_start and new_end <= existing_end:
                 return  # 数据已包含，跳过
@@ -202,6 +199,7 @@ class DataFeed:
         if period_data.length > 0:
             existing_start = period_data.first_time
             existing_end = period_data.latest_time
+            assert existing_start is not None and existing_end is not None
 
             if new_start == existing_start and new_end <= existing_end:
                 return  # 数据已包含，跳过
@@ -247,7 +245,6 @@ class DataFeed:
             self._events = pd.concat([self._events, new_df])
 
         self._event_count += len(events)
-        self._last_updated_at = pd.Timestamp.now()
 
     def get_events(
         self,

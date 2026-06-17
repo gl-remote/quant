@@ -71,11 +71,6 @@ class PeriodData:
         # 形成中 bar 的指标缓存 {indicator_name: value}
         self._forming_indicators: dict[str, float] = {}
 
-        # 数据追踪字段（类似数据库表）
-        self._created_at = pd.Timestamp.now()
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count = 0
-
         # 指标计算状态跟踪
         self._calculated_indicators: set[str] = set()
         self._indicator_last_calc_idx: dict[str, int] = {}
@@ -99,14 +94,41 @@ class PeriodData:
         """获取当前数据长度（K线数量）"""
         return len(self._df)
 
+    def _append_df(self, new_df: pd.DataFrame) -> None:
+        """内部方法：将新 DataFrame 追加到 _df，带时间顺序校验
+
+        :param new_df: 要追加的 DataFrame，索引为 datetime
+        :raises ValueError: 如果时间顺序不对（新数据的时间 <= 已有最新时间）
+        """
+        if len(new_df) == 0:
+            return
+
+        if len(self._df) > 0:
+            last_time = self._df.index[-1]
+            first_new_time = new_df.index[0]
+            if first_new_time <= last_time:
+                raise ValueError(f"New data time {first_new_time} is not after existing last time {last_time}")
+
+        if len(self._df) == 0:
+            self._df = new_df.copy()
+        else:
+            self._df = pd.concat([self._df, new_df])
+
+    def append_bar(self, bar: Bar) -> None:
+        """追加单根K线
+
+        :param bar: 单根K线数据
+        :raises ValueError: 如果 bar 时间 <= 已有最新时间
+        """
+        bar_time = pd.Timestamp(bar.datetime)
+        new_df = pd.DataFrame(
+            {"open": [bar.open], "high": [bar.high], "low": [bar.low], "close": [bar.close], "volume": [bar.volume]},
+            index=pd.Index([bar_time], name="datetime"),
+        )
+        self._append_df(new_df)
+
     def append_bars(self, bars: list[Bar]) -> None:
         """批量追加K线数据（用于回测初始化）
-
-        注意事项：
-        1. 必须按时间升序排列
-        2. 时间戳不能与已有的数据重复
-        3. Append-Only：历史数据不会被修改
-        4. 更新数据追踪字段：_last_updated_at 和 _update_count
 
         :param bars: K线列表
         :raises ValueError: 如果bars为空或时间顺序不对
@@ -114,41 +136,19 @@ class PeriodData:
         if not bars:
             raise ValueError("Bars list is empty")
 
-        # 验证时间顺序
-        prev_time = None
-        if len(self._df) > 0:
-            prev_time = self._df.index[-1]
-
-        bar_dicts = []
-        for bar in bars:
-            bar_time = pd.Timestamp(bar.datetime)
-            if prev_time is not None and bar_time <= prev_time:
-                raise ValueError(f"Bar time {bar_time} is not after previous time {prev_time}")
-            prev_time = bar_time
-
-            bar_dicts.append(
-                {
-                    "datetime": bar_time,
-                    "open": bar.open,
-                    "high": bar.high,
-                    "low": bar.low,
-                    "close": bar.close,
-                    "volume": bar.volume,
-                }
-            )
-
-        # 转换为DataFrame并追加
-        new_df = pd.DataFrame(bar_dicts)
-        new_df = new_df.set_index("datetime")
-
-        if len(self._df) == 0:
-            self._df = new_df
-        else:
-            self._df.loc[new_df.index] = new_df
-
-        # 更新数据追踪字段
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += len(bars)
+        records = [
+            {
+                "datetime": pd.Timestamp(bar.datetime),
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+            }
+            for bar in bars
+        ]
+        new_df = pd.DataFrame(records).set_index("datetime")
+        self._append_df(new_df)
 
     def load_df(self, df: pd.DataFrame, replace: bool = False) -> None:
         """从 DataFrame 直接加载数据，避免 Bar 转换开销
@@ -163,57 +163,7 @@ class PeriodData:
             self._calculated_indicators.clear()
             self._indicator_last_calc_idx.clear()
         else:
-            if len(self._df) == 0:
-                self._df = df.copy()
-            else:
-                new_rows = df.loc[~df.index.isin(self._df.index)]
-                if len(new_rows) > 0:
-                    self._df.loc[new_rows.index] = new_rows
-
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += 1
-
-    def append_bar(self, bar: Bar) -> None:
-        """追加单根K线（每个 PeriodData 独立，无并发，无需幂等检查）
-
-        注意：此方法不再清除指标缓存。指标计算状态由 DataFeed
-        在 calculate_all / calculate_period 中统一管理。
-
-        :param bar: 单根K线数据
-        """
-        bar_time = pd.Timestamp(bar.datetime)
-
-        new_row = pd.Series(
-            {"open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close, "volume": bar.volume},
-            name=bar_time,
-        )
-
-        self._df.loc[bar_time] = new_row
-
-        # 更新数据追踪字段
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += 1
-
-    def update_last_bar(self, bar: Bar) -> None:
-        """更新最后一根K线（形成中的 bar）
-
-        用于周期聚合场景：每来一根 1m bar，更新高周期"形成中"的最后一根 bar。
-        只更新 high/low/close/volume，不改变 open 和时间戳。
-
-        :param bar: 用于更新的 1m bar 数据
-        """
-        if len(self._df) == 0:
-            return
-
-        last_idx = self._df.index[-1]
-        self._df.loc[last_idx, "high"] = max(self._df.loc[last_idx, "high"], bar.high)
-        self._df.loc[last_idx, "low"] = min(self._df.loc[last_idx, "low"], bar.low)
-        self._df.loc[last_idx, "close"] = bar.close
-        self._df.loc[last_idx, "volume"] += bar.volume
-
-        # 更新数据追踪字段
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += 1
+            self._append_df(df)
 
     def update_forming_bar(self, bar: Bar) -> None:
         """更新形成中的 bar（不写入 _df）
@@ -222,9 +172,10 @@ class PeriodData:
         只更新 high/low/close/volume，不改变 open 和时间戳。
 
         :param bar: 用于更新的基础周期 bar 数据
+        :raises RuntimeError: 如果没有 forming bar（需先调用 set_forming_bar）
         """
         if self._forming_bar is None:
-            return
+            raise RuntimeError("No forming bar to update, call set_forming_bar first")
         self._forming_bar = Bar(
             symbol=self._forming_bar.symbol,
             datetime=self._forming_bar.datetime,
@@ -236,8 +187,6 @@ class PeriodData:
         )
         # 形成中 bar 更新后，指标缓存失效
         self._forming_indicators.clear()
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += 1
 
     def set_forming_bar(self, bar: Bar) -> None:
         """设置新的形成中 bar（高周期新 bar 开始形成时调用）
@@ -246,8 +195,6 @@ class PeriodData:
         """
         self._forming_bar = bar
         self._forming_indicators.clear()
-        self._last_updated_at = pd.Timestamp.now()
-        self._update_count += 1
 
     def complete_forming_bar(self) -> None:
         """将形成中的 bar 完成并追加到 _df
@@ -265,10 +212,7 @@ class PeriodData:
 
         指标DataFrame要求：
         1. 索引必须与K线的datetime对齐
-        2. 列名应为指标名（如 "sma_10", "ema_20"）
-
-        注意事项：
-        1. 更新数据追踪字段：_last_updated_at 和 _update_count
+        2. 列名应为指标名（如 "sma_10", "ema_20")
 
         :param indicators: 指标DataFrame，行数应等于或小于当前K线数
         :raises ValueError: 如果索引不匹配
@@ -280,9 +224,6 @@ class PeriodData:
         # 合并指标数据
         for col in indicators.columns:
             self._df[col] = indicators[col]
-
-        # 更新数据追踪字段
-        self._last_updated_at = pd.Timestamp.now()
 
     def get_data(
         self, current_time: pd.Timestamp | dt, lookback_bars: int = 1, events_df: pd.DataFrame | None = None
@@ -329,11 +270,10 @@ class PeriodData:
             if forming_time <= current_time_ts:
                 include_forming = True
 
-        # 找到截止时间对应的索引
+        # 找到截止时间对应的索引（ffill: 取 <= current_time 的最后一根 bar）
         if len(self._df) > 0:
             end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method="ffill")[0]
-            if end_idx < 0:
-                end_idx = 0
+            # end_idx < 0 表示 current_time 在第一根 bar 之前，没有可见的完整 bar
         else:
             end_idx = -1  # _df 为空，没有完整 bar
 
@@ -368,19 +308,6 @@ class PeriodData:
             return _make_bar_from_row(self._df.iloc[idx])
         except IndexError:
             return None
-
-    def get_bar_by_time(self, time: pd.Timestamp | dt) -> Bar | None:
-        """通过精确时间戳获取K线
-
-        :param time: 要查找的时间戳
-        :return: 匹配的Bar对象，未找到返回None
-        """
-        time_ts = pd.Timestamp(time)
-        if time_ts not in self._df.index:
-            return None
-
-        row = self._df.loc[time_ts]
-        return _make_bar_from_row(row)
 
     def get_indicator(self, name: str, idx: int) -> float | None:
         """通过索引获取指标值
