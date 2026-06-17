@@ -15,7 +15,7 @@
 
 【内部约定】
 - 基础周期（_base_period）由 apply_requirements 从声明的周期中自动推断为最小周期
-- 所有高周期 K 线由基础周期通过聚合自动生成
+- 高周期历史 K 线由调用方提供，聚合仅补充形成中的未完成 bar
 - 调用方无需关心聚合细节，只需声明需要哪些周期和指标
 """
 
@@ -24,6 +24,8 @@ from datetime import datetime as dt
 
 import pandas as pd
 
+from common.symbol_utils import parse_contract
+
 from ..core.indicators import IndicatorSpec
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
@@ -31,17 +33,6 @@ from .events import Event, EventManager
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from .serialization import dump_feed, load_feed
-
-
-def _parse_source_from_symbol(symbol: str) -> str | None:
-    """从symbol解析source，如 "CZce.sr509" -> source="CZCE"
-
-    :param symbol: 交易品种
-    :return: source，解析失败返回None
-    """
-    if "." in symbol:
-        return symbol.split(".")[0]
-    return None
 
 
 class DataFeed:
@@ -64,7 +55,8 @@ class DataFeed:
         """
         self.symbol = symbol
         if source is None:
-            self.source = _parse_source_from_symbol(symbol)
+            ci = parse_contract(symbol)
+            self.source = ci.exchange if ci else None
         else:
             self.source = source
 
