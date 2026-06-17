@@ -244,8 +244,9 @@ class DataFeed:
 
         # 2. 自动推断基础周期（最小周期）
         period_minutes = {p: parse_period_minutes(p) for p in reqs.periods}
-        self._base_period = min(period_minutes, key=period_minutes.get)  # type: ignore[arg-type]
-        base_minutes = period_minutes[self._base_period]
+        base_period = min(period_minutes, key=lambda p: period_minutes[p])
+        self._base_period = base_period
+        base_minutes = period_minutes[base_period]
 
         # 3. 校验：目标周期必须是基础周期的整数倍
         for period, minutes in period_minutes.items():
