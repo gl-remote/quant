@@ -10,6 +10,7 @@ from enum import Enum
 from typing import Any
 
 import numpy as np
+from numpy.typing import NDArray
 
 from ..core.types import Bar
 
@@ -69,7 +70,7 @@ class IndicatorCalcMode(Enum):
 
 @dataclass
 class IndicatorFuncInfo:
-    func: Callable[..., np.ndarray]
+    func: Callable[..., NDArray[np.float64]]
     calc_mode: IndicatorCalcMode
     name: str
     description: str | None = None
@@ -80,7 +81,7 @@ REGISTERED_INDICATOR_FUNCS: dict[str, IndicatorFuncInfo] = {}
 
 def register_indicator_func(
     name: str,
-    func: Callable[..., np.ndarray],
+    func: Callable[..., NDArray[np.float64]],
     calc_mode: IndicatorCalcMode = IndicatorCalcMode.BATCH,
     description: str | None = None,
 ) -> None:

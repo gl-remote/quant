@@ -27,6 +27,7 @@ from loguru import logger
 
 from ..core.indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
 from ..core.types import Bar
+from .aggregate import get_forming_bar_start
 from .events import (
     REGISTERED_CONVERTERS,
     REGISTERED_INDICATOR_FUNCS,
@@ -102,9 +103,13 @@ class DataFeed:
         # 指标注册配置
         self._registered_indicators: dict[str, list[tuple[str, dict[str, Any]]]] = {}
 
-        # 周期转换配置
+        # 周期转换配置（保留兼容，新逻辑走聚合）
         self._period_conversions: dict[tuple[str, str], Callable[..., list[Bar]]] = REGISTERED_CONVERTERS.copy()
         self._derived_periods: dict[str, str] = {}
+
+        # 聚合配置：从 1m 自动聚合出高周期
+        self._aggregation_targets: list[str] = []  # 需要从 1m 聚合的周期列表，如 ["5m", "15m", "1h"]
+        self._aggregation_enabled: bool = False
 
         # 数据追踪字段（类似数据库表）
         self._created_at = pd.Timestamp.now()
@@ -374,8 +379,26 @@ class DataFeed:
         # 更精确的实现需要解析period计算时间区间
         return self.get_events(end_time=bar_time)
 
+    def setup_aggregation(self, target_periods: list[str]) -> None:
+        """配置周期聚合：指定需要从 1m 聚合出的高周期
+
+        调用此方法后，DataFeed 将自动从 1m 数据聚合出高周期 K 线。
+        bridge 只需灌 1m 数据，高周期由 DataFeed 内部维护。
+
+        :param target_periods: 需要聚合的高周期列表，如 ["5m", "15m", "1h"]
+        """
+        self._aggregation_targets = [p for p in target_periods if p != "1m"]
+        self._aggregation_enabled = len(self._aggregation_targets) > 0
+
+        # 确保所有目标周期已注册
+        for period in self._aggregation_targets:
+            if period not in self._periods:
+                self.register_period(period)
+
     def update_bar(self, bar: Bar, period: str, events: list[Event] | None = None) -> None:
         """更新一根K线
+
+        当聚合模式启用且 period="1m" 时，自动级联更新所有高周期。
 
         :param bar: 新K线数据
         :param period: 周期名称
@@ -390,17 +413,63 @@ class DataFeed:
         if events:
             self.append_events(events)
 
-        self._check_period_conversion(period)
+        # 聚合模式：1m bar 到达时自动更新高周期
+        if period == "1m" and self._aggregation_enabled:
+            self._update_aggregated_periods(bar)
 
-    def _check_period_conversion(self, source_period: str) -> None:
-        """检查是否触发周期转换（内部方法）
+    def _update_aggregated_periods(self, bar_1m: Bar) -> None:
+        """1m bar 到达时，增量更新所有高周期（内部方法）
 
-        :param source_period: 源周期
+        对每个高周期：
+        1. 判断 1m bar 属于哪个高周期 bar（通过起始时间）
+        2. 如果属于当前"形成中"的最后一根 → update_last_bar
+        3. 如果属于新的高周期 bar → append_bar（新 bar 开始形成）
+        4. 重算该高周期的指标（因为形成中 bar 更新了）
+
+        :param bar_1m: 新到达的 1m bar
         """
-        # 这里是简化实现，实际项目中需要硬编码常见的周期转换关系
-        # 例如：1m -> 5m, 1m -> 15m, 1m -> 1h 等
-        # 目前先留空，后续根据需要实现
-        pass
+        for target_period in self._aggregation_targets:
+            period_data = self._periods.get(target_period)
+            if period_data is None:
+                continue
+
+            ts = pd.Timestamp(bar_1m.datetime)
+            bar_start = get_forming_bar_start(ts, target_period)
+
+            if period_data.length == 0:
+                # 高周期还没有数据，追加第一根
+                new_bar = Bar(
+                    symbol=bar_1m.symbol,
+                    datetime=bar_start.to_pydatetime(),
+                    open=bar_1m.open,
+                    high=bar_1m.high,
+                    low=bar_1m.low,
+                    close=bar_1m.close,
+                    volume=bar_1m.volume,
+                )
+                period_data.append_bar(new_bar)
+            else:
+                last_idx = period_data._df.index[-1]  # pyright: ignore[reportPrivateUsage]
+                if bar_start == last_idx:
+                    # 属于当前形成中的 bar → 更新
+                    period_data.update_last_bar(bar_1m)
+                elif bar_start > last_idx:
+                    # 新的高周期 bar 开始 → 追加
+                    new_bar = Bar(
+                        symbol=bar_1m.symbol,
+                        datetime=bar_start.to_pydatetime(),
+                        open=bar_1m.open,
+                        high=bar_1m.high,
+                        low=bar_1m.low,
+                        close=bar_1m.close,
+                        volume=bar_1m.volume,
+                    )
+                    period_data.append_bar(new_bar)
+
+            # 形成中 bar 更新后，需要重算该周期指标
+            # 清除指标计算标记，强制下次访问时重算
+            period_data.clear_indicator_calculation()
+            self._calculate_indicators_for_period(target_period)
 
     def _calculate_indicators_for_period(self, period_name: str, incremental: bool = False) -> None:
         """计算指定周期的所有注册指标
@@ -608,18 +677,27 @@ class DataFeed:
         return str(idx[0].date()), str(idx[-1].date())
 
     def build_ctx_cache(self, requirements: DataRequirements, symbol: str) -> dict[pd.Timestamp, BarContext]:
-        """回测专用：一次性预构造所有 BarContext
+        """回测专用：逐 1m 推进预构造所有 BarContext
 
-        按主周期（requirements.periods 的第一个 key）逐行构造 BarContext，
-        on_bar 中可直接通过 timestamp 做 O(1) 查找。
+        聚合模式下按 1m 逐根推进，每步：
+        1. 追加 1m bar → 自动聚合更新高周期形成中 bar → 重算高周期指标
+        2. 构造当前 1m 时间点的 BarContext（含所有周期视图）
 
-        前置条件：数据已加载且指标已计算（calculate_all 已调用）。
+        非聚合模式（无 _aggregation_targets）退化为旧逻辑：按主周期逐行构造。
+
+        前置条件：1m 历史数据已通过 load_history_df 加载。
 
         :param requirements: 策略数据需求
         :param symbol: 品种标识
         :return: {timestamp: BarContext} 字典
         """
         main_period = next(iter(requirements.periods))
+
+        # ── 聚合模式：逐 1m 推进 ──
+        if self._aggregation_enabled and "1m" in self._periods:
+            return self._build_ctx_cache_aggregated(requirements, symbol)
+
+        # ── 非聚合模式：按主周期逐行构造（兼容旧逻辑） ──
         main_pd = self._periods.get(main_period)
         if main_pd is None or main_pd.length == 0:
             return {}
@@ -645,6 +723,100 @@ class DataFeed:
                 if view is not None:
                     multi[period] = view
             cache[ts] = BarContext(symbol=symbol, bar=bar, multi=multi, events=[])
+
+        return cache
+
+    def _build_ctx_cache_aggregated(
+        self, requirements: DataRequirements, symbol: str
+    ) -> dict[pd.Timestamp, BarContext]:
+        """聚合模式下逐 1m 推进构造 BarContext
+
+        核心流程：
+        1. 从已加载的 1m 数据中取出所有 bar
+        2. 清空高周期数据（重新从 1m 聚合）
+        3. 逐根 1m bar 推进：追加 → 聚合 → 重算指标 → 构造 BarContext
+
+        :param requirements: 策略数据需求
+        :param symbol: 品种标识
+        :return: {timestamp: BarContext} 字典
+        """
+        period_1m = self._periods.get("1m")
+        if period_1m is None or period_1m.length == 0:
+            return {}
+
+        df_1m = period_1m._df  # pyright: ignore[reportPrivateUsage]
+
+        # 清空高周期数据，重新从 1m 聚合
+        for target_period in self._aggregation_targets:
+            period_data = self._periods.get(target_period)
+            if period_data is not None:
+                period_data.load_df(pd.DataFrame(columns=["open", "high", "low", "close", "volume"]), replace=True)
+                period_data.clear_indicator_calculation()
+
+        cache: dict[pd.Timestamp, BarContext] = {}
+
+        for idx in range(len(df_1m)):
+            ts: pd.Timestamp = df_1m.index[idx]  # type: ignore[assignment]
+            row = df_1m.iloc[idx]
+
+            # 构造 1m bar
+            bar_1m = Bar(
+                symbol=symbol,
+                datetime=ts.to_pydatetime(),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+            )
+
+            # 增量更新高周期（追加/更新形成中 bar + 重算指标）
+            for target_period in self._aggregation_targets:
+                period_data = self._periods.get(target_period)
+                if period_data is None:
+                    continue
+
+                bar_start = get_forming_bar_start(ts, target_period)
+
+                if period_data.length == 0:
+                    new_bar = Bar(
+                        symbol=symbol,
+                        datetime=bar_start.to_pydatetime(),
+                        open=bar_1m.open,
+                        high=bar_1m.high,
+                        low=bar_1m.low,
+                        close=bar_1m.close,
+                        volume=bar_1m.volume,
+                    )
+                    period_data.append_bar(new_bar)
+                else:
+                    last_idx = period_data._df.index[-1]  # pyright: ignore[reportPrivateUsage]
+                    if bar_start == last_idx:
+                        period_data.update_last_bar(bar_1m)
+                    elif bar_start > last_idx:
+                        new_bar = Bar(
+                            symbol=symbol,
+                            datetime=bar_start.to_pydatetime(),
+                            open=bar_1m.open,
+                            high=bar_1m.high,
+                            low=bar_1m.low,
+                            close=bar_1m.close,
+                            volume=bar_1m.volume,
+                        )
+                        period_data.append_bar(new_bar)
+
+                # 重算高周期指标
+                period_data.clear_indicator_calculation()
+                self._calculate_indicators_for_period(target_period)
+
+            # 构造 BarContext
+            multi: dict[str, PeriodDataView] = {}
+            for period, req in requirements.periods.items():
+                view = self.get_data(period, ts, req.lookback_bars)
+                if view is not None:
+                    multi[period] = view
+
+            cache[ts] = BarContext(symbol=symbol, bar=bar_1m, multi=multi, events=[])
 
         return cache
 

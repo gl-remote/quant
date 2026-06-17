@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 from ..core.types import Bar
 from .events import Event
@@ -166,6 +167,27 @@ class PeriodData:
         )
 
         self._df.loc[bar_time] = new_row
+
+        # 更新数据追踪字段
+        self._last_updated_at = pd.Timestamp.now()
+        self._update_count += 1
+
+    def update_last_bar(self, bar: Bar) -> None:
+        """更新最后一根K线（形成中的 bar）
+
+        用于周期聚合场景：每来一根 1m bar，更新高周期"形成中"的最后一根 bar。
+        只更新 high/low/close/volume，不改变 open 和时间戳。
+
+        :param bar: 用于更新的 1m bar 数据
+        """
+        if len(self._df) == 0:
+            return
+
+        last_idx = self._df.index[-1]
+        self._df.loc[last_idx, "high"] = max(self._df.loc[last_idx, "high"], bar.high)
+        self._df.loc[last_idx, "low"] = min(self._df.loc[last_idx, "low"], bar.low)
+        self._df.loc[last_idx, "close"] = bar.close
+        self._df.loc[last_idx, "volume"] += bar.volume
 
         # 更新数据追踪字段
         self._last_updated_at = pd.Timestamp.now()
@@ -379,18 +401,18 @@ class PeriodData:
             self._calculated_indicators.discard(name)
             self._indicator_last_calc_idx.pop(name, None)
 
-    def apply_indicator(self, func: Callable[..., np.ndarray], **params: Any) -> np.ndarray:
+    def apply_indicator(self, func: Callable[..., NDArray[np.float64]], **params: Any) -> NDArray[np.float64]:
         """对内部数据应用指标计算函数
 
         封装对 self._df 的访问，外部调用者无需直接操作 _df。
 
-        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> np.ndarray
+        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> NDArray[np.float64]
         :param params: 指标参数
         :return: 计算结果 numpy 数组
         """
         return func(self._df, **params)
 
-    def set_indicator_column(self, name: str, data: np.ndarray) -> None:
+    def set_indicator_column(self, name: str, data: NDArray[np.float64]) -> None:
         """将指标计算结果写入内部存储
 
         封装对 self._df[name] = data 的访问，外部无需直接操作 _df。

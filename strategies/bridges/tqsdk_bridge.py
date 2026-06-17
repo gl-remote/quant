@@ -259,23 +259,29 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         on_signal: Callable[[Signal, float], None] | None,
         target_pos: Any,
     ) -> None:
-        """遍历所有周期，处理本轮新增的 K 线并驱动策略 + 分发信号"""
-        for period_name, klines in self._klines.items():
-            if not self.api.is_changing(klines):
-                continue
-            current_len = len(klines)
-            if not self._caught_up and current_len > prev_lens.get(period_name, 0):
-                self._caught_up = True
-                self._log_indicator_snapshot("追上实时数据")
-            for i in range(prev_lens[period_name], current_len):
-                signal = self._on_bar_multi(klines=klines, idx=i, main_period=period_name)
-                if signal.action:
-                    close_price = float(klines.close.iloc[i])
-                    if on_signal:
-                        on_signal(signal, close_price)
-                    elif target_pos:
-                        self._execute_order(target_pos, signal, close_price)
-            prev_lens[period_name] = current_len
+        """只处理 1m 周期的新增 K 线，驱动策略 + 分发信号
+
+        聚合模式下只有 1m 数据，高周期由 DataFeed 自动聚合。
+        """
+        period_name = "1m"
+        klines = self._klines.get(period_name)
+        if klines is None:
+            return
+        if not self.api.is_changing(klines):
+            return
+        current_len = len(klines)
+        if not self._caught_up and current_len > prev_lens.get(period_name, 0):
+            self._caught_up = True
+            self._log_indicator_snapshot("追上实时数据")
+        for i in range(prev_lens[period_name], current_len):
+            signal = self._on_bar_1m(klines=klines, idx=i)
+            if signal.action:
+                close_price = float(klines.close.iloc[i])
+                if on_signal:
+                    on_signal(signal, close_price)
+                elif target_pos:
+                    self._execute_order(target_pos, signal, close_price)
+        prev_lens[period_name] = current_len
 
     # ──────────────────────────────────────────────────
     #  公开入口：组合以上三个阶段
@@ -333,20 +339,12 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     # ------------------------------------------------------------------ #
 
     def _subscribe_klines(self, symbol: str) -> None:
-        """根据策略 data_requirements 订阅多周期 kline_serial
+        """根据策略 data_requirements 只订阅 1m kline_serial
 
-        设计决策（参见 cli/tqsdk-test-plan.md §8 决策项1）:
-          使用 PeriodData 结构 + 复用回测指标计算逻辑，
-          不需要自定义适配器类（TqSdkPeriodView 方案已废弃）。
+        聚合模式下只订阅 1m 数据，高周期由 DataFeed 从 1m 自动聚合。
         """
-        reqs = self._strategy.data_requirements(self._state.strategy_config)
-        if reqs:
-            for period_name in reqs.periods:
-                duration = _PERIOD_MAP.get(period_name, 60)
-                self._klines[period_name] = self.api.get_kline_serial(symbol, duration)
-        else:
-            # 策略未声明需求时默认订阅 1 分钟线
-            self._klines["1m"] = self.api.get_kline_serial(symbol, 60)
+        # 只订阅 1m 数据
+        self._klines["1m"] = self.api.get_kline_serial(symbol, 60)
 
     def _klines_to_dataframe(self, klines: KlineDataFrame) -> Any:
         """将 tqsdk kline_serial DataFrame 转换为 PeriodData 可加载的格式
@@ -360,49 +358,48 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         return df
 
     def _init_period_data(self) -> None:
-        """用 tqsdk kline_serial 初始化 DataFeed + PeriodData + 预计算指标
+        """用 tqsdk 1m kline_serial 初始化 DataFeed + PeriodData + 预计算指标
 
-        设计: 策略声明了 data_requirements → 按声明注册周期/指标
-              无声明 → 退化为单 1m 周期无指标
+        聚合模式下只加载 1m 数据到 DataFeed，高周期由 DataFeed 自动聚合。
+        策略声明了 data_requirements → 按声明注册周期/指标 + 配置聚合
+        无声明 → 退化为单 1m 周期无指标
 
         前置条件: _subscribe_klines() + _wait_for_initial_data() 已执行
         """
         reqs = self._strategy.data_requirements(self._state.strategy_config)
         has_indicators = bool(reqs and reqs.indicators)
 
-        # 1. 创建 DataFeed 并注册周期 + 指标
+        # 1. 创建 DataFeed 并注册周期 + 指标 + 聚合配置
         self._data_feed = DataFeed(symbol=self.symbol)
         if reqs:
+            # 注册 1m 基础周期
+            self._data_feed.register_period("1m")
+            # 注册所有需要的周期（含高周期）
             for pn in reqs.periods:
                 self._data_feed.register_period(pn)
+            # 配置聚合：从 1m 自动聚合出高周期
+            self._data_feed.setup_aggregation(list(reqs.periods.keys()))
+            # 注册指标
             if has_indicators:
                 for pn, ind_list in reqs.indicators.items():
                     for ind_req in ind_list:
                         self._data_feed.register_indicator(pn, ind_req.name, **ind_req.params)
-            period_names = list(reqs.periods)
         else:
             self._data_feed.register_period("1m")
-            period_names = ["1m"]
 
-        logger.info(f"[init] DataFeed: 注册 {len(period_names)} 个周期")
+        logger.info("[init] DataFeed: 注册 1m 周期 + 聚合高周期")
 
-        # 2. 加载各周期数据（kline_serial → PeriodData）
+        # 2. 只加载 1m 数据（kline_serial → PeriodData）
         total_loaded = 0
-        for period_name in period_names:
-            if period_name not in self._klines:
-                logger.warning(f"[init]   {period_name}: 未订阅 kline_serial，跳过")
-                continue
-            klines = self._klines[period_name]
-            if len(klines) == 0:
-                logger.warning(f"[init]   {period_name}: kline 为空，跳过")
-                continue
-            pd_obj = self._data_feed.get_period(period_name)
-            if pd_obj is None:
-                continue
-            df = self._klines_to_dataframe(klines)
-            pd_obj.load_df(df)
-            total_loaded += len(df)
-            logger.info(f"[init]   {period_name}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}")
+        if "1m" in self._klines:
+            klines = self._klines["1m"]
+            if len(klines) > 0:
+                pd_obj = self._data_feed.get_period("1m")
+                if pd_obj is not None:
+                    df = self._klines_to_dataframe(klines)
+                    pd_obj.load_df(df)
+                    total_loaded += len(df)
+                    logger.info(f"[init]   1m: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}")
         logger.info(f"[init]   共加载 {total_loaded} 根K线到 PeriodData")
 
         # 3. 预计算指标（与回测路径一致，全量计算一次）
@@ -492,27 +489,27 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
                 multi[period_name] = view
         return multi
 
-    def _update_period_and_recalc(self, period_name: str, bar: Bar) -> None:
-        """追加一根 K 线到指定周期的 PeriodData，并重算该周期指标"""
+    def _update_period_and_recalc(self, bar: Bar) -> None:
+        """追加一根 1m K 线到 DataFeed，自动聚合高周期并重算指标
+
+        聚合模式下通过 DataFeed.update_bar("1m") 触发高周期自动更新。
+        """
         if self._data_feed is None:
             return
-        pd_obj = self._data_feed.get_period(period_name)
-        if pd_obj is not None:
-            pd_obj.append_bar(bar)
-            self._data_feed.calculate_period(period_name)
+        self._data_feed.update_bar(bar, "1m")
 
     # ------------------------------------------------------------------ #
     #  内部方法：K线处理 & 策略驱动
     # ------------------------------------------------------------------ #
 
     @check_types
-    def _on_bar_multi(self, klines: KlineDataFrame, idx: int, main_period: str) -> Signal:
-        """从多周期 kline_serial 构造完整 BarContext 并驱动策略
+    def _on_bar_1m(self, klines: KlineDataFrame, idx: int) -> Signal:
+        """从 1m kline_serial 构造完整 BarContext 并驱动策略
 
-        流程: kline → Bar → 追加到 PeriodData → 重算指标 → 构造 context → on_bar
+        流程: 1m kline → Bar → 追加到 DataFeed(1m) → 自动聚合高周期 → 构造 context → on_bar
         """
         bar = self._kline_to_bar(klines, idx)
-        self._update_period_and_recalc(main_period, bar)
+        self._update_period_and_recalc(bar)
         multi = self._build_multi_context(bar)
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])

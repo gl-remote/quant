@@ -5,10 +5,12 @@
 - PeriodData + PeriodDataView 数据容器
 - 数据需求类型
 - DataFeed + 模块级 cache 内存缓存
+- 周期聚合（从 1m 自动聚合高周期 K 线）
 
 从 strategies/ 顶层导入即可，无需直接引用此子模块。
 """
 
+from .aggregate import aggregate_bars, get_forming_bar_start, parse_period_minutes
 from .cache import clear_cache, get_cached_feed, set_cached_feed
 from .data_feed import (
     DataFeed,
@@ -33,6 +35,9 @@ from .requirements import (
 )
 
 __all__ = [
+    "aggregate_bars",
+    "get_forming_bar_start",
+    "parse_period_minutes",
     "Event",
     "BigTradeEvent",
     "NewsEvent",
