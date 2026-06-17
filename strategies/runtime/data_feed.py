@@ -1,25 +1,25 @@
 """量化策略数据管理模块
 
 【架构设计】
-- DataFeed: 管理单个品种的多周期数据，负责调度计算和事件管理
-- 内存缓存: 模块级 cache 按 symbol 缓存 DataFeed，减少回测中重复 parquet I/O
+- DataFeed: 管理单个品种的多周期数据，对外暴露统一的高层 API
+- 内部细节（基础周期、周期聚合、指标懒计算）对调用方透明
+- 模块级 cache 按 symbol 缓存 DataFeed，减少回测中重复 parquet I/O
 
-【并发安全】
-- 基于条件变量的Append-Only快照机制
-- 只在DataFeed级别加锁
-- 读操作检查时间戳，保障数据一致性
+【对外 API 概览】
+- 配置：apply_requirements(reqs)
+- 数据装载：feed_history_df(df) / feed_bar(bar)
+- 数据查询：get_data / get_period / get_period_names / get_date_range / get_source_date_range
+- 指标查询：get_indicator_names / get_registered_indicators
+- 序列化：to_feeds / from_feeds
+- 上下文构造：build_ctx_cache（回测）/ 模块级 build_context（实盘）
 
-【指标计算】
-- 支持批量(BATCH)和增量(INCREMENTAL)两种模式
-- 模块级注册，所有DataFeed共享
-- 懒加载按需计算，避免不必要的开销
+【内部约定】
+- 所有高周期 K 线由 SOURCE_PERIOD（1m）通过聚合自动生成
+- 调用方无需关心聚合细节，只需声明需要哪些周期和指标
 """
 
-import json
 import os
-from collections.abc import Callable
 from datetime import datetime as dt
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -28,20 +28,23 @@ from loguru import logger
 from ..core.indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start
-from .events import (
-    REGISTERED_CONVERTERS,
+from .events import Event
+from .indicators import (
     REGISTERED_INDICATOR_FUNCS,
-    Event,
     IndicatorCalcMode,
     generate_indicator_column_name,
     register_indicator_func,
 )
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
+from .serialization import _OHLCV_COLUMNS, dump_feed, load_feed
+
+# 数据源基础周期：所有高周期 K 线均由此周期聚合得到
+SOURCE_PERIOD = "1m"
 
 
 def _parse_source_from_symbol(symbol: str) -> str | None:
-    """从symbol解析source，如 "CZCE.sr509" -> source="CZCE"
+    """从symbol解析source，如 "CZce.sr509" -> source="CZCE"
 
     :param symbol: 交易品种
     :return: source，解析失败返回None
@@ -51,30 +54,16 @@ def _parse_source_from_symbol(symbol: str) -> str | None:
     return None
 
 
-# parquet 序列化时区分 OHLCV 列和指标列
-_OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
-
-# 检查 pyarrow 是否可用（parquet 必需），避免回测因缺少依赖而全挂
-try:
-    import pyarrow  # noqa: F401
-
-    _PARQUET_OK = True
-except ImportError:
-    _PARQUET_OK = False
-
-
 class DataFeed:
     """管理单个品种的多周期数据
 
     【设计目标】
     - 管理单个品种（symbol）的所有周期数据
     - 持有该品种的元数据（symbol、数据源等）
-    - 提供统一的 update_bar 入口，调度所有相关计算
-    - 基于条件变量的快照等待机制（只在 DataFeed 级别加锁）
+    - 提供高层 API，调用方无需关心基础周期/聚合/懒计算等内部细节
     - 提供高效的数据访问路由（通过周期名快速定位 PeriodData）
     - 统一管理 K线、指标、事件 三类数据
-    - 支持周期转换（从1m数据衍生出5m数据）
-    - 回测前统一注册所有指标，避免实时计算的不同步问题
+    - 高周期 K 线由基础周期（SOURCE_PERIOD = "1m"）通过聚合自动生成
     """
 
     def __init__(self, symbol: str, source: str | None = None):
@@ -98,18 +87,11 @@ class DataFeed:
             {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
         )
 
-        # 并发控制
-
         # 指标注册配置
         self._registered_indicators: dict[str, list[tuple[str, dict[str, Any]]]] = {}
 
-        # 周期转换配置（保留兼容，新逻辑走聚合）
-        self._period_conversions: dict[tuple[str, str], Callable[..., list[Bar]]] = REGISTERED_CONVERTERS.copy()
-        self._derived_periods: dict[str, str] = {}
-
-        # 聚合配置：从 1m 自动聚合出高周期
-        self._aggregation_targets: list[str] = []  # 需要从 1m 聚合的周期列表，如 ["5m", "15m", "1h"]
-        self._aggregation_enabled: bool = False
+        # 聚合配置：高周期由 SOURCE_PERIOD 自动聚合得到
+        self._aggregation_targets: list[str] = []
 
         # 数据追踪字段（类似数据库表）
         self._created_at = pd.Timestamp.now()
@@ -215,8 +197,6 @@ class DataFeed:
         - 起始时间相同，结束时间更新 → 仅追加增量行
         - 起始时间不同 → 清空该周期数据，全量加载
 
-        并发安全：全程持有 DataFeed 锁，防止多线程 check-then-write 竞态。
-
         注意：
         1. 不会自动计算指标，需调用calculate_all()
         2. DataFrame 要求索引为 datetime
@@ -252,31 +232,6 @@ class DataFeed:
 
         if events:
             self.append_events(events)
-
-    def append_event(self, event: Event) -> None:
-        """追加事件数据
-
-        :param event: 事件对象
-        """
-        event_time = pd.Timestamp(event.timestamp)
-        new_row = pd.Series(
-            {
-                "type": event.type,
-                "symbol": event.symbol,
-                "reason": event.reason,
-                "period": event.period,
-                "data": event.data,
-            },
-            name=event_time,
-        )
-
-        if len(self._events) == 0:
-            self._events = new_row.to_frame().T
-        else:
-            self._events = pd.concat([self._events, new_row.to_frame().T])
-
-        self._event_count += 1
-        self._last_updated_at = pd.Timestamp.now()
 
     def append_events(self, events: list[Event]) -> None:
         """批量追加事件数据
@@ -358,47 +313,80 @@ class DataFeed:
 
         return events
 
-    def get_events_at_bar(self, bar_time: pd.Timestamp | dt, period: str) -> list[Event]:
-        """获取指定K线时间范围内的所有事件（包括全局事件和该周期的特定事件）
-
-        【事件时间归属规则】
-        - K线时间戳表示周期开始时间，周期持续时间由周期名称决定（如 1m 表示 60 秒）
-        - K线的时间区间为 [bar.datetime, bar.datetime + period_duration)
-        - 事件时间戳落在该区间内即归属于该K线
-        - 事件时间戳精度可以高于K线精度（如毫秒级事件归属到秒级K线）
-        - 边界情况：事件时间戳等于 K线结束时间的，归属到下一根 K线
-        - 事件分为两类：
-          - 全局事件（period=None）：归属于时间范围内所有周期的 K线
-          - 周期特定事件（period="1m" 等）：只归属于对应周期的 K线
-
-        :param bar_time: K线时间
-        :param period: 周期名称
-        :return: 事件列表
-        """
-        # 简单实现：使用bar_time作为时间点，查找时间<=bar_time的事件
-        # 更精确的实现需要解析period计算时间区间
-        return self.get_events(end_time=bar_time)
-
     def setup_aggregation(self, target_periods: list[str]) -> None:
-        """配置周期聚合：指定需要从 1m 聚合出的高周期
+        """配置周期聚合：指定需要从 SOURCE_PERIOD 聚合出的高周期（内部接口）
 
-        调用此方法后，DataFeed 将自动从 1m 数据聚合出高周期 K 线。
-        bridge 只需灌 1m 数据，高周期由 DataFeed 内部维护。
+        外部调用方应使用 apply_requirements() 一步到位，本方法主要供
+        apply_requirements / from_feeds 内部使用，以及历史测试代码兼容。
 
         :param target_periods: 需要聚合的高周期列表，如 ["5m", "15m", "1h"]
         """
-        self._aggregation_targets = [p for p in target_periods if p != "1m"]
-        self._aggregation_enabled = len(self._aggregation_targets) > 0
+        # 排除 SOURCE_PERIOD 本身
+        self._aggregation_targets = [p for p in target_periods if p != SOURCE_PERIOD]
+
+        # 确保 SOURCE_PERIOD 已注册（聚合的基础数据源）
+        if self._aggregation_targets and SOURCE_PERIOD not in self._periods:
+            self.register_period(SOURCE_PERIOD)
 
         # 确保所有目标周期已注册
         for period in self._aggregation_targets:
             if period not in self._periods:
                 self.register_period(period)
 
+    def apply_requirements(self, reqs: DataRequirements) -> None:
+        """根据策略 DataRequirements 一次性配置 DataFeed
+
+        【调用方视角】
+        外部只需一行调用就能完成：注册基础/高周期 + 启用聚合 + 注册指标。
+        调用方无需感知"基础周期是 1m"，也无需知道哪些周期需要聚合。
+
+        :param reqs: 策略数据需求
+        """
+        # 1. 注册所有声明的周期（含 SOURCE_PERIOD 与高周期）
+        for period in reqs.periods:
+            self.register_period(period)
+
+        # 2. 启用聚合：高周期自动由 SOURCE_PERIOD 聚合得到
+        self.setup_aggregation(list(reqs.periods.keys()))
+
+        # 3. 注册指标
+        for period, ind_list in reqs.indicators.items():
+            for ind in ind_list:
+                self.register_indicator(period, ind.name, **ind.params)
+
+    def feed_history_df(self, df: pd.DataFrame, events: list[Event] | None = None) -> None:
+        """灌入基础周期历史 K 线（高层 API）
+
+        高周期由 DataFeed 内部聚合生成，调用方无需关心基础周期是哪个。
+
+        :param df: 基础周期 K线 DataFrame，索引为 datetime
+        :param events: 历史事件列表（可选）
+        """
+        self.load_history_df(SOURCE_PERIOD, df, events)
+
+    def feed_bar(self, bar: Bar, events: list[Event] | None = None) -> None:
+        """喂入一根基础周期实时 K 线（高层 API）
+
+        高周期会自动通过聚合更新，调用方无需关心基础周期是哪个。
+
+        :param bar: 基础周期 K 线
+        :param events: 该 K 线时间范围内的事件（可选）
+        """
+        self.update_bar(bar, SOURCE_PERIOD, events)
+
+    def has_source_data(self) -> bool:
+        """是否已加载基础周期数据"""
+        pd_obj = self._periods.get(SOURCE_PERIOD)
+        return pd_obj is not None and pd_obj.length > 0
+
+    def get_source_date_range(self) -> tuple[str, str] | None:
+        """获取基础周期的数据日期范围（用于新鲜度判定等）"""
+        return self.get_date_range(SOURCE_PERIOD)
+
     def update_bar(self, bar: Bar, period: str, events: list[Event] | None = None) -> None:
         """更新一根K线
 
-        当聚合模式启用且 period="1m" 时，自动级联更新所有高周期。
+        当 period == SOURCE_PERIOD 且已配置聚合时，自动级联更新所有高周期。
 
         :param bar: 新K线数据
         :param period: 周期名称
@@ -413,61 +401,39 @@ class DataFeed:
         if events:
             self.append_events(events)
 
-        # 聚合模式：1m bar 到达时自动更新高周期
-        if period == "1m" and self._aggregation_enabled:
-            self._update_aggregated_periods(bar)
+        # 聚合：基础周期 bar 到达时自动更新高周期
+        if period == SOURCE_PERIOD and self._aggregation_targets:
+            self._step_aggregation(bar)
 
-    def _update_aggregated_periods(self, bar_1m: Bar) -> None:
-        """1m bar 到达时，增量更新所有高周期（内部方法）
+    def _step_aggregation(self, source_bar: Bar) -> None:
+        """基础周期 bar 到达时，把该 bar 推进到所有高周期（内部方法）
 
         对每个高周期：
-        1. 判断 1m bar 属于哪个高周期 bar（通过起始时间）
+        1. 判断 source_bar 属于哪个高周期 bar（通过起始时间）
         2. 如果属于当前"形成中"的最后一根 → update_last_bar
         3. 如果属于新的高周期 bar → append_bar（新 bar 开始形成）
         4. 重算该高周期的指标（因为形成中 bar 更新了）
 
-        :param bar_1m: 新到达的 1m bar
+        :param source_bar: 新到达的基础周期 bar
         """
+        ts = pd.Timestamp(source_bar.datetime)
         for target_period in self._aggregation_targets:
             period_data = self._periods.get(target_period)
             if period_data is None:
                 continue
 
-            ts = pd.Timestamp(bar_1m.datetime)
             bar_start = get_forming_bar_start(ts, target_period)
 
             if period_data.length == 0:
-                # 高周期还没有数据，追加第一根
-                new_bar = Bar(
-                    symbol=bar_1m.symbol,
-                    datetime=bar_start.to_pydatetime(),
-                    open=bar_1m.open,
-                    high=bar_1m.high,
-                    low=bar_1m.low,
-                    close=bar_1m.close,
-                    volume=bar_1m.volume,
-                )
-                period_data.append_bar(new_bar)
+                period_data.append_bar(_make_aggregated_bar(source_bar, bar_start))
             else:
                 last_idx = period_data._df.index[-1]  # pyright: ignore[reportPrivateUsage]
                 if bar_start == last_idx:
-                    # 属于当前形成中的 bar → 更新
-                    period_data.update_last_bar(bar_1m)
+                    period_data.update_last_bar(source_bar)
                 elif bar_start > last_idx:
-                    # 新的高周期 bar 开始 → 追加
-                    new_bar = Bar(
-                        symbol=bar_1m.symbol,
-                        datetime=bar_start.to_pydatetime(),
-                        open=bar_1m.open,
-                        high=bar_1m.high,
-                        low=bar_1m.low,
-                        close=bar_1m.close,
-                        volume=bar_1m.volume,
-                    )
-                    period_data.append_bar(new_bar)
+                    period_data.append_bar(_make_aggregated_bar(source_bar, bar_start))
 
             # 形成中 bar 更新后，需要重算该周期指标
-            # 清除指标计算标记，强制下次访问时重算
             period_data.clear_indicator_calculation()
             self._calculate_indicators_for_period(target_period)
 
@@ -540,95 +506,32 @@ class DataFeed:
         """
         self._calculate_indicators_for_period(period_name, incremental=incremental)
 
-    # ── parquet 持久化 ────────────────────────────────────────
-
-    OHLCV_COLUMNS: set[str] = {"open", "high", "low", "close", "volume"}
+    # --- 序列化 ────────────────────────────────────────
 
     def to_feeds(self, feeds_dir: str) -> None:
-        """将全部周期数据 + events + 元数据写为 parquet 文件
+        """将 DataFeed 完整状态序列化到目录
 
-        每个周期存 {period}.parquet，events 存 events.parquet，
-        元数据（symbol/source/periods/indicators）存 _meta.json。
+        文件布局：{feeds_dir}/_meta.json + {period}.parquet x N + events.parquet
+        未来可扩展到其它存储介质，接口不变。
 
-        如果 pyarrow 不可用，静默跳过写入（回测结果不受影响）。
-        :param feeds_dir: 目标目录路径（自动创建）
+        如果 pyarrow 不可用，静默跳过写入。
+
+        :param feeds_dir: 目标目录路径（自动创建父目录）
         """
-        if not _PARQUET_OK:
-            return
-
-        Path(feeds_dir).mkdir(parents=True, exist_ok=True)
-
-        # 构建 _meta.json
-        indicators_serializable: dict[str, list[dict[str, Any]]] = {}
-        for pn, ind_list in self._registered_indicators.items():
-            indicators_serializable[pn] = [{"name": n, "params": p} for n, p in ind_list]
-        meta = {
-            "symbol": self.symbol,
-            "source": self.source,
-            "periods": list(self._periods.keys()),
-            "indicators": indicators_serializable,
-        }
-        meta_path = os.path.join(feeds_dir, "_meta.json")
-        with open(meta_path, "w", encoding="utf-8") as f:
-            json.dump(meta, f, indent=2, ensure_ascii=False)
-
-        # 各周期 parquet
-        for period_name, period_data in self._periods.items():
-            fp = os.path.join(feeds_dir, f"{period_name}.parquet")
-            period_data._df.to_parquet(fp, index=True)  # pyright: ignore[reportPrivateUsage]
-
-        # events
-        if not self._events.empty:
-            events_fp = os.path.join(feeds_dir, "events.parquet")
-            self._events.to_parquet(events_fp, index=False)
+        dump_feed(self, feeds_dir)
 
     @classmethod
     def from_feeds(cls, feeds_dir: str) -> "DataFeed":
-        """从 parquet 文件恢复完整 DataFeed 实例
+        """从目录反序列化恢复 DataFeed 完整实例
 
-        恢复内容包括：周期数据（含 OHLCV 和指标列）、events 表、
-        指标注册配置和已计算标记。加载后无需再调 calculate_all()。
-
-        如果 pyarrow 不可用，抛出 ImportError，调用方应降级到全量流程。
+        恢复后指标已在 DataFrame 中，不需要重新计算，可直接使用。
 
         :param feeds_dir: 源目录路径
         :return: 恢复的 DataFeed 实例
-        :raises FileNotFoundError: feeds_dir 或 _meta.json 不存在
+        :raises FileNotFoundError: 目录或 _meta.json 不存在
         :raises ImportError: pyarrow 不可用
         """
-        meta_path = os.path.join(feeds_dir, "_meta.json")
-        if not os.path.isfile(meta_path):
-            raise FileNotFoundError(f"元数据文件不存在: {meta_path}")
-
-        with open(meta_path, encoding="utf-8") as f:
-            meta = json.load(f)
-
-        feed = cls(symbol=meta["symbol"])
-        if meta.get("source"):
-            feed.source = meta["source"]
-
-        # 恢复每个周期
-        for period_name in meta["periods"]:
-            fp = os.path.join(feeds_dir, f"{period_name}.parquet")
-            if not os.path.isfile(fp):
-                continue
-            df = pd.read_parquet(fp)
-            # 识别指标列（非 OHLCV 的列）
-            indicator_cols = [c for c in df.columns if c not in cls.OHLCV_COLUMNS]
-            feed.register_period(period_name)
-            feed._periods[period_name].load_df_parquet(df, indicator_cols)
-
-        # 恢复指标注册配置
-        for pn, ind_list in meta.get("indicators", {}).items():
-            for ind in ind_list:
-                feed.register_indicator(pn, ind["name"], **ind["params"])
-
-        # events
-        events_fp = os.path.join(feeds_dir, "events.parquet")
-        if os.path.isfile(events_fp):
-            feed._events = pd.read_parquet(events_fp)
-
-        return feed
+        return load_feed(feeds_dir)
 
     def get_period(self, period_name: str) -> PeriodData | None:
         """获取指定周期的PeriodData实例（高级用法）
@@ -677,27 +580,26 @@ class DataFeed:
         return str(idx[0].date()), str(idx[-1].date())
 
     def build_ctx_cache(self, requirements: DataRequirements, symbol: str) -> dict[pd.Timestamp, BarContext]:
-        """回测专用：逐 1m 推进预构造所有 BarContext
+        """回测专用：逐基础周期推进预构造所有 BarContext
 
-        聚合模式下按 1m 逐根推进，每步：
-        1. 追加 1m bar → 自动聚合更新高周期形成中 bar → 重算高周期指标
-        2. 构造当前 1m 时间点的 BarContext（含所有周期视图）
+        启用聚合时按基础周期逐根推进，每步：
+        1. 触发聚合更新高周期形成中 bar → 重算高周期指标
+        2. 构造当前时间点的 BarContext（含所有周期视图）
 
-        非聚合模式（无 _aggregation_targets）退化为旧逻辑：按主周期逐行构造。
+        未启用聚合时按主周期逐行构造（兼容历史路径）。
 
-        前置条件：1m 历史数据已通过 load_history_df 加载。
+        前置条件：基础周期历史数据已通过 feed_history_df 加载。
 
         :param requirements: 策略数据需求
         :param symbol: 品种标识
         :return: {timestamp: BarContext} 字典
         """
-        main_period = next(iter(requirements.periods))
-
-        # ── 聚合模式：逐 1m 推进 ──
-        if self._aggregation_enabled and "1m" in self._periods:
+        # ── 启用聚合：逐基础周期推进 ──
+        if self._aggregation_targets and SOURCE_PERIOD in self._periods:
             return self._build_ctx_cache_aggregated(requirements, symbol)
 
-        # ── 非聚合模式：按主周期逐行构造（兼容旧逻辑） ──
+        # ── 未启用聚合：按主周期逐行构造（兼容历史路径） ──
+        main_period = next(iter(requirements.periods))
         main_pd = self._periods.get(main_period)
         if main_pd is None or main_pd.length == 0:
             return {}
@@ -707,16 +609,7 @@ class DataFeed:
 
         for idx in range(len(main_df)):
             ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
-            row = main_df.iloc[idx]
-            bar = Bar(
-                symbol=symbol,
-                datetime=ts.to_pydatetime(),
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
-            )
+            bar = _row_to_bar(symbol, ts, main_df.iloc[idx])
             multi: dict[str, PeriodDataView] = {}
             for period, req in requirements.periods.items():
                 view = self.get_data(period, ts, req.lookback_bars)
@@ -729,24 +622,22 @@ class DataFeed:
     def _build_ctx_cache_aggregated(
         self, requirements: DataRequirements, symbol: str
     ) -> dict[pd.Timestamp, BarContext]:
-        """聚合模式下逐 1m 推进构造 BarContext
+        """聚合模式下逐基础周期推进构造 BarContext（内部方法）
 
-        核心流程：
-        1. 从已加载的 1m 数据中取出所有 bar
-        2. 清空高周期数据（重新从 1m 聚合）
-        3. 逐根 1m bar 推进：追加 → 聚合 → 重算指标 → 构造 BarContext
+        从已加载的基础周期数据出发，复用 _step_aggregation 把每根 bar
+        推进到所有高周期，并构造对应时间点的 BarContext。
 
         :param requirements: 策略数据需求
         :param symbol: 品种标识
         :return: {timestamp: BarContext} 字典
         """
-        period_1m = self._periods.get("1m")
-        if period_1m is None or period_1m.length == 0:
+        source_pd = self._periods.get(SOURCE_PERIOD)
+        if source_pd is None or source_pd.length == 0:
             return {}
 
-        df_1m = period_1m._df  # pyright: ignore[reportPrivateUsage]
+        df_source = source_pd._df  # pyright: ignore[reportPrivateUsage]
 
-        # 清空高周期数据，重新从 1m 聚合
+        # 清空高周期数据，重新聚合
         for target_period in self._aggregation_targets:
             period_data = self._periods.get(target_period)
             if period_data is not None:
@@ -755,68 +646,20 @@ class DataFeed:
 
         cache: dict[pd.Timestamp, BarContext] = {}
 
-        for idx in range(len(df_1m)):
-            ts: pd.Timestamp = df_1m.index[idx]  # type: ignore[assignment]
-            row = df_1m.iloc[idx]
+        for idx in range(len(df_source)):
+            ts: pd.Timestamp = df_source.index[idx]  # type: ignore[assignment]
+            bar = _row_to_bar(symbol, ts, df_source.iloc[idx])
 
-            # 构造 1m bar
-            bar_1m = Bar(
-                symbol=symbol,
-                datetime=ts.to_pydatetime(),
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
-            )
+            # 推进高周期（与实时 update_bar 走同一条路径）
+            self._step_aggregation(bar)
 
-            # 增量更新高周期（追加/更新形成中 bar + 重算指标）
-            for target_period in self._aggregation_targets:
-                period_data = self._periods.get(target_period)
-                if period_data is None:
-                    continue
-
-                bar_start = get_forming_bar_start(ts, target_period)
-
-                if period_data.length == 0:
-                    new_bar = Bar(
-                        symbol=symbol,
-                        datetime=bar_start.to_pydatetime(),
-                        open=bar_1m.open,
-                        high=bar_1m.high,
-                        low=bar_1m.low,
-                        close=bar_1m.close,
-                        volume=bar_1m.volume,
-                    )
-                    period_data.append_bar(new_bar)
-                else:
-                    last_idx = period_data._df.index[-1]  # pyright: ignore[reportPrivateUsage]
-                    if bar_start == last_idx:
-                        period_data.update_last_bar(bar_1m)
-                    elif bar_start > last_idx:
-                        new_bar = Bar(
-                            symbol=symbol,
-                            datetime=bar_start.to_pydatetime(),
-                            open=bar_1m.open,
-                            high=bar_1m.high,
-                            low=bar_1m.low,
-                            close=bar_1m.close,
-                            volume=bar_1m.volume,
-                        )
-                        period_data.append_bar(new_bar)
-
-                # 重算高周期指标
-                period_data.clear_indicator_calculation()
-                self._calculate_indicators_for_period(target_period)
-
-            # 构造 BarContext
             multi: dict[str, PeriodDataView] = {}
             for period, req in requirements.periods.items():
                 view = self.get_data(period, ts, req.lookback_bars)
                 if view is not None:
                     multi[period] = view
 
-            cache[ts] = BarContext(symbol=symbol, bar=bar_1m, multi=multi, events=[])
+            cache[ts] = BarContext(symbol=symbol, bar=bar, multi=multi, events=[])
 
         return cache
 
@@ -862,6 +705,32 @@ def _bars_to_df(bars: list[Bar]) -> pd.DataFrame:
     }
     df = pd.DataFrame(data, index=[pd.Timestamp(b.datetime) for b in bars])
     return df
+
+
+def _row_to_bar(symbol: str, ts: pd.Timestamp, row: pd.Series) -> Bar:
+    """从 DataFrame 一行 OHLCV 构造标准 Bar"""
+    return Bar(
+        symbol=symbol,
+        datetime=ts.to_pydatetime(),
+        open=float(row["open"]),
+        high=float(row["high"]),
+        low=float(row["low"]),
+        close=float(row["close"]),
+        volume=float(row["volume"]),
+    )
+
+
+def _make_aggregated_bar(source_bar: Bar, bar_start: pd.Timestamp) -> Bar:
+    """以基础周期 bar 作为高周期 bar 的初值，时间戳对齐到高周期起始"""
+    return Bar(
+        symbol=source_bar.symbol,
+        datetime=bar_start.to_pydatetime(),
+        open=source_bar.open,
+        high=source_bar.high,
+        low=source_bar.low,
+        close=source_bar.close,
+        volume=source_bar.volume,
+    )
 
 
 def build_context(
@@ -934,3 +803,97 @@ register_indicator_func(
 )
 register_indicator_func("kdj", kdj_func, IndicatorCalcMode.BATCH, description="KDJ随机指标J值")
 register_indicator_func("atr", atr_func, IndicatorCalcMode.BATCH, description="平均真实波幅 (Average True Range)")
+
+
+# ==================== 便捷工厂方法 ====================
+
+
+def create_data_feed(
+    symbol: str,
+    requirements: DataRequirements,
+    feeds_dir: str,
+    source_df: pd.DataFrame | None = None,
+) -> DataFeed:
+    """便捷工厂方法：完整构造一个 DataFeed，自动处理缓存、增量加载、序列化
+
+    【流程逻辑】
+    1. 先查内存缓存，命中直接返回（零 I/O）
+    2. 内存未命中，尝试从磁盘 feeds 目录反序列化加载
+    3. 检查源数据日期范围是否匹配，不匹配则全量重加载
+    4. 如果磁盘加载成功，合并缺失的周期/指标需求，增量计算
+    5. 最后写入内存缓存并返回
+
+    :param symbol: 交易品种
+    :param requirements: 数据需求
+    :param feeds_dir: 序列化缓存目录
+    :param source_df: 源周期（1m）数据，如果为 None 则需要调用方后续灌入
+    :return: 构造完成的 DataFeed
+    """
+    from .cache import get_cached_feed, set_cached_feed
+
+    # 0. 查内存缓存（零 I/O 路径）
+    if source_df is not None and len(source_df) > 0:
+        min_dt = str(source_df.index[0].date())
+        max_dt = str(source_df.index[-1].date())
+        cached = get_cached_feed(symbol, min_dt, max_dt)
+        if cached is not None:
+            return cached
+
+    # 1. 尝试从磁盘加载，判断是否需要全量重算
+    feed: DataFeed
+    data_stale = True
+
+    if os.path.isdir(feeds_dir):
+        try:
+            feed = DataFeed.from_feeds(feeds_dir)
+            # 检查源数据是否存在且日期匹配
+            if feed.has_source_data():
+                feed_date_range = feed.get_source_date_range()
+                if feed_date_range is not None and source_df is not None:
+                    src_min_dt = str(source_df.index[0].date())
+                    src_max_dt = str(source_df.index[-1].date())
+                    if feed_date_range[0] == src_min_dt and feed_date_range[1] == src_max_dt:
+                        data_stale = False
+
+        except Exception:
+            # 加载失败，全量重算
+            pass
+
+    if data_stale:
+        # 全量加载
+        feed = DataFeed(symbol=symbol)
+        feed.apply_requirements(requirements)
+        if source_df is not None and len(source_df) > 0:
+            feed.feed_history_df(source_df.set_index("datetime"))
+        feed.calculate_all()
+        feed.to_feeds(feeds_dir)
+    else:
+        # 增量合并缺失的周期/指标
+        feed.apply_requirements(requirements)
+        changed = False
+        existing_periods = set(feed.get_period_names())
+        existing_indicators = {
+            (pn, n, tuple(sorted(p.items())))
+            for pn in requirements.indicators
+            for n, p in feed.get_registered_indicators(pn)
+        }
+        feed.apply_requirements(requirements)
+        new_periods = set(feed.get_period_names()) - existing_periods
+        new_indicators = {
+            (pn, n, tuple(sorted(p.items())))
+            for pn in requirements.indicators
+            for n, p in feed.get_registered_indicators(pn)
+        } - existing_indicators
+        if new_periods or new_indicators:
+            changed = True
+        if changed:
+            feed.calculate_all()
+            feed.to_feeds(feeds_dir)
+
+    # 写入内存缓存
+    if source_df is not None and len(source_df) > 0:
+        min_dt = str(source_df.index[0].date())
+        max_dt = str(source_df.index[-1].date())
+        set_cached_feed(symbol, feed, min_dt, max_dt)
+
+    return feed

@@ -38,7 +38,7 @@ from common.constants import (  # noqa: E402
 from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
 from common.typing import check_types  # noqa: E402
-from strategies.runtime import BarContext, DataFeed  # noqa: E402
+from strategies.runtime import SOURCE_PERIOD, BarContext, DataFeed  # noqa: E402
 
 # 周期名称 → tqsdk duration 秒数映射
 _PERIOD_MAP: dict[str, int] = {
@@ -259,21 +259,21 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         on_signal: Callable[[Signal, float], None] | None,
         target_pos: Any,
     ) -> None:
-        """只处理 1m 周期的新增 K 线，驱动策略 + 分发信号
+        """只处理源周期的新增 K 线，驱动策略 + 分发信号
 
-        聚合模式下只有 1m 数据，高周期由 DataFeed 自动聚合。
+        聚合模式下只有源周期数据，高周期由 DataFeed 自动聚合。
         """
-        period_name = "1m"
-        klines = self._klines.get(period_name)
+        source_period = SOURCE_PERIOD
+        klines = self._klines.get(source_period)
         if klines is None:
             return
         if not self.api.is_changing(klines):
             return
         current_len = len(klines)
-        if not self._caught_up and current_len > prev_lens.get(period_name, 0):
+        if not self._caught_up and current_len > prev_lens.get(source_period, 0):
             self._caught_up = True
             self._log_indicator_snapshot("追上实时数据")
-        for i in range(prev_lens[period_name], current_len):
+        for i in range(prev_lens.get(source_period, 0), current_len):
             signal = self._on_bar_1m(klines=klines, idx=i)
             if signal.action:
                 close_price = float(klines.close.iloc[i])
@@ -281,7 +281,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
                     on_signal(signal, close_price)
                 elif target_pos:
                     self._execute_order(target_pos, signal, close_price)
-        prev_lens[period_name] = current_len
+        prev_lens[source_period] = current_len
 
     # ──────────────────────────────────────────────────
     #  公开入口：组合以上三个阶段
@@ -339,12 +339,12 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     # ------------------------------------------------------------------ #
 
     def _subscribe_klines(self, symbol: str) -> None:
-        """根据策略 data_requirements 只订阅 1m kline_serial
+        """根据策略 data_requirements 只订阅源周期 kline_serial
 
-        聚合模式下只订阅 1m 数据，高周期由 DataFeed 从 1m 自动聚合。
+        高周期由 DataFeed 内部聚合生成，无需从网络订阅。
         """
-        # 只订阅 1m 数据
-        self._klines["1m"] = self.api.get_kline_serial(symbol, 60)
+        # 只订阅源周期（1m）数据
+        self._klines[SOURCE_PERIOD] = self.api.get_kline_serial(self.symbol, 60)
 
     def _klines_to_dataframe(self, klines: KlineDataFrame) -> Any:
         """将 tqsdk kline_serial DataFrame 转换为 PeriodData 可加载的格式
@@ -358,48 +358,40 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         return df
 
     def _init_period_data(self) -> None:
-        """用 tqsdk 1m kline_serial 初始化 DataFeed + PeriodData + 预计算指标
+        """用 tqsdk 源周期 kline_serial 初始化 DataFeed + 周期 + 预计算指标
 
-        聚合模式下只加载 1m 数据到 DataFeed，高周期由 DataFeed 自动聚合。
-        策略声明了 data_requirements → 按声明注册周期/指标 + 配置聚合
-        无声明 → 退化为单 1m 周期无指标
+        高周期由 DataFeed 内部聚合生成，不需要从网络订阅，也不需要外部手动配置聚合。
+        策略声明了 data_requirements → DataFeed.apply_requirements 一步搞定。
+        无声明 → 退化为单源周期无指标。
 
         前置条件: _subscribe_klines() + _wait_for_initial_data() 已执行
         """
         reqs = self._strategy.data_requirements(self._state.strategy_config)
         has_indicators = bool(reqs and reqs.indicators)
 
-        # 1. 创建 DataFeed 并注册周期 + 指标 + 聚合配置
+        # 1. 创建 DataFeed 并应用需求（注册周期、配置聚合、注册指标 一步到位）
         self._data_feed = DataFeed(symbol=self.symbol)
         if reqs:
-            # 注册 1m 基础周期
-            self._data_feed.register_period("1m")
-            # 注册所有需要的周期（含高周期）
-            for pn in reqs.periods:
-                self._data_feed.register_period(pn)
-            # 配置聚合：从 1m 自动聚合出高周期
-            self._data_feed.setup_aggregation(list(reqs.periods.keys()))
-            # 注册指标
-            if has_indicators:
-                for pn, ind_list in reqs.indicators.items():
-                    for ind_req in ind_list:
-                        self._data_feed.register_indicator(pn, ind_req.name, **ind_req.params)
+            self._data_feed.apply_requirements(reqs)
         else:
-            self._data_feed.register_period("1m")
+            self._data_feed.register_period(SOURCE_PERIOD)
 
-        logger.info("[init] DataFeed: 注册 1m 周期 + 聚合高周期")
+        logger.info("[init] DataFeed: 已配置需求，高周期将由内部聚合生成")
 
-        # 2. 只加载 1m 数据（kline_serial → PeriodData）
+        # 2. 加载源周期数据（kline_serial → PeriodData）
         total_loaded = 0
-        if "1m" in self._klines:
-            klines = self._klines["1m"]
+        source_period = SOURCE_PERIOD
+        if source_period in self._klines:
+            klines = self._klines[source_period]
             if len(klines) > 0:
-                pd_obj = self._data_feed.get_period("1m")
+                pd_obj = self._data_feed.get_period(source_period)
                 if pd_obj is not None:
                     df = self._klines_to_dataframe(klines)
                     pd_obj.load_df(df)
                     total_loaded += len(df)
-                    logger.info(f"[init]   1m: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}")
+                    logger.info(
+                        f"[init]   {source_period}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}"
+                    )
         logger.info(f"[init]   共加载 {total_loaded} 根K线到 PeriodData")
 
         # 3. 预计算指标（与回测路径一致，全量计算一次）
@@ -490,13 +482,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         return multi
 
     def _update_period_and_recalc(self, bar: Bar) -> None:
-        """追加一根 1m K 线到 DataFeed，自动聚合高周期并重算指标
+        """喂入一根源周期 K 线到 DataFeed，高周期自动聚合更新
 
-        聚合模式下通过 DataFeed.update_bar("1m") 触发高周期自动更新。
+        聚合由 DataFeed 内部完成，调用方不用关心哪些周期需要聚合。
         """
         if self._data_feed is None:
             return
-        self._data_feed.update_bar(bar, "1m")
+        self._data_feed.feed_bar(bar)
 
     # ------------------------------------------------------------------ #
     #  内部方法：K线处理 & 策略驱动
@@ -504,9 +496,9 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
     @check_types
     def _on_bar_1m(self, klines: KlineDataFrame, idx: int) -> Signal:
-        """从 1m kline_serial 构造完整 BarContext 并驱动策略
+        """从源周期 kline_serial 构造完整 BarContext 并驱动策略
 
-        流程: 1m kline → Bar → 追加到 DataFeed(1m) → 自动聚合高周期 → 构造 context → on_bar
+        流程: 源周期 kline → Bar → 喂入 DataFeed → 自动聚合高周期 → 构造 context → on_bar
         """
         bar = self._kline_to_bar(klines, idx)
         self._update_period_and_recalc(bar)
@@ -514,7 +506,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])
         self._update_peak_prices(bar)
-        return self._strategy._finalize_signal(self._strategy.on_bar(self._state, ctx), ctx)
+        return self._strategy.on_bar(self._state, ctx)
 
     def _execute_order(self, target_pos: Any, signal: Signal, price: float) -> None:
         """通过 TargetPosTask 执行下单（仅 live 模式调用）
@@ -544,7 +536,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         bar = self._kline_to_bar(kline_data, idx)
         ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
         self._update_peak_prices(bar)
-        return self._strategy._finalize_signal(self._strategy.on_bar(self._state, ctx), ctx)
+        return self._strategy.on_bar(self._state, ctx)
 
     def _update_peak_prices(self, bar: Bar) -> None:
         """更新持仓期间的 peak 价格，在调用 strategy.on_bar 前执行"""

@@ -19,7 +19,6 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
-import os
 from datetime import datetime
 from typing import Any, cast
 
@@ -39,9 +38,12 @@ from common.constants import (
 from data.manager import DataManager
 from strategies import Bar, Fill, Signal, State, Strategy, UninitializedStrategy
 from strategies.core.types import StrategyPosition
-from strategies.runtime import DataFeed, DataRequirements
-from strategies.runtime.cache import get_cached_feed, set_cached_feed
-from strategies.runtime.requirements import BarContext
+from strategies.runtime import (
+    BarContext,
+    DataFeed,
+    DataRequirements,
+    create_data_feed,
+)
 
 
 class VnpyBacktestBridge(CtaTemplate):
@@ -171,207 +173,29 @@ class VnpyBacktestBridge(CtaTemplate):
     # ── DataFeed 初始化 ────────────────────────────────────
 
     def _setup_data_feed(self) -> DataFeed:
-        """统一入口：加载 → 校验 → 差量合并 → 增量计算
+        """统一入口：create_data_feed 自动处理缓存/增量/序列化
 
-        只做缺失的工作：
-        - 内存缓存命中 → 零 I/O 返回
-        - feeds 不存在 → 全量加载 + 全量计算
-        - 数据过期 → 重加载数据 + 重算指标
-        - 加周期/加指标 → 只加载新周期 + 只算新指标
-        - 完全命中磁盘缓存 → 零开销返回
+        逻辑已经封装在 runtime.create_data_feed 中，这边只需要传参。
         """
         assert self._requirements is not None  # on_init 已判空
 
         feeds_dir = f"output/feeds/{self._state.symbol}"
-
-        # 0. 查源数据新鲜度，尝试内存缓存（零 I/O 路径）
         dm = DataManager()
-        meta = dm.store.get_metadata(self._state.symbol, interval="1m")
-        if meta and meta.get("min_dt") and meta.get("max_dt"):
-            cached = get_cached_feed(self._state.symbol, str(meta["min_dt"]), str(meta["max_dt"]))
-            if cached is not None:
-                logger.debug("[{}] 内存缓存命中，跳过 parquet I/O", self.strategy_name)
-                return cached
-
-        # 1. 加载已有 feeds 或创建空 DataFeed，同时检查数据是否过期
-        feed, data_stale = self._assess_feed(feeds_dir)
-
-        # 2. 数据过期则全量重加载所有周期数据
-        if data_stale:
-            self._register_requirements(feed)
-            self._load_periods(feed)
-            self._log_data_feed_summary("数据加载完成（计算前）")
-            feed.calculate_all()
-            self._log_data_feed_summary("指标计算完成（计算后）")
-            feed.to_feeds(feeds_dir)
-            self._cache_feed(feed, meta, feeds_dir)
-            return feed
-
-        # 3. 数据不过期 → 增量合并缺失的周期和指标
-        changed = self._merge_missing_requirements(feed)
-
-        if changed:
-            self._log_data_feed_summary("增量合并完成（计算前）")
-            feed.calculate_all()
-            self._log_data_feed_summary("指标计算完成（计算后）")
-            feed.to_feeds(feeds_dir)
-            logger.debug("[{}] feeds 已增量更新", self.strategy_name)
-        else:
-            self._log_data_feed_summary("feeds 命中，跳过计算")
-            logger.debug("[{}] feeds 命中，跳过指标计算", self.strategy_name)
-
-        self._cache_feed(feed, meta, feeds_dir)
-        return feed
-
-    def _cache_feed(self, feed: DataFeed, meta: Any, feeds_dir: str) -> None:
-        """将 DataFeed 写入内存缓存
-
-        :param feed: DataFeed 实例
-        :param meta: ExportMetadata 返回结果（含 min_dt/max_dt），None 时尝试从 parquet 恢复
-        """
-        if meta and meta.get("min_dt") and meta.get("max_dt"):
-            set_cached_feed(feed.symbol, feed, meta["min_dt"], meta["max_dt"])
-            return
-        # 无 meta 时尝试从 DataFeed 数据中恢复时间范围
-        periods = feed.get_period_names()
-        if periods:
-            date_range = feed.get_date_range(periods[0])
-            if date_range:
-                set_cached_feed(feed.symbol, feed, date_range[0], date_range[1])
-
-    def _assess_feed(self, feeds_dir: str) -> tuple[DataFeed, bool]:
-        """加载 feeds 并判断数据是否过期
-
-        聚合模式下以 1m 周期作为主周期检查数据新鲜度。
-
-        :return: (feed, data_stale) — True 表示数据过期需全量重算
-        """
-        if not os.path.isdir(feeds_dir):
-            logger.debug("[{}] feeds 目录不存在，全量加载", self.strategy_name)
-            return DataFeed(symbol=self._state.symbol), True
-
-        try:
-            feed = DataFeed.from_feeds(feeds_dir)
-        except Exception as e:
-            logger.warning("[{}] feeds 加载失败: {}，全量重算", self.strategy_name, e)
-            return DataFeed(symbol=self._state.symbol), True
-
-        # 检查 1m 周期数据是否存在（聚合模式的基础数据源）
-        pd_1m = feed.get_period("1m")
-        if pd_1m is None or pd_1m.length == 0:
-            logger.warning("[{}] feeds 1m 周期为空，全量重算", self.strategy_name)
-            return feed, True
-
-        # 从 ExportMetadata 查源数据起止时间
-        dm = DataManager()
-        meta = dm.store.get_metadata(self._state.symbol, interval="1m")
-        if meta is None or not meta.get("min_dt") or not meta.get("max_dt"):
-            logger.warning("[{}] ExportMetadata 缺失，全量重算", self.strategy_name)
-            return feed, True
-
-        date_range = feed.get_date_range("1m")
-        if date_range is None:
-            logger.warning("[{}] feeds 日期范围为空，全量重算", self.strategy_name)
-            return feed, True
-
-        if meta["min_dt"] != date_range[0] or meta["max_dt"] != date_range[1]:
-            logger.debug(
-                "[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
-                self.strategy_name,
-                meta["min_dt"],
-                meta["max_dt"],
-                date_range[0],
-                date_range[1],
-            )
-            return feed, True
-
-        return feed, False
-
-    def _merge_missing_requirements(self, feed: DataFeed) -> bool:
-        """将 feeds 中缺失的周期和指标增量合并进去
-
-        聚合模式下只加载 1m 数据，高周期由 DataFeed 聚合生成。
-
-        :return: 是否有新增
-        """
-        assert self._requirements is not None  # _setup_data_feed 调用方已判空
-        changed = False
-        dm = DataManager()
-
-        # 补充 1m 周期数据（如果缺失）
-        if "1m" not in feed.get_period_names():
-            feed.register_period("1m")
-            results = dm.load_kline([self._state.symbol], interval="1m")
-            for _symbol, df, _data_src in results:
-                if len(df) > 0:
-                    feed.load_history_df("1m", df.set_index("datetime"))
-                    logger.debug(
-                        "[{}] 增量加载 1m 数据: rows={}",
-                        self.strategy_name,
-                        len(df),
-                    )
-            changed = True
-
-        # 配置聚合（确保高周期从 1m 生成）
-        feed.setup_aggregation(list(self._requirements.periods.keys()))
-
-        # 补充缺失指标（仅注册，不计算）
-        for pn, inds in self._requirements.indicators.items():
-            cached = {(n, tuple(sorted(p.items()))) for n, p in feed.get_registered_indicators(pn)}
-            for ind in inds:
-                key = (ind.name, tuple(sorted(ind.params.items())))
-                if key not in cached:
-                    feed.register_indicator(pn, ind.name, **ind.params)
-                    logger.debug(
-                        "[{}] 增量注册指标: period={} indicator={}({})",
-                        self.strategy_name,
-                        pn,
-                        ind.name,
-                        ind.params,
-                    )
-                    changed = True
-
-        return changed
-
-    def _register_requirements(self, data_feed: DataFeed) -> None:
-        """将 DataRequirements 中的全部周期和指标注册到 DataFeed
-
-        聚合模式下：只注册 1m 周期 + 高周期，高周期由 DataFeed 从 1m 自动聚合。
-        """
-        assert self._requirements is not None
-        # 注册 1m 周期（基础数据源）
-        data_feed.register_period("1m")
-        # 注册所有需要的周期（含高周期，由聚合生成）
-        for pn in self._requirements.periods:
-            data_feed.register_period(pn)
-        # 配置聚合：从 1m 自动聚合出高周期
-        data_feed.setup_aggregation(list(self._requirements.periods.keys()))
-        # 注册指标
-        for pn, inds in self._requirements.indicators.items():
-            for ind in inds:
-                data_feed.register_indicator(pn, ind.name, **ind.params)
-
-    def _load_periods(self, data_feed: Any) -> None:
-        """从 DataManager 只加载 1m 历史数据，高周期由 DataFeed 聚合生成
-
-        聚合模式下 bridge 只灌 1m 数据，5m/15m/1h 等全部从 1m 自动聚合。
-        """
-        assert self._requirements is not None  # _setup_data_feed 调用方已判空
-        dm = DataManager()
-
-        # 只加载 1m 数据
         results = dm.load_kline([self._state.symbol], interval="1m")
         if not results:
-            return
-        _, df, _ = results[0]
-        if len(df) == 0:
-            return
-        data_feed.load_history_df("1m", df.set_index("datetime"))
-        logger.debug(
-            "[{}] 加载 1m 数据: rows={} (高周期将由聚合生成)",
-            self.strategy_name,
-            len(df),
+            _, df, _ = results[0]
+        else:
+            df = None
+
+        feed = create_data_feed(
+            symbol=self._state.symbol,
+            requirements=self._requirements,
+            feeds_dir=feeds_dir,
+            source_df=df,
         )
+
+        self._log_data_feed_summary("DataFeed 构造完成")
+        return feed
 
     # ── vnpy 行情回调 ──────────────────────────────────────
 
@@ -436,7 +260,6 @@ class VnpyBacktestBridge(CtaTemplate):
         if ctx is not None:
             self._update_peak_prices(ctx.bar)
             signal = self._core.on_bar(self._state, ctx)
-            signal = self._core._finalize_signal(signal, ctx)
         else:
             if len(self._ctx_cache) == 0 and not getattr(self, "_warned_empty_cache", False):
                 logger.warning("[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name)

@@ -125,7 +125,7 @@ def _set_indicator_value(feed: DataFeed, timeframe: str, indicator_name: str, va
         offset: 偏移量（-1 表示最新一行）
         **kwargs: 指标参数（如 period=10, fast=12 等），用于生成列名
     """
-    from strategies.runtime.events import generate_indicator_column_name
+    from strategies.runtime.indicators import generate_indicator_column_name
 
     col_name = generate_indicator_column_name(indicator_name, kwargs)
     period_data = feed._periods[timeframe]

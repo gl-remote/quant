@@ -6,7 +6,7 @@
 架构:
 - 方向判断: confirm_long_when / confirm_short_when / trend_*_when_compare 装饰器
 - 出场逻辑: with_stop_take_profit / with_atr_stop_take_profit / with_trailing_stop
-- 信号后处理: Strategy._finalize_signal（框架层，策略无感）
+- 信号后处理: @_auto_finalize 装饰器（框架层，策略无感）
 """
 
 from dataclasses import dataclass
@@ -33,7 +33,7 @@ from .core import (
     State,
     Strategy,
 )
-from .runtime.requirements import BarContext
+from .runtime import BarContext
 from .strategy_aspects import (
     KDJ,
     MACD,
@@ -133,7 +133,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
     """均线交叉策略核心 — 纯决策逻辑
 
     方向判断由建议型切面装饰器声明，on_bar 只需检查所有声明的理由是否满足。
-    出场逻辑由拦截型切面自动处理，信号后处理由框架层 _finalize_signal 完成。
+    出场逻辑由拦截型切面自动处理，信号后处理由 @_auto_finalize 装饰器自动完成。
 
     决策规则:
     - 所有 long reason key 都出现 → 买入

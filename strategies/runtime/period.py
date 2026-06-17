@@ -44,10 +44,12 @@ class PeriodData:
         self.period = period
 
         # K线数据（OHLCV） + 指标数据（合并在一起，索引统一为datetime）
-        self._df: pd.DataFrame = pd.DataFrame(columns=["datetime", "open", "high", "low", "close", "volume"])
-        self._df = self._df.astype(
-            {"open": "float64", "high": "float64", "low": "float64", "close": "float64", "volume": "float64"}
+        # 索引为空的 DataFrame，后续加载数据时会自动设置 datetime 索引
+        self._df: pd.DataFrame = pd.DataFrame(
+            columns=["open", "high", "low", "close", "volume"],
+            dtype="float64",
         )
+        self._df.index.name = "datetime"
 
         # 数据追踪字段（类似数据库表）
         self._created_at = pd.Timestamp.now()

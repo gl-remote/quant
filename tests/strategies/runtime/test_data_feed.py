@@ -14,12 +14,12 @@ from strategies import (
     EventsRequirements,
     IndicatorRequirements,
     MaStrategyCore,
-    PeriodDataView,
     PeriodRequirements,
     build_context,
 )
 from strategies.ma_strategy import MACrossParams
 from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
+from strategies.runtime.period import PeriodDataView
 
 
 def generate_test_bars(num_bars: int = 100) -> list[Bar]:
