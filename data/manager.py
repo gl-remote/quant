@@ -28,7 +28,6 @@ from common.types import BacktestResult
 from .datasource import list_sources
 from .models import (
     BacktestRecord,
-    DataEntry,
     DataSummary,
     KlineSchema,
     SymbolInfo,
@@ -152,7 +151,7 @@ class DataManager:
         start_date: str | None = None,
         end_date: str | None = None,
         interval: str | None = None,
-    ) -> list[DataEntry]:
+    ) -> list[tuple[str, KlineDataFrame, str]]:
         """一步到位：搜索匹配的品种并加载数据
 
         便利接口：自动处理 pattern 拼接 → 搜索 → 加载 全流程。

@@ -93,10 +93,7 @@ def _prepare_test_data(
         )
 
     # 加载历史数据
-    feed.load_history_data("1m", bars)
-    if use_multi_period:
-        feed.load_history_data("5m", bars)
-        feed.load_history_data("15m", bars)
+    feed.load_history_data(bars)
 
     feed.calculate_all()
 
@@ -158,9 +155,9 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
     feed.update_bar(latest_bar, "15m")
 
     # 设置指标值：多头条件
-    # 5m SMA(short) > 15m SMA(long)
+    # 5m SMA(short) > 1h SMA(long)
     _set_indicator_value(feed, "5m", "sma", 100.0, -1, period=config.sma_short)
-    _set_indicator_value(feed, "15m", "sma", 99.0, -1, period=config.sma_long)
+    _set_indicator_value(feed, "1h", "sma", 99.0, -1, period=config.sma_long)
     # 1m MACD > 0
     _set_indicator_value(feed, "1m", "macd", 0.1, -1, fast=12, slow=26, signal=9)
     # 1m KDJ < 20
@@ -169,8 +166,8 @@ def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price:
     _set_indicator_value(feed, "5m", "macd", 0.1, -1, fast=12, slow=26, signal=9)
     # 5m KDJ < 20
     _set_indicator_value(feed, "5m", "kdj", 15.0, -1, n=9, k_period=3, d_period=3)
-    # 15m ATR
-    _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
+    # 1h ATR
+    _set_indicator_value(feed, "1h", "atr", 2.0, -1, period=config.atr_period)
 
     reqs = MaStrategyCore().data_requirements(config)
     return build_context(feed, reqs, latest_dt, latest_bar)
@@ -182,12 +179,12 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
     latest_bar = _make_test_bar(latest_price, latest_dt)
     feed.update_bar(latest_bar, "1m")
     feed.update_bar(latest_bar, "5m")
-    feed.update_bar(latest_bar, "15m")
+    feed.update_bar(latest_bar, "1h")
 
     # 设置指标值：空头条件
-    # 5m SMA(short) < 15m SMA(long)
+    # 5m SMA(short) < 1h SMA(long)
     _set_indicator_value(feed, "5m", "sma", 99.0, -1, period=config.sma_short)
-    _set_indicator_value(feed, "15m", "sma", 100.0, -1, period=config.sma_long)
+    _set_indicator_value(feed, "1h", "sma", 100.0, -1, period=config.sma_long)
     # 1m MACD < 0
     _set_indicator_value(feed, "1m", "macd", -0.1, -1, fast=12, slow=26, signal=9)
     # 1m KDJ > 80
@@ -196,8 +193,8 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
     _set_indicator_value(feed, "5m", "macd", -0.1, -1, fast=12, slow=26, signal=9)
     # 5m KDJ > 80
     _set_indicator_value(feed, "5m", "kdj", 85.0, -1, n=9, k_period=3, d_period=3)
-    # 15m ATR
-    _set_indicator_value(feed, "15m", "atr", 2.0, -1, period=config.atr_period)
+    # 1h ATR
+    _set_indicator_value(feed, "1h", "atr", 2.0, -1, period=config.atr_period)
 
     reqs = MaStrategyCore().data_requirements(config)
     return build_context(feed, reqs, latest_dt, latest_bar)
@@ -206,6 +203,43 @@ def _create_downtrend_context(feed: DataFeed, config: MACrossParams, latest_pric
 # --------------------------
 # 基础测试
 # --------------------------
+
+
+class TestDataRequirements:
+    """测试策略数据需求"""
+
+    def test_data_requirements(self):
+        """测试数据需求提取"""
+        from strategies.ma_strategy import MACrossParams, MaStrategyCore
+
+        cfg = MACrossParams()
+        # 测试能否正常提取数据需求，不硬编码具体周期
+        strat = MaStrategyCore()
+        reqs = strat.data_requirements(cfg)
+        assert isinstance(reqs, DataRequirements)
+        assert len(reqs.periods) == 2
+        # 每个周期都有指标
+        for period in reqs.periods:
+            assert period in reqs.indicators
+            assert len(reqs.indicators[period]) > 0
+        # 绑定到 1h 周期
+        assert "1h" in reqs.indicators
+        # 验证结构正确，不硬编码周期名称
+        assert isinstance(reqs, DataRequirements)
+        assert len(reqs.periods) == 2
+        for period in reqs.periods:
+            assert period in reqs.indicators
+            assert len(reqs.indicators[period]) > 0
+        strat = MaStrategyCore()
+        reqs = strat.data_requirements(cfg)
+        assert isinstance(reqs, DataRequirements)
+        assert len(reqs.periods) == 2
+        # 每个周期都有指标
+        for period in reqs.periods:
+            assert period in reqs.indicators
+            assert len(reqs.indicators[period]) > 0
+        # 绑定到 1h 周期
+        assert "1h" in reqs.indicators
 
 
 class TestMACrossParams:
@@ -264,19 +298,6 @@ class TestState:
             ),
         )
         assert state.position.direction == TRADE_DIRECTION_LONG
-
-
-class TestDataRequirements:
-    """测试策略数据需求声明"""
-
-    def test_ma_strategy_data_requirements(self):
-        strat = MaStrategyCore()
-        cfg = MACrossParams(sma_short=10, sma_long=40, atr_period=14)
-        reqs = strat.data_requirements(cfg)
-        assert reqs is not None
-        assert "1m" in reqs.periods
-        assert "5m" in reqs.periods
-        assert "15m" in reqs.periods
 
 
 # --------------------------

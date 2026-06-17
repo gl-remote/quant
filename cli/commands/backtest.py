@@ -102,15 +102,27 @@ def _persist_results(
     results: list[BacktestResult] | BacktestResult,
     run_id: int | None = None,
     data_src: str | None = None,
-) -> None:
+) -> int | list[int]:
     """通用持久化：将 BacktestResult 写入数据库（单条或批量）
 
     为 TqSdk 单标的场景提供简洁持久化。
+
+    Args:
+        results: 单个 BacktestResult 或列表
+        run_id: 关联的运行记录 ID（所有结果共用）
+        data_src: 数据源路径（所有结果共用）
+
+    Returns:
+        - 单条: 返回 bt_id (int)
+        - 批量: 返回 bt_id 列表（空列表表示无结果）
     """
     if isinstance(results, BacktestResult):
-        results = [results]
+        return dm.insert_backtest(results, run_id=run_id, data_src=data_src)
+
+    ids: list[int] = []
     for r in results:
-        dm.insert_backtest(r, run_id=run_id, data_src=data_src)
+        ids.append(dm.insert_backtest(r, run_id=run_id, data_src=data_src))
+    return ids
 
 
 # ── 命令入口 ────────────────────────────────────────────
@@ -248,26 +260,25 @@ def _run_tq_backtest(
         logger.exception(f"回测执行失败: {e}")
         dm.store.log("backtest", f"失败: {e}", symbol=symbol, status=LOG_STATUS_ERROR)
         # 记录失败的占位记录
-        dm.insert_backtest(
-            BacktestResult(
-                symbol=symbol,
-                strategy=strategy_cls or "unknown",
-                strategy_version=strategy_version,
-                git_hash=git_hash,
-                status=STATUS_FAILED,
-                error_message=str(e),
-                start_date=start_date_str,
-                end_date=end_date_str,
-                total_days=total_days,
-                initial_capital=capital_arg or bc.initial_capital,
-                commission_rate=bc.commission_rate,
-                slippage=bc.slippage,
-                price_tick=bc.price_tick,
-                contract_size=bc.contract_size,
-                kline_interval=bc.interval,
-                engine_config={"type": "tqsdk"},
-            )
+        result = BacktestResult(
+            symbol=symbol,
+            strategy=strategy_cls or "unknown",
+            strategy_version=strategy_version,
+            git_hash=git_hash,
+            status=STATUS_FAILED,
+            error_message=str(e),
+            start_date=start_date_str,
+            end_date=end_date_str,
+            total_days=total_days,
+            initial_capital=capital_arg or bc.initial_capital,
+            commission_rate=bc.commission_rate,
+            slippage=bc.slippage,
+            price_tick=bc.price_tick,
+            contract_size=bc.contract_size,
+            kline_interval=bc.interval,
+            engine_config={"type": "tqsdk"},
         )
+        _persist_results(dm, result)
         raise
     finally:
         if api:
@@ -553,28 +564,28 @@ def _execute_walk_forward_mode(
     )
     bt_id = None
     if wf_result.get("success"):
-        bt_id = dm.insert_backtest(
-            BacktestResult(
-                symbol=sym,
-                strategy=get_strategy_class_name(strategy),
-                status=STATUS_SUCCESS,
-                strategy_version=getattr(strategy, "VERSION", None),
-                git_hash=git_hash,
-                strategy_params=serialize_strategy_params(strategy),
-                start_date=start_arg,
-                end_date=end_arg,
-                engine_config={
-                    "type": "vnpy",
-                    "mode": "walk-forward",
-                    "windows": wf_result.get("windows", 0),
-                },
-                sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
-                max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
-                total_return=wf_result.get("aggregate", {}).get("return_mean"),
-                daily_std=wf_result.get("aggregate", {}).get("return_std"),
-            ),
-            data_src=datasets[0][2],
+        result = BacktestResult(
+            symbol=sym,
+            strategy=get_strategy_class_name(strategy),
+            status=STATUS_SUCCESS,
+            strategy_version=getattr(strategy, "VERSION", None),
+            git_hash=git_hash,
+            strategy_params=serialize_strategy_params(strategy),
+            start_date=start_arg,
+            end_date=end_arg,
+            engine_config={
+                "type": "vnpy",
+                "mode": "walk-forward",
+                "windows": wf_result.get("windows", 0),
+            },
+            sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
+            max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
+            total_return=wf_result.get("aggregate", {}).get("return_mean"),
+            daily_std=wf_result.get("aggregate", {}).get("return_std"),
         )
+        bt_id = _persist_results(dm, result, data_src=datasets[0][2])
+        # 单条结果必然返回 int
+        assert isinstance(bt_id, int), f"expected int backtest id, got {type(bt_id)} {repr(bt_id)}"
         logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
         if bt_id:
             print(f"\n💡 查看报告: python main.py report --id {bt_id}")
@@ -692,17 +703,16 @@ def _persist_search_results(
 
             if not er.success:
                 er.status = STATUS_FAILED
-                dm.insert_backtest(
-                    er,
-                    run_id=run_id,
-                    data_src=next((f for s, _, f in datasets if s == er.symbol), None),
+                _persist_results(
+                    dm, er, run_id=run_id, data_src=next((f for s, _, f in datasets if s == er.symbol), None)
                 )
                 continue
 
             sym = er.symbol
             data_src = next((f for s, _, f in datasets if s == sym), None)
             er.status = STATUS_SUCCESS
-            bt_id = dm.insert_backtest(er, run_id=run_id, data_src=data_src)
+            bt_id = _persist_results(dm, er, run_id=run_id, data_src=data_src)
+            assert isinstance(bt_id, int)
             all_ids.append(bt_id)
 
             daily = er.daily_results
