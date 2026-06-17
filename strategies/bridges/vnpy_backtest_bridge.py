@@ -156,7 +156,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 continue
             # 已注册指标配置
             indicators = self._data_feed.get_registered_indicators(pn)
-            ind_names = [f"{n}({','.join(f'{k}={v}' for k, v in p.items())})" for n, p in indicators]
+            ind_names = [f"{spec.name}({','.join(f'{k}={v}' for k, v in spec.params.items())})" for spec in indicators]
             # 已计算完成的指标列
             calc_cols = self._data_feed.get_indicator_names(pn)
             date_range = self._data_feed.get_date_range(pn)

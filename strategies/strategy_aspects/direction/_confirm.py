@@ -14,6 +14,7 @@ import functools
 import re
 from typing import Any, Literal
 
+from ...core.indicators import generate_indicator_column_name
 from ..primitives import DirectionReason, MetricRef
 
 
@@ -47,8 +48,9 @@ def _resolve_threshold(threshold: float | str, config: Any) -> float:
 
 
 def _build_indicator_requirements(metric: MetricRef, config: Any) -> Any:
-    """从 MetricRef 构建 IndicatorRequirements，解析模板值"""
-    from ...runtime.requirements import DataRequirements, IndicatorRequirements, PeriodRequirements
+    """从 MetricRef 构建 IndicatorSpec，解析模板值"""
+    from ...core.indicators import IndicatorSpec
+    from ...runtime.requirements import DataRequirements, PeriodRequirements
 
     resolved_params = {k: _resolve_template(v, config) for k, v in metric.indicator.params.items()}
     resolved_window = _resolve_template(metric.indicator.window, config)
@@ -61,11 +63,11 @@ def _build_indicator_requirements(metric: MetricRef, config: Any) -> Any:
         },
         indicators={
             metric.period: [
-                IndicatorRequirements(
+                IndicatorSpec(
                     name=metric.indicator.name,
                     params=resolved_params,
-                    func=metric.indicator.func,  # type: ignore[arg-type]
                     window=int(resolved_window),
+                    func=metric.indicator.func,
                 )
             ],
         },
@@ -117,7 +119,7 @@ def _make_confirm_decorator(
             # 评估条件
             period_view = ctx.multi.get(metric.period)
             if period_view is not None:
-                col = metric.indicator.column
+                col = generate_indicator_column_name(metric.indicator.name, metric.indicator.params)
                 # 模板列名需要解析
                 resolved_col = _resolve_template(col, state.strategy_config)
                 value = period_view.indicator(resolved_col, -1)

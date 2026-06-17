@@ -50,7 +50,8 @@ def with_atr_stop_take_profit(period: str = "15m") -> Any:
 
         @functools.wraps(original_dr)
         def _dr_wrapper(self: Any, config: Any) -> Any:
-            from ...runtime.requirements import DataRequirements, IndicatorRequirements
+            from ...core.indicators import IndicatorSpec
+            from ...runtime.requirements import DataRequirements
 
             base = original_dr(self, config)
             if base is None:
@@ -60,7 +61,7 @@ def with_atr_stop_take_profit(period: str = "15m") -> Any:
                 periods={},
                 indicators={
                     period: [
-                        IndicatorRequirements(
+                        IndicatorSpec(
                             name="atr", params={"period": config.atr_period}, func=atr_func, window=config.atr_period
                         )
                     ],

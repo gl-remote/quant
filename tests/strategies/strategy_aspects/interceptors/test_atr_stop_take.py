@@ -22,7 +22,7 @@ from common.constants import (
 )
 from strategies import (
     DataRequirements,
-    IndicatorRequirements,
+    IndicatorSpec,
     PeriodRequirements,
     Signal,
     State,
@@ -139,8 +139,8 @@ class _ATRStrategy:
                 "15m": PeriodRequirements(lookback_bars=30),
             },
             indicators={
-                "1m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)],
-                "5m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)],
+                "1m": [IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func)],
+                "5m": [IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func)],
             },
             events=None,
         )
@@ -288,7 +288,7 @@ class _CombinedStrategy:
     def data_requirements(self, config) -> DataRequirements:
         return DataRequirements(
             periods={"1m": PeriodRequirements(lookback_bars=60), "15m": PeriodRequirements(lookback_bars=30)},
-            indicators={"1m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)]},
+            indicators={"1m": [IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func)]},
             events=None,
         )
 

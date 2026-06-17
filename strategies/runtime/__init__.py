@@ -15,6 +15,7 @@
 从 strategies/ 顶层导入即可，无需直接引用子模块。
 """
 
+from ..core.indicators import IndicatorSpec
 from .cache import clear_cache, get_cached_feed, set_cached_feed
 from .data_feed import DataFeed, build_context, create_data_feed
 from .events import BigTradeEvent, Event, NewsEvent
@@ -22,7 +23,6 @@ from .requirements import (
     BarContext,
     DataRequirements,
     EventsRequirements,
-    IndicatorRequirements,
     PeriodRequirements,
 )
 
@@ -33,7 +33,7 @@ __all__ = [
     "create_data_feed",
     # 数据需求声明（策略需要声明自己要什么）
     "PeriodRequirements",
-    "IndicatorRequirements",
+    "IndicatorSpec",
     "EventsRequirements",
     "DataRequirements",
     # 上下文（策略接收这个）

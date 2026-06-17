@@ -18,6 +18,7 @@
 
 # 协议层：基础数据结构
 # 建议型方向 DSL
+from ..core.indicators import IndicatorSpec
 from .direction import (
     confirm_long_when,
     confirm_short_when,
@@ -39,7 +40,6 @@ from .primitives import (
     DirectionAdvice,
     DirectionReason,
     DirectionSideAdvice,
-    IndicatorSpec,
     MetricRef,
     StrategyAspects,
     at,

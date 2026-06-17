@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 from typing import Any, Literal
 
+from ...core.indicators import generate_indicator_column_name
 from ..primitives import DirectionReason, MetricRef
 from ._confirm import _build_indicator_requirements, _register_direction_key, _resolve_template
 
@@ -58,11 +59,13 @@ def _make_trend_decorator(
             right_value = None
 
             if left_view is not None:
-                left_col = _resolve_template(left.indicator.column, state.strategy_config)
+                left_col = generate_indicator_column_name(left.indicator.name, left.indicator.params)
+                left_col = _resolve_template(left_col, state.strategy_config)
                 left_value = left_view.indicator(left_col, -1)
 
             if right_view is not None:
-                right_col = _resolve_template(right.indicator.column, state.strategy_config)
+                right_col = generate_indicator_column_name(right.indicator.name, right.indicator.params)
+                right_col = _resolve_template(right_col, state.strategy_config)
                 right_value = right_view.indicator(right_col, -1)
 
             if left_value is not None and right_value is not None:

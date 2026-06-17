@@ -20,6 +20,8 @@ import pandas as pd
 if TYPE_CHECKING:
     from .data_feed import DataFeed
 
+from ..core.indicators import IndicatorSpec
+
 # parquet 序列化时区分 OHLCV 列和指标列
 _OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
 
@@ -53,7 +55,10 @@ def dump_feed(feed: "DataFeed", feeds_dir: str) -> None:
     # 构建 _meta.json
     indicators_serializable: dict[str, list[dict[str, Any]]] = {}
     for pn, ind_list in feed._registered_indicators.items():
-        indicators_serializable[pn] = [{"name": n, "params": p} for n, _, p in ind_list]
+        indicators_serializable[pn] = [
+            {"name": spec.name, "params": spec.params, "window": spec.window if isinstance(spec.window, int) else 250}
+            for spec in ind_list
+        ]
     meta = {
         "symbol": feed.symbol,
         "source": feed.source,
@@ -108,15 +113,15 @@ def load_feed(feeds_dir: str) -> "DataFeed":
         if not os.path.isfile(fp):
             continue
         df = pd.read_parquet(fp)
-        # 识别指标列（非 OHLCV 的列）
-        indicator_cols = [c for c in df.columns if c not in _OHLCV_COLUMNS]
         feed.register_period(period_name)
-        feed._periods[period_name].load_df_parquet(df, indicator_cols)
+        feed._periods[period_name].load_df(df, replace=True)
 
     # 恢复指标注册配置（func 无法序列化，用 None 占位；指标值已在 parquet 中，不需要重新计算）
     for pn, ind_list in meta.get("indicators", {}).items():
         for ind in ind_list:
-            feed.register_indicator(pn, ind["name"], func=None, **ind["params"])
+            feed.register_indicator(
+                pn, IndicatorSpec(name=ind["name"], params=ind["params"], window=ind.get("window", 250), func=None)
+            )
 
     # events
     events_fp = os.path.join(feeds_dir, "events.parquet")

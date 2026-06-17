@@ -12,7 +12,7 @@ from strategies import (
     DataRequirements,
     Event,
     EventsRequirements,
-    IndicatorRequirements,
+    IndicatorSpec,
     MaStrategyCore,
     PeriodRequirements,
     build_context,
@@ -120,8 +120,8 @@ def test_data_feed_basic():
     feed.register_period("1m")
 
     # 注册指标
-    feed.register_indicator("1m", "sma", sma_func, period=5)
-    feed.register_indicator("1m", "sma", sma_func, period=10)
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 10}, window=10, func=sma_func))
 
     # 生成测试数据
     bars = generate_test_bars(50)
@@ -174,8 +174,8 @@ def test_build_context():
     # 创建 DataFeed
     feed = DataFeed("TEST3")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", sma_func, period=5)
-    feed.register_indicator("1m", "sma", sma_func, period=10)
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 10}, window=10, func=sma_func))
 
     # 加载数据
     bars = generate_test_bars(30)
@@ -188,8 +188,8 @@ def test_build_context():
         },
         indicators={
             "1m": [
-                IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func),
-                IndicatorRequirements(name="sma", params={"period": 10}, func=sma_func),
+                IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func),
+                IndicatorSpec(name="sma", params={"period": 10}, window=10, func=sma_func),
             ],
         },
         events=EventsRequirements.no_events(),
@@ -322,8 +322,8 @@ def test_calculate_period_incremental():
 
     feed = DataFeed("TEST_INC")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", sma_func, period=5)
-    feed.register_indicator("1m", "sma", sma_func, period=10)
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 10}, window=10, func=sma_func))
 
     # 初始历史：30 根 K 线（模拟 tqsdk 推送的历史数据）
     bars = generate_test_bars(30)
@@ -350,7 +350,7 @@ def test_calculate_period_incremental():
         volume=1500,
     )
     pd_obj.append_bar(new_bar)
-    feed.calculate_period("1m", incremental=True)
+    feed.calculate_period("1m")
 
     # 与全量重算对比（保证增量与全量结果一致）
     sma_5_inc = pd_obj.get_indicator("sma_5", -1)
@@ -358,8 +358,6 @@ def test_calculate_period_incremental():
     assert sma_5_inc is not None and not math.isnan(sma_5_inc)
     assert sma_10_inc is not None and not math.isnan(sma_10_inc)
 
-    pd_obj._calculated_indicators = set()  # pyright: ignore[reportPrivateUsage]
-    pd_obj._indicator_last_calc_idx = {}  # pyright: ignore[reportPrivateUsage]
     feed.calculate_all()
     sma_5_full = pd_obj.get_indicator("sma_5", -1)
     sma_10_full = pd_obj.get_indicator("sma_10", -1)
@@ -368,15 +366,10 @@ def test_calculate_period_incremental():
     assert abs(sma_5_inc - sma_5_full) < 1e-9, "sma_5 增量计算与全量重算不一致"
     assert abs(sma_10_inc - sma_10_full) < 1e-9, "sma_10 增量计算与全量重算不一致"
 
-    # --- 场景 2：无新 K 线时调用 calculate_period 应跳过（避免重复计算） ---
-    last_idx_before = len(pd_obj._df) - 1  # pyright: ignore[reportPrivateUsage]
-    calc_idx_before = pd_obj.get_indicator_last_calc_idx("sma_5")
-    feed.calculate_period("1m", incremental=True)
-    calc_idx_after = pd_obj.get_indicator_last_calc_idx("sma_5")
-    print(
-        f"  无新数据时: last_idx={last_idx_before}, calc_idx_before={calc_idx_before}, calc_idx_after={calc_idx_after}"
-    )
-    assert calc_idx_before == calc_idx_after, "incremental=True 时不应在无新数据时重算"
+    # --- 场景 2：无新 K 线时调用 calculate_period 应跳过（指标列最后一行非 NaN） ---
+    feed.calculate_period("1m")
+    sma_5_after = pd_obj.get_indicator("sma_5", -1)
+    assert sma_5_after is not None and abs(sma_5_inc - sma_5_after) < 1e-9, "无新数据时重算结果应一致"
 
     print("  ✅ 增量计算跳过逻辑与一致性验证通过\n")
 
@@ -394,8 +387,8 @@ def test_tqsdk_path_simulation():
 
     feed = DataFeed("TQSDK_SIM")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", sma_func, period=5)
-    feed.register_indicator("1m", "ema", ema_func, period=12)
+    feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
+    feed.register_indicator("1m", IndicatorSpec(name="ema", params={"period": 12}, window=12, func=ema_func))
 
     # --- 阶段 1：模拟 tqsdk kline_serial 的初始历史数据 ---
     bars = generate_test_bars(40)
@@ -439,15 +432,13 @@ def test_tqsdk_path_simulation():
             volume=1000 + i * 50,
         )
         pd_obj.append_bar(new_bar)
-        feed.calculate_period("1m", incremental=True)
+        feed.calculate_period("1m")
 
     final_sma_5 = pd_obj.get_indicator("sma_5", -1)
     final_ema_12 = pd_obj.get_indicator("ema_12", -1)
     print(f"  10 轮实时推送后: sma_5={final_sma_5:.4f}, ema_12={final_ema_12:.4f}")
 
     # --- 阶段 3：与全量重算对比（保证增量结果=全量结果） ---
-    pd_obj._calculated_indicators = set()  # pyright: ignore[reportPrivateUsage]
-    pd_obj._indicator_last_calc_idx = {}  # pyright: ignore[reportPrivateUsage]
     feed.calculate_all()
     assert abs(pd_obj.get_indicator("sma_5", -1) - final_sma_5) < 1e-9
     assert abs(pd_obj.get_indicator("ema_12", -1) - final_ema_12) < 1e-9
@@ -469,7 +460,7 @@ def test_multi_period_consistency():
     feed = DataFeed("MULTI_PERIOD")
     for period in ("1m", "5m", "15m"):
         feed.register_period(period)
-        feed.register_indicator(period, "sma", sma_func, period=5)
+        feed.register_indicator(period, IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
 
     # 初始加载：1m=50 根，5m=30 根，15m=20 根（tqsdk 各周期独立推送）
     for period, n in [("1m", 50), ("5m", 30), ("15m", 20)]:
@@ -499,7 +490,7 @@ def test_multi_period_consistency():
                 volume=1000,
             )
         )
-        feed.calculate_period("1m", incremental=True)
+        feed.calculate_period("1m")
 
     # 断言：主周期更新了；非主周期未更新（但读历史值应该仍能拿到）
     main_after = main_pd.get_indicator("sma_5", -1)

@@ -3,13 +3,9 @@
 包含策略声明数据需求的 dataclass 类型。
 """
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
-import numpy as np
-from numpy.typing import NDArray
-
+from ..core.indicators import IndicatorSpec
 from ..core.types import Bar
 from ..strategy_aspects.primitives import StrategyAspects
 from .events import Event
@@ -22,16 +18,6 @@ class PeriodRequirements:
 
     lookback_bars: int  # 查询的历史K线数量（最近N个周期）
     min_bars: int | None = None  # 策略需要的最小K线数（可选，用于校验）
-
-
-@dataclass
-class IndicatorRequirements:
-    """单个指标的计算需求"""
-
-    name: str  # 指标名
-    params: dict[str, Any]  # 指标参数
-    func: Callable[..., NDArray[np.float64]]  # 指标计算函数
-    window: int = 250  # 指标计算需要的历史K线窗口（用于增量计算时截取 tail）
 
 
 @dataclass
@@ -72,7 +58,7 @@ class DataRequirements:
     periods: dict[str, PeriodRequirements]
 
     # 指标配置：key 是周期名，value 是该周期需要的指标列表
-    indicators: dict[str, list[IndicatorRequirements]]
+    indicators: dict[str, list[IndicatorSpec]]
 
     # 事件配置
     events: EventsRequirements = field(default_factory=EventsRequirements.no_events)
@@ -91,7 +77,7 @@ class DataRequirements:
 
         用法:
             atr = DataRequirements(
-                indicators={"15m": [IndicatorRequirements(name="atr", params={"period": 14})]},
+                indicators={"15m": [IndicatorSpec(name="atr", params={"period": 14})]},
             )
             base.merge(atr)
         """

@@ -12,12 +12,12 @@
 from datetime import datetime
 
 from strategies import Bar, StrategyAspects
+from strategies.core.indicators import IndicatorSpec
 from strategies.runtime.requirements import BarContext
 from strategies.strategy_aspects.primitives import (
     DirectionAdvice,
     DirectionReason,
     DirectionSideAdvice,
-    IndicatorSpec,
     MetricRef,
     at,
 )
@@ -64,12 +64,12 @@ class TestMetricRef:
     """测试 MetricRef"""
 
     def test_name_format(self):
-        spec = IndicatorSpec(name="macd", column="macd_12_9_26", params={"fast": 12}, window=35)
+        spec = IndicatorSpec(name="macd", params={"fast": 12}, window=35)
         ref = MetricRef(period="1m", indicator=spec)
         assert ref.name == "macd_1m"
 
     def test_at_function(self):
-        spec = IndicatorSpec(name="sma", column="sma_10", params={"period": 10}, window=10)
+        spec = IndicatorSpec(name="sma", params={"period": 10}, window=10)
         ref = at(spec, "5m")
         assert ref.period == "5m"
         assert ref.name == "sma_5m"

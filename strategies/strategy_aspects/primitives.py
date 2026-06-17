@@ -2,17 +2,13 @@
 
 包含建议型切面 DSL 的核心数据结构：
 - DirectionReason / DirectionSideAdvice / DirectionAdvice / StrategyAspects
-- IndicatorSpec / MetricRef / at()
+- MetricRef / at()
 """
 
-from __future__ import annotations
-
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-import numpy as np
-from numpy.typing import NDArray
+from ..core.indicators import IndicatorSpec
 
 DirectionRole = Literal["trend", "confirm"]
 
@@ -74,21 +70,6 @@ class StrategyAspects:
         self.diagnostics["direction_detail"] = {
             r.key: r.detail for r in [*self.direction.long.reasons, *self.direction.short.reasons]
         }
-
-
-@dataclass(frozen=True)
-class IndicatorSpec:
-    """指标定义 — 只描述指标如何计算，不描述周期。
-
-    column / params / window 可包含模板值（如 "{sma_short}"），
-    在构建 data_requirements 时从 strategy_config 解析。
-    """
-
-    name: str
-    column: str
-    params: dict[str, Any]
-    window: int | str
-    func: Callable[..., NDArray[np.float64]] | None = None
 
 
 @dataclass(frozen=True)

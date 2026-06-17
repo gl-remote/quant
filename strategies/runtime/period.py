@@ -5,9 +5,8 @@
 - PeriodDataView: 只读逻辑视图，不复制数据，按时间和历史条数裁剪
 """
 
-from collections.abc import Callable
 from datetime import datetime as dt
-from typing import Any, cast
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -70,10 +69,6 @@ class PeriodData:
         self._forming_bar: Bar | None = None
         # 形成中 bar 的指标缓存 {indicator_name: value}
         self._forming_indicators: dict[str, float] = {}
-
-        # 指标计算状态跟踪
-        self._calculated_indicators: set[str] = set()
-        self._indicator_last_calc_idx: dict[str, int] = {}
 
     @property
     def first_time(self) -> pd.Timestamp | None:
@@ -160,8 +155,6 @@ class PeriodData:
         """
         if replace:
             self._df = df.copy()
-            self._calculated_indicators.clear()
-            self._indicator_last_calc_idx.clear()
         else:
             self._append_df(df)
 
@@ -337,74 +330,6 @@ class PeriodData:
         if name not in self._df.columns:
             raise KeyError(f"Indicator {name} not found")
         return self._df[name].copy()
-
-    # --- 指标计算状态管理方法 ---
-
-    def load_df_parquet(self, df: pd.DataFrame, indicator_columns: list[str]) -> None:
-        """从 parquet 加载 DataFrame 并批量标记已计算指标
-
-        专为 DataFeed.from_feeds 设计，一行完成数据加载 + 指标状态恢复。
-        load_df(replace=True) 会清空已有数据和指标标记，然后逐个恢复。
-
-        :param df: 含 index=datetime、columns=OHLCV+indicators 的 DataFrame
-        :param indicator_columns: 需标记为已计算的指标列名列表
-        """
-        self.load_df(df, replace=True)
-        last_idx = len(self._df) - 1
-        for col in indicator_columns:
-            if col in self._df.columns:
-                self.mark_indicator_calculated(col, last_idx)
-
-    def is_indicator_calculated(self, name: str) -> bool:
-        """检查指标是否已计算
-
-        :param name: 指标列名（如 "sma_10"）
-        :return: 是否已计算
-        """
-        return name in self._calculated_indicators
-
-    def get_indicator_last_calc_idx(self, name: str) -> int | None:
-        """获取指标最后计算到的行索引
-
-        :param name: 指标列名
-        :return: 最后计算到的行索引，None表示未计算过
-        """
-        return self._indicator_last_calc_idx.get(name)
-
-    def mark_indicator_calculated(self, name: str, last_idx: int | None = None) -> None:
-        """标记指标已计算
-
-        :param name: 指标列名
-        :param last_idx: 最后计算到的行索引，None表示计算到当前末尾
-        """
-        self._calculated_indicators.add(name)
-        if last_idx is not None:
-            self._indicator_last_calc_idx[name] = last_idx
-        else:
-            self._indicator_last_calc_idx[name] = len(self._df) - 1
-
-    def clear_indicator_calculation(self, name: str | None = None) -> None:
-        """清除指标计算状态
-
-        :param name: 指标列名，None表示清除所有
-        """
-        if name is None:
-            self._calculated_indicators.clear()
-            self._indicator_last_calc_idx.clear()
-        else:
-            self._calculated_indicators.discard(name)
-            self._indicator_last_calc_idx.pop(name, None)
-
-    def apply_indicator(self, func: Callable[..., NDArray[np.float64]], **params: Any) -> NDArray[np.float64]:
-        """对内部数据应用指标计算函数
-
-        封装对 self._df 的访问，外部调用者无需直接操作 _df。
-
-        :param func: 指标计算函数，签名 func(df: pd.DataFrame, **params) -> NDArray[np.float64]
-        :param params: 指标参数
-        :return: 计算结果 numpy 数组
-        """
-        return func(self._df, **params)
 
     def set_indicator_column(self, name: str, data: NDArray[np.float64]) -> None:
         """将指标计算结果写入内部存储
@@ -612,7 +537,7 @@ class PeriodDataView:
                 forming_row[ind_name] = ind_val
             result.loc[forming_time] = forming_row
 
-        return cast(pd.DataFrame, result)
+        return result
 
     # --- 便捷访问器 ---
 
@@ -640,7 +565,7 @@ class PeriodDataView:
 
         if self._forming_bar is not None and name in self._forming_indicators:
             forming_time = pd.Timestamp(self._forming_bar.datetime)
-            result.loc[forming_time] = self._forming_indicators[name]
+            result.loc[str(forming_time)] = self._forming_indicators[name]
 
         return result
 

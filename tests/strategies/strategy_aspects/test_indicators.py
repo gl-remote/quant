@@ -1,12 +1,13 @@
 """指标定义单元测试
 
 覆盖:
-  - MACD: name、column、params、window
-  - KDJ: name、column、params、window
+  - MACD: name、params、window
+  - KDJ: name、params、window
   - SMA() 工厂函数: 不同参数生成不同 IndicatorSpec
   - at() 函数与指标组合
 """
 
+from strategies.core.indicators import generate_indicator_column_name
 from strategies.strategy_aspects.indicators import KDJ, MACD, SMA
 from strategies.strategy_aspects.primitives import MetricRef, at
 
@@ -22,7 +23,7 @@ class TestMACD:
         assert MACD.name == "macd"
 
     def test_column(self):
-        assert MACD.column == "macd_12_9_26"
+        assert generate_indicator_column_name(MACD.name, MACD.params) == "macd_12_9_26"
 
     def test_params(self):
         assert MACD.params == {"fast": 12, "slow": 26, "signal": 9}
@@ -43,7 +44,7 @@ class TestKDJ:
         assert KDJ.name == "kdj"
 
     def test_column(self):
-        assert KDJ.column == "kdj_3_3_9"
+        assert generate_indicator_column_name(KDJ.name, KDJ.params) == "kdj_3_3_9"
 
     def test_params(self):
         assert KDJ.params == {"n": 9, "k_period": 3, "d_period": 3}
@@ -63,14 +64,14 @@ class TestSMAFactory:
     def test_sma_10(self):
         spec = SMA(10)
         assert spec.name == "sma"
-        assert spec.column == "sma_10"
+        assert generate_indicator_column_name(spec.name, spec.params) == "sma_10"
         assert spec.params == {"period": 10}
         assert spec.window == 10
 
     def test_sma_40(self):
         spec = SMA(40)
         assert spec.name == "sma"
-        assert spec.column == "sma_40"
+        assert generate_indicator_column_name(spec.name, spec.params) == "sma_40"
         assert spec.params == {"period": 40}
         assert spec.window == 40
 
@@ -79,13 +80,15 @@ class TestSMAFactory:
         spec_10 = SMA(10)
         spec_40 = SMA(40)
         assert spec_10 != spec_40
-        assert spec_10.column != spec_40.column
+        assert generate_indicator_column_name(spec_10.name, spec_10.params) != generate_indicator_column_name(
+            spec_40.name, spec_40.params
+        )
         assert spec_10.window != spec_40.window
 
     def test_sma_with_template_value(self):
         """SMA 支持模板值"""
         spec = SMA("{sma_short}")
-        assert spec.column == "sma_{sma_short}"
+        assert generate_indicator_column_name(spec.name, spec.params) == "sma_{sma_short}"
         assert spec.params == {"period": "{sma_short}"}
         assert spec.window == "{sma_short}"
 
@@ -115,7 +118,7 @@ class TestAtWithIndicators:
         assert isinstance(ref, MetricRef)
         assert ref.period == "5m"
         assert ref.name == "sma_5m"
-        assert ref.indicator.column == "sma_10"
+        assert generate_indicator_column_name(ref.indicator.name, ref.indicator.params) == "sma_10"
 
     def test_at_sma_different_periods(self):
         """同一指标在不同周期产生不同 MetricRef"""

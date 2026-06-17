@@ -24,7 +24,7 @@ from strategies import (
     DataFeed,
     DataRequirements,
     EventsRequirements,
-    IndicatorRequirements,
+    IndicatorSpec,
     PeriodRequirements,
     State,
     StrategyPosition,
@@ -81,12 +81,16 @@ def _prepare_test_data(
             feed.register_period(period_name)
         for period_name, indicators in reqs.indicators.items():
             for ind in indicators:
-                feed.register_indicator(period_name, ind.name, ind.func, **ind.params)
+                feed.register_indicator(period_name, ind)
     else:
         # 单周期模式（仅用于基础测试）
         feed.register_period("1m")
-        feed.register_indicator("1m", "sma", sma_func, period=config.sma_short)
-        feed.register_indicator("1m", "sma", sma_func, period=config.sma_long)
+        feed.register_indicator(
+            "1m", IndicatorSpec(name="sma", params={"period": config.sma_short}, window=config.sma_short, func=sma_func)
+        )
+        feed.register_indicator(
+            "1m", IndicatorSpec(name="sma", params={"period": config.sma_long}, window=config.sma_long, func=sma_func)
+        )
 
     # 加载历史数据
     feed.load_history_data("1m", bars)
@@ -104,8 +108,12 @@ def _prepare_test_data(
             },
             indicators={
                 "1m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_short}, func=sma_func),
-                    IndicatorRequirements(name="sma", params={"period": config.sma_long}, func=sma_func),
+                    IndicatorSpec(
+                        name="sma", params={"period": config.sma_short}, window=config.sma_short, func=sma_func
+                    ),
+                    IndicatorSpec(
+                        name="sma", params={"period": config.sma_long}, window=config.sma_long, func=sma_func
+                    ),
                 ],
             },
             events=EventsRequirements.no_events(),
@@ -126,7 +134,7 @@ def _set_indicator_value(feed: DataFeed, timeframe: str, indicator_name: str, va
         offset: 偏移量（-1 表示最新一行）
         **kwargs: 指标参数（如 period=10, fast=12 等），用于生成列名
     """
-    from strategies.runtime.indicators import generate_indicator_column_name
+    from strategies.core.indicators import generate_indicator_column_name
 
     col_name = generate_indicator_column_name(indicator_name, kwargs)
     period_data = feed._periods[timeframe]
@@ -139,7 +147,6 @@ def _set_indicator_value(feed: DataFeed, timeframe: str, indicator_name: str, va
 
     idx = df.index[offset] if offset >= 0 else df.index[offset]
     df.at[idx, col_name] = value
-    period_data.mark_indicator_calculated(col_name)
 
 
 def _create_uptrend_context(feed: DataFeed, config: MACrossParams, latest_price: float):

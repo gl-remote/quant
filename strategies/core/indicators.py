@@ -4,10 +4,36 @@
 ta-lib 只认 numpy 数组，pandas 依赖仅限于函数边界的薄壳转换层。
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import talib
 from numpy.typing import NDArray
+
+
+@dataclass(frozen=True)
+class IndicatorSpec:
+    """指标定义 — 描述指标如何计算
+
+    window 可包含模板值（如 "{sma_short}"），在构建 data_requirements 时从 strategy_config 解析。
+    """
+
+    name: str
+    params: dict[str, Any]
+    window: int | str = 250
+    func: Callable[..., NDArray[np.float64]] | None = None
+
+
+def generate_indicator_column_name(name: str, params: dict[str, Any]) -> str:
+    """生成指标列名，按参数名称排序确保确定性"""
+    sorted_params = sorted(params.items())
+    param_parts = [f"{value}" for _, value in sorted_params]
+    if param_parts:
+        return f"{name}_{'_'.join(param_parts)}"
+    return name
 
 
 def sma_func(df: pd.DataFrame, period: int) -> NDArray[np.float64]:
