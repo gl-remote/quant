@@ -51,6 +51,12 @@ class PeriodData:
         )
         self._df.index.name = "datetime"
 
+        # 形成中的 bar：高周期聚合时，未完成的 bar 暂存于此
+        # 完成后通过 complete_forming_bar() 追加到 _df
+        self._forming_bar: Bar | None = None
+        # 形成中 bar 的指标缓存 {indicator_name: value}
+        self._forming_indicators: dict[str, float] = {}
+
         # 数据追踪字段（类似数据库表）
         self._created_at = pd.Timestamp.now()
         self._last_updated_at = pd.Timestamp.now()
@@ -195,6 +201,51 @@ class PeriodData:
         self._last_updated_at = pd.Timestamp.now()
         self._update_count += 1
 
+    def update_forming_bar(self, bar: Bar) -> None:
+        """更新形成中的 bar（不写入 _df）
+
+        高周期聚合时，形成中的 bar 暂存于 _forming_bar，不写入 _df。
+        只更新 high/low/close/volume，不改变 open 和时间戳。
+
+        :param bar: 用于更新的基础周期 bar 数据
+        """
+        if self._forming_bar is None:
+            return
+        self._forming_bar = Bar(
+            symbol=self._forming_bar.symbol,
+            datetime=self._forming_bar.datetime,
+            open=self._forming_bar.open,
+            high=max(self._forming_bar.high, bar.high),
+            low=min(self._forming_bar.low, bar.low),
+            close=bar.close,
+            volume=self._forming_bar.volume + bar.volume,
+        )
+        # 形成中 bar 更新后，指标缓存失效
+        self._forming_indicators.clear()
+        self._last_updated_at = pd.Timestamp.now()
+        self._update_count += 1
+
+    def set_forming_bar(self, bar: Bar) -> None:
+        """设置新的形成中 bar（高周期新 bar 开始形成时调用）
+
+        :param bar: 新的形成中 bar
+        """
+        self._forming_bar = bar
+        self._forming_indicators.clear()
+        self._last_updated_at = pd.Timestamp.now()
+        self._update_count += 1
+
+    def complete_forming_bar(self) -> None:
+        """将形成中的 bar 完成并追加到 _df
+
+        当高周期 bar 形成完毕（新 bar 开始）时调用，将 _forming_bar 追加到 _df。
+        """
+        if self._forming_bar is None:
+            return
+        self.append_bar(self._forming_bar)
+        self._forming_bar = None
+        self._forming_indicators.clear()
+
     def append_indicators(self, indicators: pd.DataFrame) -> None:
         """追加指标数据
 
@@ -230,6 +281,7 @@ class PeriodData:
         3. 不受后续数据更新影响，保证数据一致性（Append-Only）
         4. 可指定需要的历史K线数，限定视图范围
         5. 逻辑视图，不复制数据，通过索引范围访问原始数据
+        6. 若存在形成中 bar 且时间 <= current_time，视图会包含它
 
         :param current_time: 当前时间，视图将只包含<=此时间的数据
         :param lookback_bars: 需要的历史K线数，从current_time往前数，默认1根
@@ -242,21 +294,37 @@ class PeriodData:
 
         current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
-        # 检查时间是否有效
-        if len(self._df) == 0:
+        # 检查时间是否有效（考虑 forming bar）
+        latest = self.latest_time
+        if self._forming_bar is not None:
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            if latest is None or forming_time > latest:
+                latest = forming_time
+
+        if len(self._df) == 0 and self._forming_bar is None:
             raise ValueError("No data available")
 
-        assert self.latest_time is not None  # 上一步已确保有数据
-        if current_time_ts > self.latest_time:
-            raise ValueError(f"current_time {current_time_ts} is after latest data time {self.latest_time}")
+        assert latest is not None
+        if current_time_ts > latest:
+            raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
+
+        # 判断 forming bar 是否应包含在视图中
+        include_forming = False
+        if self._forming_bar is not None:
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            if forming_time <= current_time_ts:
+                include_forming = True
 
         # 找到截止时间对应的索引
-        end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method="ffill")[0]
-        if end_idx < 0:
-            end_idx = 0
+        if len(self._df) > 0:
+            end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method="ffill")[0]
+            if end_idx < 0:
+                end_idx = 0
+        else:
+            end_idx = -1  # _df 为空，没有完整 bar
 
         # 计算起始索引
-        start_idx = max(0, end_idx - lookback_bars + 1)
+        start_idx = max(0, end_idx - lookback_bars + 1) if end_idx >= 0 else 0
 
         return PeriodDataView(
             df_ref=self._df,
@@ -265,6 +333,8 @@ class PeriodData:
             end_idx=end_idx,
             current_time=current_time_ts,
             period=self.period,
+            forming_bar=self._forming_bar if include_forming else None,
+            forming_indicators=self._forming_indicators if include_forming else None,
         )
 
     def get_bar(self, idx: int) -> Bar | None:
@@ -434,6 +504,12 @@ class PeriodDataView:
     - 不受后续数据更新影响（Append-Only 保证）
     - 高效实现：通过索引范围访问原始数据，不复制数据
     - 纯只读，不触发任何计算
+    - 支持包含形成中的 bar（高周期聚合时，forming bar 作为虚拟最后一行）
+
+    【形成中 bar 的处理】
+    - forming_bar 不在 _df 中，作为虚拟最后一行附加在视图末尾
+    - 视图索引：0..N-1 为 _df 中的行，N 为 forming_bar（如果存在）
+    - forming_indicators 提供形成中 bar 的指标值
     """
 
     def __init__(
@@ -444,15 +520,19 @@ class PeriodDataView:
         end_idx: int,
         current_time: pd.Timestamp,
         period: str,
+        forming_bar: Bar | None = None,
+        forming_indicators: dict[str, float] | None = None,
     ):
         """初始化逻辑视图（内部使用，不应直接构造）
 
         :param df_ref: 原始K线+指标DataFrame的引用（不复制）
         :param events_ref: 原始事件DataFrame的引用（不复制）
-        :param start_idx: 视图的起始索引（包含）
-        :param end_idx: 视图的结束索引（包含）
+        :param start_idx: 视图的起始索引（包含，相对于 _df）
+        :param end_idx: 视图的结束索引（包含，相对于 _df），-1 表示 _df 无数据
         :param current_time: 视图的截止时间
         :param period: 周期名称
+        :param forming_bar: 形成中的 bar（作为虚拟最后一行）
+        :param forming_indicators: 形成中 bar 的指标缓存
         """
         self._df_ref = df_ref
         self._events_ref = events_ref
@@ -460,6 +540,8 @@ class PeriodDataView:
         self._end_idx = end_idx
         self._current_time = current_time
         self._period = period
+        self._forming_bar = forming_bar
+        self._forming_indicators = forming_indicators or {}
 
     @property
     def current_time(self) -> pd.Timestamp:
@@ -468,8 +550,9 @@ class PeriodDataView:
 
     @property
     def length(self) -> int:
-        """获取视图中K线数量"""
-        return self._end_idx - self._start_idx + 1
+        """获取视图中K线数量（含 forming bar）"""
+        df_count = max(0, self._end_idx - self._start_idx + 1) if self._end_idx >= 0 else 0
+        return df_count + (1 if self._forming_bar is not None else 0)
 
     @property
     def period(self) -> str:
@@ -482,9 +565,21 @@ class PeriodDataView:
         :param idx: 索引位置，支持负索引（相对于视图）
         :return: Bar对象，索引越界返回None
         """
-        # 转换为相对于原始DataFrame的索引
-        real_idx = self._start_idx + idx if idx >= 0 else self._end_idx + idx + 1
+        df_count = max(0, self._end_idx - self._start_idx + 1) if self._end_idx >= 0 else 0
+        total = df_count + (1 if self._forming_bar is not None else 0)
 
+        # 转换为正索引
+        pos_idx = total + idx if idx < 0 else idx
+
+        if pos_idx < 0 or pos_idx >= total:
+            return None
+
+        # forming bar 在最后
+        if self._forming_bar is not None and pos_idx == df_count:
+            return self._forming_bar
+
+        # 从 _df 中取
+        real_idx = self._start_idx + pos_idx
         if real_idx < self._start_idx or real_idx > self._end_idx:
             return None
 
@@ -511,12 +606,24 @@ class PeriodDataView:
         :param idx: 索引位置，支持负索引（相对于视图）
         :return: 指标值，索引越界或指标不存在返回None
         """
+        df_count = max(0, self._end_idx - self._start_idx + 1) if self._end_idx >= 0 else 0
+        total = df_count + (1 if self._forming_bar is not None else 0)
+
+        # 转换为正索引
+        pos_idx = total + idx if idx < 0 else idx
+
+        if pos_idx < 0 or pos_idx >= total:
+            return None
+
+        # forming bar 的指标从缓存取
+        if self._forming_bar is not None and pos_idx == df_count:
+            return self._forming_indicators.get(name)
+
+        # 从 _df 中取
         if name not in self._df_ref.columns:
             return None
 
-        # 转换为相对于原始DataFrame的索引
-        real_idx = self._start_idx + idx if idx >= 0 else self._end_idx + idx + 1
-
+        real_idx = self._start_idx + pos_idx
         if real_idx < self._start_idx or real_idx > self._end_idx:
             return None
 
@@ -531,8 +638,22 @@ class PeriodDataView:
             return []
 
         # 获取视图时间范围
-        view_start = self._df_ref.index[self._start_idx]
-        view_end = self._df_ref.index[self._end_idx]
+        if self._end_idx >= 0 and len(self._df_ref) > 0:
+            view_start = self._df_ref.index[self._start_idx]
+            view_end = self._df_ref.index[self._end_idx]
+        elif self._forming_bar is not None:
+            # 只有 forming bar，没有 _df 数据
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            view_start = forming_time
+            view_end = forming_time
+        else:
+            return []
+
+        # 如果有 forming bar，扩展时间范围
+        if self._forming_bar is not None:
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            if forming_time > view_end:
+                view_end = forming_time
 
         # 筛选时间范围内的事件
         mask = (self._events_ref.index >= view_start) & (self._events_ref.index <= view_end)
@@ -555,8 +676,31 @@ class PeriodDataView:
         return events
 
     def get_all_bars(self) -> pd.DataFrame:
-        """获取视图中所有K线+指标DataFrame（只读视图，不复制）"""
-        return cast(pd.DataFrame, self._df_ref.iloc[self._start_idx : self._end_idx + 1].copy())
+        """获取视图中所有K线+指标DataFrame（含 forming bar）"""
+        if self._end_idx >= 0:
+            result = self._df_ref.iloc[self._start_idx : self._end_idx + 1].copy()
+        else:
+            result = pd.DataFrame(columns=self._df_ref.columns, dtype="float64")
+            result.index.name = "datetime"
+
+        if self._forming_bar is not None:
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            forming_row = pd.Series(
+                {
+                    "open": self._forming_bar.open,
+                    "high": self._forming_bar.high,
+                    "low": self._forming_bar.low,
+                    "close": self._forming_bar.close,
+                    "volume": self._forming_bar.volume,
+                },
+                name=forming_time,
+            )
+            # 添加 forming bar 的指标值
+            for ind_name, ind_val in self._forming_indicators.items():
+                forming_row[ind_name] = ind_val
+            result.loc[forming_time] = forming_row
+
+        return cast(pd.DataFrame, result)
 
     # --- 便捷访问器 ---
 
@@ -574,10 +718,19 @@ class PeriodDataView:
         return self.get_indicator(name, idx)
 
     def indicator_series(self, name: str) -> pd.Series:
-        """便捷方法：获取指标序列"""
-        if name not in self._df_ref.columns:
-            raise KeyError(f"Indicator {name} not found")
-        return self._df_ref[name].iloc[self._start_idx : self._end_idx + 1].copy()
+        """便捷方法：获取指标序列（含 forming bar 的指标值）"""
+        if self._end_idx >= 0:
+            if name not in self._df_ref.columns:
+                raise KeyError(f"Indicator {name} not found")
+            result = self._df_ref[name].iloc[self._start_idx : self._end_idx + 1].copy()
+        else:
+            result = pd.Series(dtype="float64", name=name)
+
+        if self._forming_bar is not None and name in self._forming_indicators:
+            forming_time = pd.Timestamp(self._forming_bar.datetime)
+            result.loc[forming_time] = self._forming_indicators[name]
+
+        return result
 
     def events(self) -> list[Event]:
         """便捷方法：获取事件列表"""

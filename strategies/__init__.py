@@ -227,7 +227,6 @@ from .strategy_aspects import (
 
 # 运行时数据管理（来自 runtime，与 core 同级）
 from .runtime import (
-    SOURCE_PERIOD,
     DataFeed,
     create_data_feed,
     Event,
@@ -297,7 +296,6 @@ __all__ = [
     "trend_long_when_compare",
     "trend_short_when_compare",
     # 数据管理类型
-    "SOURCE_PERIOD",
     "DataFeed",
     "create_data_feed",
     "Event",

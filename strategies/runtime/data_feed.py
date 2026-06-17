@@ -14,7 +14,8 @@
 - 上下文构造：build_ctx_cache（回测）/ 模块级 build_context（实盘）
 
 【内部约定】
-- 所有高周期 K 线由 SOURCE_PERIOD（1m）通过聚合自动生成
+- 基础周期（_base_period）由 apply_requirements 从声明的周期中自动推断为最小周期
+- 所有高周期 K 线由基础周期通过聚合自动生成
 - 调用方无需关心聚合细节，只需声明需要哪些周期和指标
 """
 
@@ -27,7 +28,7 @@ from loguru import logger
 
 from ..core.indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
 from ..core.types import Bar
-from .aggregate import get_forming_bar_start
+from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event
 from .indicators import (
     REGISTERED_INDICATOR_FUNCS,
@@ -38,9 +39,6 @@ from .indicators import (
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from .serialization import _OHLCV_COLUMNS, dump_feed, load_feed
-
-# 数据源基础周期：所有高周期 K 线均由此周期聚合得到
-SOURCE_PERIOD = "1m"
 
 
 def _parse_source_from_symbol(symbol: str) -> str | None:
@@ -63,7 +61,7 @@ class DataFeed:
     - 提供高层 API，调用方无需关心基础周期/聚合/懒计算等内部细节
     - 提供高效的数据访问路由（通过周期名快速定位 PeriodData）
     - 统一管理 K线、指标、事件 三类数据
-    - 高周期 K 线由基础周期（SOURCE_PERIOD = "1m"）通过聚合自动生成
+    - 基础周期由 apply_requirements 自动推断为声明的最小周期，高周期由它聚合生成
     """
 
     def __init__(self, symbol: str, source: str | None = None):
@@ -81,6 +79,9 @@ class DataFeed:
         # 周期数据管理
         self._periods: dict[str, PeriodData] = {}
 
+        # 基础周期：由 apply_requirements 自动推断为最小周期，高周期由它聚合得到
+        self._base_period: str | None = None
+
         # 事件数据管理
         self._events = pd.DataFrame(columns=["type", "symbol", "reason", "period", "data"])
         self._events = self._events.astype(
@@ -90,7 +91,7 @@ class DataFeed:
         # 指标注册配置
         self._registered_indicators: dict[str, list[tuple[str, dict[str, Any]]]] = {}
 
-        # 聚合配置：高周期由 SOURCE_PERIOD 自动聚合得到
+        # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
 
         # 数据追踪字段（类似数据库表）
@@ -314,19 +315,23 @@ class DataFeed:
         return events
 
     def setup_aggregation(self, target_periods: list[str]) -> None:
-        """配置周期聚合：指定需要从 SOURCE_PERIOD 聚合出的高周期（内部接口）
+        """配置周期聚合：指定需要从基础周期聚合出的高周期（内部接口）
 
         外部调用方应使用 apply_requirements() 一步到位，本方法主要供
         apply_requirements / from_feeds 内部使用，以及历史测试代码兼容。
 
         :param target_periods: 需要聚合的高周期列表，如 ["5m", "15m", "1h"]
+        :raises ValueError: 如果 _base_period 未设置
         """
-        # 排除 SOURCE_PERIOD 本身
-        self._aggregation_targets = [p for p in target_periods if p != SOURCE_PERIOD]
+        if self._base_period is None:
+            raise ValueError("基础周期未设置，请先调用 apply_requirements")
 
-        # 确保 SOURCE_PERIOD 已注册（聚合的基础数据源）
-        if self._aggregation_targets and SOURCE_PERIOD not in self._periods:
-            self.register_period(SOURCE_PERIOD)
+        # 排除基础周期本身
+        self._aggregation_targets = [p for p in target_periods if p != self._base_period]
+
+        # 确保基础周期已注册（聚合的数据源）
+        if self._aggregation_targets and self._base_period not in self._periods:
+            self.register_period(self._base_period)
 
         # 确保所有目标周期已注册
         for period in self._aggregation_targets:
@@ -338,18 +343,31 @@ class DataFeed:
 
         【调用方视角】
         外部只需一行调用就能完成：注册基础/高周期 + 启用聚合 + 注册指标。
-        调用方无需感知"基础周期是 1m"，也无需知道哪些周期需要聚合。
+        基础周期自动推断为声明的最小周期，调用方无需感知。
 
         :param reqs: 策略数据需求
+        :raises ValueError: 如果目标周期不是基础周期的整数倍
         """
-        # 1. 注册所有声明的周期（含 SOURCE_PERIOD 与高周期）
+        # 1. 注册所有声明的周期
         for period in reqs.periods:
             self.register_period(period)
 
-        # 2. 启用聚合：高周期自动由 SOURCE_PERIOD 聚合得到
+        # 2. 自动推断基础周期（最小周期）
+        period_minutes = {p: parse_period_minutes(p) for p in reqs.periods}
+        self._base_period = min(period_minutes, key=period_minutes.get)  # type: ignore[arg-type]
+        base_minutes = period_minutes[self._base_period]
+
+        # 3. 校验：目标周期必须是基础周期的整数倍
+        for period, minutes in period_minutes.items():
+            if period != self._base_period and minutes % base_minutes != 0:
+                raise ValueError(
+                    f"周期 {period}（{minutes}分钟）不是基础周期 {self._base_period}（{base_minutes}分钟）的整数倍，无法聚合"
+                )
+
+        # 4. 启用聚合：高周期自动由基础周期聚合得到
         self.setup_aggregation(list(reqs.periods.keys()))
 
-        # 3. 注册指标
+        # 5. 注册指标
         for period, ind_list in reqs.indicators.items():
             for ind in ind_list:
                 self.register_indicator(period, ind.name, **ind.params)
@@ -362,7 +380,8 @@ class DataFeed:
         :param df: 基础周期 K线 DataFrame，索引为 datetime
         :param events: 历史事件列表（可选）
         """
-        self.load_history_df(SOURCE_PERIOD, df, events)
+        assert self._base_period is not None, "请先调用 apply_requirements"
+        self.load_history_df(self._base_period, df, events)
 
     def feed_bar(self, bar: Bar, events: list[Event] | None = None) -> None:
         """喂入一根基础周期实时 K 线（高层 API）
@@ -372,21 +391,26 @@ class DataFeed:
         :param bar: 基础周期 K 线
         :param events: 该 K 线时间范围内的事件（可选）
         """
-        self.update_bar(bar, SOURCE_PERIOD, events)
+        assert self._base_period is not None, "请先调用 apply_requirements"
+        self.update_bar(bar, self._base_period, events)
 
     def has_source_data(self) -> bool:
         """是否已加载基础周期数据"""
-        pd_obj = self._periods.get(SOURCE_PERIOD)
+        if self._base_period is None:
+            return False
+        pd_obj = self._periods.get(self._base_period)
         return pd_obj is not None and pd_obj.length > 0
 
     def get_source_date_range(self) -> tuple[str, str] | None:
         """获取基础周期的数据日期范围（用于新鲜度判定等）"""
-        return self.get_date_range(SOURCE_PERIOD)
+        if self._base_period is None:
+            return None
+        return self.get_date_range(self._base_period)
 
     def update_bar(self, bar: Bar, period: str, events: list[Event] | None = None) -> None:
         """更新一根K线
 
-        当 period == SOURCE_PERIOD 且已配置聚合时，自动级联更新所有高周期。
+        当 period == _base_period 且已配置聚合时，自动级联更新所有高周期。
 
         :param bar: 新K线数据
         :param period: 周期名称
@@ -402,7 +426,7 @@ class DataFeed:
             self.append_events(events)
 
         # 聚合：基础周期 bar 到达时自动更新高周期
-        if period == SOURCE_PERIOD and self._aggregation_targets:
+        if period == self._base_period and self._aggregation_targets:
             self._step_aggregation(bar)
 
     def _step_aggregation(self, source_bar: Bar) -> None:
@@ -410,8 +434,8 @@ class DataFeed:
 
         对每个高周期：
         1. 判断 source_bar 属于哪个高周期 bar（通过起始时间）
-        2. 如果属于当前"形成中"的最后一根 → update_last_bar
-        3. 如果属于新的高周期 bar → append_bar（新 bar 开始形成）
+        2. 如果属于当前"形成中"的 bar → update_forming_bar
+        3. 如果属于新的高周期 bar → complete_forming_bar + set_forming_bar
         4. 重算该高周期的指标（因为形成中 bar 更新了）
 
         :param source_bar: 新到达的基础周期 bar
@@ -424,14 +448,18 @@ class DataFeed:
 
             bar_start = get_forming_bar_start(ts, target_period)
 
-            if period_data.length == 0:
-                period_data.append_bar(_make_aggregated_bar(source_bar, bar_start))
+            if period_data._forming_bar is None:
+                # 首次：设置形成中 bar
+                period_data.set_forming_bar(_make_aggregated_bar(source_bar, bar_start))
             else:
-                last_idx = period_data._df.index[-1]  # pyright: ignore[reportPrivateUsage]
-                if bar_start == last_idx:
-                    period_data.update_last_bar(source_bar)
-                elif bar_start > last_idx:
-                    period_data.append_bar(_make_aggregated_bar(source_bar, bar_start))
+                forming_time = pd.Timestamp(period_data._forming_bar.datetime)  # pyright: ignore[reportPrivateUsage]
+                if bar_start == forming_time:
+                    # 仍在同一个高周期 bar 内 → 更新形成中 bar
+                    period_data.update_forming_bar(source_bar)
+                elif bar_start > forming_time:
+                    # 新高周期 bar 开始 → 完成旧的，开始新的
+                    period_data.complete_forming_bar()
+                    period_data.set_forming_bar(_make_aggregated_bar(source_bar, bar_start))
 
             # 形成中 bar 更新后，需要重算该周期指标
             period_data.clear_indicator_calculation()
@@ -442,6 +470,8 @@ class DataFeed:
 
         incremental=True 时跳过已算到最新行的指标（按 last_calc_idx 判断），
         对确实需要计算的指标仍做全量计算（非切片增量）。
+
+        对于有 forming bar 的周期，额外计算 forming bar 的指标值并缓存。
 
         :param period_name: 周期名称
         :param incremental: True 时跳过已到最新的指标
@@ -454,31 +484,73 @@ class DataFeed:
         if period_name not in self._registered_indicators:
             return
 
-        full_df = period_data._df  # pyright: ignore[reportPrivateUsage]
+        has_forming = period_data._forming_bar is not None  # pyright: ignore[reportPrivateUsage]
 
-        for indicator_name, params in self._registered_indicators[period_name]:
-            col_name = generate_indicator_column_name(indicator_name, params)
-            df_len = len(full_df)
+        # 如果有 forming bar，需要临时追加到 _df 来计算指标
+        if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
+            forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
+            forming_time = pd.Timestamp(forming_bar.datetime)
+            forming_row = pd.Series(
+                {
+                    "open": forming_bar.open,
+                    "high": forming_bar.high,
+                    "low": forming_bar.low,
+                    "close": forming_bar.close,
+                    "volume": forming_bar.volume,
+                },
+                name=forming_time,
+            )
+            period_data._df.loc[forming_time] = forming_row  # pyright: ignore[reportPrivateUsage]
 
-            # 增量检查：如果已经算过且没有新行，跳过
-            if period_data.is_indicator_calculated(col_name):
-                last_calc_idx = period_data.get_indicator_last_calc_idx(col_name)
-                if last_calc_idx is not None and last_calc_idx >= df_len - 1:
-                    # 没有新行追加，指标值仍然最新，跳过重算
+        try:
+            for indicator_name, params in self._registered_indicators[period_name]:
+                col_name = generate_indicator_column_name(indicator_name, params)
+                df_len = len(period_data._df)  # pyright: ignore[reportPrivateUsage]
+
+                # 增量检查：如果已经算过且没有新行，跳过
+                if period_data.is_indicator_calculated(col_name):
+                    last_calc_idx = period_data.get_indicator_last_calc_idx(col_name)
+                    if last_calc_idx is not None and last_calc_idx >= df_len - 1:
+                        # 没有新行追加，指标值仍然最新，跳过重算
+                        continue
+
+                # 获取指标函数信息
+                func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
+                if func_info is None:
                     continue
 
-            # 获取指标函数信息
-            func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
-            if func_info is None:
-                continue
+                # 计算指标（全量计算，传入完整 DataFrame）
+                try:
+                    series = period_data.apply_indicator(func_info.func, **params)
+                    period_data.set_indicator_column(col_name, series)
+                    period_data.mark_indicator_calculated(col_name)
+                except Exception as e:
+                    logger.warning("指标计算失败 [{}][{}]: {}", period_name, indicator_name, e)
 
-            # 计算指标（全量计算，传入完整 DataFrame）
-            try:
-                series = period_data.apply_indicator(func_info.func, **params)
-                period_data.set_indicator_column(col_name, series)
-                period_data.mark_indicator_calculated(col_name)
-            except Exception as e:
-                logger.warning("指标计算失败 [{}][{}]: {}", period_name, indicator_name, e)
+            # 如果有 forming bar，提取最后一行的指标值到缓存，然后从 _df 中移除
+            if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
+                forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
+                forming_time = pd.Timestamp(forming_bar.datetime)
+                # 提取 forming bar 行的指标值
+                for indicator_name, params in self._registered_indicators[period_name]:
+                    col_name = generate_indicator_column_name(indicator_name, params)
+                    if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
+                        val = period_data._df.loc[forming_time, col_name]  # pyright: ignore[reportPrivateUsage]
+                        period_data._forming_indicators[col_name] = float(val)  # pyright: ignore[reportPrivateUsage]
+                # 从 _df 中移除 forming bar 行
+                period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
+                # 标记指标只算到 _df 末尾（不含 forming bar）
+                for indicator_name, params in self._registered_indicators[period_name]:
+                    col_name = generate_indicator_column_name(indicator_name, params)
+                    period_data.mark_indicator_calculated(col_name, len(period_data._df) - 1)  # pyright: ignore[reportPrivateUsage]
+
+        except Exception:
+            # 异常时确保 forming bar 被移除
+            if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
+                forming_time = pd.Timestamp(period_data._forming_bar.datetime)  # pyright: ignore[reportPrivateUsage]
+                if forming_time in period_data._df.index:  # pyright: ignore[reportPrivateUsage]
+                    period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
+            raise
 
     def calculate_all(self) -> None:
         """批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）
@@ -595,7 +667,7 @@ class DataFeed:
         :return: {timestamp: BarContext} 字典
         """
         # ── 启用聚合：逐基础周期推进 ──
-        if self._aggregation_targets and SOURCE_PERIOD in self._periods:
+        if self._aggregation_targets and self._base_period is not None and self._base_period in self._periods:
             return self._build_ctx_cache_aggregated(requirements, symbol)
 
         # ── 未启用聚合：按主周期逐行构造（兼容历史路径） ──
@@ -631,7 +703,7 @@ class DataFeed:
         :param symbol: 品种标识
         :return: {timestamp: BarContext} 字典
         """
-        source_pd = self._periods.get(SOURCE_PERIOD)
+        source_pd = self._periods.get(self._base_period) if self._base_period else None
         if source_pd is None or source_pd.length == 0:
             return {}
 
@@ -642,6 +714,8 @@ class DataFeed:
             period_data = self._periods.get(target_period)
             if period_data is not None:
                 period_data.load_df(pd.DataFrame(columns=["open", "high", "low", "close", "volume"]), replace=True)
+                period_data._forming_bar = None  # pyright: ignore[reportPrivateUsage]
+                period_data._forming_indicators.clear()  # pyright: ignore[reportPrivateUsage]
                 period_data.clear_indicator_calculation()
 
         cache: dict[pd.Timestamp, BarContext] = {}

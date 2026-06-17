@@ -57,6 +57,7 @@ def dump_feed(feed: "DataFeed", feeds_dir: str) -> None:
     meta = {
         "symbol": feed.symbol,
         "source": feed.source,
+        "base_period": feed._base_period,  # pyright: ignore[reportPrivateUsage]
         "periods": list(feed._periods.keys()),
         "indicators": indicators_serializable,
     }
@@ -98,6 +99,8 @@ def load_feed(feeds_dir: str) -> "DataFeed":
     feed = DataFeed(symbol=meta["symbol"])
     if meta.get("source"):
         feed.source = meta["source"]
+    if meta.get("base_period"):
+        feed._base_period = meta["base_period"]  # pyright: ignore[reportPrivateUsage]
 
     # 恢复每个周期
     for period_name in meta["periods"]:

@@ -16,7 +16,7 @@
 """
 
 from .cache import clear_cache, get_cached_feed, set_cached_feed
-from .data_feed import SOURCE_PERIOD, DataFeed, build_context, create_data_feed
+from .data_feed import DataFeed, build_context, create_data_feed
 from .events import BigTradeEvent, Event, NewsEvent
 from .requirements import (
     BarContext,
@@ -27,8 +27,6 @@ from .requirements import (
 )
 
 __all__ = [
-    # 常量
-    "SOURCE_PERIOD",
     # 核心类
     "DataFeed",
     # 工厂方法：完整构造 DataFeed，自动处理缓存和增量加载

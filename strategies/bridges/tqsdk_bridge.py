@@ -38,7 +38,7 @@ from common.constants import (  # noqa: E402
 from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
 from common.typing import check_types  # noqa: E402
-from strategies.runtime import SOURCE_PERIOD, BarContext, DataFeed  # noqa: E402
+from strategies.runtime import BarContext, DataFeed  # noqa: E402
 
 # 周期名称 → tqsdk duration 秒数映射
 _PERIOD_MAP: dict[str, int] = {
@@ -263,7 +263,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         聚合模式下只有源周期数据，高周期由 DataFeed 自动聚合。
         """
-        source_period = SOURCE_PERIOD
+        source_period = "1m"
         klines = self._klines.get(source_period)
         if klines is None:
             return
@@ -344,7 +344,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         高周期由 DataFeed 内部聚合生成，无需从网络订阅。
         """
         # 只订阅源周期（1m）数据
-        self._klines[SOURCE_PERIOD] = self.api.get_kline_serial(self.symbol, 60)
+        self._klines["1m"] = self.api.get_kline_serial(self.symbol, 60)
 
     def _klines_to_dataframe(self, klines: KlineDataFrame) -> Any:
         """将 tqsdk kline_serial DataFrame 转换为 PeriodData 可加载的格式
@@ -374,13 +374,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         if reqs:
             self._data_feed.apply_requirements(reqs)
         else:
-            self._data_feed.register_period(SOURCE_PERIOD)
+            self._data_feed.register_period("1m")
 
         logger.info("[init] DataFeed: 已配置需求，高周期将由内部聚合生成")
 
         # 2. 加载源周期数据（kline_serial → PeriodData）
         total_loaded = 0
-        source_period = SOURCE_PERIOD
+        source_period = "1m"
         if source_period in self._klines:
             klines = self._klines[source_period]
             if len(klines) > 0:
