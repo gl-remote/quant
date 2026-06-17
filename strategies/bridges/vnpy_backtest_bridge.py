@@ -19,7 +19,6 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
-import json
 import os
 from datetime import datetime
 from typing import Any, cast
@@ -42,7 +41,6 @@ from strategies import Bar, Fill, Signal, State, Strategy, UninitializedStrategy
 from strategies.core.types import StrategyPosition
 from strategies.runtime import DataFeed, DataRequirements
 from strategies.runtime.cache import get_cached_feed, set_cached_feed
-from strategies.runtime.period import PeriodDataView
 from strategies.runtime.requirements import BarContext
 
 
@@ -116,7 +114,13 @@ class VnpyBacktestBridge(CtaTemplate):
             return
 
         self._data_feed = self._setup_data_feed()
-        self._build_ctx_cache()
+        self._ctx_cache = self._data_feed.build_ctx_cache(self._requirements, self._state.symbol)
+
+        logger.debug(
+            "[{}] ctx_cache 构造完成: {} 条",
+            self.strategy_name,
+            len(self._ctx_cache),
+        )
 
         self.write_log(f"策略初始化: {self._core.name}")
 
@@ -144,24 +148,22 @@ class VnpyBacktestBridge(CtaTemplate):
             return
         rid = self._state.run_id
         btid = self._state.backtest_id
-        for pn in self._data_feed._periods:  # pyright: ignore[reportPrivateUsage]
+        for pn in self._data_feed.get_period_names():
             pd_obj = self._data_feed.get_period(pn)
-            if pd_obj is None:
-                continue
-            df = pd_obj._df  # pyright: ignore[reportPrivateUsage]
-            if len(df) == 0:
+            if pd_obj is None or pd_obj.length == 0:
                 continue
             # 已注册指标配置
-            indicators = self._data_feed._registered_indicators.get(pn, [])  # pyright: ignore[reportPrivateUsage]
+            indicators = self._data_feed.get_registered_indicators(pn)
             ind_names = [f"{n}({','.join(f'{k}={v}' for k, v in p.items())})" for n, p in indicators]
-            # 已计算完成的指标列（实际在 _df 中的列名）
-            ohlcv = {"open", "high", "low", "close", "volume"}
-            calc_cols = [c for c in df.columns if c not in ohlcv]
+            # 已计算完成的指标列
+            calc_cols = self._data_feed.get_indicator_names(pn)
+            date_range = self._data_feed.get_date_range(pn)
+            range_str = f"{date_range[0]}~{date_range[1]}" if date_range else "N/A"
             logger.debug(
                 f"[run={rid} bt={btid}] [{self.strategy_name}] "
                 f"{label + ' ' if label else ''}"
-                f"period={pn} rows={len(df)} "
-                f"range={df.index[0]}~{df.index[-1]} "
+                f"period={pn} rows={pd_obj.length} "
+                f"range={range_str} "
                 f"registered=[{', '.join(ind_names) if ind_names else '无'}] "
                 f"calculated_columns={calc_cols}"
             )
@@ -231,22 +233,12 @@ class VnpyBacktestBridge(CtaTemplate):
         if meta and meta.get("min_dt") and meta.get("max_dt"):
             set_cached_feed(feed.symbol, feed, meta["min_dt"], meta["max_dt"])
             return
-        # 无 meta 时尝试从 parquet _meta.json 中恢复时间范围
-        meta_path = os.path.join(feeds_dir, "_meta.json")
-        if os.path.isfile(meta_path):
-            try:
-                with open(meta_path, encoding="utf-8") as f:
-                    pm = json.load(f)
-                periods = pm.get("periods", [])
-                if periods:
-                    first_pd = feed.get_period(periods[0])
-                    if first_pd is not None and first_pd.length > 0:
-                        idx = first_pd._df.index  # pyright: ignore[reportPrivateUsage]
-                        min_dt = str(idx[0].date())
-                        max_dt = str(idx[-1].date())
-                        set_cached_feed(feed.symbol, feed, min_dt, max_dt)
-            except Exception:
-                pass
+        # 无 meta 时尝试从 DataFeed 数据中恢复时间范围
+        periods = feed.get_period_names()
+        if periods:
+            date_range = feed.get_date_range(periods[0])
+            if date_range:
+                set_cached_feed(feed.symbol, feed, date_range[0], date_range[1])
 
     def _assess_feed(self, feeds_dir: str) -> tuple[DataFeed, bool]:
         """加载 feeds 并判断数据是否过期
@@ -267,7 +259,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         # 检查主周期数据是否存在
         main_pd = feed.get_period(main_period)
-        if main_pd is None or len(main_pd._df) == 0:  # pyright: ignore[reportPrivateUsage]
+        if main_pd is None or main_pd.length == 0:
             logger.warning("[{}] feeds 主周期为空，全量重算", self.strategy_name)
             return feed, True
 
@@ -278,16 +270,19 @@ class VnpyBacktestBridge(CtaTemplate):
             logger.warning("[{}] ExportMetadata 缺失，全量重算", self.strategy_name)
             return feed, True
 
-        cache_start = str(pd.DatetimeIndex(main_pd._df.index)[0].date())  # pyright: ignore[reportAttributeAccessIssue,reportPrivateUsage]
-        cache_end = str(pd.DatetimeIndex(main_pd._df.index)[-1].date())  # pyright: ignore[reportAttributeAccessIssue,reportPrivateUsage]
-        if meta["min_dt"] != cache_start or meta["max_dt"] != cache_end:
+        date_range = feed.get_date_range(main_period)
+        if date_range is None:
+            logger.warning("[{}] feeds 日期范围为空，全量重算", self.strategy_name)
+            return feed, True
+
+        if meta["min_dt"] != date_range[0] or meta["max_dt"] != date_range[1]:
             logger.debug(
                 "[{}] feeds 过期 (源:{}/{} 缓存:{}/{})",
                 self.strategy_name,
                 meta["min_dt"],
                 meta["max_dt"],
-                cache_start,
-                cache_end,
+                date_range[0],
+                date_range[1],
             )
             return feed, True
 
@@ -307,7 +302,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         # 补充缺失周期 + 加载数据
         for pn in self._requirements.periods:
-            if pn not in feed._periods:  # pyright: ignore[reportPrivateUsage]
+            if pn not in feed.get_period_names():
                 feed.register_period(pn)
                 results = dm.load_kline([self._state.symbol], interval=pn)
                 for _symbol, df, _data_src in results:
@@ -323,7 +318,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         # 补充缺失指标（仅注册，不计算）
         for pn, inds in self._requirements.indicators.items():
-            cached = {(n, tuple(sorted(p.items()))) for n, p in feed._registered_indicators.get(pn, [])}  # pyright: ignore[reportPrivateUsage]
+            cached = {(n, tuple(sorted(p.items()))) for n, p in feed.get_registered_indicators(pn)}
             for ind in inds:
                 key = (ind.name, tuple(sorted(ind.params.items())))
                 if key not in cached:
@@ -387,62 +382,6 @@ class VnpyBacktestBridge(CtaTemplate):
                     )
                 else:
                     logger.warning("[{}] 加载数据为空: period={}", self.strategy_name, period)
-
-    def _build_ctx_cache(self) -> None:
-        """预构造所有 BarContext：按主周期时间戳逐条构造，存到 dict
-
-        on_bar 中直接通过 timestamp 做 O(1) 查找。
-        """
-        assert self._requirements is not None  # on_init 已判空
-        main_pd = self._data_feed.get_period(self._state.period)
-        if main_pd is None:
-            return
-
-        main_df: pd.DataFrame = main_pd._df  # pyright: ignore[reportPrivateUsage]
-        for idx in range(len(main_df)):
-            ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
-            row = main_df.iloc[idx]
-            bar = Bar(
-                symbol=self._state.symbol,
-                datetime=ts.to_pydatetime(),
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
-            )
-            multi: dict[str, PeriodDataView] = {}
-            for period, req in self._requirements.periods.items():
-                pd_obj = self._data_feed.get_period(period)
-                if pd_obj is None:
-                    continue
-                pdf: pd.DataFrame = pd_obj._df  # pyright: ignore[reportPrivateUsage]
-                end_idx = int(pdf.index.get_indexer(pd.Index([ts]), method="ffill")[0])
-                if end_idx < 0:
-                    end_idx = 0
-                start_idx = max(0, end_idx - req.lookback_bars + 1)
-                multi[period] = PeriodDataView(
-                    df_ref=pdf,
-                    events_ref=None,
-                    start_idx=start_idx,
-                    end_idx=end_idx,
-                    current_time=ts,
-                    period=period,
-                )
-            self._ctx_cache[ts] = BarContext(
-                symbol=self._state.symbol,
-                bar=bar,
-                multi=multi,
-                events=[],
-            )
-
-        logger.debug(
-            "[{}] ctx_cache 构造完成: {} 条, range={}~{}",
-            self.strategy_name,
-            len(self._ctx_cache),
-            main_df.index[0] if len(main_df) > 0 else "N/A",
-            main_df.index[-1] if len(main_df) > 0 else "N/A",
-        )
 
     # ── vnpy 行情回调 ──────────────────────────────────────
 

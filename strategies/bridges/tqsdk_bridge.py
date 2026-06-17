@@ -39,7 +39,6 @@ from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
 from common.typing import check_types  # noqa: E402
 from strategies.runtime import BarContext, DataFeed  # noqa: E402
-from strategies.runtime.period import PeriodDataView  # noqa: E402
 
 # 周期名称 → tqsdk duration 秒数映射
 _PERIOD_MAP: dict[str, int] = {
@@ -426,23 +425,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         """
         if self._data_feed is None:
             return
-        # 从 DataFeed 注册的周期中取数据（而非 _klines），确保只迭代有数据的周期
-        periods_to_log = []
-        if hasattr(self._data_feed, "_periods"):
-            periods_to_log = sorted(self._data_feed._periods.keys())  # pyright: ignore[reportPrivateUsage]
-        else:
-            periods_to_log = sorted(self._klines.keys())
-        for period_name in periods_to_log:
+        for period_name in self._data_feed.get_period_names():
             pd_obj = self._data_feed.get_period(period_name)
             if pd_obj is None or pd_obj.length == 0:
                 continue
             latest_time = pd_obj.latest_time
             latest_time_str = latest_time.strftime("%Y-%m-%d %H:%M") if latest_time else "N/A"
-            # 收集指标列的最新值（排除 OHLCV 和 tqsdk 元数据列）
-            skip_cols = frozenset(
-                {"open", "high", "low", "close", "volume", "id", "symbol", "duration", "open_oi", "close_oi"}
-            )
-            ind_cols = [c for c in pd_obj._df.columns if c not in skip_cols]  # pyright: ignore[reportPrivateUsage]
+            ind_cols = self._data_feed.get_indicator_names(period_name)
             ind_parts = []
             for c in sorted(ind_cols):
                 val = pd_obj.get_indicator(c, -1)
@@ -482,28 +471,25 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             volume=float(klines.volume.iloc[idx]),
         )
 
-    def _build_multi_context(self) -> dict[str, Any]:
+    def _build_multi_context(self, current_bar: Bar) -> dict[str, Any]:
         """构造多周期 PeriodDataView 字典（供 strategy.on_bar 使用）
 
-        与回测路径 VnpyBacktestBridge._build_ctx() 对称。
+        通过 DataFeed.get_data() 公共 API 获取各周期视图，天然防偷看。
         """
         if self._data_feed is None:
             return {}
+        reqs = self._strategy.data_requirements(self._state.strategy_config)
         multi: dict[str, Any] = {}
         for period_name in self._klines:
             pd_obj = self._data_feed.get_period(period_name)
             if pd_obj is None or pd_obj.length == 0:
                 continue
-            pdf = pd_obj._df  # pyright: ignore[reportPrivateUsage]
-            end_idx = len(pdf) - 1
-            multi[period_name] = PeriodDataView(
-                df_ref=pdf,
-                events_ref=None,
-                start_idx=0,
-                end_idx=end_idx,
-                current_time=pdf.index[-1],
-                period=period_name,
+            lookback = (
+                reqs.periods[period_name].lookback_bars if reqs and period_name in reqs.periods else pd_obj.length
             )
+            view = self._data_feed.get_data(period_name, current_bar.datetime, lookback)
+            if view is not None:
+                multi[period_name] = view
         return multi
 
     def _update_period_and_recalc(self, period_name: str, bar: Bar) -> None:
@@ -527,7 +513,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         """
         bar = self._kline_to_bar(klines, idx)
         self._update_period_and_recalc(main_period, bar)
-        multi = self._build_multi_context()
+        multi = self._build_multi_context(bar)
 
         ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])
         self._update_peak_prices(bar)

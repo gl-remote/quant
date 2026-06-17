@@ -569,6 +569,85 @@ class DataFeed:
         """
         return self._periods.get(period_name)
 
+    def get_period_names(self) -> list[str]:
+        """获取所有已注册的周期名称列表
+
+        :return: 周期名称列表
+        """
+        return list(self._periods.keys())
+
+    def get_indicator_names(self, period_name: str) -> list[str]:
+        """获取指定周期中已计算的指标列名（排除 OHLCV 列）
+
+        :param period_name: 周期名称
+        :return: 指标列名列表，周期不存在返回空列表
+        """
+        period_data = self._periods.get(period_name)
+        if period_data is None:
+            return []
+        return [c for c in period_data._df.columns if c not in _OHLCV_COLUMNS]  # pyright: ignore[reportPrivateUsage]
+
+    def get_registered_indicators(self, period_name: str) -> list[tuple[str, dict[str, Any]]]:
+        """获取指定周期已注册的指标配置列表
+
+        :param period_name: 周期名称
+        :return: [(indicator_name, params)] 列表，周期不存在返回空列表
+        """
+        return list(self._registered_indicators.get(period_name, []))
+
+    def get_date_range(self, period_name: str) -> tuple[str, str] | None:
+        """获取指定周期的数据日期范围
+
+        :param period_name: 周期名称
+        :return: (min_dt, max_dt) 日期字符串，周期不存在或无数据返回 None
+        """
+        period_data = self._periods.get(period_name)
+        if period_data is None or period_data.length == 0:
+            return None
+        idx = period_data._df.index  # pyright: ignore[reportPrivateUsage]
+        return str(idx[0].date()), str(idx[-1].date())
+
+    def build_ctx_cache(self, requirements: DataRequirements, symbol: str) -> dict[pd.Timestamp, BarContext]:
+        """回测专用：一次性预构造所有 BarContext
+
+        按主周期（requirements.periods 的第一个 key）逐行构造 BarContext，
+        on_bar 中可直接通过 timestamp 做 O(1) 查找。
+
+        前置条件：数据已加载且指标已计算（calculate_all 已调用）。
+
+        :param requirements: 策略数据需求
+        :param symbol: 品种标识
+        :return: {timestamp: BarContext} 字典
+        """
+        main_period = next(iter(requirements.periods))
+        main_pd = self._periods.get(main_period)
+        if main_pd is None or main_pd.length == 0:
+            return {}
+
+        cache: dict[pd.Timestamp, BarContext] = {}
+        main_df = main_pd._df  # pyright: ignore[reportPrivateUsage]
+
+        for idx in range(len(main_df)):
+            ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
+            row = main_df.iloc[idx]
+            bar = Bar(
+                symbol=symbol,
+                datetime=ts.to_pydatetime(),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+            )
+            multi: dict[str, PeriodDataView] = {}
+            for period, req in requirements.periods.items():
+                view = self.get_data(period, ts, req.lookback_bars)
+                if view is not None:
+                    multi[period] = view
+            cache[ts] = BarContext(symbol=symbol, bar=bar, multi=multi, events=[])
+
+        return cache
+
     def get_data(
         self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1, timeout: float | None = None
     ) -> PeriodDataView | None:
