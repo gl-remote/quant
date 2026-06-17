@@ -486,63 +486,16 @@ class DataFeed:
 
         has_forming = period_data._forming_bar is not None  # pyright: ignore[reportPrivateUsage]
 
-        # 如果有 forming bar，需要临时追加到 _df 来计算指标
-        if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
-            forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
-            forming_time = pd.Timestamp(forming_bar.datetime)
-            forming_row = pd.Series(
-                {
-                    "open": forming_bar.open,
-                    "high": forming_bar.high,
-                    "low": forming_bar.low,
-                    "close": forming_bar.close,
-                    "volume": forming_bar.volume,
-                },
-                name=forming_time,
-            )
-            period_data._df.loc[forming_time] = forming_row  # pyright: ignore[reportPrivateUsage]
+        # 如果有 forming bar，临时追加到 _df 以便计算指标
+        if has_forming:
+            self._attach_forming_bar(period_data)
 
         try:
-            for indicator_name, params in self._registered_indicators[period_name]:
-                col_name = generate_indicator_column_name(indicator_name, params)
-                df_len = len(period_data._df)  # pyright: ignore[reportPrivateUsage]
+            self._compute_registered_indicators(period_name, period_data)
 
-                # 增量检查：如果已经算过且没有新行，跳过
-                if period_data.is_indicator_calculated(col_name):
-                    last_calc_idx = period_data.get_indicator_last_calc_idx(col_name)
-                    if last_calc_idx is not None and last_calc_idx >= df_len - 1:
-                        # 没有新行追加，指标值仍然最新，跳过重算
-                        continue
-
-                # 获取指标函数信息
-                func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
-                if func_info is None:
-                    continue
-
-                # 计算指标（全量计算，传入完整 DataFrame）
-                try:
-                    series = period_data.apply_indicator(func_info.func, **params)
-                    period_data.set_indicator_column(col_name, series)
-                    period_data.mark_indicator_calculated(col_name)
-                except Exception as e:
-                    logger.warning("指标计算失败 [{}][{}]: {}", period_name, indicator_name, e)
-
-            # 如果有 forming bar，提取最后一行的指标值到缓存，然后从 _df 中移除
+            # 如果有 forming bar，提取指标值到缓存，然后从 _df 中移除
             if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
-                forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
-                forming_time = pd.Timestamp(forming_bar.datetime)
-                # 提取 forming bar 行的指标值
-                for indicator_name, params in self._registered_indicators[period_name]:
-                    col_name = generate_indicator_column_name(indicator_name, params)
-                    if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
-                        val = period_data._df.loc[forming_time, col_name]  # pyright: ignore[reportPrivateUsage]
-                        period_data._forming_indicators[col_name] = float(val)  # pyright: ignore[reportPrivateUsage]
-                # 从 _df 中移除 forming bar 行
-                period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
-                # 标记指标只算到 _df 末尾（不含 forming bar）
-                for indicator_name, params in self._registered_indicators[period_name]:
-                    col_name = generate_indicator_column_name(indicator_name, params)
-                    period_data.mark_indicator_calculated(col_name, len(period_data._df) - 1)  # pyright: ignore[reportPrivateUsage]
+                self._detach_forming_bar(period_data, period_name)
 
         except Exception:
             # 异常时确保 forming bar 被移除
@@ -551,6 +504,71 @@ class DataFeed:
                 if forming_time in period_data._df.index:  # pyright: ignore[reportPrivateUsage]
                     period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
             raise
+
+    def _attach_forming_bar(self, period_data: PeriodData) -> None:
+        """将 forming bar 临时追加到 _df 末尾，以便计算指标"""
+        if period_data._forming_bar is None:  # pyright: ignore[reportPrivateUsage]
+            return
+        forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
+        forming_time = pd.Timestamp(forming_bar.datetime)
+        forming_row = pd.Series(
+            {
+                "open": forming_bar.open,
+                "high": forming_bar.high,
+                "low": forming_bar.low,
+                "close": forming_bar.close,
+                "volume": forming_bar.volume,
+            },
+            name=forming_time,
+        )
+        period_data._df.loc[forming_time] = forming_row  # pyright: ignore[reportPrivateUsage]
+
+    def _detach_forming_bar(self, period_data: PeriodData, period_name: str) -> None:
+        """从 _df 中提取 forming bar 的指标值到缓存，然后移除 forming bar 行"""
+        if period_data._forming_bar is None:  # pyright: ignore[reportPrivateUsage]
+            return
+        forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
+        forming_time = pd.Timestamp(forming_bar.datetime)
+
+        # 提取 forming bar 行的指标值到缓存
+        for indicator_name, params in self._registered_indicators[period_name]:
+            col_name = generate_indicator_column_name(indicator_name, params)
+            if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
+                val = period_data._df.loc[forming_time, col_name]  # pyright: ignore[reportPrivateUsage]
+                period_data._forming_indicators[col_name] = float(val)  # pyright: ignore[reportPrivateUsage]
+
+        # 从 _df 中移除 forming bar 行
+        period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
+
+        # 标记指标只算到 _df 末尾（不含 forming bar）
+        for indicator_name, params in self._registered_indicators[period_name]:
+            col_name = generate_indicator_column_name(indicator_name, params)
+            period_data.mark_indicator_calculated(col_name, len(period_data._df) - 1)  # pyright: ignore[reportPrivateUsage]
+
+    def _compute_registered_indicators(self, period_name: str, period_data: PeriodData) -> None:
+        """计算指定周期的所有注册指标（不考虑 forming bar）"""
+        for indicator_name, params in self._registered_indicators[period_name]:
+            col_name = generate_indicator_column_name(indicator_name, params)
+            df_len = len(period_data._df)  # pyright: ignore[reportPrivateUsage]
+
+            # 增量检查：如果已经算过且没有新行，跳过
+            if period_data.is_indicator_calculated(col_name):
+                last_calc_idx = period_data.get_indicator_last_calc_idx(col_name)
+                if last_calc_idx is not None and last_calc_idx >= df_len - 1:
+                    continue
+
+            # 获取指标函数信息
+            func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
+            if func_info is None:
+                continue
+
+            # 计算指标（全量计算，传入完整 DataFrame）
+            try:
+                series = period_data.apply_indicator(func_info.func, **params)
+                period_data.set_indicator_column(col_name, series)
+                period_data.mark_indicator_calculated(col_name)
+            except Exception as e:
+                logger.warning("指标计算失败 [{}][{}]: {}", period_name, indicator_name, e)
 
     def calculate_all(self) -> None:
         """批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）
@@ -914,8 +932,7 @@ def create_data_feed(
             return cached
 
     # 1. 尝试从磁盘加载，判断是否需要全量重算
-    feed: DataFeed
-    data_stale = True
+    feed: DataFeed | None = None
 
     if os.path.isdir(feeds_dir):
         try:
@@ -927,13 +944,33 @@ def create_data_feed(
                     src_min_dt = str(source_df.index[0].date())
                     src_max_dt = str(source_df.index[-1].date())
                     if feed_date_range[0] == src_min_dt and feed_date_range[1] == src_max_dt:
-                        data_stale = False
-
+                        # 磁盘数据有效，增量合并缺失的周期/指标
+                        existing_periods = set(feed.get_period_names())
+                        existing_indicators = {
+                            (pn, n, tuple(sorted(p.items())))
+                            for pn in requirements.indicators
+                            for n, p in feed.get_registered_indicators(pn)
+                        }
+                        feed.apply_requirements(requirements)
+                        new_periods = set(feed.get_period_names()) - existing_periods
+                        new_indicators = {
+                            (pn, n, tuple(sorted(p.items())))
+                            for pn in requirements.indicators
+                            for n, p in feed.get_registered_indicators(pn)
+                        } - existing_indicators
+                        if new_periods or new_indicators:
+                            feed.calculate_all()
+                            feed.to_feeds(feeds_dir)
+                    else:
+                        feed = None  # 日期不匹配，需要全量重算
+                else:
+                    feed = None  # 无源数据，需要全量重算
+            else:
+                feed = None  # 无源数据，需要全量重算
         except Exception:
-            # 加载失败，全量重算
-            pass
+            feed = None  # 加载失败，全量重算
 
-    if data_stale:
+    if feed is None:
         # 全量加载
         feed = DataFeed(symbol=symbol)
         feed.apply_requirements(requirements)
@@ -941,28 +978,6 @@ def create_data_feed(
             feed.feed_history_df(source_df.set_index("datetime"))
         feed.calculate_all()
         feed.to_feeds(feeds_dir)
-    else:
-        # 增量合并缺失的周期/指标
-        feed.apply_requirements(requirements)
-        changed = False
-        existing_periods = set(feed.get_period_names())
-        existing_indicators = {
-            (pn, n, tuple(sorted(p.items())))
-            for pn in requirements.indicators
-            for n, p in feed.get_registered_indicators(pn)
-        }
-        feed.apply_requirements(requirements)
-        new_periods = set(feed.get_period_names()) - existing_periods
-        new_indicators = {
-            (pn, n, tuple(sorted(p.items())))
-            for pn in requirements.indicators
-            for n, p in feed.get_registered_indicators(pn)
-        } - existing_indicators
-        if new_periods or new_indicators:
-            changed = True
-        if changed:
-            feed.calculate_all()
-            feed.to_feeds(feeds_dir)
 
     # 写入内存缓存
     if source_df is not None and len(source_df) > 0:
