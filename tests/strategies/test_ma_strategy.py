@@ -30,6 +30,7 @@ from strategies import (
     StrategyPosition,
     build_context,
 )
+from strategies.core.indicators import sma_func
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
 
 # --------------------------
@@ -80,12 +81,12 @@ def _prepare_test_data(
             feed.register_period(period_name)
         for period_name, indicators in reqs.indicators.items():
             for ind in indicators:
-                feed.register_indicator(period_name, ind.name, **ind.params)
+                feed.register_indicator(period_name, ind.name, ind.func, **ind.params)
     else:
         # 单周期模式（仅用于基础测试）
         feed.register_period("1m")
-        feed.register_indicator("1m", "sma", period=config.sma_short)
-        feed.register_indicator("1m", "sma", period=config.sma_long)
+        feed.register_indicator("1m", "sma", sma_func, period=config.sma_short)
+        feed.register_indicator("1m", "sma", sma_func, period=config.sma_long)
 
     # 加载历史数据
     feed.load_history_data("1m", bars)
@@ -103,8 +104,8 @@ def _prepare_test_data(
             },
             indicators={
                 "1m": [
-                    IndicatorRequirements(name="sma", params={"period": config.sma_short}),
-                    IndicatorRequirements(name="sma", params={"period": config.sma_long}),
+                    IndicatorRequirements(name="sma", params={"period": config.sma_short}, func=sma_func),
+                    IndicatorRequirements(name="sma", params={"period": config.sma_long}, func=sma_func),
                 ],
             },
             events=EventsRequirements.no_events(),

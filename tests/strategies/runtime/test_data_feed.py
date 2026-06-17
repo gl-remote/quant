@@ -17,6 +17,7 @@ from strategies import (
     PeriodRequirements,
     build_context,
 )
+from strategies.core.indicators import ema_func, sma_func
 from strategies.ma_strategy import MACrossParams
 from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
 from strategies.runtime.period import PeriodDataView
@@ -119,8 +120,8 @@ def test_data_feed_basic():
     feed.register_period("1m")
 
     # 注册指标
-    feed.register_indicator("1m", "sma", period=5)
-    feed.register_indicator("1m", "sma", period=10)
+    feed.register_indicator("1m", "sma", sma_func, period=5)
+    feed.register_indicator("1m", "sma", sma_func, period=10)
 
     # 生成测试数据
     bars = generate_test_bars(50)
@@ -173,8 +174,8 @@ def test_build_context():
     # 创建 DataFeed
     feed = DataFeed("TEST3")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", period=5)
-    feed.register_indicator("1m", "sma", period=10)
+    feed.register_indicator("1m", "sma", sma_func, period=5)
+    feed.register_indicator("1m", "sma", sma_func, period=10)
 
     # 加载数据
     bars = generate_test_bars(30)
@@ -187,8 +188,8 @@ def test_build_context():
         },
         indicators={
             "1m": [
-                IndicatorRequirements(name="sma", params={"period": 5}),
-                IndicatorRequirements(name="sma", params={"period": 10}),
+                IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func),
+                IndicatorRequirements(name="sma", params={"period": 10}, func=sma_func),
             ],
         },
         events=EventsRequirements.no_events(),
@@ -321,8 +322,8 @@ def test_calculate_period_incremental():
 
     feed = DataFeed("TEST_INC")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", period=5)
-    feed.register_indicator("1m", "sma", period=10)
+    feed.register_indicator("1m", "sma", sma_func, period=5)
+    feed.register_indicator("1m", "sma", sma_func, period=10)
 
     # 初始历史：30 根 K 线（模拟 tqsdk 推送的历史数据）
     bars = generate_test_bars(30)
@@ -393,8 +394,8 @@ def test_tqsdk_path_simulation():
 
     feed = DataFeed("TQSDK_SIM")
     feed.register_period("1m")
-    feed.register_indicator("1m", "sma", period=5)
-    feed.register_indicator("1m", "ema", period=12)
+    feed.register_indicator("1m", "sma", sma_func, period=5)
+    feed.register_indicator("1m", "ema", ema_func, period=12)
 
     # --- 阶段 1：模拟 tqsdk kline_serial 的初始历史数据 ---
     bars = generate_test_bars(40)
@@ -468,7 +469,7 @@ def test_multi_period_consistency():
     feed = DataFeed("MULTI_PERIOD")
     for period in ("1m", "5m", "15m"):
         feed.register_period(period)
-        feed.register_indicator(period, "sma", period=5)
+        feed.register_indicator(period, "sma", sma_func, period=5)
 
     # 初始加载：1m=50 根，5m=30 根，15m=20 根（tqsdk 各周期独立推送）
     for period, n in [("1m", 50), ("5m", 30), ("15m", 20)]:

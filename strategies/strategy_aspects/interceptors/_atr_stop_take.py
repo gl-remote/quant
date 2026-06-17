@@ -18,6 +18,7 @@ from common.constants import (
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
 )
+from strategies.core.indicators import atr_func
 
 
 def with_atr_stop_take_profit(period: str = "15m") -> Any:
@@ -60,7 +61,7 @@ def with_atr_stop_take_profit(period: str = "15m") -> Any:
                 indicators={
                     period: [
                         IndicatorRequirements(
-                            name="atr", params={"period": config.atr_period}, window=config.atr_period
+                            name="atr", params={"period": config.atr_period}, func=atr_func, window=config.atr_period
                         )
                     ],
                 },

@@ -53,7 +53,7 @@ def dump_feed(feed: "DataFeed", feeds_dir: str) -> None:
     # 构建 _meta.json
     indicators_serializable: dict[str, list[dict[str, Any]]] = {}
     for pn, ind_list in feed._registered_indicators.items():
-        indicators_serializable[pn] = [{"name": n, "params": p} for n, p in ind_list]
+        indicators_serializable[pn] = [{"name": n, "params": p} for n, _, p in ind_list]
     meta = {
         "symbol": feed.symbol,
         "source": feed.source,
@@ -113,10 +113,10 @@ def load_feed(feeds_dir: str) -> "DataFeed":
         feed.register_period(period_name)
         feed._periods[period_name].load_df_parquet(df, indicator_cols)
 
-    # 恢复指标注册配置
+    # 恢复指标注册配置（func 无法序列化，用 None 占位；指标值已在 parquet 中，不需要重新计算）
     for pn, ind_list in meta.get("indicators", {}).items():
         for ind in ind_list:
-            feed.register_indicator(pn, ind["name"], **ind["params"])
+            feed.register_indicator(pn, ind["name"], func=None, **ind["params"])
 
     # events
     events_fp = os.path.join(feeds_dir, "events.parquet")

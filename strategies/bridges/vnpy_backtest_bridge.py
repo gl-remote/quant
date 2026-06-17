@@ -44,10 +44,6 @@ from strategies.runtime import (
     DataRequirements,
     create_data_feed,
 )
-from strategies.runtime.indicators import register_default_indicators
-
-# 确保默认指标函数已注册
-register_default_indicators()
 
 
 class VnpyBacktestBridge(CtaTemplate):

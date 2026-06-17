@@ -64,6 +64,7 @@ def _build_indicator_requirements(metric: MetricRef, config: Any) -> Any:
                 IndicatorRequirements(
                     name=metric.indicator.name,
                     params=resolved_params,
+                    func=metric.indicator.func,  # type: ignore[arg-type]
                     window=int(resolved_window),
                 )
             ],

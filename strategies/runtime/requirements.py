@@ -3,8 +3,12 @@
 包含策略声明数据需求的 dataclass 类型。
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+import numpy as np
+from numpy.typing import NDArray
 
 from ..core.types import Bar
 from ..strategy_aspects.primitives import StrategyAspects
@@ -26,6 +30,7 @@ class IndicatorRequirements:
 
     name: str  # 指标名
     params: dict[str, Any]  # 指标参数
+    func: Callable[..., NDArray[np.float64]]  # 指标计算函数
     window: int = 250  # 指标计算需要的历史K线窗口（用于增量计算时截取 tail）
 
 

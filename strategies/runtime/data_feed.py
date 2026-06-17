@@ -29,10 +29,7 @@ from loguru import logger
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event
-from .indicators import (
-    REGISTERED_INDICATOR_FUNCS,
-    generate_indicator_column_name,
-)
+from .indicators import generate_indicator_column_name
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from .serialization import _OHLCV_COLUMNS, dump_feed, load_feed
@@ -85,8 +82,8 @@ class DataFeed:
             {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
         )
 
-        # 指标注册配置
-        self._registered_indicators: dict[str, list[tuple[str, dict[str, Any]]]] = {}
+        # 指标注册配置: (name, func, params)
+        self._registered_indicators: dict[str, list[tuple[str, Any, dict[str, Any]]]] = {}
 
         # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
@@ -107,43 +104,32 @@ class DataFeed:
             self._periods[period] = PeriodData(period)
         return self._periods[period]
 
-    def register_indicator(self, period_name: str, indicator_name: str, **params: Any) -> None:
+    def register_indicator(self, period_name: str, indicator_name: str, func: Any, **params: Any) -> None:
         """为指定周期注册需要计算的指标
 
-        指标不会立即计算，第一次访问时才懒加载；计算方式灵活（全量/逐行都支持）
-
         参数组合示例：
-        - register_indicator("5m", "sma", period=10) → 生成列 "sma_10"
-        - register_indicator("5m", "sma", period=20) → 生成列 "sma_20"
-        - register_indicator("5m", "ema", period=20) → 生成列 "ema_20"
-
-        【指标计算说明】
-        - BATCH 模式指标始终在完整的 PeriodData._df 上计算
-        - 数据访问是通过逻辑视图（时间戳/索引范围），不复制数据，不触发重新计算
-        - calculate_all() 的作用是预计算所有注册指标，避免运行时懒加载延迟
-        - 如果某个指标已经计算过，calculate_all() 会跳过该指标
-        - 指标函数接收的是完整 DataFrame，不应该假设或依赖数据范围
+        - register_indicator("5m", "sma", sma_func, period=10) → 生成列 "sma_10"
+        - register_indicator("5m", "sma", sma_func, period=20) → 生成列 "sma_20"
+        - register_indicator("5m", "ema", ema_func, period=20) → 生成列 "ema_20"
 
         :param period_name: 周期名称
-        :param indicator_name: 指标名称，需已在模块级注册
+        :param indicator_name: 指标名称
+        :param func: 指标计算函数，签名 func(df, **params) -> NDArray
         :param params: 指标参数，将传递给计算函数
-        :raises KeyError: 如果周期未注册或指标函数未注册
+        :raises KeyError: 如果周期未注册
         """
         if period_name not in self._periods:
             raise KeyError(f"Period {period_name} not registered")
-
-        if indicator_name not in REGISTERED_INDICATOR_FUNCS:
-            raise KeyError(f"Indicator function {indicator_name} not registered")
 
         if period_name not in self._registered_indicators:
             self._registered_indicators[period_name] = []
 
         # 检查是否已注册
-        for existing_name, existing_params in self._registered_indicators[period_name]:
+        for existing_name, _, existing_params in self._registered_indicators[period_name]:
             if existing_name == indicator_name and existing_params == params:
                 return  # 已注册，无需重复
 
-        self._registered_indicators[period_name].append((indicator_name, params))
+        self._registered_indicators[period_name].append((indicator_name, func, params))
 
     def load_history_data(self, period: str, bars: list[Bar], events: list[Event] | None = None) -> None:
         """批量加载历史数据（用于回测初始化）
@@ -367,7 +353,7 @@ class DataFeed:
         # 5. 注册指标
         for period, ind_list in reqs.indicators.items():
             for ind in ind_list:
-                self.register_indicator(period, ind.name, **ind.params)
+                self.register_indicator(period, ind.name, ind.func, **ind.params)
 
     def feed_history_df(self, df: pd.DataFrame, events: list[Event] | None = None) -> None:
         """灌入基础周期历史 K 线（高层 API）
@@ -528,7 +514,7 @@ class DataFeed:
         forming_time = pd.Timestamp(forming_bar.datetime)
 
         # 提取 forming bar 行的指标值到缓存
-        for indicator_name, params in self._registered_indicators[period_name]:
+        for indicator_name, _, params in self._registered_indicators[period_name]:
             col_name = generate_indicator_column_name(indicator_name, params)
             if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
                 val = period_data._df.loc[forming_time, col_name]  # pyright: ignore[reportPrivateUsage]
@@ -538,13 +524,13 @@ class DataFeed:
         period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
 
         # 标记指标只算到 _df 末尾（不含 forming bar）
-        for indicator_name, params in self._registered_indicators[period_name]:
+        for indicator_name, _, params in self._registered_indicators[period_name]:
             col_name = generate_indicator_column_name(indicator_name, params)
             period_data.mark_indicator_calculated(col_name, len(period_data._df) - 1)  # pyright: ignore[reportPrivateUsage]
 
     def _compute_registered_indicators(self, period_name: str, period_data: PeriodData) -> None:
         """计算指定周期的所有注册指标（不考虑 forming bar）"""
-        for indicator_name, params in self._registered_indicators[period_name]:
+        for indicator_name, func, params in self._registered_indicators[period_name]:
             col_name = generate_indicator_column_name(indicator_name, params)
             df_len = len(period_data._df)  # pyright: ignore[reportPrivateUsage]
 
@@ -554,14 +540,9 @@ class DataFeed:
                 if last_calc_idx is not None and last_calc_idx >= df_len - 1:
                     continue
 
-            # 获取指标函数信息
-            func_info = REGISTERED_INDICATOR_FUNCS.get(indicator_name)
-            if func_info is None:
-                continue
-
             # 计算指标（全量计算，传入完整 DataFrame）
             try:
-                series = period_data.apply_indicator(func_info.func, **params)
+                series = period_data.apply_indicator(func, **params)
                 period_data.set_indicator_column(col_name, series)
                 period_data.mark_indicator_calculated(col_name)
             except Exception as e:
@@ -646,11 +627,11 @@ class DataFeed:
             return []
         return [c for c in period_data._df.columns if c not in _OHLCV_COLUMNS]  # pyright: ignore[reportPrivateUsage]
 
-    def get_registered_indicators(self, period_name: str) -> list[tuple[str, dict[str, Any]]]:
+    def get_registered_indicators(self, period_name: str) -> list[tuple[str, Any, dict[str, Any]]]:
         """获取指定周期已注册的指标配置列表
 
         :param period_name: 周期名称
-        :return: [(indicator_name, params)] 列表，周期不存在返回空列表
+        :return: [(indicator_name, func, params)] 列表，周期不存在返回空列表
         """
         return list(self._registered_indicators.get(period_name, []))
 
@@ -930,14 +911,14 @@ def create_data_feed(
                         existing_indicators = {
                             (pn, n, tuple(sorted(p.items())))
                             for pn in requirements.indicators
-                            for n, p in feed.get_registered_indicators(pn)
+                            for n, _, p in feed.get_registered_indicators(pn)
                         }
                         feed.apply_requirements(requirements)
                         new_periods = set(feed.get_period_names()) - existing_periods
                         new_indicators = {
                             (pn, n, tuple(sorted(p.items())))
                             for pn in requirements.indicators
-                            for n, p in feed.get_registered_indicators(pn)
+                            for n, _, p in feed.get_registered_indicators(pn)
                         } - existing_indicators
                         if new_periods or new_indicators:
                             feed.calculate_all()

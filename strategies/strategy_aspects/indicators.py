@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from ..core.indicators import kdj_func, macd_func, sma_func
 from .primitives import IndicatorSpec
 
 MACD = IndicatorSpec(
@@ -13,6 +14,7 @@ MACD = IndicatorSpec(
     column="macd_12_9_26",
     params={"fast": 12, "slow": 26, "signal": 9},
     window=35,
+    func=macd_func,
 )
 
 KDJ = IndicatorSpec(
@@ -20,6 +22,7 @@ KDJ = IndicatorSpec(
     column="kdj_3_3_9",
     params={"n": 9, "k_period": 3, "d_period": 3},
     window=9,
+    func=kdj_func,
 )
 
 
@@ -30,4 +33,5 @@ def SMA(period: int | str) -> IndicatorSpec:  # noqa: N802
         column=f"sma_{period}",
         params={"period": period},
         window=period,
+        func=sma_func,
     )

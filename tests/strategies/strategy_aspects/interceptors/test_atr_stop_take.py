@@ -28,6 +28,7 @@ from strategies import (
     State,
     StrategyPosition,
 )
+from strategies.core.indicators import sma_func
 from strategies.strategy_aspects import with_atr_stop_take_profit, with_stop_take_profit
 from strategies.strategy_aspects.primitives import StrategyAspects
 
@@ -138,8 +139,8 @@ class _ATRStrategy:
                 "15m": PeriodRequirements(lookback_bars=30),
             },
             indicators={
-                "1m": [IndicatorRequirements(name="sma", params={"period": 5})],
-                "5m": [IndicatorRequirements(name="sma", params={"period": 5})],
+                "1m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)],
+                "5m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)],
             },
             events=None,
         )
@@ -287,7 +288,7 @@ class _CombinedStrategy:
     def data_requirements(self, config) -> DataRequirements:
         return DataRequirements(
             periods={"1m": PeriodRequirements(lookback_bars=60), "15m": PeriodRequirements(lookback_bars=30)},
-            indicators={"1m": [IndicatorRequirements(name="sma", params={"period": 5})]},
+            indicators={"1m": [IndicatorRequirements(name="sma", params={"period": 5}, func=sma_func)]},
             events=None,
         )
 

@@ -7,8 +7,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+import numpy as np
+from numpy.typing import NDArray
 
 DirectionRole = Literal["trend", "confirm"]
 
@@ -84,6 +88,7 @@ class IndicatorSpec:
     column: str
     params: dict[str, Any]
     window: int | str
+    func: Callable[..., NDArray[np.float64]] | None = None
 
 
 @dataclass(frozen=True)

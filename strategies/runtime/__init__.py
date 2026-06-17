@@ -18,7 +18,6 @@
 from .cache import clear_cache, get_cached_feed, set_cached_feed
 from .data_feed import DataFeed, build_context, create_data_feed
 from .events import BigTradeEvent, Event, NewsEvent
-from .indicators import register_default_indicators
 from .requirements import (
     BarContext,
     DataRequirements,
@@ -47,8 +46,6 @@ __all__ = [
     "get_cached_feed",
     "set_cached_feed",
     "clear_cache",
-    # 指标注册（桥接代码按需调用）
-    "register_default_indicators",
     # 上下文构造（桥接/回测需要）
     "build_context",
 ]
