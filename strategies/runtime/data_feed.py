@@ -26,15 +26,12 @@ from typing import Any
 import pandas as pd
 from loguru import logger
 
-from ..core.indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event
 from .indicators import (
     REGISTERED_INDICATOR_FUNCS,
-    IndicatorCalcMode,
     generate_indicator_column_name,
-    register_indicator_func,
 )
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
@@ -879,22 +876,6 @@ def build_context(
     bar.symbol = data_feed.symbol
 
     return BarContext(symbol=data_feed.symbol, bar=bar, multi=multi, events=events)
-
-
-# ==================== 默认指标注册 ====================
-# 指标实现见 core/indicators.py（sma_func, ema_func, rsi_func）
-
-# 注册默认指标
-register_indicator_func("sma", sma_func, IndicatorCalcMode.BATCH, description="简单移动平均线 (Simple Moving Average)")
-register_indicator_func(
-    "ema", ema_func, IndicatorCalcMode.BATCH, description="指数移动平均线 (Exponential Moving Average)"
-)
-register_indicator_func("rsi", rsi_func, IndicatorCalcMode.BATCH, description="相对强弱指标 (Relative Strength Index)")
-register_indicator_func(
-    "macd", macd_func, IndicatorCalcMode.BATCH, description="MACD快慢线差值 (Moving Average Convergence Divergence)"
-)
-register_indicator_func("kdj", kdj_func, IndicatorCalcMode.BATCH, description="KDJ随机指标J值")
-register_indicator_func("atr", atr_func, IndicatorCalcMode.BATCH, description="平均真实波幅 (Average True Range)")
 
 
 # ==================== 便捷工厂方法 ====================

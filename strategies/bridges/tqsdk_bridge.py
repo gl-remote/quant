@@ -39,6 +39,10 @@ from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
 from common.typing import check_types  # noqa: E402
 from strategies.runtime import BarContext, DataFeed  # noqa: E402
+from strategies.runtime.indicators import register_default_indicators  # noqa: E402
+
+# 确保默认指标函数已注册
+register_default_indicators()
 
 # 周期名称 → tqsdk duration 秒数映射
 _PERIOD_MAP: dict[str, int] = {

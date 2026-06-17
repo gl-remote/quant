@@ -75,3 +75,18 @@ def generate_indicator_column_name(name: str, params: dict[str, Any]) -> str:
     if param_parts:
         return f"{name}_{'_'.join(param_parts)}"
     return name
+
+
+def register_default_indicators() -> None:
+    """注册内置默认指标函数（sma/ema/rsi/macd/kdj/atr）
+
+    由调用方（桥接器、测试等）按需调用，而非在模块导入时自动执行。
+    """
+    from ..core.indicators import atr_func, ema_func, kdj_func, macd_func, rsi_func, sma_func
+
+    register_indicator_func("sma", sma_func, IndicatorCalcMode.BATCH, description="简单移动平均线")
+    register_indicator_func("ema", ema_func, IndicatorCalcMode.BATCH, description="指数移动平均线")
+    register_indicator_func("rsi", rsi_func, IndicatorCalcMode.BATCH, description="相对强弱指标")
+    register_indicator_func("macd", macd_func, IndicatorCalcMode.BATCH, description="MACD")
+    register_indicator_func("kdj", kdj_func, IndicatorCalcMode.BATCH, description="KDJ")
+    register_indicator_func("atr", atr_func, IndicatorCalcMode.BATCH, description="平均真实波幅")
