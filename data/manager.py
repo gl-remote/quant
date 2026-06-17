@@ -28,6 +28,7 @@ from common.types import BacktestResult
 from .datasource import list_sources
 from .models import (
     BacktestRecord,
+    DataEntry,
     DataSummary,
     KlineSchema,
     SymbolInfo,
@@ -122,16 +123,53 @@ class DataManager:
         """
         return self._collect_symbols()
 
-    def search_symbols(self, pattern: str) -> list[str]:
+    def search_symbols(self, pattern: str, interval: str | None = None) -> list[str]:
         """按正则表达式搜索可用品种
 
+        如果 pattern 不包含周期部分（如 'DCE\\.m.*'），会自动根据 interval 拼出完整 pattern
+        `DCE\\.m.*\\.$interval\\.`，只匹配对应周期的文件。
+
         Args:
-            pattern: 正则表达式模式（匹配文件名，如 'DCE\\.m.*\\.1m\\.' 匹配 DCE 豆粕的 1 分钟数据）
+            pattern: 正则表达式模式（匹配文件名，如 'DCE\\.m.*' 匹配 DCE 豆粕）
+            interval: K线周期，如果提供且不在 pattern 中，会自动拼接到 pattern 后。
+                如果不提供，从配置读取默认 interval。
 
         Returns:
             匹配的品种代码列表
         """
+        # 如果用户提供的 pattern 不包含周期后缀，自动加上 interval
+        # 文件名格式: {symbol}.{interval}.csv → pattern 需要以 .{interval}. 结尾
+        if interval is None:
+            interval = self._get_default_interval()
+        # 简单判断：如果 pattern 中找不到 interval，就自动拼接
+        if interval not in pattern:
+            pattern = f"{pattern}\\.{interval}\\."
         return self._collect_symbols(pattern)
+
+    def search_and_load(
+        self,
+        pattern: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        interval: str | None = None,
+    ) -> list[DataEntry]:
+        """一步到位：搜索匹配的品种并加载数据
+
+        便利接口：自动处理 pattern 拼接 → 搜索 → 加载 全流程。
+
+        Args:
+            pattern: 正则表达式模式（匹配文件名，如 'DCE\\.m.*' 匹配 DCE 豆粕）
+            start_date: 开始日期，None 使用默认起始
+            end_date: 结束日期，None 使用今天
+            interval: K线周期，如果不提供从配置读取
+
+        Returns:
+            加载完成的数据集列表
+        """
+        if interval is None:
+            interval = self._get_default_interval()
+        symbols = self.search_symbols(pattern, interval)
+        return self.load_kline(symbols, start_date, end_date, interval)
 
     def _collect_symbols(self, pattern: str | None = None) -> list[str]:
         """从 CSV 文件名收集品种代码，可选按文件名正则过滤"""

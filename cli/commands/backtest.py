@@ -40,7 +40,6 @@ from common.constants import (
     LOG_STATUS_ERROR,
     LOG_STATUS_INFO,
     LOG_STATUS_SUCCESS,
-    MODE_BATCH,
     MODE_MULTI,
     MODE_SINGLE,
     STATUS_FAILED,
@@ -408,37 +407,31 @@ def _run_batch_backtest(
     try:
         bc, strategy_params, _, _, _ = _prepare_backtest_config(args, cm)
 
-        # ── 步骤 1: 确定品种列表 ─────────────────────
+        # ── 步骤 1+2: 搜索匹配品种并加载数据 ─────────────────────
         if symbol_arg and not pattern_arg:
+            # 单品种模式：直接加载指定品种
             symbol_list = [symbol_arg]
             mode_label = MODE_SINGLE
-        else:
-            symbol_list = dm.search_symbols(pattern_arg or "")
-            if not symbol_list:
-                logger.error("未找到匹配的品种数据")
-                dm.store.log(
-                    "backtest",
-                    "未找到匹配的品种数据",
-                    symbol=MODE_MULTI,
-                    status=LOG_STATUS_ERROR,
-                )
+            datasets = dm.load_kline(symbol_list, start_arg, end_arg, bc.interval)
+            if not datasets:
+                logger.error("品种数据加载失败")
                 return
-            mode_label = MODE_BATCH
+        else:
+            # 批量模式：搜索匹配品种并一步加载
+            mode_label = MODE_MULTI
+            datasets = dm.search_and_load(pattern_arg or "", start_arg, end_arg, bc.interval)
+            if not datasets:
+                logger.error("所有品种数据加载失败")
+                return
 
         mode_name = "参数搜索" if mode_arg == "search" else "Walk-Forward"
         logger.info(
             "{}回测: {} 个品种 strategy={} mode={}",
-            "批量" if mode_label == MODE_BATCH else "单品种",
-            len(symbol_list),
+            "批量" if mode_label == MODE_MULTI else "单品种",
+            len(datasets),
             strategy_name,
             mode_name,
         )
-
-        # ── 步骤 2: 加载批量数据 ─────────────────────
-        datasets = dm.load_kline(symbol_list, start_arg, end_arg, bc.interval)
-        if not datasets:
-            logger.error("所有品种数据加载失败")
-            return
 
         # ── 步骤 3: 初始化引擎 ───────────────────────
         engine = VnpyBacktestEngine(bc, dm)

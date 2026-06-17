@@ -113,16 +113,16 @@ class MACrossParams:
 # 装饰器从下到上执行，建议型切面在外层先评估条件写入 ctx.aspects，
 # 拦截型切面在内层先执行（有持仓时提前返回出场信号）。
 # ── 做多方向切面 ──
-@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "15m"))
-@confirm_long_when(at(MACD, "1m"), ">", 0)
+@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "1h"))
+@confirm_long_when(at(MACD, "1h"), ">", 0)
 @confirm_long_when(at(MACD, "5m"), ">", 0)
-@confirm_long_when(at(KDJ, "1m"), "<", "kdj_oversold")
+@confirm_long_when(at(KDJ, "1h"), "<", "kdj_oversold")
 @confirm_long_when(at(KDJ, "5m"), "<", "kdj_oversold")
 # ── 做空方向切面 ──
-@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "15m"))
-@confirm_short_when(at(MACD, "1m"), "<", 0)
+@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "1h"))
+@confirm_short_when(at(MACD, "1h"), "<", 0)
 @confirm_short_when(at(MACD, "5m"), "<", 0)
-@confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
+@confirm_short_when(at(KDJ, "1h"), ">", "kdj_overbought")
 @confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
 # ── 拦截型切面声明 ──
 @with_trade_cooldown(minutes=10)
