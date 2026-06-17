@@ -10,10 +10,15 @@ from typing import cast
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 from numpy.typing import NDArray
 
+from ..core.indicators import IndicatorSpec, generate_indicator_column_name
 from ..core.types import Bar
 from .events import Event
+
+# OHLCV 标准列名
+_OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
 
 
 def _make_bar_from_row(row: pd.Series, symbol: str = "") -> Bar:
@@ -27,6 +32,15 @@ def _make_bar_from_row(row: pd.Series, symbol: str = "") -> Bar:
         low=row["low"],
         close=row["close"],
         volume=row["volume"],
+    )
+
+
+def _forming_bar_to_series(bar: Bar) -> pd.Series:
+    """将 forming Bar 转为 DataFrame 行（pd.Series，name 为时间戳）"""
+    forming_time = pd.Timestamp(bar.datetime)
+    return pd.Series(
+        {"open": bar.open, "high": bar.high, "low": bar.low, "close": bar.close, "volume": bar.volume},
+        name=forming_time,
     )
 
 
@@ -69,6 +83,9 @@ class PeriodData:
         self._forming_bar: Bar | None = None
         # 形成中 bar 的指标缓存 {indicator_name: value}
         self._forming_indicators: dict[str, float] = {}
+
+        # 已注册的指标列表
+        self._registered_indicators: list[IndicatorSpec] = []
 
     @property
     def first_time(self) -> pd.Timestamp | None:
@@ -199,6 +216,95 @@ class PeriodData:
         self.append_bar(self._forming_bar)
         self._forming_bar = None
         self._forming_indicators.clear()
+
+    @property
+    def has_forming_bar(self) -> bool:
+        """是否存在形成中的 bar"""
+        return self._forming_bar is not None
+
+    @property
+    def forming_bar(self) -> Bar | None:
+        """获取形成中的 bar（只读）"""
+        return self._forming_bar
+
+    def reset(self) -> None:
+        """清空所有数据（_df、forming bar、指标缓存），保留注册的指标配置"""
+        self._df = pd.DataFrame(
+            columns=["open", "high", "low", "close", "volume"],
+            dtype="float64",
+        )
+        self._df.index.name = "datetime"
+        self._forming_bar = None
+        self._forming_indicators.clear()
+
+    def register_indicator(self, spec: IndicatorSpec) -> None:
+        """注册需要计算的指标
+
+        :param spec: IndicatorSpec 指标定义对象
+        """
+        for existing in self._registered_indicators:
+            if existing.name == spec.name and existing.params == spec.params:
+                return
+        self._registered_indicators.append(spec)
+
+    @property
+    def indicator_names(self) -> list[str]:
+        """获取已计算的指标列名（排除 OHLCV 列）"""
+        return [c for c in self._df.columns if c not in _OHLCV_COLUMNS]
+
+    @property
+    def registered_indicators(self) -> list[IndicatorSpec]:
+        """获取已注册的指标配置列表（只读副本）"""
+        return list(self._registered_indicators)
+
+    def calculate_indicators(self) -> None:
+        """计算所有注册指标
+
+        跳过已计算且最后一行非 NaN 的指标，对需要计算的指标做全量计算。
+        对于有 forming bar 的周期，在临时拼接的 DataFrame 上计算，
+        结果分别写回 _df 和 _forming_indicators，不修改 _df 本身。
+        """
+        if not self._registered_indicators:
+            return
+
+        for spec in self._registered_indicators:
+            col_name = generate_indicator_column_name(spec.name, spec.params)
+
+            # 跳过已计算且最后一行非 NaN 的指标
+            if col_name in self._df.columns and not self._df[col_name].isna().iloc[-1]:
+                continue
+
+            if spec.func is None:
+                continue
+
+            try:
+                window = spec.window if isinstance(spec.window, int) else 250
+                tail_len = min(window, len(self._df))
+                tail_df = self._df.tail(tail_len)
+
+                # 拼接 forming bar 到临时 tail，不修改 _df
+                if self._forming_bar is not None:
+                    forming_row = _forming_bar_to_series(self._forming_bar)
+                    tail_df = pd.concat([tail_df, forming_row.to_frame().T])
+
+                result = spec.func(tail_df, **spec.params)
+                result_series = pd.Series(result, index=tail_df.index)
+
+                # 结果写回 _df（只写 _df 中存在的行）
+                if col_name not in self._df.columns:
+                    self._df[col_name] = np.nan
+                df_mask = tail_df.index.isin(self._df.index)
+                self._df.loc[tail_df.index[df_mask], col_name] = result_series[df_mask]
+
+                # forming bar 的指标值写入缓存
+                if self._forming_bar is not None:
+                    forming_time = pd.Timestamp(self._forming_bar.datetime)
+                    if forming_time in result_series.index:
+                        val = result_series[forming_time]
+                        self._forming_indicators[col_name] = float(val) if not pd.isna(val) else np.nan
+
+            except Exception as e:
+                logger.warning("指标计算失败 [{}][{}]: {}", self.period, spec.name, e)
 
     def append_indicators(self, indicators: pd.DataFrame) -> None:
         """追加指标数据
@@ -340,6 +446,13 @@ class PeriodData:
         :param data: 指标计算结果 numpy 数组
         """
         self._df[name] = data
+
+    def to_parquet(self, path: str) -> None:
+        """将数据序列化到 parquet 文件
+
+        :param path: 目标文件路径
+        """
+        self._df.to_parquet(path, index=True)
 
 
 class PeriodDataView:
@@ -521,21 +634,11 @@ class PeriodDataView:
             result.index.name = "datetime"
 
         if self._forming_bar is not None:
-            forming_time = pd.Timestamp(self._forming_bar.datetime)
-            forming_row = pd.Series(
-                {
-                    "open": self._forming_bar.open,
-                    "high": self._forming_bar.high,
-                    "low": self._forming_bar.low,
-                    "close": self._forming_bar.close,
-                    "volume": self._forming_bar.volume,
-                },
-                name=forming_time,
-            )
+            forming_row = _forming_bar_to_series(self._forming_bar)
             # 添加 forming bar 的指标值
             for ind_name, ind_val in self._forming_indicators.items():
                 forming_row[ind_name] = ind_val
-            result.loc[forming_time] = forming_row
+            result.loc[forming_row.name] = forming_row
 
         return result
 

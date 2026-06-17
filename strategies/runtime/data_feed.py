@@ -22,17 +22,15 @@
 import os
 from datetime import datetime as dt
 
-import numpy as np
 import pandas as pd
-from loguru import logger
 
-from ..core.indicators import IndicatorSpec, generate_indicator_column_name
+from ..core.indicators import IndicatorSpec
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
-from .serialization import _OHLCV_COLUMNS, dump_feed, load_feed
+from .serialization import dump_feed, load_feed
 
 
 def _parse_source_from_symbol(symbol: str) -> str | None:
@@ -82,13 +80,30 @@ class DataFeed:
             {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
         )
 
-        # 指标注册配置
-        self._registered_indicators: dict[str, list[IndicatorSpec]] = {}
-
         # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
 
         self._event_count = 0
+
+    @property
+    def base_period(self) -> str | None:
+        """获取基础周期名称"""
+        return self._base_period
+
+    @base_period.setter
+    def base_period(self, value: str | None) -> None:
+        """设置基础周期（供反序列化使用）"""
+        self._base_period = value
+
+    @property
+    def events_df(self) -> pd.DataFrame:
+        """获取事件 DataFrame（供序列化使用）"""
+        return self._events
+
+    @events_df.setter
+    def events_df(self, value: pd.DataFrame) -> None:
+        """设置事件 DataFrame（供反序列化使用）"""
+        self._events = value
 
     def register_period(self, period: str) -> PeriodData:
         """注册一个新的周期，创建对应的PeriodData实例
@@ -110,15 +125,7 @@ class DataFeed:
         if period_name not in self._periods:
             raise KeyError(f"Period {period_name} not registered")
 
-        if period_name not in self._registered_indicators:
-            self._registered_indicators[period_name] = []
-
-        # 检查是否已注册（按 name + params 判重）
-        for existing in self._registered_indicators[period_name]:
-            if existing.name == indicator.name and existing.params == indicator.params:
-                return
-
-        self._registered_indicators[period_name].append(indicator)
+        self._periods[period_name].register_indicator(indicator)
 
     def load_history_data(self, period: str, bars: list[Bar], events: list[Event] | None = None) -> None:
         """批量加载历史数据（用于回测初始化）
@@ -421,11 +428,13 @@ class DataFeed:
 
             bar_start = get_forming_bar_start(ts, target_period)
 
-            if period_data._forming_bar is None:
+            if not period_data.has_forming_bar:
                 # 首次：设置形成中 bar
                 period_data.set_forming_bar(_make_aggregated_bar(source_bar, bar_start))
             else:
-                forming_time = pd.Timestamp(period_data._forming_bar.datetime)  # pyright: ignore[reportPrivateUsage]
+                forming_bar = period_data.forming_bar
+                assert forming_bar is not None
+                forming_time = pd.Timestamp(forming_bar.datetime)
                 if bar_start == forming_time:
                     # 仍在同一个高周期 bar 内 → 更新形成中 bar
                     period_data.update_forming_bar(source_bar)
@@ -435,106 +444,7 @@ class DataFeed:
                     period_data.set_forming_bar(_make_aggregated_bar(source_bar, bar_start))
 
             # 形成中 bar 更新后，需要重算该周期指标
-            self._calculate_indicators_for_period(target_period)
-
-    def _calculate_indicators_for_period(self, period_name: str) -> None:
-        """计算指定周期的所有注册指标
-
-        跳过已计算且最后一行非 NaN 的指标，对需要计算的指标做全量计算。
-
-        对于有 forming bar 的周期，额外计算 forming bar 的指标值并缓存。
-
-        :param period_name: 周期名称
-        """
-        if period_name not in self._periods:
-            return
-
-        period_data = self._periods[period_name]
-
-        if period_name not in self._registered_indicators:
-            return
-
-        has_forming = period_data._forming_bar is not None  # pyright: ignore[reportPrivateUsage]
-
-        # 如果有 forming bar，临时追加到 _df 以便计算指标
-        if has_forming:
-            self._attach_forming_bar(period_data)
-
-        try:
-            self._compute_registered_indicators(period_name, period_data)
-
-            # 如果有 forming bar，提取指标值到缓存，然后从 _df 中移除
-            if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
-                self._detach_forming_bar(period_data, period_name)
-
-        except Exception:
-            # 异常时确保 forming bar 被移除
-            if has_forming and period_data._forming_bar is not None:  # pyright: ignore[reportPrivateUsage]
-                forming_time = pd.Timestamp(period_data._forming_bar.datetime)  # pyright: ignore[reportPrivateUsage]
-                if forming_time in period_data._df.index:  # pyright: ignore[reportPrivateUsage]
-                    period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
-            raise
-
-    def _attach_forming_bar(self, period_data: PeriodData) -> None:
-        """将 forming bar 临时追加到 _df 末尾，以便计算指标"""
-        if period_data._forming_bar is None:  # pyright: ignore[reportPrivateUsage]
-            return
-        forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
-        forming_time = pd.Timestamp(forming_bar.datetime)
-        forming_row = pd.Series(
-            {
-                "open": forming_bar.open,
-                "high": forming_bar.high,
-                "low": forming_bar.low,
-                "close": forming_bar.close,
-                "volume": forming_bar.volume,
-            },
-            name=forming_time,
-        )
-        period_data._df.loc[forming_time] = forming_row  # pyright: ignore[reportPrivateUsage]
-
-    def _detach_forming_bar(self, period_data: PeriodData, period_name: str) -> None:
-        """从 _df 中提取 forming bar 的指标值到缓存，然后移除 forming bar 行"""
-        if period_data._forming_bar is None:  # pyright: ignore[reportPrivateUsage]
-            return
-        forming_bar = period_data._forming_bar  # pyright: ignore[reportPrivateUsage]
-        forming_time = pd.Timestamp(forming_bar.datetime)
-
-        # 提取 forming bar 行的指标值到缓存
-        for spec in self._registered_indicators[period_name]:
-            col_name = generate_indicator_column_name(spec.name, spec.params)
-            if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
-                val = period_data._df.loc[forming_time, col_name]  # pyright: ignore[reportPrivateUsage]
-                period_data._forming_indicators[col_name] = float(val) if not pd.isna(val) else np.nan  # type: ignore[arg-type]  # pyright: ignore[reportPrivateUsage]
-
-        # 从 _df 中移除 forming bar 行
-        period_data._df.drop(forming_time, inplace=True)  # pyright: ignore[reportPrivateUsage]
-
-    def _compute_registered_indicators(self, period_name: str, period_data: PeriodData) -> None:
-        """计算指定周期的所有注册指标（不考虑 forming bar）"""
-        for spec in self._registered_indicators[period_name]:
-            col_name = generate_indicator_column_name(spec.name, spec.params)
-
-            # 跳过已计算且最后一行非 NaN 的指标
-            if col_name in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
-                if not period_data._df[col_name].isna().iloc[-1]:  # pyright: ignore[reportPrivateUsage]
-                    continue
-
-            # 计算指标（用 window 优化：只传 tail 给指标函数）
-            if spec.func is None:
-                continue
-            try:
-                window = spec.window if isinstance(spec.window, int) else 250
-                tail_len = min(window, len(period_data._df))  # pyright: ignore[reportPrivateUsage]
-                tail_df = period_data._df.tail(tail_len)  # pyright: ignore[reportPrivateUsage]
-                result = spec.func(tail_df, **spec.params)
-                # 写入结果到 _df 的 tail 部分
-                if col_name not in period_data._df.columns:  # pyright: ignore[reportPrivateUsage]
-                    period_data._df[col_name] = np.nan  # pyright: ignore[reportPrivateUsage]
-                result_series = pd.Series(result, index=tail_df.index)
-                period_data._df.loc[tail_df.index, col_name] = result_series  # pyright: ignore[reportPrivateUsage]
-            except Exception as e:
-                logger.warning("指标计算失败 [{}][{}]: {}", period_name, spec.name, e)
+            period_data.calculate_indicators()
 
     def calculate_all(self) -> None:
         """批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）
@@ -549,12 +459,14 @@ class DataFeed:
         - 会遍历所有周期，计算所有注册指标
         - 如果某个指标已经计算过，会跳过该指标
         """
-        for period_name in self._periods:
-            self._calculate_indicators_for_period(period_name)
+        for period_data in self._periods.values():
+            period_data.calculate_indicators()
 
     def calculate_period(self, period_name: str) -> None:
         """只计算指定周期的所有注册指标（跳过已计算且最后一行非 NaN 的指标）"""
-        self._calculate_indicators_for_period(period_name)
+        period_data = self._periods.get(period_name)
+        if period_data is not None:
+            period_data.calculate_indicators()
 
     # --- 序列化 ────────────────────────────────────────
 
@@ -607,7 +519,7 @@ class DataFeed:
         period_data = self._periods.get(period_name)
         if period_data is None:
             return []
-        return [c for c in period_data._df.columns if c not in _OHLCV_COLUMNS]  # pyright: ignore[reportPrivateUsage]
+        return period_data.indicator_names
 
     def get_registered_indicators(self, period_name: str) -> list[IndicatorSpec]:
         """获取指定周期已注册的指标配置列表
@@ -615,7 +527,10 @@ class DataFeed:
         :param period_name: 周期名称
         :return: IndicatorSpec 列表，周期不存在返回空列表
         """
-        return list(self._registered_indicators.get(period_name, []))
+        period_data = self._periods.get(period_name)
+        if period_data is None:
+            return []
+        return period_data.registered_indicators
 
     def get_date_range(self, period_name: str) -> tuple[str, str] | None:
         """获取指定周期的数据日期范围
@@ -626,8 +541,10 @@ class DataFeed:
         period_data = self._periods.get(period_name)
         if period_data is None or period_data.length == 0:
             return None
-        idx = period_data._df.index  # pyright: ignore[reportPrivateUsage]
-        return str(idx[0].date()), str(idx[-1].date())
+        first = period_data.first_time
+        last = period_data.latest_time
+        assert first is not None and last is not None
+        return str(first.date()), str(last.date())
 
     def build_ctx_cache(self, requirements: DataRequirements, symbol: str) -> dict[pd.Timestamp, BarContext]:
         """回测专用：逐基础周期推进预构造所有 BarContext
@@ -655,11 +572,12 @@ class DataFeed:
             return {}
 
         cache: dict[pd.Timestamp, BarContext] = {}
-        main_df = main_pd._df  # pyright: ignore[reportPrivateUsage]
 
-        for idx in range(len(main_df)):
-            ts: pd.Timestamp = main_df.index[idx]  # type: ignore[assignment]
-            bar = _row_to_bar(symbol, ts, main_df.iloc[idx])
+        for idx in range(main_pd.length):
+            bar = main_pd.get_bar(idx)
+            if bar is None:
+                continue
+            ts = pd.Timestamp(bar.datetime)
             multi: dict[str, PeriodDataView] = {}
             for period, req in requirements.periods.items():
                 view = self.get_data(period, ts, req.lookback_bars)
@@ -685,21 +603,19 @@ class DataFeed:
         if source_pd is None or source_pd.length == 0:
             return {}
 
-        df_source = source_pd._df  # pyright: ignore[reportPrivateUsage]
-
         # 清空高周期数据，重新聚合
         for target_period in self._aggregation_targets:
             period_data = self._periods.get(target_period)
             if period_data is not None:
-                period_data.load_df(pd.DataFrame(columns=["open", "high", "low", "close", "volume"]), replace=True)
-                period_data._forming_bar = None  # pyright: ignore[reportPrivateUsage]
-                period_data._forming_indicators.clear()  # pyright: ignore[reportPrivateUsage]
+                period_data.reset()
 
         cache: dict[pd.Timestamp, BarContext] = {}
 
-        for idx in range(len(df_source)):
-            ts: pd.Timestamp = df_source.index[idx]  # type: ignore[assignment]
-            bar = _row_to_bar(symbol, ts, df_source.iloc[idx])
+        for idx in range(source_pd.length):
+            bar = source_pd.get_bar(idx)
+            if bar is None:
+                continue
+            ts = pd.Timestamp(bar.datetime)
 
             # 推进高周期（与实时 update_bar 走同一条路径）
             self._step_aggregation(bar)
@@ -735,7 +651,7 @@ class DataFeed:
         current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
         # 懒加载计算指标
-        self._calculate_indicators_for_period(period_name)
+        self._periods[period_name].calculate_indicators()
 
         # 获取视图
         period_data = self._periods[period_name]
@@ -756,19 +672,6 @@ def _bars_to_df(bars: list[Bar]) -> pd.DataFrame:
     }
     df = pd.DataFrame(data, index=[pd.Timestamp(b.datetime) for b in bars])
     return df
-
-
-def _row_to_bar(symbol: str, ts: pd.Timestamp, row: pd.Series) -> Bar:
-    """从 DataFrame 一行 OHLCV 构造标准 Bar"""
-    return Bar(
-        symbol=symbol,
-        datetime=ts.to_pydatetime(),
-        open=float(row["open"]),
-        high=float(row["high"]),
-        low=float(row["low"]),
-        close=float(row["close"]),
-        volume=float(row["volume"]),
-    )
 
 
 def _make_aggregated_bar(source_bar: Bar, bar_start: pd.Timestamp) -> Bar:

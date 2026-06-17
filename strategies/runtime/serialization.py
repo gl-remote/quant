@@ -22,9 +22,6 @@ if TYPE_CHECKING:
 
 from ..core.indicators import IndicatorSpec
 
-# parquet 序列化时区分 OHLCV 列和指标列
-_OHLCV_COLUMNS = frozenset({"open", "high", "low", "close", "volume"})
-
 # 检查 pyarrow 是否可用（parquet 必需）
 try:
     import pyarrow  # noqa: F401
@@ -54,16 +51,16 @@ def dump_feed(feed: "DataFeed", feeds_dir: str) -> None:
 
     # 构建 _meta.json
     indicators_serializable: dict[str, list[dict[str, Any]]] = {}
-    for pn, ind_list in feed._registered_indicators.items():
+    for pn in feed.get_period_names():
         indicators_serializable[pn] = [
             {"name": spec.name, "params": spec.params, "window": spec.window if isinstance(spec.window, int) else 250}
-            for spec in ind_list
+            for spec in feed.get_registered_indicators(pn)
         ]
     meta = {
         "symbol": feed.symbol,
         "source": feed.source,
-        "base_period": feed._base_period,  # pyright: ignore[reportPrivateUsage]
-        "periods": list(feed._periods.keys()),
+        "base_period": feed.base_period,
+        "periods": feed.get_period_names(),
         "indicators": indicators_serializable,
     }
     meta_path = os.path.join(feeds_dir, "_meta.json")
@@ -71,14 +68,18 @@ def dump_feed(feed: "DataFeed", feeds_dir: str) -> None:
         json.dump(meta, f, indent=2, ensure_ascii=False)
 
     # 各周期 parquet
-    for period_name, period_data in feed._periods.items():
-        fp = os.path.join(feeds_dir, f"{period_name}.parquet")
-        period_data._df.to_parquet(fp, index=True)  # pyright: ignore[reportPrivateUsage]
+    for pn in feed.get_period_names():
+        period_data = feed.get_period(pn)
+        if period_data is None:
+            continue
+        fp = os.path.join(feeds_dir, f"{pn}.parquet")
+        period_data.to_parquet(fp)
 
     # events
-    if not feed._events.empty:
+    events_df = feed.events_df
+    if not events_df.empty:
         events_fp = os.path.join(feeds_dir, "events.parquet")
-        feed._events.to_parquet(events_fp, index=False)
+        events_df.to_parquet(events_fp, index=False)
 
 
 def load_feed(feeds_dir: str) -> "DataFeed":
@@ -105,7 +106,7 @@ def load_feed(feeds_dir: str) -> "DataFeed":
     if meta.get("source"):
         feed.source = meta["source"]
     if meta.get("base_period"):
-        feed._base_period = meta["base_period"]  # pyright: ignore[reportPrivateUsage]
+        feed.base_period = meta["base_period"]
 
     # 恢复每个周期
     for period_name in meta["periods"]:
@@ -114,7 +115,9 @@ def load_feed(feeds_dir: str) -> "DataFeed":
             continue
         df = pd.read_parquet(fp)
         feed.register_period(period_name)
-        feed._periods[period_name].load_df(df, replace=True)
+        period_data = feed.get_period(period_name)
+        assert period_data is not None
+        period_data.load_df(df, replace=True)
 
     # 恢复指标注册配置（func 无法序列化，用 None 占位；指标值已在 parquet 中，不需要重新计算）
     for pn, ind_list in meta.get("indicators", {}).items():
@@ -126,6 +129,6 @@ def load_feed(feeds_dir: str) -> "DataFeed":
     # events
     events_fp = os.path.join(feeds_dir, "events.parquet")
     if os.path.isfile(events_fp):
-        feed._events = pd.read_parquet(events_fp)
+        feed.events_df = pd.read_parquet(events_fp)
 
     return feed
