@@ -18,7 +18,7 @@
 from ..core.indicators import IndicatorSpec
 from .cache import clear_cache, get_cached_feed, set_cached_feed
 from .data_feed import DataFeed, build_context, create_data_feed
-from .events import BigTradeEvent, Event, NewsEvent
+from .events import BigTradeEvent, Event, EventManager, NewsEvent
 from .requirements import (
     BarContext,
     DataRequirements,
@@ -40,6 +40,7 @@ __all__ = [
     "BarContext",
     # 事件类型（策略可能产生事件）
     "Event",
+    "EventManager",
     "BigTradeEvent",
     "NewsEvent",
     # 缓存工具（桥接代码用来优化性能）

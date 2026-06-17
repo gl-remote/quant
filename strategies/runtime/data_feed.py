@@ -27,7 +27,7 @@ import pandas as pd
 from ..core.indicators import IndicatorSpec
 from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
-from .events import Event
+from .events import Event, EventManager
 from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from .serialization import dump_feed, load_feed
@@ -75,15 +75,10 @@ class DataFeed:
         self._base_period: str | None = None
 
         # 事件数据管理
-        self._events = pd.DataFrame(columns=["type", "symbol", "reason", "period", "data"])
-        self._events = self._events.astype(
-            {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
-        )
+        self._event_mgr = EventManager()
 
         # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
-
-        self._event_count = 0
 
     @property
     def base_period(self) -> str | None:
@@ -98,12 +93,12 @@ class DataFeed:
     @property
     def events_df(self) -> pd.DataFrame:
         """获取事件 DataFrame（供序列化使用）"""
-        return self._events
+        return self._event_mgr.df
 
     @events_df.setter
     def events_df(self, value: pd.DataFrame) -> None:
         """设置事件 DataFrame（供反序列化使用）"""
-        self._events = value
+        self._event_mgr.df = value
 
     def register_period(self, period: str) -> PeriodData:
         """注册一个新的周期，创建对应的PeriodData实例
@@ -130,45 +125,15 @@ class DataFeed:
     def load_history_data(self, period: str, bars: list[Bar], events: list[Event] | None = None) -> None:
         """批量加载历史数据（用于回测初始化）
 
-        幂等加载：按数据范围智能处理重复调用
-        - 时间范围一致 → 跳过
-        - 起始时间相同，结束时间更新 → 仅追加增量
-        - 起始时间不同 → 清空该周期数据，全量加载
-
-        注意：
-        1. 不会自动计算指标，需调用calculate_all()
+        幂等加载：委托给 load_history_df，自动处理重复调用。
 
         :param period: 周期名称
         :param bars: 历史K线列表，需按时间升序排列
         :param events: 历史事件列表（可选）
         """
-        if period not in self._periods:
-            self.register_period(period)
-
         if not bars:
             return
-
-        new_start = pd.Timestamp(bars[0].datetime)
-        new_end = pd.Timestamp(bars[-1].datetime)
-        period_data = self._periods[period]
-
-        if period_data.length > 0:
-            existing_start = period_data.first_time
-            existing_end = period_data.latest_time
-            assert existing_start is not None and existing_end is not None
-
-            if new_start == existing_start and new_end <= existing_end:
-                return  # 数据已包含，跳过
-            elif new_start == existing_start and new_end > existing_end:
-                append_bars = [b for b in bars if pd.Timestamp(b.datetime) > existing_end]
-                period_data.append_bars(append_bars)
-            else:
-                period_data.load_df(_bars_to_df(bars), replace=True)
-        else:
-            period_data.load_df(_bars_to_df(bars), replace=False)
-
-        if events:
-            self.append_events(events)
+        self.load_history_df(period, _bars_to_df(bars), events)
 
     def load_history_df(self, period: str, df: pd.DataFrame, events: list[Event] | None = None) -> None:
         """从 DataFrame 直接加载历史数据（避免 Bar 转换开销）
@@ -220,31 +185,7 @@ class DataFeed:
 
         :param events: 事件列表
         """
-        if not events:
-            return
-
-        event_dicts = []
-        for event in events:
-            event_dicts.append(
-                {
-                    "datetime": pd.Timestamp(event.timestamp),
-                    "type": event.type,
-                    "symbol": event.symbol,
-                    "reason": event.reason,
-                    "period": event.period,
-                    "data": event.data,
-                }
-            )
-
-        new_df = pd.DataFrame(event_dicts)
-        new_df = new_df.set_index("datetime")
-
-        if len(self._events) == 0:
-            self._events = new_df
-        else:
-            self._events = pd.concat([self._events, new_df])
-
-        self._event_count += len(events)
+        self._event_mgr.append(events)
 
     def get_events(
         self,
@@ -261,38 +202,7 @@ class DataFeed:
         :param period: 周期名称筛选（可选，None表示所有事件）
         :return: 事件列表
         """
-        if len(self._events) == 0:
-            return []
-
-        mask = pd.Series([True] * len(self._events), index=self._events.index)
-
-        if start_time is not None:
-            mask &= self._events.index >= pd.Timestamp(start_time)
-
-        if end_time is not None:
-            mask &= self._events.index <= pd.Timestamp(end_time)
-
-        if event_type is not None:
-            mask &= self._events["type"] == event_type
-
-        if period is not None:
-            mask &= (self._events["period"] == period) | (self._events["period"].isna())
-
-        events_df = self._events[mask]
-
-        events = []
-        for _, row in events_df.iterrows():
-            event = Event(
-                timestamp=pd.Timestamp(row.name).to_pydatetime(),  # type: ignore[arg-type]
-                type=row["type"],
-                symbol=row["symbol"],
-                reason=row.get("reason", ""),
-                period=row.get("period"),
-                data=row.get("data"),
-            )
-            events.append(event)
-
-        return events
+        return self._event_mgr.query(start_time, end_time, event_type, period)
 
     def setup_aggregation(self, target_periods: list[str]) -> None:
         """配置周期聚合：指定需要从基础周期聚合出的高周期（内部接口）
@@ -655,7 +565,7 @@ class DataFeed:
 
         # 获取视图
         period_data = self._periods[period_name]
-        return period_data.get_data(current_time_ts, lookback_bars, self._events)
+        return period_data.get_data(current_time_ts, lookback_bars, self._event_mgr.df)
 
 
 # ==================== 辅助函数 ====================
@@ -769,55 +679,20 @@ def create_data_feed(
     """
     from .cache import get_cached_feed, set_cached_feed
 
+    # 计算源数据日期范围（缓存 key）
+    src_date_range = _source_date_range(source_df)
+
     # 0. 查内存缓存（零 I/O 路径）
-    if source_df is not None and len(source_df) > 0:
-        min_dt = str(source_df.index[0].date())
-        max_dt = str(source_df.index[-1].date())
-        cached = get_cached_feed(symbol, min_dt, max_dt)
+    if src_date_range is not None:
+        cached = get_cached_feed(symbol, src_date_range[0], src_date_range[1])
         if cached is not None:
             return cached
 
-    # 1. 尝试从磁盘加载，判断是否需要全量重算
-    feed: DataFeed | None = None
+    # 1. 尝试从磁盘加载
+    feed = _try_load_from_disk(feeds_dir, source_df, requirements, src_date_range)
 
-    if os.path.isdir(feeds_dir):
-        try:
-            feed = DataFeed.from_feeds(feeds_dir)
-            # 检查源数据是否存在且日期匹配
-            if feed.has_source_data():
-                feed_date_range = feed.get_source_date_range()
-                if feed_date_range is not None and source_df is not None:
-                    src_min_dt = str(source_df.index[0].date())
-                    src_max_dt = str(source_df.index[-1].date())
-                    if feed_date_range[0] == src_min_dt and feed_date_range[1] == src_max_dt:
-                        # 磁盘数据有效，增量合并缺失的周期/指标
-                        existing_periods = set(feed.get_period_names())
-                        existing_indicators = {
-                            (pn, spec.name, tuple(sorted(spec.params.items())))
-                            for pn in requirements.indicators
-                            for spec in feed.get_registered_indicators(pn)
-                        }
-                        feed.apply_requirements(requirements)
-                        new_periods = set(feed.get_period_names()) - existing_periods
-                        new_indicators = {
-                            (pn, spec.name, tuple(sorted(spec.params.items())))
-                            for pn in requirements.indicators
-                            for spec in feed.get_registered_indicators(pn)
-                        } - existing_indicators
-                        if new_periods or new_indicators:
-                            feed.calculate_all()
-                            feed.to_feeds(feeds_dir)
-                    else:
-                        feed = None  # 日期不匹配，需要全量重算
-                else:
-                    feed = None  # 无源数据，需要全量重算
-            else:
-                feed = None  # 无源数据，需要全量重算
-        except Exception:
-            feed = None  # 加载失败，全量重算
-
+    # 2. 磁盘加载失败，全量构造
     if feed is None:
-        # 全量加载
         feed = DataFeed(symbol=symbol)
         feed.apply_requirements(requirements)
         if source_df is not None and len(source_df) > 0:
@@ -826,9 +701,64 @@ def create_data_feed(
         feed.to_feeds(feeds_dir)
 
     # 写入内存缓存
-    if source_df is not None and len(source_df) > 0:
-        min_dt = str(source_df.index[0].date())
-        max_dt = str(source_df.index[-1].date())
-        set_cached_feed(symbol, feed, min_dt, max_dt)
+    if src_date_range is not None:
+        set_cached_feed(symbol, feed, src_date_range[0], src_date_range[1])
+
+    return feed
+
+
+def _source_date_range(source_df: pd.DataFrame | None) -> tuple[str, str] | None:
+    """提取源数据的日期范围（用于缓存 key）"""
+    if source_df is None or len(source_df) == 0:
+        return None
+    return str(source_df.index[0].date()), str(source_df.index[-1].date())
+
+
+def _try_load_from_disk(
+    feeds_dir: str,
+    source_df: pd.DataFrame | None,
+    requirements: DataRequirements,
+    src_date_range: tuple[str, str] | None,
+) -> DataFeed | None:
+    """尝试从磁盘加载 DataFeed，日期不匹配或加载失败返回 None"""
+    if not os.path.isdir(feeds_dir):
+        return None
+
+    try:
+        feed = DataFeed.from_feeds(feeds_dir)
+    except Exception:
+        return None
+
+    # 检查源数据是否存在且日期匹配
+    if not feed.has_source_data():
+        return None
+
+    feed_date_range = feed.get_source_date_range()
+    if feed_date_range is None or src_date_range is None:
+        return None
+
+    if feed_date_range[0] != src_date_range[0] or feed_date_range[1] != src_date_range[1]:
+        return None
+
+    # 磁盘数据有效，增量合并缺失的周期/指标
+    existing_periods = set(feed.get_period_names())
+    existing_indicators = {
+        (pn, spec.name, tuple(sorted(spec.params.items())))
+        for pn in requirements.indicators
+        for spec in feed.get_registered_indicators(pn)
+    }
+
+    feed.apply_requirements(requirements)
+
+    new_periods = set(feed.get_period_names()) - existing_periods
+    new_indicators = {
+        (pn, spec.name, tuple(sorted(spec.params.items())))
+        for pn in requirements.indicators
+        for spec in feed.get_registered_indicators(pn)
+    } - existing_indicators
+
+    if new_periods or new_indicators:
+        feed.calculate_all()
+        feed.to_feeds(feeds_dir)
 
     return feed

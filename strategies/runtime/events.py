@@ -1,11 +1,15 @@
-"""事件类型定义
+"""事件类型定义与管理
 
-包含：Event 基类、BigTradeEvent、NewsEvent 等具体事件类型。
+包含：
+- Event 基类、BigTradeEvent、NewsEvent 等具体事件类型
+- EventManager: 事件存储与查询，从 DataFeed 中提取的独立职责
 """
 
 from dataclasses import dataclass
 from datetime import datetime as dt
 from typing import Any
+
+import pandas as pd
 
 
 @dataclass(kw_only=True)
@@ -49,3 +53,107 @@ class NewsEvent(Event):
     title: str
     content: str | None = None
     importance: int = 1  # 1-5
+
+
+class EventManager:
+    """事件存储与查询管理器
+
+    从 DataFeed 中提取的独立职责，封装事件的 DataFrame 存储、追加和筛选查询。
+    """
+
+    def __init__(self) -> None:
+        self._df: pd.DataFrame = pd.DataFrame(columns=["type", "symbol", "reason", "period", "data"])
+        self._df = self._df.astype(
+            {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
+        )
+        self._count = 0
+
+    @property
+    def df(self) -> pd.DataFrame:
+        """获取底层 DataFrame（供序列化使用）"""
+        return self._df
+
+    @df.setter
+    def df(self, value: pd.DataFrame) -> None:
+        """设置底层 DataFrame（供反序列化使用）"""
+        self._df = value
+
+    @property
+    def count(self) -> int:
+        """已追加的事件总数"""
+        return self._count
+
+    def append(self, events: list[Event]) -> None:
+        """批量追加事件数据
+
+        :param events: 事件列表
+        """
+        if not events:
+            return
+
+        event_dicts = [
+            {
+                "datetime": pd.Timestamp(event.timestamp),
+                "type": event.type,
+                "symbol": event.symbol,
+                "reason": event.reason,
+                "period": event.period,
+                "data": event.data,
+            }
+            for event in events
+        ]
+
+        new_df = pd.DataFrame(event_dicts).set_index("datetime")
+
+        if len(self._df) == 0:
+            self._df = new_df
+        else:
+            self._df = pd.concat([self._df, new_df])
+
+        self._count += len(events)
+
+    def query(
+        self,
+        start_time: pd.Timestamp | dt | None = None,
+        end_time: pd.Timestamp | dt | None = None,
+        event_type: str | None = None,
+        period: str | None = None,
+    ) -> list[Event]:
+        """查询指定条件的事件
+
+        :param start_time: 开始时间（可选）
+        :param end_time: 结束时间（可选）
+        :param event_type: 事件类型（可选）
+        :param period: 周期名称筛选（可选，None表示所有事件）
+        :return: 事件列表
+        """
+        if len(self._df) == 0:
+            return []
+
+        mask = pd.Series([True] * len(self._df), index=self._df.index)
+
+        if start_time is not None:
+            mask &= self._df.index >= pd.Timestamp(start_time)
+
+        if end_time is not None:
+            mask &= self._df.index <= pd.Timestamp(end_time)
+
+        if event_type is not None:
+            mask &= self._df["type"] == event_type
+
+        if period is not None:
+            mask &= (self._df["period"] == period) | (self._df["period"].isna())
+
+        events_df = self._df[mask]
+
+        return [
+            Event(
+                timestamp=pd.Timestamp(row.name).to_pydatetime(),  # type: ignore[arg-type]
+                type=row["type"],
+                symbol=row["symbol"],
+                reason=row.get("reason", ""),
+                period=row.get("period"),
+                data=row.get("data"),
+            )
+            for _, row in events_df.iterrows()
+        ]
