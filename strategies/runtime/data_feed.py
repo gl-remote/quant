@@ -24,6 +24,7 @@ from datetime import datetime as dt
 from typing import TYPE_CHECKING
 
 import pandas as pd
+from loguru import logger
 
 from common.symbol_utils import parse_contract
 
@@ -170,6 +171,16 @@ class DataFeed:
                 if len(append_df) > 0:
                     period_data.load_df(append_df, replace=False)
             else:
+                # new_start != existing_start，触发全量覆盖
+                if new_start > existing_start:
+                    logger.warning(
+                        "[{}] load_history_df 数据范围变窄: 已有[{}, {}]，新数据[{}, {}]——早期数据将丢失",
+                        period,
+                        existing_start,
+                        existing_end,
+                        new_start,
+                        new_end,
+                    )
                 period_data.load_df(df, replace=True)
         else:
             period_data.load_df(df, replace=False)
@@ -355,6 +366,14 @@ class DataFeed:
                     # 新高周期 bar 开始 → 完成旧的，开始新的
                     period_data.complete_forming_bar()
                     period_data.set_forming_bar(_make_aggregated_bar(source_bar, bar_start))
+                else:
+                    logger.warning(
+                        "[{}] bar_start({}) < forming_time({}), period={} —— 源 bar 时间异常，跳过聚合",
+                        self.symbol,
+                        bar_start,
+                        forming_time,
+                        target_period,
+                    )
 
             # 形成中 bar 更新后，需要重算该周期指标
             period_data.calculate_indicators()
@@ -511,7 +530,19 @@ class DataFeed:
         events_req = requirements.events
 
         if events_req.include_global_events or events_req.include_period_events:
-            all_events = self.get_events(end_time=current_time)
+            # 按最大 lookback 窗口计算 start_time，避免每次遍历全量历史事件
+            max_lookback = max(req.lookback_bars for req in requirements.periods.values())
+            # 从当前时间倒推最大 lookback 窗口；若找不到对应周期分钟数则不回退
+            start_time: pd.Timestamp | None = None
+            try:
+                # 取基础周期分钟数估算窗口宽度，统一为单位时间
+                if self._base_period:
+                    period_min = parse_period_minutes(self._base_period)
+                    start_time = current_time - pd.Timedelta(minutes=period_min * max_lookback)
+            except Exception:
+                pass
+
+            all_events = self.get_events(start_time=start_time, end_time=current_time)
 
             for event in all_events:
                 include = False
@@ -534,7 +565,14 @@ class DataFeed:
                     events.append(event)
 
         # 使用传入的 bar，不再从 multi 中提取
-        bar.symbol = self.symbol
+        if bar.symbol != self.symbol:
+            logger.warning(
+                "[{}] build_context 收到 symbol={} 的 bar，已修正为 {}",
+                self.symbol,
+                bar.symbol,
+                self.symbol,
+            )
+            bar.symbol = self.symbol
 
         return BarContext(symbol=self.symbol, bar=bar, multi=multi, events=events)
 

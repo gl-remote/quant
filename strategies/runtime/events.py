@@ -10,6 +10,7 @@ from datetime import datetime as dt
 from typing import Any
 
 import pandas as pd
+from loguru import logger
 
 
 @dataclass(kw_only=True)
@@ -63,9 +64,7 @@ class EventManager:
 
     def __init__(self) -> None:
         self._df: pd.DataFrame = pd.DataFrame(columns=["type", "symbol", "reason", "period", "data"])
-        self._df = self._df.astype(
-            {"type": "string", "symbol": "string", "reason": "string", "period": "string"}
-        )
+        self._df = self._df.astype({"type": "string", "symbol": "string", "reason": "string", "period": "string"})
         self._count = 0
 
     @property
@@ -77,6 +76,7 @@ class EventManager:
     def df(self, value: pd.DataFrame) -> None:
         """设置底层 DataFrame（供反序列化使用）"""
         self._df = value
+        self._count = len(value)
 
     @property
     def count(self) -> int:
@@ -145,6 +145,10 @@ class EventManager:
             mask &= (self._df["period"] == period) | (self._df["period"].isna())
 
         events_df = self._df[mask]
+        # 已知的事件子类类型（序列化时只能存 type 字符串）
+        subclass_types = frozenset({"big_trade", "news"})
+        if len(events_df) > 0 and events_df["type"].isin(subclass_types).any():
+            logger.warning("事件类型中包含子类（big_trade/news）但反序列化为基础 Event，子类额外字段将丢失")
 
         return [
             Event(
