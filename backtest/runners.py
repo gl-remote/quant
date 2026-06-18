@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import pandas as pd
 from loguru import logger
 
 from common.schemas import KlineDataFrame

@@ -515,10 +515,10 @@ def _attach_run_logger(dm: DataManager, run_id: int) -> None:
         "{level: <8} | {name}:{function}:{line} | {message}"
     )
     sink_id = logger.add(
-          logs_dir / "run.log",
-          level="DEBUG",
-          format=fmt,
-      )
+        logs_dir / "run.log",
+        level="DEBUG",
+        format=fmt,
+    )
     dm.add_log_sink_id(sink_id)
 
     stderr_id = get_stderr_sink_id()
