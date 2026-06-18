@@ -17,7 +17,7 @@
 
 from ..core.indicators import IndicatorSpec
 from .cache import clear_cache, get_cached_feed, set_cached_feed
-from .data_feed import DataFeed, build_context, create_data_feed
+from .data_feed import DataFeed
 from .events import BigTradeEvent, Event, EventManager, NewsEvent
 from .requirements import (
     BarContext,
@@ -29,8 +29,6 @@ from .requirements import (
 __all__ = [
     # 核心类
     "DataFeed",
-    # 工厂方法：完整构造 DataFeed，自动处理缓存和增量加载
-    "create_data_feed",
     # 数据需求声明（策略需要声明自己要什么）
     "PeriodRequirements",
     "IndicatorSpec",
@@ -47,6 +45,4 @@ __all__ = [
     "get_cached_feed",
     "set_cached_feed",
     "clear_cache",
-    # 上下文构造（桥接/回测需要）
-    "build_context",
 ]

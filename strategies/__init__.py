@@ -228,7 +228,6 @@ from .strategy_aspects import (
 # 运行时数据管理（来自 runtime，与 core 同级）
 from .runtime import (
     DataFeed,
-    create_data_feed,
     Event,
     BigTradeEvent,
     NewsEvent,
@@ -239,7 +238,6 @@ from .runtime import (
     get_cached_feed,
     set_cached_feed,
     clear_cache,
-    build_context,
 )
 
 # 具体策略实现
@@ -296,7 +294,6 @@ __all__ = [
     "trend_short_when_compare",
     # 数据管理类型
     "DataFeed",
-    "create_data_feed",
     "Event",
     "BigTradeEvent",
     "NewsEvent",

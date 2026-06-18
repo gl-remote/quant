@@ -20,7 +20,7 @@
 """
 
 from datetime import datetime
-from typing import Any, cast
+from typing import Any
 
 import pandas as pd
 from loguru import logger
@@ -35,14 +35,11 @@ from common.constants import (
     TRADE_DIRECTION_SHORT,
     TRADE_OFFSET_OPEN,
 )
-from data.manager import DataManager
 from strategies import Bar, Fill, Signal, State, Strategy, UninitializedStrategy
 from strategies.core.types import StrategyPosition
 from strategies.runtime import (
-    BarContext,
     DataFeed,
     DataRequirements,
-    create_data_feed,
 )
 
 
@@ -86,8 +83,7 @@ class VnpyBacktestBridge(CtaTemplate):
         self._core: Strategy[Any] = UninitializedStrategy()
         self._state: State[Any] = State(symbol="", period="", strategy_config=None)
         self._requirements: DataRequirements | None = None
-        self._data_feed: Any = None
-        self._ctx_cache: dict[pd.Timestamp, BarContext] = {}
+        self._data_feed: DataFeed | None = None
         self.entry_price: float = 0.0
 
     def is_initialized(self) -> bool:
@@ -100,9 +96,9 @@ class VnpyBacktestBridge(CtaTemplate):
     # ── vnpy 生命周期 ──────────────────────────────────────
 
     def on_init(self) -> None:
-        """vnpy 初始化回调 — 预加载数据、预计算指标、预构造上下文
+        """vnpy 初始化回调 — 加载数据、计算指标
 
-        on_bar 中只做 O(1) 的 dict 查找，零重算、零时间戳搜索。
+        BarContext 在 on_bar 动态构造，不需要预缓存。
         """
         if not self.is_initialized():
             logger.error(f"[{self.strategy_name}] strategy 未注入，初始化跳过")
@@ -115,13 +111,15 @@ class VnpyBacktestBridge(CtaTemplate):
             self.write_log(f"策略初始化: {self._core.name}")
             return
 
-        self._data_feed = self._setup_data_feed()
-        self._ctx_cache = self._data_feed.build_ctx_cache(self._requirements, self._state.symbol)
+        self._data_feed = DataFeed.create(
+            symbol=self._state.symbol,
+            requirements=self._requirements,
+        )
+        self._log_data_feed_summary("DataFeed 构造完成")
 
         logger.debug(
-            "[{}] ctx_cache 构造完成: {} 条",
+            "[{}] 初始化完成",
             self.strategy_name,
-            len(self._ctx_cache),
         )
 
         self.write_log(f"策略初始化: {self._core.name}")
@@ -169,33 +167,6 @@ class VnpyBacktestBridge(CtaTemplate):
                 f"registered=[{', '.join(ind_names) if ind_names else '无'}] "
                 f"calculated_columns={calc_cols}"
             )
-
-    # ── DataFeed 初始化 ────────────────────────────────────
-
-    def _setup_data_feed(self) -> DataFeed:
-        """统一入口：create_data_feed 自动处理缓存/增量/序列化
-
-        逻辑已经封装在 runtime.create_data_feed 中，这边只需要传参。
-        """
-        assert self._requirements is not None  # on_init 已判空
-
-        feeds_dir = f"output/feeds/{self._state.symbol}"
-        dm = DataManager()
-        results = dm.load_kline([self._state.symbol], interval="1m")
-        if not results:
-            _, df, _ = results[0]
-        else:
-            df = None
-
-        feed = create_data_feed(
-            symbol=self._state.symbol,
-            requirements=self._requirements,
-            feeds_dir=feeds_dir,
-            source_df=df,
-        )
-
-        self._log_data_feed_summary("DataFeed 构造完成")
-        return feed
 
     # ── vnpy 行情回调 ──────────────────────────────────────
 
@@ -245,26 +216,36 @@ class VnpyBacktestBridge(CtaTemplate):
             logger.debug("[{}] {} no signal | {}", self.strategy_name, bar_time, diag_str)
 
     def on_bar(self, bar: Any) -> None:
-        """vnpy K线回调 — 从预构造缓存中 O(1) 获取上下文
+        """vnpy K线回调 — 动态构造 BarContext 并驱动策略
 
-        所有重活（数据加载、指标计算、上下文构造）已在 on_init 完成，
-        此处仅做 dict 查找 + 策略调用 + 下单。
+        所有数据已在 on_init 加载并计算好指标，BarContext 动态构造。
         """
         raw_dt: Any = getattr(bar, "datetime", None)
         if raw_dt is None:
             return
-        bar_time = cast(pd.Timestamp, pd.Timestamp(raw_dt))
+        bar_time = pd.Timestamp(raw_dt)
         close_price = float(getattr(bar, "close_price", 0))
 
-        ctx = self._ctx_cache.get(bar_time)
-        if ctx is not None:
-            self._update_peak_prices(ctx.bar)
-            signal = self._core.on_bar(self._state, ctx)
-        else:
-            if len(self._ctx_cache) == 0 and not getattr(self, "_warned_empty_cache", False):
-                logger.warning("[{}] ctx_cache 为空，所有 bar 将跳过策略调用", self.strategy_name)
-                self._warned_empty_cache = True
-            signal = Signal()
+        assert self._data_feed is not None
+        assert self._requirements is not None
+        assert self._data_feed.base_period is not None
+
+        # vnpy bar → 标准 Bar，datetime 转成 Python datetime
+        bar_obj = Bar(
+            symbol=self._state.symbol,
+            datetime=bar_time.to_pydatetime(),
+            open=float(getattr(bar, "open_price", 0)),
+            high=float(getattr(bar, "high_price", 0)),
+            low=float(getattr(bar, "low_price", 0)),
+            close=close_price,
+            volume=float(getattr(bar, "volume", 0)),
+        )
+
+        # 动态构造 BarContext
+        ctx = self._data_feed.build_context(self._requirements, bar_obj)
+
+        self._update_peak_prices(ctx.bar)
+        signal = self._core.on_bar(self._state, ctx)
 
         self._log_bar_diagnostics(bar_time, signal, close_price)
 

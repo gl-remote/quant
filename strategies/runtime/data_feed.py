@@ -21,6 +21,7 @@
 
 import os
 from datetime import datetime as dt
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -34,6 +35,9 @@ from .period import PeriodData, PeriodDataView
 from .requirements import BarContext, DataRequirements
 from .serialization import dump_feed, load_feed
 
+if TYPE_CHECKING:
+    pass
+
 
 class DataFeed:
     """管理单个品种的多周期数据
@@ -45,13 +49,23 @@ class DataFeed:
     - 提供高效的数据访问路由（通过周期名快速定位 PeriodData）
     - 统一管理 K线、指标、事件 三类数据
     - 基础周期由 apply_requirements 自动推断为声明的最小周期，高周期由它聚合生成
+
+    【工厂方法】
+        DataFeed.create(symbol, requirements, feeds_dir, data_manager) -> DataFeed
+        完整构造：自动处理缓存、从数据库加载所有周期、计算指标、序列化。
     """
 
-    def __init__(self, symbol: str, source: str | None = None):
+    def __init__(
+        self,
+        symbol: str,
+        source: str | None = None,
+        requirements: DataRequirements | None = None,
+    ):
         """初始化单个品种的多周期数据管理器
 
         :param symbol: 交易品种，如 "btc_usdt" 或 "CZCE.sr509"
         :param source: 数据源标识（可选，如果不提供可从symbol解析）
+        :param requirements: 策略数据需求（可选），如果提供会自动调用 apply_requirements
         """
         self.symbol = symbol
         if source is None:
@@ -71,6 +85,10 @@ class DataFeed:
 
         # 聚合配置：高周期由基础周期自动聚合得到
         self._aggregation_targets: list[str] = []
+
+        # 如果提供了 requirements，自动配置
+        if requirements is not None:
+            self.apply_requirements(requirements)
 
     @property
     def base_period(self) -> str | None:
@@ -113,19 +131,6 @@ class DataFeed:
             raise KeyError(f"Period {period_name} not registered")
 
         self._periods[period_name].register_indicator(indicator)
-
-    def load_history_data(self, period: str, bars: list[Bar], events: list[Event] | None = None) -> None:
-        """批量加载历史数据（用于回测初始化）
-
-        幂等加载：委托给 load_history_df，自动处理重复调用。
-
-        :param period: 周期名称
-        :param bars: 历史K线列表，需按时间升序排列
-        :param events: 历史事件列表（可选）
-        """
-        if not bars:
-            return
-        self.load_history_df(period, _bars_to_df(bars), events)
 
     def load_history_df(self, period: str, df: pd.DataFrame, events: list[Event] | None = None) -> None:
         """从 DataFrame 直接加载历史数据（避免 Bar 转换开销）
@@ -551,30 +556,146 @@ class DataFeed:
         if period_name not in self._periods:
             raise KeyError(f"Period {period_name} not registered")
 
-        current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
-
-        # 懒加载计算指标
-        self._periods[period_name].calculate_indicators()
-
-        # 获取视图
         period_data = self._periods[period_name]
+        current_time_ts = pd.Timestamp(current_time)
+        # 懒加载计算指标（如果还没计算）
+        period_data.calculate_indicators()
         return period_data.get_data(current_time_ts, lookback_bars, self._event_mgr.df)
+
+    def build_context(
+        self,
+        requirements: DataRequirements,
+        bar: Bar,
+        timeout: float | None = None,
+    ) -> BarContext:
+        """构造 BarContext 上下文对象
+
+        行为：
+        1. 解析 requirements 中的 periods 配置
+        2. 对每个周期调用 self.get_data(period, current_time, lookback_bars, timeout)
+        3. 从 self 获取当前时间范围内的事件（按 requirements.events 配置筛选）
+        4. 构造并返回 BarContext 对象
+        """
+        current_time = pd.Timestamp(bar.datetime)
+        multi: dict[str, PeriodDataView] = {}
+
+        # 获取多周期数据
+        for period, req in requirements.periods.items():
+            view = self.get_data(period, current_time, req.lookback_bars, timeout)
+            if view is not None:
+                multi[period] = view
+
+        # 获取事件（不需要事件时直接跳过，节省锁和 DataFrame 操作）
+        events: list[Event] = []
+        events_req = requirements.events
+
+        if events_req.include_global_events or events_req.include_period_events:
+            all_events = self.get_events(end_time=current_time)
+
+            for event in all_events:
+                include = False
+
+                # 检查全局事件
+                if events_req.include_global_events and event.period is None:
+                    include = True
+
+                # 检查周期特定事件
+                if not include and events_req.include_period_events:
+                    if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
+                        include = True
+
+                # 检查事件类型白名单
+                if include and events_req.event_types:
+                    if event.type not in events_req.event_types:
+                        include = False
+
+                if include:
+                    events.append(event)
+
+        # 使用传入的 bar，不再从 multi 中提取
+        bar.symbol = self.symbol
+
+        return BarContext(symbol=self.symbol, bar=bar, multi=multi, events=events)
+
+    @classmethod
+    def create(
+        cls,
+        symbol: str,
+        requirements: DataRequirements,
+    ) -> "DataFeed":
+        """完整构造一个 DataFeed，自动处理缓存、增量加载、序列化
+
+        【流程逻辑】
+        1. 根据 requirements 找出基础周期（最小间隔）
+        2. 先查内存缓存，命中直接返回（零 I/O）
+        3. 内存未命中，尝试从磁盘 feeds 目录反序列化加载
+        4. 检查源数据日期范围是否匹配，不匹配则全量重加载
+        5. 如果磁盘加载成功，合并缺失的周期/指标需求，增量计算
+        6. 最后写入内存缓存并返回
+
+        :param symbol: 交易品种
+        :param requirements: 数据需求
+        :return: 构造完成的 DataFeed
+        """
+        from data.manager import DataManager
+
+        from .cache import get_cached_feed, set_cached_feed
+
+        dm = DataManager()
+        feeds_dir = f"output/feeds/{symbol}"
+
+        # 找出基础周期（最小时间间隔），它是聚合的源
+        base_period = next(iter(requirements.periods))
+        min_minutes = min(parse_period_minutes(p) for p in requirements.periods)
+        for period in requirements.periods:
+            if parse_period_minutes(period) == min_minutes:
+                base_period = period
+                break
+
+        # 加载所有周期数据，每个周期从数据库加载对应间隔的数据
+        # 先加载基础周期源数据
+        base_df: pd.DataFrame | None = None
+        results = dm.load_kline([symbol], interval=base_period)
+        if results:
+            _, base_df, _ = results[0]
+
+        # 计算源数据日期范围（缓存 key）使用基础周期
+        src_date_range = _source_date_range(base_df)
+
+        # 0. 查内存缓存（零 I/O 路径）
+        if src_date_range is not None:
+            cached = get_cached_feed(symbol, src_date_range[0], src_date_range[1])
+            if cached is not None:
+                return cached
+
+        # 1. 尝试从磁盘加载
+        feed = _try_load_from_disk(feeds_dir, base_df, requirements, src_date_range)
+
+        # 2. 磁盘加载失败，全量构造
+        if feed is None:
+            feed = cls(symbol=symbol, requirements=requirements)
+            if base_df is not None and len(base_df) > 0:
+                feed.feed_history_df(base_df.set_index("datetime"))
+            # 加载其他周期（非基础周期）如果数据库中已有预存数据
+            for period in requirements.periods:
+                if period == base_period:
+                    continue
+                results = dm.load_kline([symbol], interval=period)
+                if results:
+                    _, df, _ = results[0]
+                    if len(df) > 0:
+                        feed.load_history_df(period, df.set_index("datetime"))
+            feed.calculate_all()
+            feed.to_feeds(feeds_dir)
+
+        # 写入内存缓存
+        if src_date_range is not None:
+            set_cached_feed(symbol, feed, src_date_range[0], src_date_range[1])
+
+        return feed
 
 
 # ==================== 辅助函数 ====================
-
-
-def _bars_to_df(bars: list[Bar]) -> pd.DataFrame:
-    """将 Bar 列表转为 DataFrame，索引为 datetime"""
-    data = {
-        "open": [b.open for b in bars],
-        "high": [b.high for b in bars],
-        "low": [b.low for b in bars],
-        "close": [b.close for b in bars],
-        "volume": [b.volume for b in bars],
-    }
-    df = pd.DataFrame(data, index=[pd.Timestamp(b.datetime) for b in bars])
-    return df
 
 
 def _make_aggregated_bar(source_bar: Bar, bar_start: pd.Timestamp) -> Bar:
@@ -588,116 +709,6 @@ def _make_aggregated_bar(source_bar: Bar, bar_start: pd.Timestamp) -> Bar:
         close=source_bar.close,
         volume=source_bar.volume,
     )
-
-
-def build_context(
-    data_feed: DataFeed,
-    requirements: DataRequirements,
-    current_time: pd.Timestamp | dt,
-    bar: Bar,
-    timeout: float | None = None,
-) -> BarContext:
-    """构造 BarContext 上下文对象
-
-    行为：
-    1. 解析 requirements 中的 periods 配置
-    2. 对每个周期调用 data_feed.get_data(period, current_time, lookback_bars, timeout)
-    3. 从 DataFeed 获取当前时间范围内的事件（按 requirements.events 配置筛选）
-    4. 构造并返回 BarContext 对象
-    """
-    multi: dict[str, PeriodDataView] = {}
-
-    # 获取多周期数据
-    for period, req in requirements.periods.items():
-        view = data_feed.get_data(period, current_time, req.lookback_bars, timeout)
-        if view is not None:
-            multi[period] = view
-
-    # 获取事件（不需要事件时直接跳过，节省锁和 DataFrame 操作）
-    events: list[Event] = []
-    events_req = requirements.events
-
-    if events_req.include_global_events or events_req.include_period_events:
-        all_events = data_feed.get_events(end_time=current_time)
-
-        for event in all_events:
-            include = False
-
-            # 检查全局事件
-            if events_req.include_global_events and event.period is None:
-                include = True
-
-            # 检查周期特定事件
-            if not include and events_req.include_period_events:
-                if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
-                    include = True
-
-            # 检查事件类型白名单
-            if include and events_req.event_types:
-                if event.type not in events_req.event_types:
-                    include = False
-
-            if include:
-                events.append(event)
-
-    # 使用传入的 bar，不再从 multi 中提取
-    bar.symbol = data_feed.symbol
-
-    return BarContext(symbol=data_feed.symbol, bar=bar, multi=multi, events=events)
-
-
-# ==================== 便捷工厂方法 ====================
-
-
-def create_data_feed(
-    symbol: str,
-    requirements: DataRequirements,
-    feeds_dir: str,
-    source_df: pd.DataFrame | None = None,
-) -> DataFeed:
-    """便捷工厂方法：完整构造一个 DataFeed，自动处理缓存、增量加载、序列化
-
-    【流程逻辑】
-    1. 先查内存缓存，命中直接返回（零 I/O）
-    2. 内存未命中，尝试从磁盘 feeds 目录反序列化加载
-    3. 检查源数据日期范围是否匹配，不匹配则全量重加载
-    4. 如果磁盘加载成功，合并缺失的周期/指标需求，增量计算
-    5. 最后写入内存缓存并返回
-
-    :param symbol: 交易品种
-    :param requirements: 数据需求
-    :param feeds_dir: 序列化缓存目录
-    :param source_df: 源周期（1m）数据，如果为 None 则需要调用方后续灌入
-    :return: 构造完成的 DataFeed
-    """
-    from .cache import get_cached_feed, set_cached_feed
-
-    # 计算源数据日期范围（缓存 key）
-    src_date_range = _source_date_range(source_df)
-
-    # 0. 查内存缓存（零 I/O 路径）
-    if src_date_range is not None:
-        cached = get_cached_feed(symbol, src_date_range[0], src_date_range[1])
-        if cached is not None:
-            return cached
-
-    # 1. 尝试从磁盘加载
-    feed = _try_load_from_disk(feeds_dir, source_df, requirements, src_date_range)
-
-    # 2. 磁盘加载失败，全量构造
-    if feed is None:
-        feed = DataFeed(symbol=symbol)
-        feed.apply_requirements(requirements)
-        if source_df is not None and len(source_df) > 0:
-            feed.feed_history_df(source_df.set_index("datetime"))
-        feed.calculate_all()
-        feed.to_feeds(feeds_dir)
-
-    # 写入内存缓存
-    if src_date_range is not None:
-        set_cached_feed(symbol, feed, src_date_range[0], src_date_range[1])
-
-    return feed
 
 
 def _source_date_range(source_df: pd.DataFrame | None) -> tuple[str, str] | None:
