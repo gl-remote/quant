@@ -456,7 +456,7 @@ def _run_batch_backtest(
             engine=run_engine_label if mode_arg == "search" else "walk-forward",
             symbols=len(datasets),
         )
-        engine._run_id = run_id
+        engine.set_run_id(run_id)
 
         # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
         _attach_run_logger(dm, run_id)
@@ -514,15 +514,12 @@ def _attach_run_logger(dm: DataManager, run_id: int) -> None:
         f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
         "{level: <8} | {name}:{function}:{line} | {message}"
     )
-    _sink_ids = getattr(dm, "_sink_ids", [])
-    _sink_ids.append(
-        logger.add(
-            logs_dir / "run.log",
-            level="DEBUG",
-            format=fmt,
-        )
-    )
-    dm._sink_ids = _sink_ids  # pyright: ignore[reportPrivateUsage]
+    sink_id = logger.add(
+          logs_dir / "run.log",
+          level="DEBUG",
+          format=fmt,
+      )
+    dm.add_log_sink_id(sink_id)
 
     stderr_id = get_stderr_sink_id()
     if stderr_id is not None:
@@ -531,7 +528,7 @@ def _attach_run_logger(dm: DataManager, run_id: int) -> None:
 
 def _detach_run_logger(dm: DataManager) -> None:
     """移除临时日志 sink，恢复 stderr"""
-    for sid in getattr(dm, "_sink_ids", []):
+    for sid in dm.get_log_sink_ids():
         logger.remove(sid)
     logger.add(
         sys.stderr,
@@ -554,7 +551,7 @@ def _execute_walk_forward_mode(
     end_arg: str | None,
 ) -> None:
     """Walk-Forward 模式执行与持久化"""
-    wf_result, strategy, sym = execute_walk_forward(
+    wf_result, strategy_cls_name, sym = execute_walk_forward(
         engine=engine,
         strategy_name=strategy_name,
         strategy_params=strategy_params,
@@ -564,11 +561,16 @@ def _execute_walk_forward_mode(
     )
     bt_id = None
     if wf_result.get("success"):
+        # execute_walk_forward 返回的第二个参数是策略类名称
+        # 策略实例需要从 strategy_name 加载
+        from strategies.utils import load_strategy
+
+        strategy = load_strategy(strategy_name)
         result = BacktestResult(
             symbol=sym,
             strategy=get_strategy_class_name(strategy),
             status=STATUS_SUCCESS,
-            strategy_version=getattr(strategy, "VERSION", None),
+            strategy_version=getattr(type(strategy), "VERSION", None),
             git_hash=git_hash,
             strategy_params=serialize_strategy_params(strategy),
             start_date=start_arg,

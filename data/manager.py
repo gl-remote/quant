@@ -514,3 +514,16 @@ class DataManager:
         exc_tb: object,
     ) -> None:
         self.close()
+
+    # ── 日志 sink 管理（用于批量回测时临时重定向日志）────────────────────────
+
+    def get_log_sink_ids(self) -> list[int]:
+        """获取当前存储的日志 sink ID 列表"""
+        return getattr(self, "_sink_ids", [])
+
+    def add_log_sink_id(self, sink_id: int) -> None:
+        """添加一个日志 sink ID"""
+        sink_ids = self.get_log_sink_ids()
+        sink_ids.append(sink_id)
+        # pyright: ignore[reportAttributeAccess]
+        object.__setattr__(self, "_sink_ids", sink_ids)

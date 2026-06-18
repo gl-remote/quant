@@ -81,6 +81,10 @@ class VnpyBacktestEngine:
         """设置 Git 提交哈希"""
         self._git_hash = git_hash
 
+    def set_run_id(self, run_id: int | None) -> None:
+        """设置当前运行记录 ID"""
+        self._run_id = run_id
+
     # ── 结果构建辅助方法 ──────────────────────────────────
 
     def _create_backtest_result(

@@ -61,7 +61,7 @@ def execute_parameter_search(
     strategy_params: dict[str, Any],
     capital: float,
     contract_size: int,
-    datasets: list[tuple[str, pd.DataFrame, str]],
+    datasets: list[tuple[str, KlineDataFrame, str]],
     n_trials: int,
     optimizer_cfg: Any,
     cm: ConfigManager,

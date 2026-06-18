@@ -132,7 +132,7 @@ commission_rate = 0.0003        # 手续费率 (0.03%)
 slippage = 1                    # 滑点 (跳)
 price_tick = 1                  # 最小价格变动
 contract_size = 5               # 合约乘数
-interval = "1m"                 # K线周期: 1m/5m/15m/30m/1h/d
+interval = "5m"                 # K线周期: 1m/5m/15m/30m/1h/d
 provider = ""                   # 回测优先数据源 (空=自动遍历所有)
 
 # ============================================================
