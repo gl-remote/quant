@@ -18,7 +18,7 @@ from config import ConfigManager
 from data import DataManager, export_csv
 
 
-def cmd_export(args: argparse.Namespace):
+def cmd_export(args: argparse.Namespace) -> None:
     """执行数据导出命令
 
     Args:

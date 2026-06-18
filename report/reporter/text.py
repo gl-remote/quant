@@ -143,7 +143,7 @@ def format_single_report(dm: DataManager, backtest_id: int) -> str:
         "【盈亏汇总 [vnpy]】",  # 2026-06-06新增
         f"  总净盈亏:   {_get_attr(bt, 'total_net_pnl', 0) or 0:,.2f}",
         f"  日均净盈亏: {_get_attr(bt, 'daily_net_pnl', 0) or 0:,.2f}",
-        f"  总手续费:   {_get_attr(bt, 'total_commission', 0) or 0:,.2f} ({format_pct((_get_attr(bt, 'total_commission') or 0) / (bt.initial_capital or 1))})",
+        f"  总手续费:   {_get_attr(bt, 'total_commission', 0) or 0:,.2f} ({format_pct(ensure_float(str(_get_attr(bt, 'total_commission') or 0)) / ensure_float(bt.initial_capital or 1))})",
         f"  日均手续费: {_get_attr(bt, 'daily_commission', 0) or 0:,.2f}",
         f"  总滑点成本: {_get_attr(bt, 'total_slippage', 0) or 0:,.2f}",
         f"  日均滑点:   {_get_attr(bt, 'daily_slippage', 0) or 0:,.2f}",

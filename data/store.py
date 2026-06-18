@@ -19,14 +19,14 @@ from typing import Any
 
 import pandas as pd
 import pandera.pandas as pa
+from loguru import logger
+from peewee import OperationalError
 
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 # pyright: reportUnknownArgumentType=false, reportArgumentType=false
 # pyright: reportAttributeAccessIssue=false, reportUnusedCallResult=false
 # 注: 以上规则抑制是因为 peewee ORM 缺少类型存根，所有方法链、
 # 字段描述符访问、`dict[str, object]` 查询返回值都会产生误报。
-from loguru import logger
-
 import common.constants as constants
 from common.schemas import (
     BacktestDailySchema,
@@ -191,13 +191,18 @@ class DataStore:
             provider: 数据源过滤（可选），不传则返回最新一条
             interval: 周期过滤（可选）
         """
-        query = ExportMetadata.select().where(ExportMetadata.symbol == symbol)
-        if provider:
-            query = query.where(ExportMetadata.provider == provider)
-        if interval:
-            query = query.where(ExportMetadata.interval == interval)
-        row = query.order_by(ExportMetadata.id.desc()).limit(1).dicts()
-        result = next(iter(row), None)
+        try:
+            query = ExportMetadata.select().where(ExportMetadata.symbol == symbol)
+            if provider:
+                query = query.where(ExportMetadata.provider == provider)
+            if interval:
+                query = query.where(ExportMetadata.interval == interval)
+            row = query.order_by(ExportMetadata.id.desc()).limit(1).dicts()
+            result = next(iter(row), None)
+        except OperationalError as e:
+            logger.debug(f"元数据表不可用，返回 None: {e}")
+            return None
+
         if result:
             for field in ["start_date", "end_date", "min_dt", "max_dt", "created_at", "updated_at"]:
                 if result.get(field) is not None:
@@ -293,6 +298,8 @@ class DataStore:
         """
         now = datetime.now()
         fields = self._build_backtest_fields(result, now, data_src)
+        if run_id is not None:
+            fields["run"] = run_id
 
         if result.backtest_id:
             bt = Backtest.get_by_id(result.backtest_id)

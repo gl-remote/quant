@@ -23,10 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from loguru import logger
 
@@ -234,7 +233,7 @@ def _run_tq_backtest(
             auth=auth,
             web_gui=gui_flag,
         )
-        bridge.initialize(api)
+        cast(Any, bridge).initialize(api)
         bridge.run(symbol=symbol)  # BacktestFinished 会正常传播
 
     except tqsdk.BacktestFinished:
@@ -414,6 +413,8 @@ def _run_batch_backtest(
     trials_arg: int | None = args.trials  # pyright: ignore[reportAny]
     optimizer_arg: str | None = args.optimizer  # pyright: ignore[reportAny]
     mode_arg: str = args.mode  # pyright: ignore[reportAny]
+    parallel_arg: bool = getattr(args, "parallel", False)
+    workers_arg: int | None = getattr(args, "workers", None)
 
     try:
         bc, strategy_params, _, _, _ = _prepare_backtest_config(args, cm)
@@ -474,6 +475,7 @@ def _run_batch_backtest(
                 git_hash=git_hash,
                 start_arg=start_arg,
                 end_arg=end_arg,
+                run_id=run_id,
             )
         else:
             _execute_search_mode(
@@ -489,6 +491,9 @@ def _run_batch_backtest(
                 git_hash=git_hash,
                 dm=dm,
                 run_id=run_id,
+                bc=bc,
+                parallel=parallel_arg,
+                n_workers=workers_arg,
             )
 
     except Exception as e:
@@ -505,9 +510,7 @@ def _run_batch_backtest(
 
 
 def _attach_run_logger(dm: DataManager, run_id: int) -> None:
-    """将 DEBUG 级别日志重定向到 output/r{run_id}/data/run.log"""
-    from common.log_config import get_stderr_sink_id
-
+    """将 DEBUG 级别日志写入 output/r{run_id}/data/run.log，同时保留 stderr 输出"""
     logs_dir = Path("output") / f"r{run_id}" / "data"
     logs_dir.mkdir(parents=True, exist_ok=True)
     fmt = (
@@ -521,21 +524,23 @@ def _attach_run_logger(dm: DataManager, run_id: int) -> None:
     )
     dm.add_log_sink_id(sink_id)
 
-    stderr_id = get_stderr_sink_id()
-    if stderr_id is not None:
-        logger.remove(stderr_id)
-
 
 def _detach_run_logger(dm: DataManager) -> None:
-    """移除临时日志 sink，恢复 stderr"""
+    """移除临时日志文件 sink，stderr 保持不变"""
     for sid in dm.get_log_sink_ids():
         logger.remove(sid)
-    logger.add(
-        sys.stderr,
-        level="INFO",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
-        colorize=True,
-    )
+
+
+def _convert_run_log(run_id: int) -> None:
+    """将 run.log 转为前端可读的 logs.json"""
+    logger.complete()  # 确保所有缓冲日志落盘
+    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
+    if log_file.exists():
+        with open(log_file, encoding="utf-8") as f:
+            text = f.read()
+        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(text, f, ensure_ascii=False)
 
 
 def _execute_walk_forward_mode(
@@ -549,6 +554,7 @@ def _execute_walk_forward_mode(
     git_hash: str | None,
     start_arg: str | None,
     end_arg: str | None,
+    run_id: int,
 ) -> None:
     """Walk-Forward 模式执行与持久化"""
     wf_result, strategy_cls_name, sym = execute_walk_forward(
@@ -589,11 +595,35 @@ def _execute_walk_forward_mode(
         # 单条结果必然返回 int
         assert isinstance(bt_id, int), f"expected int backtest id, got {type(bt_id)} {repr(bt_id)}"
         logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
+
+        # 拼接所有窗口的 OOS daily 和 trades 并持久化
+        window_results = wf_result.get("window_results", [])
+        all_daily: list[dict[str, object]] = []
+        all_trades: list[dict[str, object]] = []
+        for wr in window_results:
+            all_daily.extend(wr.get("daily_results", []))
+            all_trades.extend(wr.get("trades", []))
+        if all_daily:
+            try:
+                dm.insert_backtest_daily(bt_id, all_daily)
+            except Exception:
+                logger.exception("Walk-Forward 每日资金曲线持久化失败 [bt=%d]", bt_id)
+        if all_trades:
+            try:
+                dm.insert_backtest_trades(bt_id, all_trades)
+            except Exception:
+                logger.exception("Walk-Forward 交易记录持久化失败 [bt=%d]", bt_id)
+
         if bt_id:
             print(f"\n💡 查看报告: python main.py report --id {bt_id}")
             dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
     else:
         logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
+
+    # 输出日志和构建看板
+    _convert_run_log(run_id)
+    dm.store.finish_run(run_id)
+    build_dashboard(output_dir="output", run_id=run_id)
 
 
 def _execute_search_mode(
@@ -609,27 +639,73 @@ def _execute_search_mode(
     git_hash: str | None,
     dm: DataManager,
     run_id: int,
+    bc: BacktestConfig | None = None,
+    parallel: bool = False,
+    n_workers: int | None = None,
 ) -> None:
-    """参数搜索模式执行与持久化"""
+    """参数搜索模式执行与持久化
+
+    Args:
+        parallel: True 时使用 ParallelBacktestOptimizer 多进程并行回测
+        n_workers: 并行进程数（默认 os.cpu_count()）
+        bc: 仅为了和并行路径复用统一的参数提取，串行路径不使用
+    """
     optimizer_cfg = cm.get_optimizer_config()
     n_trials = trials_arg if trials_arg else optimizer_cfg.n_trials
 
-    result = execute_parameter_search(
-        engine=engine,
-        strategy_name=strategy_name,
-        strategy_params=strategy_params,
-        capital=capital,
-        contract_size=contract_size,
-        datasets=datasets,
-        n_trials=n_trials,
-        optimizer_cfg=optimizer_cfg,
-        cm=cm,
-        optimizer_arg=optimizer_arg,
-        git_hash=git_hash,
-        dm=dm,
-        run_id=run_id,
-    )
+    # ── 提取搜索空间 ──────────────────────────────
+    run_engine = optimizer_arg or cm.get_optimizer_config().engine or "grid"
+    sc = cm.get_trading_config(strategy_name)
+    search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
+    if not search_space:
+        logger.warning("搜索空间为空，跳过参数搜索")
+        dm.store.finish_run(run_id, "skipped")
+        _convert_run_log(run_id)
+        build_dashboard(output_dir="output", run_id=run_id)
+        return
+
+    result: SearchResult | None
+    if parallel:
+        from backtest.parallel import run_param_search_parallel
+
+        datasets_simple = cast(list[tuple[str, Any]], [(s, d) for s, d, _ in datasets])
+        study_name = f"{strategy_name}_{run_engine}_r{run_id}"
+        dm.store.link_study(run_id, study_name)
+
+        result = run_param_search_parallel(
+            datasets=datasets_simple,
+            strategy_name=strategy_name,
+            search_space=search_space,
+            strategy_params=strategy_params,
+            backtest_config=bc,  # type: ignore[arg-type]
+            n_trials=n_trials,
+            search_type=run_engine,
+            n_workers=n_workers,
+            study_db_path=f"sqlite:///{dm.store.db_path}",
+            study_name=study_name,
+            random_seed=optimizer_cfg.random_seed,
+            use_fixed_seed=optimizer_cfg.use_fixed_seed,
+        )
+    else:
+        result = execute_parameter_search(
+            engine=engine,
+            strategy_name=strategy_name,
+            strategy_params=strategy_params,
+            capital=capital,
+            contract_size=contract_size,
+            datasets=datasets,
+            n_trials=n_trials,
+            optimizer_cfg=optimizer_cfg,
+            cm=cm,
+            optimizer_arg=optimizer_arg,
+            git_hash=git_hash,
+            dm=dm,
+            run_id=run_id,
+        )
     if not result:
+        _convert_run_log(run_id)
+        dm.store.finish_run(run_id, "no_result")
+        build_dashboard(output_dir="output", run_id=run_id)
         return
 
     # 保存实际使用的随机种子
@@ -640,26 +716,21 @@ def _execute_search_mode(
     )
 
     # CLI 统一持久化
-    _persist_search_results(
-        dm=dm,
-        result=result,
-        datasets=datasets,
-        search_type=optimizer_arg or cm.get_optimizer_config().engine or "grid",
-        study_name=result.study_name,
-        git_hash=git_hash,
-        run_id=run_id,
-    )
+    try:
+        _persist_search_results(
+            dm=dm,
+            result=result,
+            datasets=datasets,
+            search_type=optimizer_arg or cm.get_optimizer_config().engine or "grid",
+            study_name=result.study_name,
+            git_hash=git_hash,
+            run_id=run_id,
+        )
+    except Exception:
+        logger.exception("参数搜索结果持久化失败，部分数据可能未入库")
 
-    # run.log → logs.json
-    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
-    if log_file.exists():
-        with open(log_file, encoding="utf-8") as f:
-            text = f.read()
-        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
-        with open(json_file, "w", encoding="utf-8") as f:
-            json.dump(text, f, ensure_ascii=False)
-
-    # 自动生成回测看板
+    # 无论持久化是否成功，始终输出日志和构建看板
+    _convert_run_log(run_id)
     dm.store.finish_run(run_id)
     build_dashboard(output_dir="output", run_id=run_id)
 
@@ -719,15 +790,24 @@ def _persist_search_results(
 
             daily = er.daily_results
             if daily:
-                dm.insert_backtest_daily(bt_id, daily)
+                try:
+                    dm.insert_backtest_daily(bt_id, daily)
+                except Exception:
+                    logger.exception("每日资金曲线持久化失败 [bt=%d]", bt_id)
 
             if er.fills:
-                dm.insert_backtest_trades(bt_id, er.fills)
+                try:
+                    dm.insert_backtest_trades(bt_id, er.fills)
+                except Exception:
+                    logger.exception("交易记录持久化失败 [bt=%d]", bt_id)
 
-            errors = dm.validate_consistency(bt_id)
-            if errors:
-                for err in errors:
-                    logger.warning(f"数据一致性警告: {err}")
+            try:
+                errors = dm.validate_consistency(bt_id)
+                if errors:
+                    for err in errors:
+                        logger.warning("数据一致性警告: {}", err)
+            except Exception:
+                logger.exception("数据一致性校验失败 [bt=%d]", bt_id)
 
     # 输出摘要
     print(f"\n============ {search_type.upper()} 优化结果 ============")

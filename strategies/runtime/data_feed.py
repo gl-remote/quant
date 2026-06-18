@@ -33,7 +33,7 @@ from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event, EventManager
 from .period import PeriodData, PeriodDataView
-from .requirements import BarContext, DataRequirements
+from .requirements import BarContext, DataRequirements, PeriodRequirements
 from .serialization import dump_feed, load_feed
 
 if TYPE_CHECKING:
@@ -378,7 +378,45 @@ class DataFeed:
             # 形成中 bar 更新后，需要重算该周期指标
             period_data.calculate_indicators()
 
-    def calculate_all(self) -> None:
+    def build_aggregations(self) -> None:
+        """构建所有高周期聚合数据。
+
+        遍历基础周期的全部 K 线，逐步构建高周期（5m, 15m 等）聚合数据。
+        仅在目标周期无已加载数据时才构建（跳过已有数据的周期）。
+        """
+        assert self._base_period is not None
+        base_data = self._periods.get(self._base_period)
+        if base_data is None or base_data.length == 0:
+            return
+        if not self._aggregation_targets:
+            return
+
+        # 跳过已有数据的目标周期（如通过 load_history_df 预填充的场景）
+        active_targets = [
+            p for p in self._aggregation_targets if self._periods.get(p) is not None and self._periods[p].length == 0
+        ]
+        if not active_targets:
+            return
+
+        for idx in base_data.data.index:
+            row = base_data.data.loc[idx]
+            bar = Bar(
+                symbol=self.symbol,
+                datetime=idx.to_pydatetime(),
+                open=float(row["open"]),
+                high=float(row["high"]),
+                low=float(row["low"]),
+                close=float(row["close"]),
+                volume=float(row["volume"]),
+            )
+            self._step_aggregation(bar)
+
+        for target_period in active_targets:
+            period_data = self._periods.get(target_period)
+            if period_data and period_data.has_forming_bar:
+                period_data.complete_forming_bar()
+
+    def calculate_all(self, force: bool = False) -> None:
         """批量预计算所有周期的所有指标（可选，用于回测初始化性能优化）
 
         适用场景：
@@ -387,12 +425,13 @@ class DataFeed:
 
         注意：
         - 不是必须调用，不调用也能用
-        - 会覆盖已有的指标数据
-        - 会遍历所有周期，计算所有注册指标
-        - 如果某个指标已经计算过，会跳过该指标
+        - force=True 时会覆盖已有的指标数据（用于 build_aggregations 后的全量重算）
+        - force=False（默认）时会跳过已计算的指标
+
+        :param force: 强制全量重算，清除已有的部分指标结果
         """
         for period_data in self._periods.values():
-            period_data.calculate_indicators()
+            period_data.calculate_indicators(force=force)
 
     def calculate_period(self, period_name: str) -> None:
         """只计算指定周期的所有注册指标（跳过已计算且最后一行非 NaN 的指标）"""
@@ -598,27 +637,33 @@ class DataFeed:
         """
         from data.manager import DataManager
 
-        from .cache import get_cached_feed, set_cached_feed
+        from .cache import get_cached_feed, get_cached_feed_by_symbol, set_cached_feed
 
         dm = DataManager()
         feeds_dir = f"output/feeds/{symbol}"
 
-        # 找出基础周期（最小时间间隔），它是聚合的源
-        base_period = next(iter(requirements.periods))
-        min_minutes = min(parse_period_minutes(p) for p in requirements.periods)
-        for period in requirements.periods:
-            if parse_period_minutes(period) == min_minutes:
-                base_period = period
-                break
+        # CSV 原始数据固定为 1 分钟粒度，策略需求的更高周期由 1m 聚合得到。
+        # 将 1m 加入需求，确保 apply_requirements 将其设为 base_period。
+        source_period = "1m"
+        if source_period not in requirements.periods:
+            requirements.periods[source_period] = PeriodRequirements(lookback_bars=1)
 
-        # 加载所有周期数据，每个周期从数据库加载对应间隔的数据
-        # 先加载基础周期源数据
+        # 从 CSV 加载 1 分钟源数据
         base_df: pd.DataFrame | None = None
-        results = dm.load_kline([symbol], interval=base_period)
+        try:
+            results = dm.load_kline([symbol], interval=source_period)
+        except FileNotFoundError:
+            cached = get_cached_feed_by_symbol(symbol)
+            if cached is not None:
+                return cached
+            raise
         if results:
             _, base_df, _ = results[0]
+            # load_kline 返回的 DataFrame 以 "datetime" 列存储，需转为 DatetimeIndex
+            if "datetime" in base_df.columns:
+                base_df = base_df.set_index("datetime")
 
-        # 计算源数据日期范围（缓存 key）使用基础周期
+        # 计算源数据日期范围（缓存 key）
         src_date_range = _source_date_range(base_df)
 
         # 0. 查内存缓存（零 I/O 路径）
@@ -635,18 +680,9 @@ class DataFeed:
             feed = cls(symbol=symbol, requirements=requirements)
             if base_df is not None and len(base_df) > 0 and isinstance(base_df.index, pd.DatetimeIndex):
                 feed.feed_history_df(base_df)
-            # 加载其他周期（非基础周期）如果数据库中已有预存数据
-            for period in requirements.periods:
-                if period == base_period:
-                    continue
-                results = dm.load_kline([symbol], interval=period)
-                if results:
-                    _, df, _ = results[0]
-                    if len(df) > 0 and isinstance(df.index, pd.DatetimeIndex):
-                        feed.load_history_df(period, df)
-                    elif len(df) > 0 and "datetime" in df.columns:
-                        feed.load_history_df(period, df.set_index("datetime"))
             feed.calculate_all()
+            feed.build_aggregations()
+            feed.calculate_all(force=True)
             feed.to_feeds(feeds_dir)
 
         # 写入内存缓存
@@ -725,7 +761,7 @@ def _try_load_from_disk(
     } - existing_indicators
 
     if new_periods or new_indicators:
-        feed.calculate_all()
+        feed.calculate_all(force=True)
         feed.to_feeds(feeds_dir)
 
     return feed

@@ -44,6 +44,12 @@ def get_cached_feed(symbol: str, min_dt: str, max_dt: str) -> DataFeed | None:
     return None
 
 
+def get_cached_feed_by_symbol(symbol: str) -> DataFeed | None:
+    """按品种获取缓存的 DataFeed，用于无源数据元信息时的进程内回退"""
+    entry = _cache.get(symbol)
+    return entry[0] if entry is not None else None
+
+
 def set_cached_feed(symbol: str, feed: DataFeed, min_dt: str, max_dt: str) -> None:
     """将 DataFeed 存入内存缓存
 

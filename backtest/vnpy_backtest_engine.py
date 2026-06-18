@@ -50,11 +50,12 @@ class VnpyBacktestEngine:
         )
     """
 
-    def __init__(self, backtest_config: BacktestConfig, dm: DataManager) -> None:
+    def __init__(self, backtest_config: BacktestConfig, dm: DataManager | None = None) -> None:
         """
         Args:
             backtest_config: 回测配置（含 capital/commission/slippage 等交易环境参数）
-            dm: 数据管理器，提供数据加载能力
+            dm: 数据管理器，提供数据加载能力。batch_mode 下可不传（传 None 时
+                _create_placeholder_record 将被跳过，由主进程统一写入 DB）
         """
         self._dm = dm
         self._run_id: int | None = None
@@ -216,6 +217,7 @@ class VnpyBacktestEngine:
     def run(
         self,
         pairs: list[tuple[str, pd.DataFrame, str, dict[str, Any]]],
+        batch_mode: bool = False,
     ) -> list[BacktestResult]:
         """执行多策略 × 多品种回测
 
@@ -223,6 +225,8 @@ class VnpyBacktestEngine:
 
         Args:
             pairs: [(symbol, DataFrame, strategy_name, strategy_params), ...]
+            batch_mode: True 时跳过 _create_placeholder_record（不写 DB），
+                        由主进程统一入库。用于并行回测子进程。
 
         Returns:
             list[BacktestResult]
@@ -254,7 +258,7 @@ class VnpyBacktestEngine:
             data_start, data_end, total_days = calculate_date_range(df)
             logger.debug(f"数据: {len(df)} 条, {data_start} ~ {data_end}, 共 {total_days} 天")
 
-            batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list)
+            batch_results = self._run_backtest(df, symbol, strategy_names, strategy_params_list, batch_mode=batch_mode)
             for i, r in enumerate(batch_results):
                 stats = r.get("statistics", {})
                 daily = r.get("daily_results", [])
@@ -264,7 +268,7 @@ class VnpyBacktestEngine:
                 results.append(
                     self._create_backtest_result(
                         symbol=sym,
-                        backtest_id=r.get("bt_id"),
+                        backtest_id=r.get("bt_id") if r.get("bt_id") != -1 else None,
                         strategy_name=strategy_names[i] if i < len(strategy_names) else "unknown",
                         strategy_version=r.get("strategy_version"),
                         strategy_params=serialize_strategy_params(strategy_config) if strategy_config else {},
@@ -403,6 +407,8 @@ class VnpyBacktestEngine:
                     "test_end": str(test_df["datetime"].iloc[-1])[:10],
                     "statistics": test_result.get("statistics", {}),
                     "statistics_is": train_result.get("statistics", {}),
+                    "daily_results": test_result.get("daily_results", []),
+                    "trades": test_result.get("trades", []),
                 }
             )
         return window_results
@@ -415,6 +421,7 @@ class VnpyBacktestEngine:
         symbol: str,
         strategy_names: list[str],
         strategy_params_list: list[dict[str, Any]],
+        batch_mode: bool = False,
     ) -> list[dict[str, Any]]:
         """在单个数据集上执行 vnpy 回测（主流程编排）
 
@@ -425,6 +432,8 @@ class VnpyBacktestEngine:
             symbol: 品种代码
             strategy_names: 策略名称列表
             strategy_params_list: 策略参数列表
+            batch_mode: True 时跳过 _create_placeholder_record，bt_id 用 -1 占位，
+                        用于并行回测子进程，结果回主进程统一入库。
 
         Returns:
             list[dict]，每个 dict 包含 statistics, daily_results, strategy_config, strategy_version 等
@@ -450,15 +459,18 @@ class VnpyBacktestEngine:
         for strategy_name, strategy_params in zip(strategy_names, strategy_params_list, strict=False):
             strategy_version = self._get_strategy_version(strategy_name)
 
-            bt_placeholder = self._create_placeholder_record(
-                symbol=symbol,
-                strategy_name=strategy_name,
-                strategy_version=strategy_version,
-                data_start=data_start,
-                data_end=data_end,
-                total_days=total_days,
-            )
-            bt_id = bt_placeholder.id
+            if batch_mode:
+                bt_id = -1
+            else:
+                bt_placeholder = self._create_placeholder_record(
+                    symbol=symbol,
+                    strategy_name=strategy_name,
+                    strategy_version=strategy_version,
+                    data_start=data_start,
+                    data_end=data_end,
+                    total_days=total_days,
+                )
+                bt_id = bt_placeholder.id
 
             try:
                 # 创建 vnpy 引擎并执行回测

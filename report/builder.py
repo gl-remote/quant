@@ -195,7 +195,7 @@ def _collect_trades_fingerprint(dm: DataManager, run_id: int) -> dict[str, objec
         if not s_id:
             continue
         symbol = str(s.get("symbol", ""))
-        result[symbol] = len(list(dm.query_trades(int(s_id))))
+        result[symbol] = len(list(dm.query_trades(int(str(s_id)))))
     return result
 
 

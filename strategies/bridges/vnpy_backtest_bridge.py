@@ -218,7 +218,7 @@ class VnpyBacktestBridge(CtaTemplate):
     def on_bar(self, bar: Any) -> None:
         """vnpy K线回调 — 动态构造 BarContext 并驱动策略
 
-        所有数据已在 on_init 加载并计算好指标，BarContext 动态构造。
+        所有数据已在 on_init 加载并计算好指标（含聚合），BarContext 动态构造。
         """
         raw_dt: Any = getattr(bar, "datetime", None)
         if raw_dt is None:

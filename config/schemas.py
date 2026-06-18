@@ -86,8 +86,9 @@ class OptimizerConfig(BaseModel):
     - engine: \"grid\" — 使用 GridSampler 穷举搜索
     - engine: \"bayesian\" — 使用 TPESampler 贝叶斯优化
 
-    注意：本优化器强制单线程执行（n_jobs=1），
-    因为 vnpy BacktestingEngine 非线程安全。
+    注意：
+    - 串行模式（默认）：n_jobs=1，vnpy 引擎非线程安全
+    - 并行模式（CLI --parallel）：使用 multiprocessing 进程隔离，可安全并行
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")

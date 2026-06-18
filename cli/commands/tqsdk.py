@@ -32,7 +32,7 @@ from strategies.utils import apply_strategy_config, get_strategy_class_name, loa
 VALID_ACCOUNT_TYPES = ("tqsim", "tqkq", "tqaccount")
 
 
-def build_account(account_info: Any | None, account_type_override: str | None = None):
+def build_account(account_info: Any | None, account_type_override: str | None = None) -> tuple[Any, Any]:
     """根据配置构造 tqsdk 账户对象。
 
     Args:

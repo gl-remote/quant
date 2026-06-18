@@ -247,10 +247,10 @@ def _resample_kline(df: pd.DataFrame, rule: str) -> list[dict]:
         )
         .dropna()
     )
-    resampled.index = resampled.index.tz_convert("UTC")
+    resampled.index = pd.DatetimeIndex(resampled.index).tz_convert("UTC")
     return [
         {
-            "datetime": int(idx.timestamp()),
+            "datetime": int(pd.Timestamp(str(idx)).timestamp()),
             "open": float(row.open),
             "high": float(row.high),
             "low": float(row.low),
@@ -327,7 +327,7 @@ def build_kline_dict(
 
         daily_data = [
             {
-                "datetime": int(idx.timestamp()),
+                "datetime": int(pd.Timestamp(str(idx)).timestamp()),
                 "open": float(row.open),
                 "high": float(row.high),
                 "low": float(row.low),

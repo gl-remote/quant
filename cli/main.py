@@ -110,6 +110,8 @@ def main() -> None:
         help="参数搜索引擎: grid=网格搜索, bayesian=贝叶斯优化 (默认读 TOML)",
     )
     p.add_argument("--trials", type=int, default=None, help="optimizer 最大试验次数（默认从配置文件读取）")
+    p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭）")
+    p.add_argument("--workers", type=int, default=None, help="并行进程数（默认 os.cpu_count()，仅 --parallel 时生效）")
 
     # ---- report ----
     p = sub.add_parser(

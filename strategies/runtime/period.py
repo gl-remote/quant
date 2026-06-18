@@ -108,6 +108,11 @@ class PeriodData:
         """获取当前数据长度（K线数量）"""
         return len(self._df)
 
+    @property
+    def data(self) -> pd.DataFrame:
+        """获取底层 DataFrame（只读）"""
+        return self._df
+
     def _append_df(self, new_df: pd.DataFrame) -> None:
         """内部方法：将新 DataFrame 追加到 _df，带时间顺序校验
 
@@ -259,12 +264,17 @@ class PeriodData:
         """获取已注册的指标配置列表（只读副本）"""
         return list(self._registered_indicators)
 
-    def calculate_indicators(self) -> None:
+    def calculate_indicators(self, force: bool = False) -> None:
         """计算所有注册指标
 
         跳过已计算且最后一行非 NaN 的指标，对需要计算的指标做全量计算。
         对于有 forming bar 的周期，在临时拼接的 DataFrame 上计算，
         结果分别写回 _df 和 _forming_indicators，不修改 _df 本身。
+
+        首次计算（列不存在或 force=True）时对全量数据计算，
+        后续增量更新仅计算 window 尾部。
+
+        :param force: 强制全量重算，清除已有的部分指标结果
         """
         if not self._registered_indicators:
             return
@@ -272,9 +282,9 @@ class PeriodData:
         for spec in self._registered_indicators:
             col_name = generate_indicator_column_name(spec.name, spec.params)
 
-            # 跳过已计算且最后一行非 NaN 的指标
+            # 跳过已计算且最后一行非 NaN 的指标（force 模式下不跳过）
             # 如有 forming bar，还需其指标缓存也已计算
-            if col_name in self._df.columns:
+            if not force and col_name in self._df.columns:
                 if len(self._df) > 0 and not self._df[col_name].isna().iloc[-1]:
                     if self._forming_bar is None or col_name in self._forming_indicators:
                         continue
@@ -284,22 +294,31 @@ class PeriodData:
 
             try:
                 window = spec.window if isinstance(spec.window, int) else 250
-                tail_len = min(window, len(self._df))
-                tail_df = self._df.tail(tail_len)
+                is_first_compute = force or col_name not in self._df.columns
 
-                # 拼接 forming bar 到临时 tail，不修改 _df
+                # 首次计算/强制重算：对全量数据计算；增量更新：仅计算 window 尾部
+                if is_first_compute:
+                    compute_df = self._df
+                else:
+                    tail_len = min(window, len(self._df))
+                    compute_df = self._df.tail(tail_len)
+
+                # 拼接 forming bar 到临时 DataFrame，不修改 _df
                 if self._forming_bar is not None:
                     forming_row = _forming_bar_to_series(self._forming_bar)
-                    tail_df = pd.concat([tail_df, forming_row.to_frame().T])
+                    compute_df = pd.concat([compute_df, forming_row.to_frame().T])
 
-                result = spec.func(tail_df, **spec.params)
-                result_series = pd.Series(result, index=tail_df.index)
+                if len(compute_df) == 0:
+                    continue
+
+                result = spec.func(compute_df, **spec.params)
+                result_series = pd.Series(result, index=compute_df.index)
 
                 # 结果写回 _df（只写 _df 中存在的行）
                 if col_name not in self._df.columns:
                     self._df[col_name] = np.nan
-                df_mask = tail_df.index.isin(self._df.index)
-                self._df.loc[tail_df.index[df_mask], col_name] = result_series[df_mask]
+                df_mask = compute_df.index.isin(self._df.index)
+                self._df.loc[compute_df.index[df_mask], col_name] = result_series[df_mask]
 
                 # forming bar 的指标值写入缓存
                 if self._forming_bar is not None:

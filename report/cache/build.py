@@ -90,7 +90,7 @@ class BuildCache:
                 logger.debug("数据变更检测到，需要更新: %s", fingerprint_path.name)
             else:
                 logger.debug("数据未变更，跳过: %s", fingerprint_path.name)
-            return needs_update
+            return bool(needs_update)
         except (OSError, json.JSONDecodeError) as e:
             logger.warning("指纹文件读取失败，需要更新: %s - %s", fingerprint_path.name, e)
             return True

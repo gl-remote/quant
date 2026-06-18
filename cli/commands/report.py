@@ -19,7 +19,7 @@ from data import DataManager
 from report import format_single_report, format_summary_report
 
 
-def cmd_report(args: argparse.Namespace):
+def cmd_report(args: argparse.Namespace) -> None:
     """回测数据管理入口
 
     Args:
@@ -91,7 +91,7 @@ def _cmd_build(run_id: int | None = None) -> None:
         for r in runs:
             rid = r["id"]
             print(f"  → 重建 r{rid}...")
-            build_all(output_dir="output", run_id=rid, incremental=False)
+            build_all(output_dir="output", run_id=int(str(rid)), incremental=False)
     print("完成。")
 
 

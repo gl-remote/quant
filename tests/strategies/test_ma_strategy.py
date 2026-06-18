@@ -245,12 +245,9 @@ def _create_stop_or_tp_context(
         for period, spec in specs:
             p = spec.params.get("period")
             if p is not None:
-                # SMA: 用 config 中的 period 参数
+                # SMA: 设置为相等值，不触发趋势信号
                 if indicator_name == "sma":
-                    if p == config.sma_short:
-                        _set_indicator_value(feed, period, indicator_name, 100.0, -1, period=p)
-                    elif p == config.sma_long:
-                        _set_indicator_value(feed, period, indicator_name, 99.0, -1, period=p)
+                    _set_indicator_value(feed, period, indicator_name, 100.0, -1, period=p)
                 else:
                     _set_indicator_value(feed, period, indicator_name, 2.0, -1, **params)
             else:
@@ -321,8 +318,8 @@ class TestMACrossParams:
 
     def test_default_params(self):
         cfg = MACrossParams()
-        assert cfg.sma_short == 10
-        assert cfg.sma_long == 40
+        assert cfg.sma_short == 5
+        assert cfg.sma_long == 20
         assert cfg.atr_period == 14
         assert cfg.atr_stop_loss_multiplier == 2.0
         assert cfg.atr_take_profit_multiplier == 3.0

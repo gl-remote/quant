@@ -328,6 +328,8 @@ class DataManager:
                 results.append((symbol, self._data_cache[cache_key], data_src))
                 continue
 
+            logger.debug(f"加载K线数据: {symbol} data_src={data_src}")
+
             df = pd.read_csv(data_src)
             df["datetime"] = pd.to_datetime(df["datetime"])
 

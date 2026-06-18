@@ -18,6 +18,7 @@
 
 from .data_utils import df_to_vnpy_datalines, resolve_interval
 from .optimizer import OptunaOptimizer, OptunaResult, SearchResult, run_param_search
+from .parallel import ParallelBacktestOptimizer, run_param_search_parallel
 from .results import WalkForwardAggregate, aggregate_walk_forward
 from .runners import execute_parameter_search, execute_walk_forward
 from .strategy_factory import StrategyFactory, create_strategy_class, load_strategy_and_config
@@ -45,6 +46,8 @@ __all__ = [
     "execute_walk_forward",
     "execute_parameter_search",
     "run_param_search",
+    "run_param_search_parallel",
+    "ParallelBacktestOptimizer",
     "OptunaOptimizer",
     "OptunaResult",
     "SearchResult",

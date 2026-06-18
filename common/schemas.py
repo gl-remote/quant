@@ -95,7 +95,7 @@ class DailyReturnSchema(pa.DataFrameModel):
 
     date: Series[pd.DatetimeTZDtype] = pa.Field(unique=True)
     return_: Series[float] = pa.Field(alias="return")
-    equity: Series[float] = pa.Field(ge=0.0)
+    equity: Series[float] = pa.Field()
 
     class Config:
         coerce = True
@@ -144,9 +144,9 @@ class BacktestDailySchema(pa.DataFrameModel):
     验证写入 backtest_daily 表的每日资金数据。
     字段说明：
         date: 日期
-        equity: 当日权益
+        equity: 当日权益（可为负数，期货亏损可能超过本金）
         daily_return: 当日净盈亏（金额）
-        drawdown: 当日回撤
+        drawdown: 当日回撤（负数或零）
     2026-06-06 新增 vnpy 日度字段：
         turnover: 当日成交金额
         commission: 当日手续费
@@ -155,7 +155,7 @@ class BacktestDailySchema(pa.DataFrameModel):
     """
 
     date: Series[pd.Timestamp] = pa.Field()
-    equity: Series[float] = pa.Field(ge=0.0)
+    equity: Series[float] = pa.Field()
     daily_return: Series[float] = pa.Field()
     drawdown: Series[float] = pa.Field(le=0.0)
     # 2026-06-06 新增 vnpy 日度字段（nullable）
@@ -163,11 +163,6 @@ class BacktestDailySchema(pa.DataFrameModel):
     commission: Series[float] = pa.Field(ge=0, nullable=True)
     slippage: Series[float] = pa.Field(ge=0, nullable=True)
     trade_count: Series[int] = pa.Field(ge=0, nullable=True)
-
-    @pa.dataframe_check
-    def check_equity_positive(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]
-        """验证权益值始终为正（账户未爆仓）"""
-        return bool((df["equity"] > 0).all())
 
     class Config:
         coerce = True
