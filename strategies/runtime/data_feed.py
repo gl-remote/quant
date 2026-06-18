@@ -679,8 +679,8 @@ class DataFeed:
         # 2. 磁盘加载失败，全量构造
         if feed is None:
             feed = cls(symbol=symbol, requirements=requirements)
-            if base_df is not None and len(base_df) > 0:
-                feed.feed_history_df(base_df.set_index("datetime"))
+            if base_df is not None and len(base_df) > 0 and isinstance(base_df.index, pd.DatetimeIndex):
+                feed.feed_history_df(base_df)
             # 加载其他周期（非基础周期）如果数据库中已有预存数据
             for period in requirements.periods:
                 if period == base_period:
@@ -688,7 +688,9 @@ class DataFeed:
                 results = dm.load_kline([symbol], interval=period)
                 if results:
                     _, df, _ = results[0]
-                    if len(df) > 0:
+                    if len(df) > 0 and isinstance(df.index, pd.DatetimeIndex):
+                        feed.load_history_df(period, df)
+                    elif len(df) > 0 and "datetime" in df.columns:
                         feed.load_history_df(period, df.set_index("datetime"))
             feed.calculate_all()
             feed.to_feeds(feeds_dir)
@@ -719,6 +721,8 @@ def _make_aggregated_bar(source_bar: Bar, bar_start: pd.Timestamp) -> Bar:
 def _source_date_range(source_df: pd.DataFrame | None) -> tuple[str, str] | None:
     """提取源数据的日期范围（用于缓存 key）"""
     if source_df is None or len(source_df) == 0:
+        return None
+    if not isinstance(source_df.index, pd.DatetimeIndex):
         return None
     return str(source_df.index[0].date()), str(source_df.index[-1].date())
 

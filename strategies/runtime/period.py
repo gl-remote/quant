@@ -96,7 +96,9 @@ class PeriodData:
 
     @property
     def latest_time(self) -> pd.Timestamp | None:
-        """获取最新数据时间戳"""
+        """获取最新数据时间戳（含形成中 bar）"""
+        if self._forming_bar is not None:
+            return pd.Timestamp(self._forming_bar.datetime)
         if len(self._df) == 0:
             return None
         return cast(pd.Timestamp, self._df.index[-1])
@@ -350,18 +352,22 @@ class PeriodData:
         current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
         # 检查时间是否有效（考虑 forming bar）
+        # forming bar 的时间戳是其起始时间（如 10:00），但 visual 上它覆盖到
+        # (start, start + period_minutes] 的时间范围。因此允许 current_time 位于
+        # (forming_bar.datetime, forming_bar.datetime + period] 区间内。
         latest = self.latest_time
-        if self._forming_bar is not None:
-            forming_time = pd.Timestamp(self._forming_bar.datetime)
-            if latest is None or forming_time > latest:
-                latest = forming_time
-
-        if len(self._df) == 0 and self._forming_bar is None:
-            raise ValueError("No data available")
-
-        assert latest is not None
-        if current_time_ts > latest:
-            raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
+        if latest is not None and current_time_ts > latest:
+            # 检查是否在 forming bar 的 effective 范围内
+            forming_end = None
+            try:
+                from .aggregate import parse_period_minutes
+                period_minutes = parse_period_minutes(self.period)
+                if latest is not None:
+                    forming_end = latest + pd.Timedelta(minutes=period_minutes)
+            except Exception:
+                pass
+            if forming_end is None or current_time_ts > forming_end:
+                raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
 
         # 判断 forming bar 是否应包含在视图中
         include_forming = False
