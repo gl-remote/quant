@@ -271,8 +271,9 @@ class PeriodData:
             col_name = generate_indicator_column_name(spec.name, spec.params)
 
             # 跳过已计算且最后一行非 NaN 的指标
-            if col_name in self._df.columns and not self._df[col_name].isna().iloc[-1]:
-                continue
+            if col_name in self._df.columns:
+                if len(self._df) > 0 and not self._df[col_name].isna().iloc[-1]:
+                    continue
 
             if spec.func is None:
                 continue

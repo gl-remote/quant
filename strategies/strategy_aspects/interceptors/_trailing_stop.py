@@ -46,14 +46,16 @@ def with_trailing_stop(period: str = "15m") -> Any:
         @functools.wraps(original_dr)
         def _dr_wrapper(self: Any, config: Any) -> Any:
             from ...core.indicators import IndicatorSpec
-            from ...runtime.requirements import DataRequirements
+            from ...runtime.requirements import DataRequirements, PeriodRequirements
 
             base = original_dr(self, config)
             if base is None:
                 return base
 
             extra = DataRequirements(
-                periods={},
+                periods={
+                    period: PeriodRequirements(lookback_bars=config.atr_period + 1),
+                },
                 indicators={
                     period: [
                         IndicatorSpec(
@@ -101,6 +103,10 @@ def with_trailing_stop(period: str = "15m") -> Any:
             peak_price = (
                 state.position.highest_price if direction == TRADE_DIRECTION_LONG else state.position.lowest_price
             )
+
+            # 峰值未初始化（0 是默认值），跳过
+            if peak_price <= 0:
+                return original_on_bar(self, state, ctx)
 
             # 回撤止盈检查
             activation_threshold = atr_value * config.trailing_activation_atr

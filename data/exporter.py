@@ -114,11 +114,13 @@ def _validate_data(
             gap_details = []
             for idx in large_gaps.index:
                 gap_loc = sorted_times.index.get_loc(idx)
-                if gap_loc > 0:
-                    prev_t = sorted_times.iloc[gap_loc - 1]
-                    curr_t = sorted_times.iloc[gap_loc]
-                    gap_h = large_gaps[idx] / 3600
-                    gap_details.append(f"{prev_t} → {curr_t} ({gap_h:.1f}h)")
+                # gap_loc 可能是 int/slice/ndarray，只处理整数位置的单个间隙
+                if isinstance(gap_loc, int):
+                    if gap_loc > 0:
+                        prev_t = sorted_times.iloc[gap_loc - 1]
+                        curr_t = sorted_times.iloc[gap_loc]
+                        gap_h = large_gaps[idx] / 3600
+                        gap_details.append(f"{prev_t} → {curr_t} ({gap_h:.1f}h)")
             if gap_details:
                 # 最多只报 3 个间隙样例
                 sample = gap_details[:3]

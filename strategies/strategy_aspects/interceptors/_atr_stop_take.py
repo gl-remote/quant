@@ -57,8 +57,12 @@ def with_atr_stop_take_profit(period: str = "15m") -> Any:
             if base is None:
                 return base
 
+            from ...runtime.requirements import PeriodRequirements
+
             extra = DataRequirements(
-                periods={},
+                periods={
+                    period: PeriodRequirements(lookback_bars=config.atr_period + 1),
+                },
                 indicators={
                     period: [
                         IndicatorSpec(

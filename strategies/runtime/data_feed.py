@@ -235,27 +235,32 @@ class DataFeed:
         :param reqs: 策略数据需求
         :raises ValueError: 如果目标周期不是基础周期的整数倍
         """
-        # 1. 注册所有声明的周期
-        for period in reqs.periods:
+        # 1. 收集所有需要的周期（periods + indicators 中出现的所有周期）
+        all_periods = set(reqs.periods)
+        for period in reqs.indicators:
+            all_periods.add(period)
+
+        # 2. 注册所有声明的周期
+        for period in all_periods:
             self.register_period(period)
 
-        # 2. 自动推断基础周期（最小周期）
-        period_minutes = {p: parse_period_minutes(p) for p in reqs.periods}
+        # 3. 自动推断基础周期（最小周期）
+        period_minutes = {p: parse_period_minutes(p) for p in all_periods}
         base_period = min(period_minutes, key=lambda p: period_minutes[p])
         self._base_period = base_period
         base_minutes = period_minutes[base_period]
 
-        # 3. 校验：目标周期必须是基础周期的整数倍
+        # 4. 校验：目标周期必须是基础周期的整数倍
         for period, minutes in period_minutes.items():
             if period != self._base_period and minutes % base_minutes != 0:
                 raise ValueError(
                     f"周期 {period}（{minutes}分钟）不是基础周期 {self._base_period}（{base_minutes}分钟）的整数倍，无法聚合"
                 )
 
-        # 4. 启用聚合：高周期自动由基础周期聚合得到
-        self.setup_aggregation(list(reqs.periods.keys()))
+        # 5. 启用聚合：高周期自动由基础周期聚合得到
+        self.setup_aggregation(list(all_periods))
 
-        # 5. 注册指标
+        # 6. 注册指标
         for period, ind_list in reqs.indicators.items():
             for ind in ind_list:
                 self.register_indicator(period, ind)

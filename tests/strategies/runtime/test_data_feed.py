@@ -5,22 +5,18 @@
 
 from datetime import datetime, timedelta
 
-from strategies import (
-    Bar,
-    BigTradeEvent,
-    DataFeed,
-    DataRequirements,
-    Event,
-    EventsRequirements,
-    IndicatorSpec,
-    MaStrategyCore,
-    PeriodRequirements,
-    build_context,
-)
-from strategies.core.indicators import ema_func, sma_func
-from strategies.ma_strategy import MACrossParams
+from strategies.core.indicators import IndicatorSpec, ema_func, sma_func
+from strategies.core.types import Bar
+from strategies.ma_strategy import MACrossParams, MaStrategyCore
 from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
+from strategies.runtime.data_feed import DataFeed
+from strategies.runtime.events import BigTradeEvent, Event
 from strategies.runtime.period import PeriodDataView
+from strategies.runtime.requirements import (
+    DataRequirements,
+    EventsRequirements,
+    PeriodRequirements,
+)
 
 
 def generate_test_bars(num_bars: int = 100) -> list[Bar]:
@@ -125,7 +121,22 @@ def test_data_feed_basic():
 
     # 生成测试数据
     bars = generate_test_bars(50)
-    feed.load_history_data("1m", bars)
+    # 转换为 DataFrame 加载
+    import pandas as pd
+
+    data = [
+        {
+            "datetime": pd.Timestamp(b.datetime),
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume,
+        }
+        for b in bars
+    ]
+    df = pd.DataFrame(data).set_index("datetime")
+    feed.load_history_df("1m", df)
 
     # 预计算所有指标
     feed.calculate_all()
@@ -179,7 +190,22 @@ def test_build_context():
 
     # 加载数据
     bars = generate_test_bars(30)
-    feed.load_history_data("1m", bars)
+    # 转换为 DataFrame 加载
+    import pandas as pd
+
+    data = [
+        {
+            "datetime": pd.Timestamp(b.datetime),
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume,
+        }
+        for b in bars
+    ]
+    df = pd.DataFrame(data).set_index("datetime")
+    feed.load_history_df("1m", df)
 
     # 定义数据需求
     reqs = DataRequirements(
@@ -197,7 +223,7 @@ def test_build_context():
 
     # 构建上下文
     latest_bar = bars[-1]
-    ctx = build_context(feed, reqs, latest_bar.datetime, latest_bar)
+    ctx = feed.build_context(reqs, latest_bar)
 
     print(f"BarContext symbol: {ctx.symbol}")
     print(f"包含的周期: {list(ctx.multi.keys())}")
@@ -327,7 +353,22 @@ def test_calculate_period_incremental():
 
     # 初始历史：30 根 K 线（模拟 tqsdk 推送的历史数据）
     bars = generate_test_bars(30)
-    feed.load_history_data("1m", bars)
+    # 转换为 DataFrame 加载
+    import pandas as pd
+
+    data = [
+        {
+            "datetime": pd.Timestamp(b.datetime),
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume,
+        }
+        for b in bars
+    ]
+    df = pd.DataFrame(data).set_index("datetime")
+    feed.load_history_df("1m", df)
     feed.calculate_all()
 
     pd_obj = feed.get_period("1m")
@@ -463,9 +504,24 @@ def test_multi_period_consistency():
         feed.register_indicator(period, IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
 
     # 初始加载：1m=50 根，5m=30 根，15m=20 根（tqsdk 各周期独立推送）
+    import pandas as pd
+
     for period, n in [("1m", 50), ("5m", 30), ("15m", 20)]:
         bars = generate_test_bars(n)
-        feed.load_history_data(period, bars)
+        # 转换为 DataFrame 加载
+        data = [
+            {
+                "datetime": pd.Timestamp(b.datetime),
+                "open": b.open,
+                "high": b.high,
+                "low": b.low,
+                "close": b.close,
+                "volume": b.volume,
+            }
+            for b in bars
+        ]
+        df = pd.DataFrame(data).set_index("datetime")
+        feed.load_history_df(period, df)
     feed.calculate_all()
 
     # 记录初始值
