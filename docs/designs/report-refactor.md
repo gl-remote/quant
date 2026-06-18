@@ -1,5 +1,10 @@
 # 报告模块 React 重构 — 分阶段技术方案
 
+> 类型：Design / 已实现设计记录  
+> 状态：主体已实现，Phase D 待全链路验证  
+> 完成日期：2026-05-27  
+> Git 参考：`6dacbde feat: 报告模块 React 重构 + file:// 预加载方案`
+
 > **目标**: 将 Jinja2 模板方案替换为 React + Vite 单页应用（SPA），Python 负责数据层 JSON 导出，React 负责渲染。
 > **原则**: 一次 run = 一次统一构建，不生成独立单报告 HTML。SPA 使用 HashRouter 路由，单入口 HTML。
 

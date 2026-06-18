@@ -1,5 +1,10 @@
 # MA 策略盈利改进 Spec
 
+> 类型：Design / 已实现设计记录  
+> 状态：已实现  
+> 完成日期：2026-06-17  
+> Git 参考：`60cd033 feat: aggregate high-period bars from 1m in DataFeed`
+
 ## 0. 核心结论
 
 **当前策略的根本问题不是参数没调好，而是策略逻辑本身有结构性缺陷。**

@@ -1,5 +1,10 @@
 # ParallelBacktestOptimizer 并行回测方案
 
+> 类型：Design / 已实现设计记录  
+> 状态：已实现  
+> 完成日期：2026-06-19  
+> Git 参考：`b388815 fix: stabilize parallel backtest reporting pipeline`
+
 ## 1. 目标
 
 在**不修改现有串行路径**的前提下，新增基于 `multiprocessing.ProcessPoolExecutor` 的并行优化器，让 Grid Search 和 Bayesian Search 都能利用多核加速，同时解决 vnpy 引擎非线程安全的问题。

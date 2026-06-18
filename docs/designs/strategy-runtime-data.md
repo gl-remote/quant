@@ -1,5 +1,8 @@
 # 量化策略运行时数据管理方案设计
 
+> 类型：Design / 历史设计记录  
+> Git 参考：`599b946 docs(runtime): 文档移至 strategies/docs/（与 core/runtime 同层）`
+
 > ⚠️ **历史文档 (v3.0)** — 2026-06-03 起该方案已废弃。
 >
 > **当前架构**：每个 `VnpyBacktestBridge` 创建独立 `DataFeed` 实例，

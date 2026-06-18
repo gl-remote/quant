@@ -1,0 +1,31 @@
+# 文档目录
+
+文档按用途分组，避免项目说明、未来规划和已实现设计记录混在一起。
+
+## 当前项目说明
+
+- [项目概览](overview.md)
+- [架构说明](architecture.md)
+- [使用指南](usage-guide.md)
+- [常见问题](faq.md)
+
+## 参考资料
+
+- [API 参考](reference/api-reference.md)
+- [配置说明](reference/configuration.md)
+- [数据字典](reference/data-dictionary.md)
+- [风险评估](reference/risk-assessment.md)
+
+## Roadmap / 未来规划
+
+- [目录结构长期规划](roadmap/directory-roadmap.md)
+- [回测链路分阶段重构计划](roadmap/backtest-refactor-plan.md)
+
+## Designs / 设计记录
+
+- [并行回测设计与实现说明](designs/backtest-parallel.md) — 已实现，2026-06-19
+- [报告前端重构设计](designs/report-refactor.md) — 主体已实现，2026-05-27
+- [策略切面设计规格](designs/strategy-aspects.md) — 已实现，2026-06-16
+- [MA 策略盈利能力改造设计](designs/strategy-ma-profitability.md) — 已实现，2026-06-17
+- [策略运行时数据设计](designs/strategy-runtime-data.md) — 历史设计，已废弃
+- [策略核心架构重构设计 v0.3](designs/strategy-core-architecture-refactoring-v0.3.md) — 历史设计，已废弃

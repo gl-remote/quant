@@ -128,6 +128,8 @@ quant/
 
     cli/
       python/
+        commands/
+        workflows/
 
     tests/
     docs/
@@ -261,15 +263,19 @@ from quant_common import ...
 
 不要通过修改 `PYTHONPATH` 或跨目录相对路径直接引用 `packages/python-common` 内部文件。
 
-### 原则 6：CLI 是入口，不承载业务逻辑
+### 原则 6：CLI 是入口，`cli/workflows` 承载命令级跨域编排
 
 长期目标是：
 
 ```text
-cli -> workflow/service -> business domain
+cli/commands -> cli/workflows -> data/strategy/backtest/trading/report
 ```
 
-CLI 负责参数解析、命令分发和用户输出，不直接承载数据、策略、回测、交易或报告的核心逻辑。
+CLI 的命令入口负责参数解析、命令分发和用户输出，不直接承载数据、策略、回测、交易或报告的核心逻辑。
+
+`cli/workflows` 负责命令级跨业务域编排，例如一次回测命令如何串联 data、backtest、report 等业务域。workflow 不应绑定 argparse 细节，应接收明确的请求对象，便于未来被 API、scheduler 或 worker 复用。
+
+不新增顶层 `services/` 或 `application/` 作为长期目录承诺。各业务域内的 service/module 视为该业务域对外契约边界；当前通过 Python 函数/类调用，未来如需拆分为独立服务、worker 或 package，应优先沿这些契约边界拆分。
 
 ### 原则 7：目录按业务域组织，部署按运行单元组织
 
@@ -318,7 +324,7 @@ Dockerfile 命名跟随“可部署运行单元”，不强制跟随业务域目
 | `data/` | `workspace/data/python/` | 行情、数据源、数据存储、数据管理 |
 | `strategies/` | `workspace/strategy/python/` | 策略核心、运行期结构、桥接器 |
 | `backtest/` | `workspace/backtest/python/` | 回测、优化、walk-forward |
-| `cli/` | `workspace/cli/python/` | 命令行入口和命令分发 |
+| `cli/` | `workspace/cli/python/` | 命令行入口、命令分发和命令级 workflows；`cli/commands` 负责适配命令行，`cli/workflows` 负责编排跨域任务 |
 | `report/` | `workspace/report/python/` + `workspace/report/web/` | Python 报告生成和 Web 报告展示分离到同一业务域 |
 | `tests/` | `workspace/tests/` | 可继续按业务域组织测试 |
 | `docs/` | `workspace/docs/` | 长期可迁移；当前先保留根目录 docs |
@@ -334,15 +340,17 @@ Dockerfile 命名跟随“可部署运行单元”，不强制跟随业务域目
 
 当前阶段只建立共识和文档，不做结构迁移。
 
-### 阶段 1：先稳定服务边界
+### 阶段 1：先稳定 workflow 与业务域 service 契约边界
 
-在现有结构下逐步引入 service/workflow 边界，让 CLI 和脚本减少对底层模块的直接依赖。
+在现有结构下逐步引入 `cli/workflows`，让 CLI 命令入口和脚本减少对底层模块的直接依赖。
 
 目标：
 
 ```text
-cli -> services/workflows -> data/strategy/backtest/trading/report
+cli/commands -> cli/workflows -> data/strategy/backtest/trading/report
 ```
+
+各业务域维护自己的 service/module 契约，作为对外调用边界；暂不设计顶层跨多个业务域的 `services/`，避免形成无人明确维护的新杂烩层。
 
 这一步比搬目录更重要。
 

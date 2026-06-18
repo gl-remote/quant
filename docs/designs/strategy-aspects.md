@@ -1,5 +1,10 @@
 # Strategy Aspects 可实现规格
 
+> 类型：Design / 已实现设计记录  
+> 状态：已实现  
+> 完成日期：2026-06-16  
+> Git 参考：`bb3d0d6 feat(strategy_aspects): implement advisory direction DSL and refactor MA strategy`
+
 ## 0. 交接摘要
 
 本 spec 的核心结论：

@@ -21,6 +21,7 @@
 4. 先建立验证护栏，再收敛路径、日志、编排和持久化边界。
 5. Optuna、Walk-Forward、report query、幂等性单独处理，不和其他重构混在一起。
 6. 任何阶段如果真实回测数据缺失，先回退或修复该阶段，不继续推进下一阶段。
+7. 当前阶段只在现有 `cli/` 下建立 `cli/workflows` 命令级编排边界，不进行 workspace/ 目录迁移。
 
 ## 目标边界
 
@@ -28,8 +29,9 @@
 cli/
   只负责参数解析和调用应用服务。
 
-application/
-  负责 run 级编排、生命周期、finalize、跨模块协调。
+cli/workflows/
+  负责命令级跨业务域编排，例如 backtest run、report rebuild。
+  workflow 不绑定 argparse 细节，接收明确请求对象。
 
 backtest/
   只负责执行回测和优化，返回强类型结果。
@@ -44,6 +46,8 @@ report/
 report/web/
   只消费稳定 JSON 契约。
 ```
+
+当前不新增顶层 `services/` 或 `application/`。各业务域内的 service/module 作为该业务域对外契约边界，`cli/workflows` 只编排这些契约，不穿透业务域内部实现。
 
 ## 必须保持不变的前端数据契约
 
@@ -199,13 +203,7 @@ output/data/nav.json
 
 ### 计划改动
 
-新增路径布局对象，例如：
-
-```text
-application/run_paths.py
-```
-
-或：
+新增 report 域路径布局对象：
 
 ```text
 report/output_layout.py
@@ -251,10 +249,10 @@ report/output_layout.py
 
 ### 计划改动
 
-新增运行生命周期服务，例如：
+新增命令级运行生命周期模块：
 
 ```text
-application/run_lifecycle.py
+cli/workflows/run_lifecycle.py
 ```
 
 包含：
@@ -302,7 +300,7 @@ report_failed   回测和入库成功，但报告构建失败
 - run 状态含义清晰，不再散落硬编码。
 - 静态验证和真实回测验证通过。
 
-## 阶段 3：抽出 BacktestRunService 应用编排层
+## 阶段 3：抽出 BacktestRunWorkflow 命令级编排层
 
 ### 目标
 
@@ -323,15 +321,15 @@ report_failed   回测和入库成功，但报告构建失败
 
 ### 计划改动
 
-新增应用服务，例如：
+新增命令级 workflow：
 
 ```text
-application/backtest_run_service.py
+cli/workflows/backtest_run.py
 ```
 
 包含：
 
-- `BacktestRunService.run(args)` 或更明确的请求对象。
+- `BacktestRunWorkflow.run(request)`，接收明确请求对象，不直接依赖 argparse Namespace。
 - `run_search(...)`
 - `run_walk_forward(...)`
 - 统一异常路径。
@@ -340,8 +338,8 @@ application/backtest_run_service.py
 CLI 最终只负责：
 
 ```python
-service = BacktestRunService(...)
-service.run(args)
+request = BacktestRunRequest.from_args(args)
+BacktestRunWorkflow().run(request)
 ```
 
 ### 边界要求
@@ -377,13 +375,7 @@ service.run(args)
 
 ### 计划改动
 
-新增持久化服务，例如：
-
-```text
-application/backtest_persistence.py
-```
-
-或：
+新增 data 域持久化契约：
 
 ```text
 data/backtest_persistence.py
@@ -444,7 +436,7 @@ data/backtest_persistence.py
   - `study_name`
   - `study_db_path`
 
-由应用层负责：
+由 `cli/workflows` 负责：
 
 - 创建 run。
 - 生成 study_name。
@@ -465,7 +457,7 @@ data/backtest_persistence.py
 - 参数优化页可打开。
 - 静态验证和真实回测验证通过。
 
-## 阶段 6：拆出 OptunaStudyService / OptunaQueryService
+## 阶段 6：拆出 Optuna 业务域契约
 
 ### 目标
 
@@ -485,27 +477,26 @@ Optuna 相关逻辑散落在：
 
 ### 计划改动
 
-新增服务，例如：
+新增业务域内 Optuna 契约：
 
 ```text
-application/optuna_study_service.py
+backtest/optuna_study.py
 report/optuna_query.py
 ```
 
 包含：
 
-- `OptunaStudyService`
+- `backtest/optuna_study.py`
   - `make_study_name(strategy, engine, run_id)`
-  - `link_run_study(run_id, study_name)`
   - `study_db_url()`
-- `OptunaQueryService`
+- `report/optuna_query.py`
   - `get_optuna_data(run_id)`
   - `get_best_trial_index(run_id)`
   - 封装所有 Optuna 内部 SQL。
 
 ### 边界要求
 
-- 应用层负责创建/关联 study。
+- `cli/workflows` 负责协调创建 study name、传入 study db path，并调用 data 域契约关联 run-study。
 - backtest 层只接收 `study_name` / `study_db_path`。
 - report 层只通过 query service 获取优化展示数据。
 - Optuna 内部表结构只在一个模块中出现。
@@ -715,13 +706,13 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 验证
 阶段 2：RunLogService + RunFinalizer
 验证
-阶段 3：BacktestRunService 应用编排层
+阶段 3：BacktestRunWorkflow 命令级编排层
 验证
 阶段 4：结果持久化服务
 验证
 阶段 5：清理 runners 对 data 层依赖
 验证
-阶段 6：OptunaStudyService / OptunaQueryService
+阶段 6：Optuna 业务域契约
 验证
 阶段 7：Walk-Forward 强类型化
 验证
@@ -743,12 +734,12 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 2. 阶段 0.5：建立最小 JSON 契约测试。
 3. 阶段 1：OutputLayout / RunPaths。
 4. 阶段 2：RunLogService + RunFinalizer。
-5. 阶段 3：BacktestRunService 应用编排层。
+5. 阶段 3：BacktestRunWorkflow 命令级编排层。
 6. 阶段 4：结果持久化服务。
 
 可后置但不能遗漏：
 
-- 阶段 6：Optuna 边界独立封装。
+- 阶段 6：Optuna 边界独立封装到 backtest/report/data 各自业务域契约。
 - 阶段 9：幂等性和重跑策略。
 - 阶段 10：统一 TqSdk 生命周期。
 

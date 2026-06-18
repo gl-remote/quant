@@ -106,8 +106,8 @@ n_trials = 5                     # 最大试验次数
 |------|------|
 | [系统概览](docs/overview.md) | 项目定位与核心能力 |
 | [架构设计](docs/architecture.md) | 模块划分、数据流、设计决策 |
-| [数据字典](docs/data-dictionary.md) | 全部字段含义、格式约定、计算公式 |
-| [配置说明](docs/configuration.md) | 参数详解与配置示例 |
+| [数据字典](docs/reference/data-dictionary.md) | 全部字段含义、格式约定、计算公式 |
+| [配置说明](docs/reference/configuration.md) | 参数详解与配置示例 |
 | [AI_BEHAVIOR_RULES.md](AI_BEHAVIOR_RULES.md) | AI 开发行为规范 |
 
 ## 环境要求
