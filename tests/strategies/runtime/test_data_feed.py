@@ -616,7 +616,7 @@ def test_multi_period_feed_bar_aggregation():
         for pn in ("5m", "15m"):
             pd_obj = feed.get_period(pn)
             assert pd_obj is not None
-            assert pd_obj.has_forming_bar, f"第 {i+1} 根 bar 后 {pn} 应有 forming bar"
+            assert pd_obj.has_forming_bar, f"第 {i + 1} 根 bar 后 {pn} 应有 forming bar"
     print("  前 5 根 1m bar 喂入后: 5m/15m 均有 forming bar")
 
     # 前 5 根 bar 的 high 最高为 105（bar 4 的 high=105）
@@ -674,68 +674,6 @@ def test_multi_period_feed_bar_aggregation():
     assert view_5m is not None
     assert view_5m.length == 1, f"5m view 应有 1 根 bar (第 1 根 complete), 实际 {view_5m.length}"
     print(f"  5m view: {view_5m.length} 根 bar ✅")
-    print()
-
-
-def test_build_ctx_cache_aggregated():
-    """测试 build_ctx_cache 聚合模式（回测路径）
-
-    模拟回测流程：feed_history_df → build_ctx_cache → 逐 bar 聚合
-    """
-    import pandas as pd
-
-    print("=== 测试 build_ctx_cache 聚合模式 ===\n")
-
-    reqs = DataRequirements(
-        periods={
-            "1m": PeriodRequirements(lookback_bars=10),
-            "5m": PeriodRequirements(lookback_bars=5),
-        },
-        indicators={},
-        events=EventsRequirements.no_events(),
-    )
-
-    feed = DataFeed("TEST_CACHE_AGG", requirements=reqs)
-
-    base_time = datetime(2024, 1, 1, 10, 0, 0)
-    bar_data = [
-        {
-            "datetime": pd.Timestamp(base_time + timedelta(minutes=i)),
-            "open": 100.0 + i,
-            "high": 101.0 + i,
-            "low": 99.0 + i,
-            "close": 100.5 + i,
-            "volume": 1000,
-        }
-        for i in range(12)
-    ]
-    df = pd.DataFrame(bar_data).set_index("datetime")
-    feed.load_history_df("1m", df)
-
-    cache = feed.build_ctx_cache(reqs, "TEST_CACHE_AGG")
-    assert len(cache) == 12, f"cache 应有 12 个 entry, 实际 {len(cache)}"
-    print(f"  cache 包含 {len(cache)} 个 BarContext ✅")
-
-    # 第 5 根 bar (10:00) 时 5m 已有第 1 根 complete bar
-    ts_0 = pd.Timestamp(base_time + timedelta(minutes=0))
-    ctx_0 = cache.get(ts_0)
-    assert ctx_0 is not None
-    assert ctx_0.multi["5m"].length == 1, f"10:00 时 5m 应有 1 根 complete bar"
-    print(f"  {ts_0}: 5m view 含 1 根 complete bar ✅")
-
-    # 第 6 根 bar (10:05) 时 5m 已有 2 根 complete bar
-    ts_5 = pd.Timestamp(base_time + timedelta(minutes=5))
-    ctx_5 = cache.get(ts_5)
-    assert ctx_5 is not None
-    assert ctx_5.multi["5m"].length == 2, f"10:05 时 5m 应有 2 根 complete bar, 实际 {ctx_5.multi['5m'].length}"
-    print(f"  {ts_5}: 5m view 含 2 根 complete bar ✅")
-
-    # 第 11 根 bar (10:10) 时 5m 有 3 根 complete bar
-    ts_10 = pd.Timestamp(base_time + timedelta(minutes=10))
-    ctx_10 = cache.get(ts_10)
-    assert ctx_10 is not None
-    assert ctx_10.multi["5m"].length == 3, f"10:10 时 5m 应有 3 根 complete bar, 实际 {ctx_10.multi['5m'].length}"
-    print(f"  {ts_10}: 5m view 含 3 根 complete bar ✅")
     print()
 
 
@@ -831,6 +769,7 @@ def test_data_feed_create_factory():
     覆盖：全量构造、build_context 正常、内存缓存命中
     """
     import unittest.mock as mock
+
     import pandas as pd
 
     print("=== 测试 DataFeed.create() 工厂方法 ===\n")
@@ -867,8 +806,8 @@ def test_data_feed_create_factory():
 
     # 场景 1：全量构造
     print("1. 全量构造路径")
-    with mock.patch("data.manager.DataManager") as MockDM:
-        instance = MockDM.return_value
+    with mock.patch("data.manager.DataManager") as mock_dm:
+        instance = mock_dm.return_value
         instance.load_kline.return_value = [("TEST", kline_df, "1m")]
 
         feed = DataFeed.create("TEST_CREATE", reqs)
@@ -883,15 +822,19 @@ def test_data_feed_create_factory():
 
     # 场景 2：DataFeed.create() 返回的 DataFeed 能正常 build_context
     print("2. build_context 正常")
-    with mock.patch("data.manager.DataManager") as MockDM:
-        instance = MockDM.return_value
+    with mock.patch("data.manager.DataManager") as mock_dm:
+        instance = mock_dm.return_value
         instance.load_kline.return_value = [("TEST", kline_df, "1m")]
 
         feed = DataFeed.create("TEST_CREATE2", reqs)
         bar = Bar(
             symbol="TEST_CREATE2",
             datetime=base_time + timedelta(minutes=49),
-            open=149.0, high=150.0, low=148.0, close=149.5, volume=1000,
+            open=149.0,
+            high=150.0,
+            low=148.0,
+            close=149.5,
+            volume=1000,
         )
         ctx = feed.build_context(reqs, bar)
         assert "1m" in ctx.multi
@@ -900,8 +843,8 @@ def test_data_feed_create_factory():
 
     # 场景 3：内存缓存命中 → 零 I/O
     print("3. 内存缓存命中")
-    with mock.patch("data.manager.DataManager") as MockDM:
-        instance = MockDM.return_value
+    with mock.patch("data.manager.DataManager") as mock_dm:
+        instance = mock_dm.return_value
         instance.load_kline.return_value = [("TEST", kline_df, "1m")]
 
         feed1 = DataFeed.create("TEST_CACHE", reqs)
@@ -925,7 +868,6 @@ if __name__ == "__main__":
     test_tqsdk_path_simulation()
     test_multi_period_consistency()
     test_multi_period_feed_bar_aggregation()
-    test_build_ctx_cache_aggregated()
     test_feed_bar_with_indicator_recalc()
     test_data_feed_create_factory()
 

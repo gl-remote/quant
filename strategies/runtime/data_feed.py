@@ -11,7 +11,7 @@
 - 数据查询：get_data / get_period / get_period_names / get_date_range / get_source_date_range
 - 指标查询：get_indicator_names / get_registered_indicators
 - 序列化：to_feeds / from_feeds
-- 上下文构造：build_ctx_cache（回测）/ 模块级 build_context（实盘）
+- 上下文构造：build_context
 
 【内部约定】
 - 基础周期（_base_period）由 apply_requirements 从声明的周期中自动推断为最小周期
@@ -458,90 +458,6 @@ class DataFeed:
         last = period_data.latest_time
         assert first is not None and last is not None
         return str(first.date()), str(last.date())
-
-    def build_ctx_cache(self, requirements: DataRequirements, symbol: str) -> dict[pd.Timestamp, BarContext]:
-        """回测专用：逐基础周期推进预构造所有 BarContext
-
-        启用聚合时按基础周期逐根推进，每步：
-        1. 触发聚合更新高周期形成中 bar → 重算高周期指标
-        2. 构造当前时间点的 BarContext（含所有周期视图）
-
-        未启用聚合时按主周期逐行构造（兼容历史路径）。
-
-        前置条件：基础周期历史数据已通过 feed_history_df 加载。
-
-        :param requirements: 策略数据需求
-        :param symbol: 品种标识
-        :return: {timestamp: BarContext} 字典
-        """
-        # ── 启用聚合：逐基础周期推进 ──
-        if self._aggregation_targets and self._base_period is not None and self._base_period in self._periods:
-            return self._build_ctx_cache_aggregated(requirements, symbol)
-
-        # ── 未启用聚合：按主周期逐行构造（兼容历史路径） ──
-        main_period = next(iter(requirements.periods))
-        main_pd = self._periods.get(main_period)
-        if main_pd is None or main_pd.length == 0:
-            return {}
-
-        cache: dict[pd.Timestamp, BarContext] = {}
-
-        for idx in range(main_pd.length):
-            bar = main_pd.get_bar(idx)
-            if bar is None:
-                continue
-            ts = pd.Timestamp(bar.datetime)
-            multi: dict[str, PeriodDataView] = {}
-            for period, req in requirements.periods.items():
-                view = self.get_data(period, ts, req.lookback_bars)
-                if view is not None:
-                    multi[period] = view
-            cache[ts] = BarContext(symbol=symbol, bar=bar, multi=multi, events=[])
-
-        return cache
-
-    def _build_ctx_cache_aggregated(
-        self, requirements: DataRequirements, symbol: str
-    ) -> dict[pd.Timestamp, BarContext]:
-        """聚合模式下逐基础周期推进构造 BarContext（内部方法）
-
-        从已加载的基础周期数据出发，复用 _step_aggregation 把每根 bar
-        推进到所有高周期，并构造对应时间点的 BarContext。
-
-        :param requirements: 策略数据需求
-        :param symbol: 品种标识
-        :return: {timestamp: BarContext} 字典
-        """
-        source_pd = self._periods.get(self._base_period) if self._base_period else None
-        if source_pd is None or source_pd.length == 0:
-            return {}
-
-        # 清空高周期数据，重新聚合
-        for target_period in self._aggregation_targets:
-            period_data = self._periods.get(target_period)
-            if period_data is not None:
-                period_data.reset()
-
-        cache: dict[pd.Timestamp, BarContext] = {}
-
-        for idx in range(source_pd.length):
-            bar = source_pd.get_bar(idx)
-            if bar is None:
-                continue
-            ts = pd.Timestamp(bar.datetime)
-
-            # 推进高周期（与实时 update_bar 走同一条路径）
-            self._step_aggregation(bar)
-
-            multi: dict[str, PeriodDataView] = {}
-            for period, req in requirements.periods.items():
-                view = self.get_data(period, ts, req.lookback_bars)
-                if view is not None:
-                    multi[period] = view
-
-            cache[ts] = BarContext(symbol=symbol, bar=bar, multi=multi, events=[])
-
-        return cache
 
     def get_data(
         self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1, timeout: float | None = None
