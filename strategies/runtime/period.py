@@ -273,9 +273,11 @@ class PeriodData:
             col_name = generate_indicator_column_name(spec.name, spec.params)
 
             # 跳过已计算且最后一行非 NaN 的指标
+            # 如有 forming bar，还需其指标缓存也已计算
             if col_name in self._df.columns:
                 if len(self._df) > 0 and not self._df[col_name].isna().iloc[-1]:
-                    continue
+                    if self._forming_bar is None or col_name in self._forming_indicators:
+                        continue
 
             if spec.func is None:
                 continue
@@ -361,6 +363,7 @@ class PeriodData:
             forming_end = None
             try:
                 from .aggregate import parse_period_minutes
+
                 period_minutes = parse_period_minutes(self.period)
                 if latest is not None:
                     forming_end = latest + pd.Timedelta(minutes=period_minutes)
