@@ -950,6 +950,40 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 - 阶段 9：幂等性和重跑策略。
 - 阶段 10：统一 TqSdk 生命周期。
 
+## 待评估任务清单（重构完成后统一决策）
+
+以下任务**独立于模块边界重构主线**，已明确不混入当前阶段。待全部重构阶段完成后，再根据实际需求逐条评估"做 / 不做 / 何时做"。
+
+### 真实问题（有明确技术缺陷，建议修）
+
+1. **tqsdk_bridge 硬编码 `source_period = "1m"`**
+   - 位置：[`tqsdk_bridge._subscribe_klines / _init_period_data`](file:///Users/gaolei/Documents/src/quant/strategies/bridges/tqsdk_bridge.py#L341-L395)
+   - 与阶段 0 已修复的 `DataFeed.create()` 同源（硬编码 1m，应按策略 reqs 推断最小周期），但在 TqSdk 单标的路径上仍未修。
+   - 建议落点：**阶段 10（统一 TqSdk 生命周期）**，顺带统一 `DataFeed.create()` 与 `_init_period_data()` 的 docstring，标注各自适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。
+
+2. **`total_trades` 与实际 `fills` 数不一致**
+   - 位置：[`backtest/vnpy_backtest_engine.py#L126`](file:///Users/gaolei/Documents/src/quant/backtest/vnpy_backtest_engine.py#L126)
+   - 现象：默认参数下 `DCE.m2603` 出现 `fills=47, total_trades=0`。根因是优先取 vnpy `calculate_statistics()` 的 `total_trade_count`，边界条件下该字段为 0 但实际已有成交。
+   - 建议落点：**阶段 7（Walk-Forward 强类型化）前后**。修复思路：以 `_calculate_trade_stats` 的 `closed_trades` 数（或 `len(formatted_trades) / 2`）作为 fallback；同时在阶段 0.5 契约测试中增加 `total_trades` 与 `trades.json` 条目数一致性校验作为护栏。
+
+3. **OptunaCharts.tsx 前端代码质量问题**
+   - 位置：[`OptunaCharts.tsx`](file:///Users/gaolei/Documents/src/quant/report/web/src/components/charts/OptunaCharts.tsx#L79-L91)
+   - 两处：(a) 第 79/87 行有 `console.log` 调试残留；(b) 第 80-81 行在 render 阶段直接调用 `setXParam`/`setYParam`，是 React 反模式，应改用惰性初始化或 `useEffect`。
+   - 建议落点：前端独立小任务，不挂后端重构主线。
+
+### 架构说明（非缺陷，仅记录，默认不动）
+
+4. **optuna.json 双架构并存**
+   - `optimization_history` / `param_importances` / `parallel_coordinate` 三个图表是**后端驱动 UI**：后端直接产出完整 ECharts spec，前端透传渲染（数据嵌套在 `series[].data`）。
+   - `contour`（等高线）是**前端驱动**：后端只给原始 `trials: [{params, value}]`，前端 `buildContourOption` 按用户选择的 X/Y 参数轴动态组装。原因是等高线需要交互式切换参数，无法预生成所有组合。
+   - 这是合理权衡（静态图后端驱动、交互图前端驱动），**非 bug**。
+   - 文档早期设想的把 `trial_nums` / `trial_values` 提为顶层扁平字段的"扁平化提案"——本质是把 server-driven-UI 改为前端组装，属架构方向转变，**无实际消费需求，默认不做**。
+
+5. **report/writer 单文件子包**
+   - 当前 `report/writer/` 仅含 `json_writer.py`。本阶段不动。
+   - 未来若 builder 扩展（如 Python 生成图表内嵌、新增 `chart_writer.py` 等），多文件子包即合理，届时再评估是否合并入 `report/builder/`。
+
+
 ## 每阶段完成记录模板
 
 每完成一个阶段，在对应阶段的"验收标准"之后追加 `### 阶段 X 完成记录` 小节：
