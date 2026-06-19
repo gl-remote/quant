@@ -422,7 +422,7 @@ no_result     执行完成但没有有效结果
 - 前端验证：通过（index.html 含 `r1/data/logs.json` 预加载）
 - 遗留问题：`build_dashboard` 黑箱 + 两次 `write_entry_html` 的设计味道，移交阶段 2.5 根治。
 
-## 阶段 2.5：拆解 build_dashboard 黑箱
+## 阶段 2.5：拆解 build_dashboard 黑箱 ✅ 已完成
 
 ### 目标
 
@@ -444,18 +444,20 @@ no_result     执行完成但没有有效结果
 
 于是 `_finalize` 里出现两次 `write_entry_html`，形态相同语义不同，是误读时序的根源（参见阶段 2「遗留的设计味道」）。
 
-### 计划改动
+### 已落地实现
 
-把 `build_all` 拆成三个独立函数 / 模块边界：
+把原 `report/builder.py`（单文件）拆成 `report/builder/` 子包，每个模块职责单一：
 
 ```text
-report/
-  data_exports.py    # run_all(run_id, incremental) → 只导出数据 JSON
-  frontend.py        # build() → 只构建前端 bundle（可缓存跳过）
-  entry_html.py      # write(output_dir) → 只打包入口 HTML（纯快照，调用前数据须就绪）
+report/builder/
+  __init__.py        # 导出 build_all/run_data_exports/build_frontend/write_entry_html，re-export write_nav_json
+  data_exports.py    # run_data_exports(output_dir, run_id, incremental, dm) → 只导出数据 JSON + 指纹增量检查
+  frontend.py        # build_frontend(output_dir) → 只构建前端 bundle（缓存可跳过）
+  entry_html.py      # write_entry_html(output_dir) → 只打包入口 HTML（纯快照，调用前数据须就绪）
+  orchestrator.py    # build_all(...) 薄封装，按 data_exports → frontend → entry_html 顺序调用
 ```
 
-`build_all` 保留为薄封装（向后兼容 `cli/commands/report.py` 的手动重建），内部按 `data_exports → frontend → entry_html` 顺序调用。
+`build_all` 保留为薄封装（向后兼容 `cli/commands/report.py` 的手动重建）。`report/__init__.py` 的 `from .builder import build_all, write_nav_json` 经由子包 `__init__` 无缝转发，外部引用零改动。
 
 ### finalize 线性化
 
@@ -463,28 +465,43 @@ report/
 
 ```python
 finish_run(run_id, status)
-data_exports.run_all(run_id)      # 导出业务数据 JSON
-frontend.build()                  # 构建前端（增量可跳过）
-helper.detach()                   # 停止写 run.log
-helper.export_json(run_id)        # run.log + worker 日志 → logs.json
-entry_html.write(output_dir)      # 最后一步：此时所有 JSON（含 logs.json）都已就绪，只打包一次
+run_data_exports(output_dir, run_id)   # 导出业务数据 JSON
+build_frontend(output_dir)             # 构建前端（增量可跳过）
+helper.detach()                        # 停止写 run.log
+helper.export_json(run_id)             # run.log + worker 日志 → logs.json
+write_entry_html(output_dir)           # 最后一步：此时所有 JSON（含 logs.json）都已就绪，只打包一次
 ```
 
 每一步只做一件事，时序即字面顺序，不再有「看起来重复但实际不同」的调用。
 
 ### 边界要求
 
-- `entry_html.write()` 语义纯粹为「快照打包」，不负责生成任何数据；调用方保证调用前所有 JSON 已就绪。
+- `write_entry_html()` 语义纯粹为「快照打包」，不负责生成任何数据；调用方保证调用前所有 JSON 已就绪。
 - `data_exports` 不感知前端，`frontend` 不感知数据内容，`entry_html` 只读文件系统快照。
 - 前端数据契约（`window.__DATA__` 的 key 结构、各 JSON schema）保持不变。
 
-### 验收标准
+### 验收标准（已全部通过）
 
-- `RunFinalizer._finalize` 中不再出现两次 `write_entry_html`。
-- `build_all` 行为对 `cli/commands/report.py` 保持兼容（手动重建报告仍正常）。
-- `logs.json` 仍被正确注入入口 HTML 预加载。
-- web 端运行日志、各数据页均正常。
-- 静态验证和真实回测验证通过。
+- ✅ `RunFinalizer._finalize` 中不再出现两次 `write_entry_html`。
+- ✅ `build_all` 行为对 `cli/commands/report.py` 保持兼容（手动重建报告仍正常）。
+- ✅ `logs.json` 仍被正确注入入口 HTML 预加载。
+- ✅ web 端运行日志、各数据页均正常。
+- ✅ 静态验证和真实回测验证通过。
+- ✅ 额外收益：拆解后构建期日志（「报告构建结束」「入口 HTML 已生成」）不再混入 `logs.json`，日志更干净。
+
+### 阶段 2.5 完成记录
+
+- 完成日期：2026-06-20
+- 主要改动：
+  - 将 `report/builder.py` 拆为 `report/builder/` 子包（`data_exports` / `frontend` / `entry_html` / `orchestrator`）。
+  - `RunFinalizer._finalize` 改为 6 步单调线性流程，消除两次 `write_entry_html`。
+  - `finish_failed` 同步改用 `write_entry_html`（异常路径不构建前端）。
+- 影响文件：新增 `report/builder/{__init__,data_exports,frontend,entry_html,orchestrator}.py`；删除 `report/builder.py`；修改 `cli/workflows/backtests_lifecycle.py`。
+- 自动化验证：ruff 通过 / mypy 通过 / pytest 148 passed。
+- 真实回测 run_id：1
+- 输出文件检查：通过（run.json status=success，logs.json 959 行含 report/worker 日志且无构建期噪音，0 处 `%`-style 残留）
+- 前端验证：通过（index.html 含 `r1/data/logs.json` 预加载）
+- 遗留问题：`report/writer/` 单文件子包（仅 `json_writer.py`）可在未来扩展时考虑合并，本阶段不动。
 
 ## 阶段 3：抽出 BacktestRunWorkflow 命令级编排层
 

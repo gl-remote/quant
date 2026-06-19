@@ -93,23 +93,24 @@ class RunFinalizer:
         self._helper = helper or RunLogHelper()
 
     def _finalize(self, run_id: int, status: str) -> None:
-        """内部收尾：标记状态 → 构建看板 → detach sink → 导出日志 → 重写入口 HTML
+        """内部收尾，单调线性时序（每步只做一件事）：
 
-        detach 必须在 export_json 之前完成：
-        - 否则 build_dashboard 之后的日志（write_entry_html、preload script）
-          会继续写入 run.log，但 logs.json 已生成完毕，导致前端看不到这部分。
-        - detach 后，后续的 write_entry_html 日志只输出到 stderr，不污染 logs.json。
+        1. finish_run        — DB 状态标记，让数据导出读到最新 status
+        2. run_data_exports  — 导出业务数据 JSON
+        3. build_frontend    — 构建前端 bundle（增量可跳过）
+        4. detach            — 停止写 run.log，避免后续日志污染 logs.json
+        5. export_json       — run.log + worker 日志 → logs.json
+        6. write_entry_html  — 最后一步，此时所有 JSON（含 logs.json）已就绪，只打包一次
         """
-        from report.builder import build_all as build_dashboard
-        from report.builder import write_entry_html
+        from report.builder import build_frontend, run_data_exports, write_entry_html
 
         output_dir = str(_output_root())
         self._dm.store.finish_run(run_id, status)
-        build_dashboard(output_dir=output_dir, run_id=run_id)
+        run_data_exports(output_dir, run_id)
+        build_frontend(output_dir)
         self._helper.detach()
         self._helper.export_json(run_id)
-        # export_json 之后 logs.json 才落盘，需要重写入口 HTML 将其注入预加载
-        write_entry_html(output_dir=output_dir)
+        write_entry_html(output_dir)
 
     def finish_success(self, run_id: int) -> None:
         """正常完成"""
@@ -124,13 +125,13 @@ class RunFinalizer:
         self._finalize(run_id, "no_result")
 
     def finish_failed(self, run_id: int, error: str) -> None:
-        """执行失败（异常路径，标记状态 → detach sink → 导出日志 → 重写入口 HTML，不构建看板）"""
+        """执行失败（异常路径，标记状态 → detach sink → 导出日志 → 打包入口 HTML，不构建前端）"""
         from report.builder import write_entry_html
 
         self._dm.store.finish_run(run_id, "failed")
         self._helper.detach()
         self._helper.export_json(run_id)
-        write_entry_html(output_dir=str(_output_root()))
+        write_entry_html(str(_output_root()))
 
 
 def _output_root() -> Path:
