@@ -18,11 +18,6 @@ NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
-if [[ "${CONDA_PREFIX:-}" == *quant_trading* ]]; then
-    PYTHON_PATH="${CONDA_PREFIX}/bin/python"
-else
-    PYTHON_PATH="/usr/local/Caskroom/miniconda/base/envs/quant_trading/bin/python"
-fi
 
 # 默认参数
 STRATEGY="ma"
@@ -57,10 +52,10 @@ if [ "$CURRENT_HOUR" -ge 15 ] && [ "$CURRENT_HOUR" -lt 21 ]; then
     echo ""
 fi
 
-if "$PYTHON_PATH" "$ROOT_DIR/main.py" test \
+if (cd "$ROOT_DIR" && uv run python main.py test \
     --strategy "$STRATEGY" \
     --symbol "$SYMBOL" \
-    $GUI_FLAG; then
+    $GUI_FLAG); then
     echo -e "${GREEN}✓ 测试完成${NC}"
 else
     echo -e "${GREEN}✓ 测试已停止（Ctrl+C 正常退出）${NC}"

@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 packages = ["cli", "common", "config", "data", "backtest", "strategies", "strategies.strategy_aspects", "strategies.strategy_aspects.direction", "strategies.strategy_aspects.interceptors", "report"]
 
 [project]
-name = "quant"
+name = "quantsmith"
 version = "0.4.0-dev"
-description = "策略工具箱 - 量化策略研发工具链"
+description = "AI 打造的传统量化策略研发工具链"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
@@ -37,23 +37,27 @@ dependencies = [
     "pandera>=0.18",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "pytest>=7.4",
     "pytest-cov>=4.1",
-    "flake8>=6.1",
-    "pylint>=2.17",
     "mypy>=1.5",
     "pandas-stubs>=2.0",
     "tomli-w>=1.0",
+    "ruff>=0.6",
+    "jsonschema>=4.0",
 ]
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage --typeguard-packages=quant"
+addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "core: tests for strategy core module",
@@ -88,22 +92,6 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 
 [tool.ruff.format]
 quote-style = "double"
-
-[tool.pylint.main]
-ignore = ["htmlcov"]
-jobs = 0
-
-[tool.pylint.format]
-max-line-length = 120
-
-[tool.pylint.messages_control]
-disable = [
-    "missing-module-docstring",
-    "missing-class-docstring",
-    "missing-function-docstring",
-    "too-few-public-methods",
-    "invalid-name",
-]
 
 [tool.mypy]
 python_version = "3.12"

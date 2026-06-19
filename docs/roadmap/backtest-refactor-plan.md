@@ -82,8 +82,8 @@ output/r{run_id}/data/logs.json
 
 ```bash
 ruff check strategies/ tests/strategies/
-conda run -n quant_trading python -m mypy cli/commands/backtest.py backtest/vnpy_backtest_engine.py
-conda run -n quant_trading python -m pytest tests/strategies/ --tb=short
+uv run mypy cli/commands/backtest.py backtest/vnpy_backtest_engine.py
+uv run pytest tests/strategies/ --tb=short
 ```
 
 ### 真实回测验证

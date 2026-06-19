@@ -19,7 +19,7 @@ if [ -f "$DB" ]; then
     echo ""
     echo "[1/2] 清理数据库..."
 
-    python3 -c "
+    uv run python -c "
 import sqlite3, os
 db = '$DB'
 if not os.path.exists(db):

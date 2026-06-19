@@ -20,14 +20,7 @@
 # ============================================================================
 
 # 设置 Python 路径
-CONDA_BASE="${CONDA_PREFIX:-/usr/local/Caskroom/miniconda/base}"
-PYTHON_PATH="${CONDA_BASE}/envs/quant_trading/bin/python"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-
-# 如果 Conda 环境不存在，使用系统 Python
-if [ ! -f "$PYTHON_PATH" ]; then
-    PYTHON_PATH="python"
-fi
 
 # 检查命令是否有效
 VALID_COMMANDS="export test backtest report live"
@@ -92,4 +85,4 @@ case "$COMMAND" in
 esac
 
 # 执行命令
-"$PYTHON_PATH" "$SCRIPT_DIR/main.py" "$@"
+(cd "$SCRIPT_DIR" && uv run python main.py "$@")

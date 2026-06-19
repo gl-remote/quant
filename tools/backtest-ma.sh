@@ -14,11 +14,6 @@ NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
-if [[ "${CONDA_PREFIX:-}" == *quant_trading* ]]; then
-    PYTHON_PATH="${CONDA_PREFIX}/bin/python"
-else
-    PYTHON_PATH="/usr/local/Caskroom/miniconda/base/envs/quant_trading/bin/python"
-fi
 
 echo "=========================================="
 echo "MA 策略全链路测试（并行回测）"
@@ -29,7 +24,7 @@ echo "=========================================="
 echo ""
 echo "[步骤 1/2] 执行全量回测 + 贝叶斯搜索..."
 
-if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
+if (cd "$ROOT_DIR" && uv run python main.py backtest \
     --pattern "DCE\\.m.*" \
     --strategy ma \
     --mode search \
@@ -37,7 +32,7 @@ if "$PYTHON_PATH" "$ROOT_DIR/main.py" backtest \
     --parallel \
     --trials 3 \
     --capital 100000 \
-    --contract-size 10; then
+    --contract-size 10); then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"
