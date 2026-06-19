@@ -49,7 +49,9 @@ from common.types import BacktestResult
 from config import ConfigManager
 from config.schemas import BacktestConfig
 from data import DataManager
+from data.output_paths import output_root
 from report import build_all as build_dashboard
+from report.output_paths import logs_json_path, run_log_path
 from strategies.utils import (
     apply_strategy_config,
     get_strategy_class_name,
@@ -511,14 +513,14 @@ def _run_batch_backtest(
 
 def _attach_run_logger(dm: DataManager, run_id: int) -> None:
     """将 DEBUG 级别日志写入 output/r{run_id}/data/run.log，同时保留 stderr 输出"""
-    logs_dir = Path("output") / f"r{run_id}" / "data"
-    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_path = run_log_path(run_id)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     fmt = (
         f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
         "{level: <8} | {name}:{function}:{line} | {message}"
     )
     sink_id = logger.add(
-        logs_dir / "run.log",
+        str(log_path),
         level="DEBUG",
         format=fmt,
     )
@@ -534,11 +536,11 @@ def _detach_run_logger(dm: DataManager) -> None:
 def _convert_run_log(run_id: int) -> None:
     """将 run.log 转为前端可读的 logs.json"""
     logger.complete()  # 确保所有缓冲日志落盘
-    log_file = Path("output") / f"r{run_id}" / "data" / "run.log"
+    log_file = run_log_path(run_id)
     if log_file.exists():
         with open(log_file, encoding="utf-8") as f:
             text = f.read()
-        json_file = Path("output") / f"r{run_id}" / "data" / "logs.json"
+        json_file = logs_json_path(run_id)
         with open(json_file, "w", encoding="utf-8") as f:
             json.dump(text, f, ensure_ascii=False)
 
@@ -623,7 +625,7 @@ def _execute_walk_forward_mode(
     # 输出日志和构建看板
     _convert_run_log(run_id)
     dm.store.finish_run(run_id)
-    build_dashboard(output_dir="output", run_id=run_id)
+    build_dashboard(output_dir=str(output_root()), run_id=run_id)
 
 
 def _execute_search_mode(
@@ -661,7 +663,7 @@ def _execute_search_mode(
         logger.warning("搜索空间为空，跳过参数搜索")
         dm.store.finish_run(run_id, "skipped")
         _convert_run_log(run_id)
-        build_dashboard(output_dir="output", run_id=run_id)
+        build_dashboard(output_dir=str(output_root()), run_id=run_id)
         return
 
     result: SearchResult | None
@@ -705,7 +707,7 @@ def _execute_search_mode(
     if not result:
         _convert_run_log(run_id)
         dm.store.finish_run(run_id, "no_result")
-        build_dashboard(output_dir="output", run_id=run_id)
+        build_dashboard(output_dir=str(output_root()), run_id=run_id)
         return
 
     # 保存实际使用的随机种子
@@ -732,7 +734,7 @@ def _execute_search_mode(
     # 无论持久化是否成功，始终输出日志和构建看板
     _convert_run_log(run_id)
     dm.store.finish_run(run_id)
-    build_dashboard(output_dir="output", run_id=run_id)
+    build_dashboard(output_dir=str(output_root()), run_id=run_id)
 
 
 # ── 参数搜索结果持久化 ───────────────────────────────

@@ -110,19 +110,19 @@ def _run_data_exports(
     - 自定义类型（equity/kline/trades/nav）: 有特殊的增量检查逻辑
     """
     # 任务描述符: (类型名, 指纹收集函数, 全量导出函数)
-    export_tasks: list[tuple[str, Callable[[DataManager, int], object], Callable[[str, int, DataManager], object]]] = [
-        ("run", lambda d, rid: d.get_run_info(rid), lambda out, rid, d: export_run_json(out, rid, d)),
-        ("summary", lambda d, rid: d.get_run_summary(rid), lambda out, rid, d: export_summary_json(out, rid, d)),
+    export_tasks: list[tuple[str, Callable[[DataManager, int], object], Callable[..., object]]] = [
+        ("run", lambda d, rid: d.get_run_info(rid), lambda rid, d: export_run_json(rid, d)),
+        ("summary", lambda d, rid: d.get_run_summary(rid), lambda rid, d: export_summary_json(rid, d)),
         (
             "backtests",
             lambda d, rid: d.get_backtests_for_run(rid),
-            lambda out, rid, d: export_backtests_json(out, rid, d),
+            lambda rid, d: export_backtests_json(rid, d),
         ),
-        ("equity", _collect_equity_fingerprint, lambda out, rid, d: export_equity_json(out, rid, d)),
-        ("kline", _collect_kline_fingerprint, lambda out, rid, d: export_kline_json(out, rid, d)),
-        ("optuna", lambda d, rid: d.get_optuna_data(rid), lambda out, rid, d: export_optuna_json(out, rid, d)),
-        ("trades", _collect_trades_fingerprint, lambda out, rid, d: export_trades_json(out, rid, d)),
-        ("nav", lambda d, _rid: d.get_all_runs(), lambda out, _rid, d: write_nav_json(out, d)),
+        ("equity", _collect_equity_fingerprint, lambda rid, d: export_equity_json(rid, d)),
+        ("kline", _collect_kline_fingerprint, lambda rid, d: export_kline_json(rid, d)),
+        ("optuna", lambda d, rid: d.get_optuna_data(rid), lambda rid, d: export_optuna_json(rid, d)),
+        ("trades", _collect_trades_fingerprint, lambda rid, d: export_trades_json(rid, d)),
+        ("nav", lambda d, _rid: d.get_all_runs(), lambda _rid, d: write_nav_json(d)),
     ]
 
     exported = 0
@@ -142,7 +142,7 @@ def _run_data_exports(
             # 通用增量检查: 基于指纹/缓存哈希对比
             new_data = getter(dm, run_id)
             if cache.needs_update(data_type, run_id, new_data):
-                exporter(output_dir, run_id, dm)
+                exporter(run_id, dm)
                 cache.update_fingerprint(data_type, run_id, new_data)
                 logger.info("→ 导出 %s（数据已变更）", data_type)
                 executed = True
@@ -151,7 +151,7 @@ def _run_data_exports(
                 executed = False
         else:
             # 全量导出: 不检查缓存，直接写入
-            exporter(output_dir, run_id, dm)
+            exporter(run_id, dm)
             logger.info("→ 导出 %s", data_type)
             executed = True
 
@@ -213,7 +213,7 @@ def _export_equity_with_incremental(
 
     if cache.needs_update("equity", run_id, equity_data):
         logger.info("→ 导出 equity（数据已变更）")
-        export_equity_json(output_dir, run_id, dm)
+        export_equity_json(run_id, dm)
         cache.update_fingerprint("equity", run_id, equity_data)
         return True
     logger.info("○ 跳过 equity（数据未变更）")
@@ -231,7 +231,7 @@ def _export_kline_with_incremental(
 
     if cache.needs_update("kline", run_id, kline_data):
         logger.info("→ 导出 kline（数据已变更）")
-        has_changes = export_kline_json(output_dir, run_id, dm)
+        has_changes = export_kline_json(run_id, dm)
         cache.update_fingerprint("kline", run_id, kline_data)
         return has_changes
     logger.info("○ 跳过 kline（数据未变更）")
@@ -249,7 +249,7 @@ def _export_trades_with_incremental(
 
     if cache.needs_update("trades", run_id, trades_data):
         logger.info("→ 导出 trades（数据已变更）")
-        export_trades_json(output_dir, run_id, dm)
+        export_trades_json(run_id, dm)
         cache.update_fingerprint("trades", run_id, trades_data)
         return True
     logger.info("○ 跳过 trades（数据未变更）")
@@ -265,7 +265,7 @@ def _export_nav_with_incremental(
     runs = dm.get_all_runs()
     if cache.needs_update("nav", None, runs):
         logger.info("→ 导出 nav（数据已变更）")
-        write_nav_json(output_dir, dm)
+        write_nav_json(dm)
         cache.update_fingerprint("nav", None, runs)
         return True
     logger.info("○ 跳过 nav（数据未变更）")

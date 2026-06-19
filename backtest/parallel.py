@@ -59,7 +59,9 @@ def _init_worker(
     _WORKER_CTX["backtest_config"] = backtest_config
 
     # ── 子进程独立日志文件 ──────────────────────────
-    logs_dir = os.path.join(os.getcwd(), "output", "workers")
+    from data.output_paths import output_root
+
+    logs_dir = str(output_root() / "workers")
     os.makedirs(logs_dir, exist_ok=True)
     pid = os.getpid()
     logger.add(

@@ -636,11 +636,12 @@ class DataFeed:
         :return: 构造完成的 DataFeed
         """
         from data.manager import DataManager
+        from data.output_paths import output_root
 
         from .cache import get_cached_feed, get_cached_feed_by_symbol, set_cached_feed
 
         dm = DataManager()
-        feeds_dir = f"output/feeds/{symbol}"
+        feeds_dir = str(output_root() / "feeds" / symbol)
 
         # 按 requirements 推断基础周期（最小周期），用作源数据加载粒度。
         # 高周期由 apply_requirements 自动从基础周期聚合得到。

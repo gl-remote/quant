@@ -38,6 +38,7 @@ from .models import (
     SymbolInfo,
     TradeRecord,
 )
+from .output_paths import output_root
 
 __all__ = [
     # 核心管理器
@@ -58,4 +59,6 @@ __all__ = [
     # 数据源工厂
     "get_data_source",
     "list_sources",
+    # 输出路径
+    "output_root",
 ]

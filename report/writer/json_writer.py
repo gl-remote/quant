@@ -18,7 +18,9 @@ import pandas as pd
 from loguru import logger
 
 from data import DataManager
+from data.output_paths import output_root
 from report.cache import KlineCache
+from report.output_paths import nav_json_path, run_data_dir
 
 
 def _get_dm(dm: DataManager | None) -> DataManager:
@@ -26,7 +28,7 @@ def _get_dm(dm: DataManager | None) -> DataManager:
     return dm if dm is not None else DataManager()
 
 
-def export_run_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_run_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出单次运行的元信息到 JSON 文件"""
     dm = _get_dm(dm)
     row = dm.get_run_info(run_id)
@@ -43,24 +45,24 @@ def export_run_json(output_dir: str, run_id: int, dm: DataManager | None = None)
         "status": row["status"],
         "created_at": row["created_at"],
     }
-    _write_json(output_dir, f"r{run_id}/data/run.json", data)
+    _write_json(run_data_dir(run_id) / "run.json", data)
 
 
-def export_summary_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_summary_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出品种汇总表（每品种最优回测记录）"""
     dm = _get_dm(dm)
     data = dm.get_run_summary(run_id)
-    _write_json(output_dir, f"r{run_id}/data/summary.json", data)
+    _write_json(run_data_dir(run_id) / "summary.json", data)
 
 
-def export_backtests_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_backtests_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出所有回测记录完整信息（含指标、参数、日线数据）"""
     dm = _get_dm(dm)
     result = dm.get_backtests_for_run(run_id)
-    _write_json(output_dir, f"r{run_id}/data/backtests.json", result)
+    _write_json(run_data_dir(run_id) / "backtests.json", result)
 
 
-def export_equity_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_equity_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出资金曲线数据（每品种最优回测的日线权益/回撤）"""
     dm = _get_dm(dm)
     summary = dm.get_run_summary(run_id)
@@ -74,17 +76,17 @@ def export_equity_json(output_dir: str, run_id: int, dm: DataManager | None = No
             equity["max_ddpercent"] = s.get("max_ddpercent", 0)  # type: ignore[arg-type]
             equity["initial_capital"] = s.get("initial_capital")  # type: ignore[arg-type]
             result[str(s["symbol"])] = equity
-    _write_json(output_dir, f"r{run_id}/data/equity.json", result)
+    _write_json(run_data_dir(run_id) / "equity.json", result)
 
 
-def export_kline_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> bool:
+def export_kline_json(run_id: int, dm: DataManager | None = None) -> bool:
     """导出 K 线数据 JSON（使用 KlineCache 复用 CSV→JSON 转换结果）
 
     Returns:
         True if any kline data was written, False if all hit cache
     """
     dm = _get_dm(dm)
-    cache = KlineCache(output_dir)
+    cache = KlineCache(str(output_root()))
     summary = dm.get_run_summary(run_id)
     has_changes = False
 
@@ -97,7 +99,7 @@ def export_kline_json(output_dir: str, run_id: int, dm: DataManager | None = Non
         start_date = str(s.get("start_date")) if s.get("start_date") else None
         end_date = str(s.get("end_date")) if s.get("end_date") else None
         interval: str = str(s.get("kline_interval") or "1m")
-        dest = Path(output_dir) / f"r{run_id}/data" / f"kline_{symbol}.{interval}.json"
+        dest = run_data_dir(run_id) / f"kline_{symbol}.{interval}.json"
 
         if not data_src:
             continue
@@ -121,7 +123,7 @@ def export_kline_json(output_dir: str, run_id: int, dm: DataManager | None = Non
     return has_changes
 
 
-def export_trades_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_trades_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出交易记录 JSON（取最优 trial 对应的各品种成交）"""
     from data.models import Backtest, BacktestTrade
 
@@ -170,10 +172,10 @@ def export_trades_json(output_dir: str, run_id: int, dm: DataManager | None = No
                 }
             )
 
-    _write_json(output_dir, f"r{run_id}/data/trades.json", all_trades)
+    _write_json(run_data_dir(run_id) / "trades.json", all_trades)
 
 
-def export_optuna_json(output_dir: str, run_id: int, dm: DataManager | None = None) -> None:
+def export_optuna_json(run_id: int, dm: DataManager | None = None) -> None:
     """导出 Optuna 优化数据 JSON（含图表配置）"""
     import os
 
@@ -208,24 +210,23 @@ def export_optuna_json(output_dir: str, run_id: int, dm: DataManager | None = No
         "parallel_coordinate": charts_spec.get("parallel_coordinate"),
         "contours": charts_spec.get("contours"),
     }
-    _write_json(output_dir, f"r{run_id}/data/optuna.json", result)
+    _write_json(run_data_dir(run_id) / "optuna.json", result)
 
 
-def write_nav_json(output_dir: str, dm: DataManager | None = None) -> None:
+def write_nav_json(dm: DataManager | None = None) -> None:
     """导出全局导航数据 JSON（所有运行记录）"""
     dm = _get_dm(dm)
     runs = dm.get_all_runs()
-    _write_json(output_dir, "data/nav.json", runs)
+    _write_json(nav_json_path(), runs)
 
 
 # ── 内部工具函数 ──────────────────────────────────────────────────────────
 
 
-def _write_json(output_dir: str, rel_path: str, data: object) -> None:
+def _write_json(file_path: Path, data: object) -> None:
     """将数据写入 JSON 文件"""
-    full_path = Path(output_dir) / rel_path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(full_path, "w", encoding="utf-8") as f:
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, default=str)
 
 

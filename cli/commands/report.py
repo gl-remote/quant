@@ -16,7 +16,8 @@ from loguru import logger
 
 from config import ConfigManager
 from data import DataManager
-from report import format_single_report, format_summary_report
+from data.output_paths import output_root
+from report import build_all, format_single_report, format_summary_report
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -72,12 +73,10 @@ def _cmd_build(run_id: int | None = None) -> None:
     Args:
         run_id: 指定重建某个 run（None 则重建所有）
     """
-    from report import build_all
-
     if run_id is not None:
         # 重建指定 run
         print(f"重建运行 r{run_id} 的可视化报告...")
-        build_all(output_dir="output", run_id=run_id, incremental=False)
+        build_all(output_dir=str(output_root()), run_id=run_id, incremental=False)
     else:
         # 重建所有 run（从数据库查询，不依赖 output 目录）
         print("重建所有运行的可视化报告...")
@@ -91,7 +90,7 @@ def _cmd_build(run_id: int | None = None) -> None:
         for r in runs:
             rid = r["id"]
             print(f"  → 重建 r{rid}...")
-            build_all(output_dir="output", run_id=int(str(rid)), incremental=False)
+            build_all(output_dir=str(output_root()), run_id=int(str(rid)), incremental=False)
     print("完成。")
 
 

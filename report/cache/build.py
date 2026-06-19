@@ -27,6 +27,8 @@ from typing import Any
 
 from loguru import logger
 
+from data.output_paths import output_root
+
 
 class BuildCache:
     """统一增量构建缓存管理器"""
@@ -34,9 +36,10 @@ class BuildCache:
     FINGERPRINT_DIR = "fingerprints"
     FRONTEND_HASH_FILE = "frontend_hash"
 
-    def __init__(self, output_dir: str = "output"):
-        self._output_dir = Path(output_dir)
-        self._cache_dir = self._output_dir / ".build_cache"
+    def __init__(self, output_dir: str = ""):
+        root = Path(output_dir) if output_dir else output_root()
+        self._output_dir = root
+        self._cache_dir = root / ".build_cache"
         self._fingerprint_dir = self._cache_dir / self.FINGERPRINT_DIR
         self._ensure_cache_dirs()
 

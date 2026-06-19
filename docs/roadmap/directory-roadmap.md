@@ -499,3 +499,14 @@ workspace/packages/
 - Python 子包通过 `uv pip install -e` 安装为 editable，测试已接入 pytest
 - 根 `pyproject.toml` 已加 `[tool.uv.workspace] members` 和 `testpaths` 扩展
 - 这是 `workspace/packages/` 提前试点，比 roadmap 原本规划的阶段 2（report 域试点）更早，但方向一致：先建立契约，再推进业务域迁移
+
+### 阶段 1（2026-06-19）
+
+在回测重构 [阶段 1](./backtest-refactor-plan.md#阶段-1抽出-outputlayout--runpaths) 中，集中管理 output 目录结构：
+
+- 新建 `data/output_paths.py`：`output_root()` — 唯一暴露项目 output 根路径
+- 新建 `report/output_paths.py`：`run_dir/run_data_dir/run_log_path/logs_json_path/nav_json_path` — run 维度路径
+- 消除 27 处 `"output"` 硬编码，覆盖 8 个文件
+- `BuildCache`/`KlineCache` 默认值改为 `output_root()`
+- `DataFeed.create()` feeds 目录 / `parallel.py` workers 目录 改用 `output_root()`
+- ruff + mypy + pytest contracts 全部通过

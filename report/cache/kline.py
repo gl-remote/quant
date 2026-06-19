@@ -14,12 +14,14 @@ from pathlib import Path
 
 from loguru import logger
 
+from data.output_paths import output_root
+
 
 class KlineCache:
     """K 线数据转换缓存
 
     用法:
-        cache = KlineCache("output")
+        cache = KlineCache(str(output_root()))
         data = cache.get("DCE.m2601", "/path/to/data.csv", "1m")
         if data is None:
             data = build_kline_dict(...)
@@ -27,8 +29,9 @@ class KlineCache:
         cache.copy_to("DCE.m2601", "/path/to/data.csv", "1m", dest_path)
     """
 
-    def __init__(self, output_dir: str = "output"):
-        self._cache_dir = Path(output_dir) / ".kline_cache"
+    def __init__(self, output_dir: str = ""):
+        root = Path(output_dir) if output_dir else output_root()
+        self._cache_dir = root / ".kline_cache"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
     # 缓存版本号：数据结构变更时递增

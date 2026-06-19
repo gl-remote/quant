@@ -267,33 +267,55 @@ output/data/nav.json
 
 路径拼接散落后，后续改目录或新增文件容易漏改。
 
-### 计划改动
+### 实现
 
-新增 report 域路径布局对象：
+分两层管理，各层只感知本层语义：
 
-```text
-report/output_layout.py
+**`data/output_paths.py`** — 只暴露 `output_root()`，返回 `<项目根>/output/`。不感知任何上层业务路径。
+
+**`report/output_paths.py`** — run 维度的文件路径，底层调用 `output_root()` 拼接：
+
+- `run_dir(run_id)` → `output/r{N}/`
+- `run_data_dir(run_id)` → `output/r{N}/data/`
+- `run_log_path(run_id)` → `output/r{N}/data/run.log`
+- `logs_json_path(run_id)` → `output/r{N}/data/logs.json`
+- `nav_json_path()` → `output/data/nav.json`
+
+其他域（cache/parallel/data_feed）直接用 `output_root()` 拼自己的路径，
+不需要 wrapper 文件：
+```python
+output_root() / ".kline_cache"
+output_root() / ".build_cache"
+output_root() / "workers"
+output_root() / "feeds" / symbol
 ```
-
-包含：
-
-- `run_dir(run_id)`
-- `run_data_dir(run_id)`
-- `run_log_path(run_id)`
-- `logs_json_path(run_id)`
-- `global_data_dir()`
-- `nav_json_path()`
 
 ### 边界要求
 
-- 日志服务、finalizer、report writer 通过统一路径对象获取路径。
-- 不在业务逻辑中手写 `Path("output") / f"r{run_id}" / "data"`。
+- 不在业务逻辑中手写 `Path("output")`。
+- data 层不知道 run、nav、dashboard 等业务概念。
+- 将来切云存储时改 `output_root()` 即可。
 
 ### 验收标准
 
 - 现有 JSON 输出路径不变。
 - 真实回测输出文件完整。
 - 静态验证和真实回测验证通过。
+
+### 阶段 1 完成记录（2026-06-19）
+
+- 新建 `data/output_paths.py`（`output_root()`）
+- 新建 `report/output_paths.py`（5 个 run 路径函数）
+- 消除 27 处 `"output"` 硬编码，分布在：
+  - `cli/commands/backtest.py` — 7 处
+  - `cli/commands/report.py` — 2 处
+  - `report/writer/json_writer.py` — 8 处（+ 签去 `output_dir` 参数）
+  - `report/builder.py` — 调整所有 export 回调
+  - `report/cache/build.py` — `BuildCache` 默认值
+  - `report/cache/kline.py` — `KlineCache` 默认值
+  - `backtest/parallel.py` — worker 日志目录
+  - `strategies/runtime/data_feed.py` — feeds 目录
+- ruff + mypy + pytest contracts 全部通过
 
 ## 阶段 2：抽出 RunLogService 和 RunFinalizer
 
