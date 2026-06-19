@@ -33,7 +33,7 @@ from ..core.types import Bar
 from .aggregate import get_forming_bar_start, parse_period_minutes
 from .events import Event, EventManager
 from .period import PeriodData, PeriodDataView
-from .requirements import BarContext, DataRequirements, PeriodRequirements
+from .requirements import BarContext, DataRequirements
 from .serialization import dump_feed, load_feed
 
 if TYPE_CHECKING:
@@ -642,13 +642,16 @@ class DataFeed:
         dm = DataManager()
         feeds_dir = f"output/feeds/{symbol}"
 
-        # CSV 原始数据固定为 1 分钟粒度，策略需求的更高周期由 1m 聚合得到。
-        # 将 1m 加入需求，确保 apply_requirements 将其设为 base_period。
-        source_period = "1m"
-        if source_period not in requirements.periods:
-            requirements.periods[source_period] = PeriodRequirements(lookback_bars=1)
+        # 按 requirements 推断基础周期（最小周期），用作源数据加载粒度。
+        # 高周期由 apply_requirements 自动从基础周期聚合得到。
+        all_periods = set(requirements.periods)
+        for period in requirements.indicators:
+            all_periods.add(period)
+        if not all_periods:
+            raise ValueError(f"requirements 未声明任何周期，无法推断基础周期: symbol={symbol}")
+        source_period = min(all_periods, key=parse_period_minutes)
 
-        # 从 CSV 加载 1 分钟源数据
+        # 从 CSV 加载基础周期源数据
         base_df: pd.DataFrame | None = None
         try:
             results = dm.load_kline([symbol], interval=source_period)
