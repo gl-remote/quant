@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/trades.schema.json",
+  "title": "Trade Records by Symbol",
+  "description": "output/r{run_id}/data/trades.json: 按 symbol 分组的成交记录。",
+  "type": "object",
+  "patternProperties": {
+    "^.+$": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["datetime", "symbol", "direction", "offset"],
+        "properties": {
+          "datetime": {"type": "string", "minLength": 1},
+          "symbol": {"type": "string", "minLength": 1},
+          "direction": {"type": "string", "minLength": 1},
+          "offset": {"type": "string", "minLength": 1},
+          "open_price": {"type": "number"},
+          "close_price": {"type": "number"},
+          "quantity": {"type": "number"},
+          "pnl": {"type": "number"},
+          "commission": {"type": "number"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

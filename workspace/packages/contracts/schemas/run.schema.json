@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/run.schema.json",
+  "title": "Run Metadata",
+  "description": "output/r{run_id}/data/run.json: 当前 run 的元数据。",
+  "type": "object",
+  "required": ["id", "strategy", "engine", "symbols", "status", "created_at"],
+  "properties": {
+    "id": {"type": "integer", "minimum": 1},
+    "strategy": {"type": "string", "minLength": 1},
+    "engine": {"type": "string", "minLength": 1},
+    "symbols": {"type": "integer", "minimum": 0},
+    "status": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": true
+}

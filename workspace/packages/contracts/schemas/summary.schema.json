@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/summary.schema.json",
+  "title": "Symbol Summary List",
+  "description": "output/r{run_id}/data/summary.json: 当前 run 内每个 (id, symbol) 的概览。前端 r 详情页消费。",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "symbol",
+      "total_return",
+      "total_trades",
+      "end_balance",
+      "start_date",
+      "end_date",
+      "kline_interval"
+    ],
+    "properties": {
+      "id": {"type": "integer", "minimum": 1},
+      "symbol": {"type": "string", "minLength": 1},
+      "total_return": {"type": "number"},
+      "total_trades": {"type": "integer", "minimum": 0},
+      "end_balance": {"type": "number"},
+      "sharpe": {"type": "number"},
+      "max_drawdown": {"type": "number"},
+      "max_ddpercent": {"type": "number"},
+      "start_date": {"type": "string", "minLength": 1},
+      "end_date": {"type": "string", "minLength": 1},
+      "kline_interval": {"type": "string", "minLength": 1}
+    },
+    "additionalProperties": true
+  }
+}

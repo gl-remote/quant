@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/backtests.schema.json",
+  "title": "Backtest Records",
+  "description": "output/r{run_id}/data/backtests.json: 每条 backtest 记录（含参数与逐日序列）。前端 r 详情页消费。",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": [
+      "id",
+      "symbol",
+      "strategy",
+      "status",
+      "start_date",
+      "end_date",
+      "initial_capital",
+      "end_balance",
+      "total_return",
+      "total_trades",
+      "params",
+      "daily"
+    ],
+    "properties": {
+      "id": {"type": "integer", "minimum": 1},
+      "symbol": {"type": "string", "minLength": 1},
+      "strategy": {"type": "string", "minLength": 1},
+      "status": {"type": "string", "minLength": 1},
+      "start_date": {"type": "string", "minLength": 1},
+      "end_date": {"type": "string", "minLength": 1},
+      "initial_capital": {"type": "number"},
+      "end_balance": {"type": "number"},
+      "total_return": {"type": "number"},
+      "total_trades": {"type": "integer", "minimum": 0},
+      "kline_interval": {"type": "string", "minLength": 1},
+      "params": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "value"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1},
+            "value": {"type": ["number", "string", "boolean", "null"]}
+          },
+          "additionalProperties": true
+        }
+      },
+      "daily": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["date", "equity", "daily_return"],
+          "properties": {
+            "date": {"type": "string", "minLength": 1},
+            "equity": {"type": "number"},
+            "daily_return": {"type": "number"},
+            "drawdown": {"type": "number"},
+            "trade_count": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "additionalProperties": true
+  }
+}

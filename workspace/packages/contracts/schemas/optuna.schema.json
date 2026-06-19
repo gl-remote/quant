@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/optuna.schema.json",
+  "title": "Optuna Optimization Result",
+  "description": "output/r{run_id}/data/optuna.json: 单个 run 的参数搜索结果。前端 Optuna 图表消费。",
+  "type": "object",
+  "required": ["study_name", "trial_count", "best_value", "best_params", "optimization_history"],
+  "properties": {
+    "study_name": {"type": "string", "minLength": 1},
+    "trial_count": {"type": "integer", "minimum": 0},
+    "best_value": {"type": "number"},
+    "best_params": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "value": {"type": ["number", "string", "boolean", "null"]}
+        },
+        "additionalProperties": true
+      }
+    },
+    "optimization_history": {
+      "type": "object",
+      "required": ["series"],
+      "properties": {
+        "series": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "data"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "data": {
+                "type": "array",
+                "items": {"type": "array"}
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "param_importances": {},
+    "parallel_coordinate": {},
+    "contours": {}
+  },
+  "additionalProperties": true
+}

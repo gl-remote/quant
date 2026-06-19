@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantsmith.dev/contracts/equity.schema.json",
+  "title": "Equity Curves by Symbol",
+  "description": "output/r{run_id}/data/equity.json: 按 symbol 分组的净值序列。",
+  "type": "object",
+  "patternProperties": {
+    "^.+$": {
+      "type": "object",
+      "required": ["dates", "equity", "drawdown"],
+      "properties": {
+        "dates": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "equity": {
+          "type": "array",
+          "items": {"type": "number"}
+        },
+        "drawdown": {
+          "type": "array",
+          "items": {"type": "number"}
+        },
+        "max_ddpercent": {"type": "number"},
+        "initial_capital": {"type": ["number", "null"]}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}
