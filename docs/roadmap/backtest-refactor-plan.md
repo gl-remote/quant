@@ -286,9 +286,9 @@ output/data/nav.json
 ```python
 output_root() / ".kline_cache"
 output_root() / ".build_cache"
-output_root() / "workers"
 output_root() / "feeds" / symbol
 ```
+worker 日志路径为 `workers_dir(run_id)`，已在 `report/output_paths.py` 中定义（阶段 2 落地）。
 
 ### 边界要求
 
@@ -317,11 +317,13 @@ output_root() / "feeds" / symbol
   - `strategies/runtime/data_feed.py` — feeds 目录
 - ruff + mypy + pytest contracts 全部通过
 
-## 阶段 2：抽出 RunLogService 和 RunFinalizer
+## 阶段 2：抽出 RunLogHelper 和 RunFinalizer ✅ 已完成
 
 ### 目标
 
 把 run 收尾逻辑和日志逻辑从 CLI 中移出，减少 `cli/commands/backtest.py` 的职责。
+
+同时修复阶段 0 基线发现的三个日志问题。
 
 ### 当前问题
 
@@ -335,57 +337,153 @@ output_root() / "feeds" / symbol
 
 这些属于运行生命周期管理，不应散落在 CLI 中。
 
-### 计划改动
+另外阶段 0 基线记录了三个日志 bug：
 
-新增命令级运行生命周期模块：
+1. **logs.json 不完整**：`_convert_run_log` 在 `build_dashboard` 之前调用，report 构建阶段的日志（`report.builder`/`report.writer`/`report.cache.build`）丢失。
+2. **`%`-style 格式串未展开**：`report.builder` 等模块使用 `logger.info("→ 导出 %s", name)`，loguru 的 `{}`-style file sink 不展开 `%` 占位符。
+3. **并行 worker 日志未采集**：worker 日志写入 `output/workers/worker_{pid}.log`，不进入 `logs.json`，前端看不到。
 
-```text
-cli/workflows/run_lifecycle.py
-```
+### 已落地实现
 
-包含：
+新建命令级运行生命周期模块 `cli/workflows/backtests_lifecycle.py`，包含：
 
-- `RunLogService`
-  - `attach(run_id)`
-  - `detach()`
-  - `export_json(run_id)`
+- `RunLogHelper`
+  - `attach(run_id)` — 开 file sink → `output/r{run_id}/data/run.log`
+  - `detach()` — 关 sink（幂等，重复调用安全）
+  - `export_json(run_id)` — 收集 run.log + `r{run_id}/workers/*.log` 合并写入 logs.json
 - `RunFinalizer`
-  - `finalize_success(run_id)`
-  - `finalize_partial_success(run_id)`
-  - `finalize_skipped(run_id)`
-  - `finalize_no_result(run_id)`
-  - `finalize_failed(run_id, error)`
-  - 内部统一执行：
-    - flush 日志
-    - 导出 `logs.json`
-    - 标记 run 状态
-    - 构建 dashboard
+  - `finish_success(run_id)` / `finish_skipped(run_id)` / `finish_no_result(run_id)` / `finish_failed(run_id, error)`
+  - `_finalize` 内部时序（关键）：
+    1. `finish_run`（DB 状态标记，让 build_dashboard 读到最新 status）
+    2. `build_dashboard`（report 日志进入 run.log，run.json 写入正确 status）
+    3. `detach`（停止写 run.log，避免后续日志污染已生成的 logs.json）
+    4. `export_json`（读 run.log + worker 日志 → logs.json）
+    5. `write_entry_html`（logs.json 落盘后重写入口 HTML，将其注入 `window.__DATA__` 预加载）
+
+### 实施中发现并修复的额外问题
+
+1. **worker 日志目录归属**：原 `output/workers/` 是全局目录，多 run 并发会混淆。改为 `output/r{run_id}/workers/`，新增 `report.output_paths.workers_dir(run_id)`，`run_id` 经 `run_param_search_parallel` → `ParallelBacktestOptimizer` → `_init_worker` 传递。
+2. **`%`-style 残留范围超出预期**：实际有 36 处分布在 `report/`（builder/cache/writer/optimizer）、`cli/commands/backtest.py`、`data/schema.py`，全部改为 `{}`-style。
+3. **`run.json` status 始终为 `running`**：最初 `_finalize` 把 `finish_run` 放在 `build_dashboard` 之后，导致 builder 导出 run.json 时读到的仍是旧状态。修复为 `finish_run` 先行。
+4. **web 端运行日志空白**：`logs.json` 由 builder 之外生成，而 `build_dashboard` 内部的 `write_entry_html` 用 glob 快照预加载数据，此时 logs.json 尚未落盘 → 前端 `window.__DATA__` 缺失该键 → 显示空白。修复为 finalize 末尾追加一次 `write_entry_html`。
 
 ### Run 状态语义
 
-先统一定义状态含义：
+当前 `runs` 表实际使用的 4 种状态：
 
 ```text
-running         已创建，执行中
-success         主记录、核心数据、report 均成功
-partial_success 主记录成功，但 daily/trades/report 等非核心步骤部分失败
-skipped         配置原因跳过，例如搜索空间为空
-no_result       执行完成但没有有效结果
-failed          执行失败或主记录写入失败
-report_failed   回测和入库成功，但报告构建失败
+running       已创建，执行中
+success       主记录、核心数据、report 均成功
+skipped       配置原因跳过，例如搜索空间为空
+no_result     执行完成但没有有效结果
 ```
+
+失败由异常处理路径通过 `failed` 写入 `backtests` 表（非 runs 表）。
 
 ### 边界要求
 
 - CLI 只调用 finalizer，不直接知道 `logs.json` 生成细节。
 - finalizer 可以知道 report 构建，但 backtest engine 不知道 report。
-- 日志路径通过 OutputLayout / RunPaths 获取。
+- 日志路径通过 output_paths 获取。
+
+### 遗留的设计味道（移交阶段 2.5）
+
+`_finalize` 中出现了**两次 `write_entry_html` 调用**——一次在 `build_dashboard` 内部，一次在 finalize 末尾补打包。这两次调用语义不同（一次是 builder 内部环节，一次是 logs.json 落盘后的补丁），但代码形态相同，容易让人/AI 误读时序。
+
+根因：`build_dashboard` 是「导出数据 + 构建前端 + 打包 HTML」的黑箱组合体，无法在「数据全部就绪后只打包一次」。这是阶段 2.5 拆解 builder 要消除的核心问题，详见阶段 2.5。
+
+### 验收标准（已全部通过）
+
+- ✅ `cli/commands/backtest.py` 不再包含 `_attach_run_logger`、`_detach_run_logger`、`_convert_run_log`。
+- ✅ 搜索成功、搜索跳过、无结果路径都会生成 `logs.json`。
+- ✅ `logs.json` 包含 report 构建阶段日志（`report.builder`/`report.writer`/`report.cache`）。
+- ✅ `logs.json` 包含并行 worker 日志（`r{run_id}/workers/*.log`）。
+- ✅ `run.log` / `logs.json` 中 `%`-style 格式串正确展开（全项目 0 残留）。
+- ✅ `run.json` status 正确写入 `success`。
+- ✅ web 端运行日志面板正常显示（`index.html` 含 `r1/data/logs.json` 预加载）。
+- ✅ 静态验证（ruff + mypy）和真实回测验证通过。
+
+### 阶段 2 完成记录
+
+- 完成日期：2026-06-20
+- 主要改动：
+  - 新建 `cli/workflows/backtests_lifecycle.py`（`RunLogHelper` + `RunFinalizer`）。
+  - 从 `cli/commands/backtest.py` 删除 `_attach_run_logger` / `_detach_run_logger` / `_convert_run_log`，改由 lifecycle 类承担。
+  - worker 日志目录由全局 `output/workers/` 改为 `output/r{run_id}/workers/`，新增 `report.output_paths.workers_dir`。
+  - 全项目 36 处 `%`-style 日志格式串改为 `{}`-style。
+  - 修复 `run.json` status 始终为 `running` 的时序 bug、web 端运行日志空白 bug。
+- 影响文件：`cli/workflows/backtests_lifecycle.py`、`cli/commands/backtest.py`、`backtest/parallel.py`、`report/output_paths.py`、`report/__init__.py`、`report/builder.py`、`report/cache/build.py`、`report/writer/json_writer.py`、`report/reporter/optimizer.py`、`data/schema.py`。
+- 自动化验证：
+  - ruff：通过
+  - mypy：通过
+  - pytest：通过（strategies + contracts，148 passed）
+- 真实回测 run_id：1
+- 输出文件检查：通过（run.json status=success，logs.json 951 行含 report/worker 日志，0 处 `%`-style 残留）
+- 前端验证：通过（index.html 含 `r1/data/logs.json` 预加载）
+- 遗留问题：`build_dashboard` 黑箱 + 两次 `write_entry_html` 的设计味道，移交阶段 2.5 根治。
+
+## 阶段 2.5：拆解 build_dashboard 黑箱
+
+### 目标
+
+把 `report.builder.build_all`（即 CLI 中别名 `build_dashboard`）从「导出数据 + 构建前端 + 打包 HTML」的黑箱组合体，拆成三个职责单一、可独立调用的环节，消除阶段 2 遗留的「两次 `write_entry_html`」补丁。
+
+### 当前问题
+
+`build_all(output_dir, run_id, incremental)` 内部串联了三件事：
+
+1. **导出数据 JSON**（run/summary/backtests/equity/kline/optuna/trades/nav）——增量构建，关心数据变更。
+2. **构建前端 bundle**（`build_frontend`：npm lint + tsc + vite build）。
+3. **打包入口 HTML**（`write_entry_html`：glob `output/r*/data/*.json` 做快照 → 注入 `window.__DATA__`）。
+
+问题在于这三件事的「完成时机」错位：
+
+- 步骤 3 用 glob 快照所有 JSON，但 `logs.json` 由 `RunLogHelper.export_json` 在 builder **之外**生成。
+- 因此 builder 跑完时 `logs.json` 还没落盘，步骤 3 的快照漏掉它。
+- 阶段 2 的补救是：builder 跑完 → 写 logs.json → **再调一次 `write_entry_html`**。
+
+于是 `_finalize` 里出现两次 `write_entry_html`，形态相同语义不同，是误读时序的根源（参见阶段 2「遗留的设计味道」）。
+
+### 计划改动
+
+把 `build_all` 拆成三个独立函数 / 模块边界：
+
+```text
+report/
+  data_exports.py    # run_all(run_id, incremental) → 只导出数据 JSON
+  frontend.py        # build() → 只构建前端 bundle（可缓存跳过）
+  entry_html.py      # write(output_dir) → 只打包入口 HTML（纯快照，调用前数据须就绪）
+```
+
+`build_all` 保留为薄封装（向后兼容 `cli/commands/report.py` 的手动重建），内部按 `data_exports → frontend → entry_html` 顺序调用。
+
+### finalize 线性化
+
+拆解后，`RunFinalizer._finalize` 改为单调线性、无重复调用：
+
+```python
+finish_run(run_id, status)
+data_exports.run_all(run_id)      # 导出业务数据 JSON
+frontend.build()                  # 构建前端（增量可跳过）
+helper.detach()                   # 停止写 run.log
+helper.export_json(run_id)        # run.log + worker 日志 → logs.json
+entry_html.write(output_dir)      # 最后一步：此时所有 JSON（含 logs.json）都已就绪，只打包一次
+```
+
+每一步只做一件事，时序即字面顺序，不再有「看起来重复但实际不同」的调用。
+
+### 边界要求
+
+- `entry_html.write()` 语义纯粹为「快照打包」，不负责生成任何数据；调用方保证调用前所有 JSON 已就绪。
+- `data_exports` 不感知前端，`frontend` 不感知数据内容，`entry_html` 只读文件系统快照。
+- 前端数据契约（`window.__DATA__` 的 key 结构、各 JSON schema）保持不变。
 
 ### 验收标准
 
-- `cli/commands/backtest.py` 不再包含 `_attach_run_logger`、`_detach_run_logger`、`_convert_run_log`。
-- 搜索成功、搜索失败、搜索跳过、无结果路径都会生成 `logs.json`。
-- run 状态含义清晰，不再散落硬编码。
+- `RunFinalizer._finalize` 中不再出现两次 `write_entry_html`。
+- `build_all` 行为对 `cli/commands/report.py` 保持兼容（手动重建报告仍正常）。
+- `logs.json` 仍被正确注入入口 HTML 预加载。
+- web 端运行日志、各数据页均正常。
 - 静态验证和真实回测验证通过。
 
 ## 阶段 3：抽出 BacktestRunWorkflow 命令级编排层
@@ -396,23 +494,23 @@ report_failed   回测和入库成功，但报告构建失败
 
 ### 当前问题
 
-`cli/commands/backtest.py` 当前既解析参数，又编排：
+阶段 2 已把日志和收尾逻辑收进 `RunFinalizer`，但 `cli/commands/backtest.py` 仍既解析参数，又编排：
 
 - 配置读取。
 - 数据加载。
 - engine 创建。
 - run 创建。
-- 日志挂载。
-- 参数搜索 / Walk-Forward 分支。
-- 持久化。
-- finalize。
+- 日志挂载（现在通过 `RunLogHelper`，但仍由 CLI 显式 attach/detach）。
+- 参数搜索 / Walk-Forward 分支（`_execute_search_mode` / `_execute_walk_forward_mode`）。
+- 持久化（`_persist_search_results`）。
+- finalize（现在通过 `RunFinalizer`，但 CLI 负责把它传进各分支）。
 
 ### 计划改动
 
 新增命令级 workflow：
 
 ```text
-cli/workflows/backtest_run.py
+cli/workflows/backtests_run.py
 ```
 
 包含：
@@ -421,7 +519,7 @@ cli/workflows/backtest_run.py
 - `run_search(...)`
 - `run_walk_forward(...)`
 - 统一异常路径。
-- 统一调用 RunLogService、RunFinalizer、Persister。
+- 统一持有并调用 `RunLogHelper`、`RunFinalizer`、Persister（阶段 4 产出），CLI 不再手动传递 finalizer。
 
 CLI 最终只负责：
 
@@ -793,7 +891,9 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 验证
 阶段 1：OutputLayout / RunPaths
 验证
-阶段 2：RunLogService + RunFinalizer
+阶段 2：RunLogHelper + RunFinalizer
+验证
+阶段 2.5：拆解 build_dashboard 黑箱
 验证
 阶段 3：BacktestRunWorkflow 命令级编排层
 验证
@@ -822,9 +922,10 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 1. 阶段 0：建立基线。
 2. 阶段 0.5：建立最小 JSON 契约测试。
 3. 阶段 1：OutputLayout / RunPaths。
-4. 阶段 2：RunLogService + RunFinalizer。
-5. 阶段 3：BacktestRunWorkflow 命令级编排层。
-6. 阶段 4：结果持久化服务。
+4. 阶段 2：RunLogHelper + RunFinalizer。
+5. 阶段 2.5：拆解 build_dashboard 黑箱。
+6. 阶段 3：BacktestRunWorkflow 命令级编排层。
+7. 阶段 4：结果持久化服务。
 
 可后置但不能遗漏：
 

@@ -52,7 +52,7 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
     skip_count = 0
     failed_tasks: list[tuple[str, str]] = []
 
-    logger.info("开始构建报告: run_id=%d, output_dir=%s, incremental=%s", run_id, output_dir, incremental)
+    logger.info("开始构建报告: run_id={}, output_dir={}, incremental={}", run_id, output_dir, incremental)
 
     dm = DataManager()
     cache = BuildCache(output_dir) if incremental else None
@@ -68,7 +68,7 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
         logger.info("✓ 构建前端完成")
         success_count += 1
     except Exception as e:
-        logger.error("✗ 构建前端失败: %s", str(e))
+        logger.error("✗ 构建前端失败: {}", str(e))
         failed_tasks.append(("构建前端", str(e)))
 
     # 写入入口 HTML
@@ -78,20 +78,20 @@ def build_all(output_dir: str, run_id: int, incremental: bool = True) -> None:
             logger.info("✓ 写入入口HTML完成")
             success_count += 1
         except Exception as e:
-            logger.error("✗ 写入入口HTML失败: %s", str(e))
+            logger.error("✗ 写入入口HTML失败: {}", str(e))
             failed_tasks.append(("写入入口HTML", str(e)))
     else:
         logger.info("○ 数据未变更，跳过写入入口HTML")
 
     duration = time.time() - start_time
     logger.info(
-        "报告构建结束: 成功=%d, 跳过=%d, 失败=%d, 耗时=%.2fs", success_count, skip_count, len(failed_tasks), duration
+        "报告构建结束: 成功={}, 跳过={}, 失败={}, 耗时={:.2f}s", success_count, skip_count, len(failed_tasks), duration
     )
 
     if failed_tasks:
         logger.warning("失败任务列表:")
         for task_name, error in failed_tasks:
-            logger.warning("  - %s: %s", task_name, error)
+            logger.warning("  - {}: {}", task_name, error)
 
 
 # ── 数据导出任务调度 ────────────────────────────────────────────────────
@@ -144,15 +144,15 @@ def _run_data_exports(
             if cache.needs_update(data_type, run_id, new_data):
                 exporter(run_id, dm)
                 cache.update_fingerprint(data_type, run_id, new_data)
-                logger.info("→ 导出 %s（数据已变更）", data_type)
+                logger.info("→ 导出 {}（数据已变更）", data_type)
                 executed = True
             else:
-                logger.info("○ 跳过 %s（数据未变更）", data_type)
+                logger.info("○ 跳过 {}（数据未变更）", data_type)
                 executed = False
         else:
             # 全量导出: 不检查缓存，直接写入
             exporter(run_id, dm)
-            logger.info("→ 导出 %s", data_type)
+            logger.info("→ 导出 {}", data_type)
             executed = True
 
         if executed:
@@ -354,7 +354,7 @@ def write_entry_html(output_dir: str) -> None:
     out_path = Path(output_dir) / "index.html"
     out_path.write_text("\n".join(html_parts), encoding="utf-8")
     total_size = out_path.stat().st_size / (1024 * 1024)
-    logger.info("入口 HTML 已生成: %s (JS: %.1f MiB, 总大小: %.1f MiB)", out_path, js_size, total_size)
+    logger.info("入口 HTML 已生成: {} (JS: {:.1f} MiB, 总大小: {:.1f} MiB)", out_path, js_size, total_size)
 
 
 def _read_and_escape_js(path: Path) -> str:
@@ -392,7 +392,7 @@ def _build_preload_script(output_dir: str) -> str:
     json_str = json_str.replace("<\\/script>", "\\x3C/script\\x3E")
     json_str = json_str.replace("</script>", "\\x3C/script\\x3E")
     mib = len(json_str.encode("utf-8")) / (1024 * 1024)
-    logger.info("预加载 %d 个数据文件 (%.1f MiB)", len(data_map), mib)
+    logger.info("预加载 {} 个数据文件 ({:.1f} MiB)", len(data_map), mib)
     return f"<script>window.__DATA__ = {json_str};</script>"
 
 
@@ -404,7 +404,7 @@ def _collect_json(data_dir: Path, prefix: str, data_map: dict[str, object]) -> N
             with open(f, encoding="utf-8") as fh:
                 data_map[key] = json.load(fh)
         except Exception as e:
-            logger.warning("预加载失败 [%s]: %s", key, e)
+            logger.warning("预加载失败 [{}]: {}", key, e)
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────────────

@@ -75,14 +75,14 @@ class SchemaVersionManager:
         db_version = self.get_db_version()
         if db_version >= CURRENT_SCHEMA_VERSION:
             logger.info(
-                "数据库 schema 已是最新版本 (db=%d, code=%d)",
+                "数据库 schema 已是最新版本 (db={}, code={})",
                 db_version,
                 CURRENT_SCHEMA_VERSION,
             )
             return
 
         logger.info(
-            "检测到待执行迁移：当前 db=%d，代码期望=%d，开始按顺序执行…",
+            "检测到待执行迁移：当前 db={}，代码期望={}，开始按顺序执行…",
             db_version,
             CURRENT_SCHEMA_VERSION,
         )
@@ -95,7 +95,7 @@ class SchemaVersionManager:
             description: str = migration["description"]
             up_fn: Callable[[], None] = migration["up"]
 
-            logger.info("执行迁移 #%d：%s", version, description)
+            logger.info("执行迁移 #{}：{}", version, description)
             try:
                 with database.atomic():
                     up_fn()
@@ -105,13 +105,13 @@ class SchemaVersionManager:
                         applied_at=datetime.now(),
                     )
                     self._applied_versions.add(version)
-                    logger.info("迁移 #%d 完成", version)
+                    logger.info("迁移 #{} 完成", version)
             except Exception as e:
-                logger.error("迁移 #%d (%s) 失败：%s", version, description, e)
+                logger.error("迁移 #{} ({}) 失败：{}", version, description, e)
                 raise  # 不吞异常 — 失败就停止启动，让开发者看到问题
 
         logger.info(
-            "所有迁移完成：db_version %d → %d",
+            "所有迁移完成：db_version {} → {}",
             db_version,
             CURRENT_SCHEMA_VERSION,
         )

@@ -34,7 +34,7 @@ def export_run_json(run_id: int, dm: DataManager | None = None) -> None:
     row = dm.get_run_info(run_id)
 
     if not row:
-        logger.warning("run_id=%d 不存在", run_id)
+        logger.warning("run_id={} 不存在", run_id)
         return
 
     data = {
@@ -108,7 +108,7 @@ def export_kline_json(run_id: int, dm: DataManager | None = None) -> bool:
             continue
 
         if not Path(data_src).exists():
-            logger.warning("K线数据源不存在: %s → %s", symbol, data_src)
+            logger.warning("K线数据源不存在: {} → {}", symbol, data_src)
             continue
 
         kline_dict = build_kline_dict(data_src, symbol, interval, start_date, end_date)
@@ -117,7 +117,7 @@ def export_kline_json(run_id: int, dm: DataManager | None = None) -> bool:
             dest.parent.mkdir(parents=True, exist_ok=True)
             with open(dest, "w", encoding="utf-8") as f:
                 json.dump(kline_dict, f, ensure_ascii=False, default=str)
-            logger.info("K线已导出: %s → %s", symbol, dest.name)
+            logger.info("K线已导出: {} → {}", symbol, dest.name)
             has_changes = True
 
     return has_changes
@@ -194,7 +194,7 @@ def export_optuna_json(run_id: int, dm: DataManager | None = None) -> None:
             study_db_url = f"sqlite:///{os.path.abspath(dm.store.db_path)}"
             charts_spec = build_optuna_spec(study_db_url, study_name)
         except Exception as e:
-            logger.warning("Optuna chart spec 生成失败: %s", e)
+            logger.warning("Optuna chart spec 生成失败: {}", e)
 
     best_params_raw = optuna_data.get("best_params") or []
     best_params_from_optuna = charts_spec.get("best_params") or []
@@ -376,5 +376,5 @@ def build_kline_dict(
         }
 
     except Exception as e:
-        logger.error("K线数据构建失败 [%s]: %s", symbol, e)
+        logger.error("K线数据构建失败 [{}]: {}", symbol, e)
         return None

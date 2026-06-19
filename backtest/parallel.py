@@ -45,6 +45,7 @@ def _init_worker(
     strategy_name: str,
     strategy_params: dict[str, Any],
     backtest_config: BacktestConfig,
+    run_id: int,
 ) -> None:
     """子进程初始化：每个 worker 启动时执行一次
 
@@ -59,9 +60,9 @@ def _init_worker(
     _WORKER_CTX["backtest_config"] = backtest_config
 
     # ── 子进程独立日志文件 ──────────────────────────
-    from data.output_paths import output_root
+    from report.output_paths import workers_dir
 
-    logs_dir = str(output_root() / "workers")
+    logs_dir = str(workers_dir(run_id))
     os.makedirs(logs_dir, exist_ok=True)
     pid = os.getpid()
     logger.add(
@@ -195,6 +196,7 @@ class ParallelBacktestOptimizer:
         batch_size: int | None = None,
         study_db_path: str = "",
         study_name: str = "",
+        run_id: int = 0,
         random_seed: int = 42,
         use_fixed_seed: bool = False,
     ) -> None:
@@ -209,6 +211,7 @@ class ParallelBacktestOptimizer:
         self._batch_size = batch_size or self._n_workers
         self._study_db_path = study_db_path
         self._use_fixed_seed = use_fixed_seed
+        self._run_id = run_id
 
         if use_fixed_seed:
             self._actual_seed = random_seed
@@ -309,6 +312,7 @@ class ParallelBacktestOptimizer:
                     self._strategy_name,
                     self._strategy_params,
                     self._backtest_config,
+                    self._run_id,
                 ),
             ),
         ) as pool:
@@ -418,6 +422,7 @@ def run_param_search_parallel(
     search_space: dict[str, dict[str, Any]],
     strategy_params: dict[str, Any],
     backtest_config: BacktestConfig,
+    run_id: int = 0,
     n_trials: int = 50,
     search_type: str = "bayesian",
     n_workers: int | None = None,
@@ -435,6 +440,7 @@ def run_param_search_parallel(
         search_space: 搜索空间定义
         strategy_params: 策略默认参数
         backtest_config: 回测配置（通过 spawn pickle 传给子进程，无问题）
+        run_id: 运行 ID，用于 worker 日志目录（r{run_id}/workers/）
         n_trials: 最大试验次数
         search_type: "grid" 或 "bayesian"
         n_workers: 并行进程数（默认 os.cpu_count()）
@@ -453,6 +459,7 @@ def run_param_search_parallel(
         search_space=search_space,
         strategy_params=strategy_params,
         backtest_config=backtest_config,
+        run_id=run_id,
         n_trials=n_trials,
         search_type=search_type,
         n_workers=n_workers,

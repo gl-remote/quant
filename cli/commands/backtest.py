@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -35,6 +34,7 @@ from backtest import (
     execute_parameter_search,
     execute_walk_forward,
 )
+from cli.workflows.backtests_lifecycle import RunFinalizer, RunLogHelper
 from common.constants import (
     LOG_STATUS_ERROR,
     LOG_STATUS_INFO,
@@ -49,9 +49,6 @@ from common.types import BacktestResult
 from config import ConfigManager
 from config.schemas import BacktestConfig
 from data import DataManager
-from data.output_paths import output_root
-from report import build_all as build_dashboard
-from report.output_paths import logs_json_path, run_log_path
 from strategies.utils import (
     apply_strategy_config,
     get_strategy_class_name,
@@ -461,8 +458,11 @@ def _run_batch_backtest(
         )
         engine.set_run_id(run_id)
 
-        # 挂实时日志文件：DEBUG 全量 → output/r{run_id}/data/run.log
-        _attach_run_logger(dm, run_id)
+        # run 生命周期：日志 + 收尾
+        log_helper = RunLogHelper()
+        finalizer = RunFinalizer(dm, log_helper)
+
+        log_helper.attach(run_id)
 
         # ── 步骤 4: 根据模式执行 ────────────────────
         if mode_arg == "walk-forward":
@@ -478,6 +478,7 @@ def _run_batch_backtest(
                 start_arg=start_arg,
                 end_arg=end_arg,
                 run_id=run_id,
+                finalizer=finalizer,
             )
         else:
             _execute_search_mode(
@@ -496,10 +497,12 @@ def _run_batch_backtest(
                 bc=bc,
                 parallel=parallel_arg,
                 n_workers=workers_arg,
+                finalizer=finalizer,
             )
 
     except Exception as e:
         logger.exception(f"回测执行失败: {e}")
+        finalizer.finish_failed(run_id, str(e))
         dm.store.log(
             "backtest",
             f"失败: {e}",
@@ -508,41 +511,7 @@ def _run_batch_backtest(
         )
         raise
     finally:
-        _detach_run_logger(dm)
-
-
-def _attach_run_logger(dm: DataManager, run_id: int) -> None:
-    """将 DEBUG 级别日志写入 output/r{run_id}/data/run.log，同时保留 stderr 输出"""
-    log_path = run_log_path(run_id)
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    fmt = (
-        f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
-        "{level: <8} | {name}:{function}:{line} | {message}"
-    )
-    sink_id = logger.add(
-        str(log_path),
-        level="DEBUG",
-        format=fmt,
-    )
-    dm.add_log_sink_id(sink_id)
-
-
-def _detach_run_logger(dm: DataManager) -> None:
-    """移除临时日志文件 sink，stderr 保持不变"""
-    for sid in dm.get_log_sink_ids():
-        logger.remove(sid)
-
-
-def _convert_run_log(run_id: int) -> None:
-    """将 run.log 转为前端可读的 logs.json"""
-    logger.complete()  # 确保所有缓冲日志落盘
-    log_file = run_log_path(run_id)
-    if log_file.exists():
-        with open(log_file, encoding="utf-8") as f:
-            text = f.read()
-        json_file = logs_json_path(run_id)
-        with open(json_file, "w", encoding="utf-8") as f:
-            json.dump(text, f, ensure_ascii=False)
+        log_helper.detach()
 
 
 def _execute_walk_forward_mode(
@@ -557,6 +526,7 @@ def _execute_walk_forward_mode(
     start_arg: str | None,
     end_arg: str | None,
     run_id: int,
+    finalizer: RunFinalizer,
 ) -> None:
     """Walk-Forward 模式执行与持久化"""
     wf_result, strategy_cls_name, sym = execute_walk_forward(
@@ -609,12 +579,12 @@ def _execute_walk_forward_mode(
             try:
                 dm.insert_backtest_daily(bt_id, all_daily)
             except Exception:
-                logger.exception("Walk-Forward 每日资金曲线持久化失败 [bt=%d]", bt_id)
+                logger.exception("Walk-Forward 每日资金曲线持久化失败 [bt={}]", bt_id)
         if all_trades:
             try:
                 dm.insert_backtest_trades(bt_id, all_trades)
             except Exception:
-                logger.exception("Walk-Forward 交易记录持久化失败 [bt=%d]", bt_id)
+                logger.exception("Walk-Forward 交易记录持久化失败 [bt={}]", bt_id)
 
         if bt_id:
             print(f"\n💡 查看报告: python main.py report --id {bt_id}")
@@ -622,10 +592,7 @@ def _execute_walk_forward_mode(
     else:
         logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
 
-    # 输出日志和构建看板
-    _convert_run_log(run_id)
-    dm.store.finish_run(run_id)
-    build_dashboard(output_dir=str(output_root()), run_id=run_id)
+    finalizer.finish_success(run_id)
 
 
 def _execute_search_mode(
@@ -641,6 +608,7 @@ def _execute_search_mode(
     git_hash: str | None,
     dm: DataManager,
     run_id: int,
+    finalizer: RunFinalizer,
     bc: BacktestConfig | None = None,
     parallel: bool = False,
     n_workers: int | None = None,
@@ -661,9 +629,7 @@ def _execute_search_mode(
     search_space = sc.search_space or optimizer_cfg.strategy_spaces.get(strategy_name, {}) or optimizer_cfg.search_space
     if not search_space:
         logger.warning("搜索空间为空，跳过参数搜索")
-        dm.store.finish_run(run_id, "skipped")
-        _convert_run_log(run_id)
-        build_dashboard(output_dir=str(output_root()), run_id=run_id)
+        finalizer.finish_skipped(run_id)
         return
 
     result: SearchResult | None
@@ -680,6 +646,7 @@ def _execute_search_mode(
             search_space=search_space,
             strategy_params=strategy_params,
             backtest_config=bc,  # type: ignore[arg-type]
+            run_id=run_id,
             n_trials=n_trials,
             search_type=run_engine,
             n_workers=n_workers,
@@ -705,9 +672,7 @@ def _execute_search_mode(
             run_id=run_id,
         )
     if not result:
-        _convert_run_log(run_id)
-        dm.store.finish_run(run_id, "no_result")
-        build_dashboard(output_dir=str(output_root()), run_id=run_id)
+        finalizer.finish_no_result(run_id)
         return
 
     # 保存实际使用的随机种子
@@ -732,9 +697,7 @@ def _execute_search_mode(
         logger.exception("参数搜索结果持久化失败，部分数据可能未入库")
 
     # 无论持久化是否成功，始终输出日志和构建看板
-    _convert_run_log(run_id)
-    dm.store.finish_run(run_id)
-    build_dashboard(output_dir=str(output_root()), run_id=run_id)
+    finalizer.finish_success(run_id)
 
 
 # ── 参数搜索结果持久化 ───────────────────────────────
@@ -795,13 +758,13 @@ def _persist_search_results(
                 try:
                     dm.insert_backtest_daily(bt_id, daily)
                 except Exception:
-                    logger.exception("每日资金曲线持久化失败 [bt=%d]", bt_id)
+                    logger.exception("每日资金曲线持久化失败 [bt={}]", bt_id)
 
             if er.fills:
                 try:
                     dm.insert_backtest_trades(bt_id, er.fills)
                 except Exception:
-                    logger.exception("交易记录持久化失败 [bt=%d]", bt_id)
+                    logger.exception("交易记录持久化失败 [bt={}]", bt_id)
 
             try:
                 errors = dm.validate_consistency(bt_id)
@@ -809,7 +772,7 @@ def _persist_search_results(
                     for err in errors:
                         logger.warning("数据一致性警告: {}", err)
             except Exception:
-                logger.exception("数据一致性校验失败 [bt=%d]", bt_id)
+                logger.exception("数据一致性校验失败 [bt={}]", bt_id)
 
     # 输出摘要
     print(f"\n============ {search_type.upper()} 优化结果 ============")

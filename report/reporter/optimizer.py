@@ -47,34 +47,34 @@ def build_optuna_spec(
         result["best_params"] = [{"name": k, "value": v} for k, v in study.best_params.items()]
         result["best_value"] = study.best_value
     except Exception as e:
-        logger.warning("最优参数获取失败: %s", e)
+        logger.warning("最优参数获取失败: {}", e)
 
     # --- optimization_history ---
     try:
         result["optimization_history"] = _build_history(trials, study.direction)
     except Exception as e:
-        logger.warning("optimization_history 生成失败: %s", e)
+        logger.warning("optimization_history 生成失败: {}", e)
         result["optimization_history"] = None
 
     # --- param_importances ---
     try:
         result["param_importances"] = _build_importances(study)
     except Exception as e:
-        logger.warning("param_importances 生成失败: %s", e)
+        logger.warning("param_importances 生成失败: {}", e)
         result["param_importances"] = None
 
     # --- parallel_coordinate ---
     try:
         result["parallel_coordinate"] = _build_parallel(study, trials)
     except Exception as e:
-        logger.warning("parallel_coordinate 生成失败: %s", e)
+        logger.warning("parallel_coordinate 生成失败: {}", e)
         result["parallel_coordinate"] = None
 
     # --- contour ---
     try:
         result["contours"] = _build_contour(study, trials)
     except Exception as e:
-        logger.warning("contour 生成失败: %s", e)
+        logger.warning("contour 生成失败: {}", e)
         result["contours"] = None
 
     return result

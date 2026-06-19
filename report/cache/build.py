@@ -80,7 +80,7 @@ class BuildCache:
         fingerprint_path = self._get_fingerprint_path(data_type, run_id)
 
         if not fingerprint_path.exists():
-            logger.debug("指纹文件不存在，需要更新: %s", fingerprint_path.name)
+            logger.debug("指纹文件不存在，需要更新: {}", fingerprint_path.name)
             return True
 
         try:
@@ -90,12 +90,12 @@ class BuildCache:
 
             needs_update = stored_fingerprint != new_fingerprint
             if needs_update:
-                logger.debug("数据变更检测到，需要更新: %s", fingerprint_path.name)
+                logger.debug("数据变更检测到，需要更新: {}", fingerprint_path.name)
             else:
-                logger.debug("数据未变更，跳过: %s", fingerprint_path.name)
+                logger.debug("数据未变更，跳过: {}", fingerprint_path.name)
             return bool(needs_update)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning("指纹文件读取失败，需要更新: %s - %s", fingerprint_path.name, e)
+            logger.warning("指纹文件读取失败，需要更新: {} - {}", fingerprint_path.name, e)
             return True
 
     def update_fingerprint(self, data_type: str, run_id: int | None, data: Any) -> None:
@@ -120,9 +120,9 @@ class BuildCache:
         try:
             with open(fingerprint_path, "w", encoding="utf-8") as f:
                 json.dump(fingerprint_info, f, ensure_ascii=False, indent=2)
-            logger.debug("指纹已更新: %s", fingerprint_path.name)
+            logger.debug("指纹已更新: {}", fingerprint_path.name)
         except OSError as e:
-            logger.error("指纹更新失败: %s - %s", fingerprint_path.name, e)
+            logger.error("指纹更新失败: {} - {}", fingerprint_path.name, e)
 
     def get_frontend_hash(self) -> str | None:
         """获取前端源码哈希"""
@@ -209,7 +209,7 @@ class BuildCache:
         if run_id is not None:
             for fp in self._fingerprint_dir.glob(f"*_{run_id}.json"):
                 fp.unlink()
-                logger.debug("已删除指纹: %s", fp.name)
+                logger.debug("已删除指纹: {}", fp.name)
         else:
             for fp in self._fingerprint_dir.glob("*.json"):
                 fp.unlink()

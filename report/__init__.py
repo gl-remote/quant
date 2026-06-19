@@ -10,7 +10,7 @@
 import contextlib
 
 from .builder import build_all, write_nav_json
-from .output_paths import logs_json_path, nav_json_path, run_data_dir, run_dir, run_log_path
+from .output_paths import logs_json_path, nav_json_path, run_data_dir, run_dir, run_log_path, workers_dir
 from .reporter import build_optuna_spec, format_single_report, format_summary_report
 
 # 向后兼容 - 支持旧的导入路径
@@ -29,4 +29,5 @@ __all__ = [
     "run_log_path",
     "logs_json_path",
     "nav_json_path",
+    "workers_dir",
 ]

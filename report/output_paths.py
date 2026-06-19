@@ -33,3 +33,8 @@ def logs_json_path(run_id: int) -> Path:
 def nav_json_path() -> Path:
     """output/data/nav.json（全局导航数据）"""
     return output_root() / "data" / "nav.json"
+
+
+def workers_dir(run_id: int) -> Path:
+    """output/r{run_id}/workers/（并行 worker 日志目录）"""
+    return run_dir(run_id) / "workers"
