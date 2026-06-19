@@ -2,7 +2,7 @@
 
 Usage::
 
-    from quant_contracts.validate import validate_run_artifacts
+    from quantsmith_contracts.validate import validate_run_artifacts
     issues = validate_run_artifacts("output/r1/data", nav_path="output/data/nav.json")
     for issue in issues:
         print(issue)

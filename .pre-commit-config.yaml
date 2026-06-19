@@ -23,7 +23,7 @@ repos:
     hooks:
       - id: mypy-check
         name: mypy type check
-        entry: conda run -n quant_trading python -m mypy --config-file pyproject.toml common/ data/ backtest/ strategies/
+        entry: uv run python -m mypy --config-file pyproject.toml common/ data/ backtest/ strategies/
         language: system
         types: [python]
         pass_filenames: false
@@ -34,7 +34,7 @@ repos:
     hooks:
       - id: pytest-smoke
         name: pytest smoke test
-        entry: conda run -n quant_trading python -m pytest tests/ -q --tb=short -x
+        entry: uv run python -m pytest tests/ -q --tb=short -x
         language: system
         pass_filenames: false
         always_run: true

@@ -9,7 +9,7 @@ If no run directory exists (e.g. first-time clone), tests are skipped.
 from pathlib import Path
 
 import pytest
-from quant_contracts.validate import validate_run_artifacts
+from quantsmith_contracts.validate import validate_run_artifacts
 
 
 def test_latest_run_artifacts_conform_to_schemas(

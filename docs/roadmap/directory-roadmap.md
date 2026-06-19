@@ -485,7 +485,7 @@ workspace/packages/
       nav.schema.json                 # 全局导航
   python-contracts/                   # Python 侧 schema loader + validator
     pyproject.toml                    # name="quantsmith-contracts"
-    src/quant_contracts/
+    src/quantsmith_contracts/
       __init__.py
       schema.py                       # load_schema(name) -> dict
       validate.py                     # validate_run_artifacts(run_dir, nav_path) -> list[str]

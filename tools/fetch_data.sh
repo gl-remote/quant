@@ -12,5 +12,5 @@ source activate_env.sh
 for interval in 1m 5m 15m 1h; do
     echo ""
     echo ">>> 拉取 ${interval} 数据..."
-    python tools/fetch_data.py --source tqsdk --interval "$interval" "$@"
+    uv run python tools/fetch_data.py --source tqsdk --interval "$interval" "$@"
 done

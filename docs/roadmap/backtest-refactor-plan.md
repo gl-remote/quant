@@ -209,7 +209,7 @@ workspace/packages/contracts/
 ```text
 workspace/packages/python-contracts/
   pyproject.toml                         # name="quantsmith-contracts"
-  src/quant_contracts/
+  src/quantsmith_contracts/
     __init__.py
     schema.py                            # load_schema(name) -> dict
     validate.py                          # validate_run_artifacts(run_dir, nav_path) -> list[str]
@@ -239,7 +239,7 @@ workspace/packages/python-contracts/
   4. `uv pip install -e ./workspace/packages/python-contracts` 接入子包
 - 影响文件：
   - 新增：`workspace/packages/contracts/{README.md,schemas/*.schema.json}`（9 个文件）
-  - 新增：`workspace/packages/python-contracts/{pyproject.toml,src/quant_contracts/__init__.py,src/quant_contracts/schema.py,src/quant_contracts/validate.py,tests/__init__.py,tests/conftest.py,tests/test_run_artifacts.py}`（7 个文件）
+  - 新增：`workspace/packages/python-contracts/{pyproject.toml,src/quantsmith_contracts/__init__.py,src/quantsmith_contracts/schema.py,src/quantsmith_contracts/validate.py,tests/__init__.py,tests/conftest.py,tests/test_run_artifacts.py}`（7 个文件）
   - 修改：`pyproject.toml`（加 `[tool.uv.workspace]` 和 `testpaths` 扩展）
 - 自动化验证：
   - ruff：通过（`ruff check workspace/packages/python-contracts/` All checks passed）
