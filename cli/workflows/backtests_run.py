@@ -137,7 +137,7 @@ class BacktestRunWorkflow:
 
         self._log_run_header(MODE_MULTI, datasets, req.strategy, "参数搜索", req.symbol, req.pattern)
 
-        engine = VnpyBacktestEngine(bc, self._dm)
+        engine = VnpyBacktestEngine(bc)
         git_hash = get_git_hash()
         engine.set_git_hash(git_hash)
 
@@ -183,7 +183,7 @@ class BacktestRunWorkflow:
 
         self._log_run_header(MODE_MULTI, datasets, req.strategy, "Walk-Forward", req.symbol, req.pattern)
 
-        engine = VnpyBacktestEngine(bc, self._dm)
+        engine = VnpyBacktestEngine(bc)
         git_hash = get_git_hash()
         engine.set_git_hash(git_hash)
 

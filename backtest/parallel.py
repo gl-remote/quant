@@ -12,7 +12,7 @@ Grid Search 全并行，Bayesian Search 分批并行。
 调用链路:
   CLI → run_param_search_parallel → ParallelBacktestOptimizer.optimize()
        → ProcessPoolExecutor.map/_execute_trial
-       → VnpyBacktestEngine(dm=None).run(pairs, batch_mode=True)
+       → VnpyBacktestEngine().run(pairs, batch_mode=True)
 """
 
 from __future__ import annotations
@@ -120,7 +120,7 @@ def _execute_trial(params: dict[str, Any], trial_seed: int = 0) -> dict[str, Any
 
     from .vnpy_backtest_engine import VnpyBacktestEngine
 
-    engine = VnpyBacktestEngine(ctx["backtest_config"], dm=None)
+    engine = VnpyBacktestEngine(ctx["backtest_config"])
     merged_params = {**ctx["strategy_params"], **params}
     pairs = [(sym, df, ctx["strategy_name"], merged_params) for sym, df in ctx["datasets"]]
     engine_results = engine.run(pairs, batch_mode=True)

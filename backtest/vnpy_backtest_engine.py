@@ -28,7 +28,6 @@ from common.contract_specs import BROKER_ADDON_DFCF, CONTRACT_SPECS
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
 from config.app_config import BacktestConfig
-from data.manager import DataManager
 from strategies.utils import serialize_strategy_params
 
 from .data_utils import calculate_date_range, df_to_vnpy_datalines, resolve_interval
@@ -50,14 +49,11 @@ class VnpyBacktestEngine:
         )
     """
 
-    def __init__(self, backtest_config: BacktestConfig, dm: DataManager | None = None) -> None:
+    def __init__(self, backtest_config: BacktestConfig) -> None:
         """
         Args:
             backtest_config: 回测配置（含 capital/commission/slippage 等交易环境参数）
-            dm: 数据管理器，提供数据加载能力。batch_mode 下可不传（传 None 时
-                _create_placeholder_record 将被跳过，由主进程统一写入 DB）
         """
-        self._dm = dm
         self._run_id: int | None = None
         self._git_hash: str | None = None
         self.initial_capital: float = float(backtest_config.initial_capital)

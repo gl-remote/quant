@@ -66,7 +66,7 @@ def make_basic_config(**overrides) -> BacktestConfig:
     return BacktestConfig(**kwargs)
 
 
-def _run_single_backtest(batch_mode: bool, dm=None) -> tuple:
+def _run_single_backtest(batch_mode: bool) -> tuple:
     """在同步上下文中运行单次回测（用于 batch_mode 对比测试）
 
     Returns:
@@ -74,7 +74,7 @@ def _run_single_backtest(batch_mode: bool, dm=None) -> tuple:
     """
     df = make_price_df()
     config = make_basic_config()
-    engine = VnpyBacktestEngine(config, dm=dm)
+    engine = VnpyBacktestEngine(config)
     pairs = [("DCE.m2501", df, "ma_strategy", {"fast": 5, "slow": 20})]
     results = engine.run(pairs, batch_mode=batch_mode)
     calmars = [
@@ -96,7 +96,7 @@ class TestBatchMode:
         """batch_mode=True 时跳过 _create_placeholder_record（不写 DB）"""
         df = make_price_df()
         config = make_basic_config()
-        engine = VnpyBacktestEngine(config, dm=None)
+        engine = VnpyBacktestEngine(config)
         pairs = [("DCE.m2501", df, "ma_strategy", {"fast": 5, "slow": 20})]
         results = engine.run(pairs, batch_mode=True)
 
@@ -108,7 +108,7 @@ class TestBatchMode:
         """batch_mode=True + dm=None 正常执行，不报错"""
         df = make_price_df()
         config = make_basic_config()
-        engine = VnpyBacktestEngine(config, dm=None)
+        engine = VnpyBacktestEngine(config)
         pairs = [("DCE.m2501", df, "ma_strategy", {"fast": 5, "slow": 20})]
         results = engine.run(pairs, batch_mode=True)
 
@@ -122,7 +122,7 @@ class TestBatchMode:
     def test_batch_mode_with_multiple_symbols(self) -> None:
         """batch_mode=True 下多品种回测正常"""
         config = make_basic_config()
-        engine = VnpyBacktestEngine(config, dm=None)
+        engine = VnpyBacktestEngine(config)
 
         df1 = make_price_df("2024-01-01", n=240, seed=1)
         df2 = make_price_df("2024-06-01", n=240, seed=2)
