@@ -2,17 +2,19 @@
 
 CLI 层职责（commands 在 CLI 体系中的定位）：
     - 自定义 argparse subparser（`register`）
-    - 把 argparse Namespace 转为明确请求对象（`BacktestRunRequest`）
+    - 把 argparse Namespace 翻译为对应的工作流请求对象（VnpySearchRequest /
+      VnpyWalkForwardRequest / TqsdkRequest），每个对象字段最小化
     - 跨字段参数校验：argparse 不能表达的约束（如 TqSdk 必填、`--gui` 引擎兼容性）
-    - 引擎路由：根据 `--engine` 选择调用对应的 workflow 入口
+    - 引擎与模式路由：根据 `--engine` / `--mode` 选择调用对应的 workflow 入口
     - 用户交互层友好错误信息（`ValueError` 或 warn）
 
 具体业务编排（数据加载、引擎初始化、run 生命周期、持久化）由
-`cli.workflows.backtests_run.BacktestRunWorkflow` 承担。
+`cli.workflows.backtests_run.BacktestRunWorkflow` 三个公开入口承担。
 
-阶段 3.5 重构（args 定义下沉）：
-    - argparse 选项定义从 `cli/main.py` 迁入本模块的 `register(subparsers)`
-    - main 仅负责调用 register 与命令分发
+阶段 3.5 重构（多入口拆分）：
+    - argparse 选项定义在本模块的 `register(subparsers)`
+    - 三个工作流（vnpy search / vnpy walk-forward / tqsdk）有独立请求对象
+    - workflow 不再感知 `engine` / `mode` 字段，路由完全在本模块完成
 """
 
 from __future__ import annotations
@@ -22,7 +24,12 @@ from typing import Any
 
 from loguru import logger
 
-from cli.workflows.backtests_run import BacktestRunRequest, BacktestRunWorkflow
+from cli.workflows.backtests_run import (
+    BacktestRunWorkflow,
+    TqsdkRequest,
+    VnpySearchRequest,
+    VnpyWalkForwardRequest,
+)
 
 
 def register(subparsers: Any) -> None:
@@ -44,7 +51,7 @@ def register(subparsers: Any) -> None:
                    - 仅生成文字报告 + 数据库落地
 
   --engine tqsdk   使用 TqSdk 进行单标的回测，可启用 GUI（仅本引擎支持 --gui）
-                   - 必须指定 --symbol
+                   - 必须指定 --symbol / --start / --end
                    - 不支持 --pattern / --mode / --parallel
                    - GUI 默认关闭，需显式 --gui 开启
 
@@ -55,7 +62,7 @@ def register(subparsers: Any) -> None:
 示例:
   python main.py backtest --strategy ma --pattern "DCE\\.m"
   python main.py backtest --engine vnpy --strategy ma --symbol DCE.m2509
-  python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui
+  python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --start 2025-01-01 --end 2025-06-30 --gui
 
 回测结果均会自动保存到数据库，可使用 report 命令查看详情。
 """,
@@ -71,8 +78,8 @@ def register(subparsers: Any) -> None:
     p.add_argument(
         "--pattern", default=None, help='文件名正则表达式（如 "DCE\\.m.*\\.1m\\." 匹配 DCE 豆粕的 1 分钟数据）'
     )
-    p.add_argument("--start", default=None, help="开始日期 YYYY-MM-DD（可选）")
-    p.add_argument("--end", default=None, help="结束日期 YYYY-MM-DD（可选）")
+    p.add_argument("--start", default=None, help="开始日期 YYYY-MM-DD（tqsdk 必填）")
+    p.add_argument("--end", default=None, help="结束日期 YYYY-MM-DD（tqsdk 必填）")
     p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
     p.add_argument("--capital", type=float, default=None, help="初始资金（默认从配置文件读取）")
     p.add_argument("--contract-size", type=int, default=None, help="合约乘数（默认从配置文件读取）")
@@ -97,38 +104,85 @@ def register(subparsers: Any) -> None:
 
 
 def cmd_backtest(args: argparse.Namespace) -> None:
-    """执行统一回测命令
-
-    引擎由 `--engine` 决定（默认 vnpy）：
-      - `--engine vnpy`   批量回测（参数搜索 / Walk-Forward），可叠加 --symbol / --pattern
-      - `--engine tqsdk`  单标的回测，必须指定 --symbol / --start / --end，可启用 --gui
-    """
-    request = BacktestRunRequest.from_args(args)
-    _validate_request(request)
+    """执行统一回测命令：根据 `--engine` + `--mode` 路由到对应的 workflow 入口"""
+    _validate_cross_field(args)
 
     workflow = BacktestRunWorkflow()
-    if request.engine == "vnpy":
-        workflow.run_vnpy(request)
-    elif request.engine == "tqsdk":
-        workflow.run_tqsdk(request)
+    if args.engine == "vnpy":
+        if args.mode == "walk-forward":
+            workflow.run_vnpy_walk_forward(_build_walk_forward_request(args))
+        else:
+            workflow.run_vnpy_search(_build_search_request(args))
+    elif args.engine == "tqsdk":
+        workflow.run_tqsdk(_build_tqsdk_request(args))
     else:  # 实际由 argparse choices 已拦截，此处兜底
-        raise ValueError(f"未知引擎: {request.engine!r}")
+        raise ValueError(f"未知引擎: {args.engine!r}")
 
 
-def _validate_request(request: BacktestRunRequest) -> None:
-    """跨字段参数校验
+# ── 跨字段校验 ───────────────────────────────────────────
 
-    argparse 只能做单字段约束（type/choices/required）。对引擎间互斥、必填依赖等
-    跨字段约束在此集中处理，便于未来扩展（例如阶段 10 后 `--engine tqsdk` 也支持
-    `--mode walk-forward` 时仅在此处放开即可）。
+
+def _validate_cross_field(args: argparse.Namespace) -> None:
+    """argparse 不能表达的跨字段约束集中在此
+
+    例如 `--gui` 仅 tqsdk 下生效；TqSdk 必填项缺失需早期报错。
     """
-    # `--gui` 仅 tqsdk 下生效
-    if request.gui and request.engine != "tqsdk":
+    if args.gui and args.engine != "tqsdk":
         logger.warning("--gui 仅在 --engine tqsdk 下生效，已忽略当前 --gui 标志")
 
-    # tqsdk 引擎必填项
-    if request.engine == "tqsdk":
-        if not request.symbol:
+    if args.engine == "tqsdk":
+        if not args.symbol:
             raise ValueError("--engine tqsdk 必须指定 --symbol")
-        if not request.start or not request.end:
+        if not args.start or not args.end:
             raise ValueError("--engine tqsdk 必须显式指定 --start / --end")
+        if args.mode != "search":
+            logger.warning("--mode 仅在 --engine vnpy 下生效，TqSdk 路径已忽略")
+        if args.parallel:
+            logger.warning("--parallel 仅在 --engine vnpy 下生效，TqSdk 路径已忽略")
+
+
+# ── argparse → request 翻译 ─────────────────────────────
+
+
+def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
+    return VnpySearchRequest(
+        strategy=args.strategy,
+        capital=args.capital,
+        contract_size=args.contract_size,
+        symbol=args.symbol,
+        pattern=args.pattern,
+        start=args.start,
+        end=args.end,
+        optimizer=args.optimizer,
+        trials=args.trials,
+        parallel=bool(args.parallel),
+        workers=args.workers,
+    )
+
+
+def _build_walk_forward_request(args: argparse.Namespace) -> VnpyWalkForwardRequest:
+    return VnpyWalkForwardRequest(
+        strategy=args.strategy,
+        capital=args.capital,
+        contract_size=args.contract_size,
+        symbol=args.symbol,
+        pattern=args.pattern,
+        start=args.start,
+        end=args.end,
+    )
+
+
+def _build_tqsdk_request(args: argparse.Namespace) -> TqsdkRequest:
+    """构造 TqSdk 请求
+
+    `_validate_cross_field` 已保证 symbol / start / end 非空，此处可安全使用。
+    """
+    assert args.symbol and args.start and args.end  # 由跨字段校验保证
+    return TqsdkRequest(
+        strategy=args.strategy,
+        symbol=args.symbol,
+        start=args.start,
+        end=args.end,
+        capital=args.capital,
+        gui=bool(args.gui),
+    )
