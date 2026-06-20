@@ -1057,38 +1057,24 @@ backtest/persister.py
 
 阶段 3 已把这些注入和分发动作集中到 workflow 内，但形态本身没改。
 
-### 计划改动
+### 实际结果
 
-**runners 接口收敛**：调整 `execute_parameter_search()` 参数：
+阶段 5 执行结果与原计划方向一致，但采用更直接的方式——**彻底删除 `runners.py`**：
 
-- 移除 `dm`
-- 移除 `run_id`
-- 增加显式参数：
-  - `study_name`
-  - `study_db_path`
+- `backtest/runners.py` **删除**（−132 行）。
+- `execute_walk_forward`（4 行）内联为 `engine.run_walk_forward()` 直调。
+- `execute_parameter_search` 内联为 `_run_search` 中的 `run_param_search()` 直调，串行/并行 dispatch 统一到 `_run_search` 方法内。
+- `_do_vnpy_search` 新增 `optimizer_cfg.enabled=False` 检查；关闭后**降级为单次回测**（原来是什么都不跑）。
+- `_do_vnpy_walk_forward` 移除不再需要的 `capital` / `contract_size` 局部变量。
 
-**engine 退化为纯执行器**：
+但 engine 状态注入（`set_run_id`/`set_git_hash`/持 `dm`）并未清理——`_run_search` 仅合并了 dispatch，engine 构造、优化器选择仍在 workflow 内。这留给阶段 5.5。
 
-- 移除 `engine.set_run_id` / `engine.set_git_hash`，改为执行时通过参数显式传入（或在持久化阶段补全 `git_hash` 字段）。
-- engine 不再持有 `dm` 引用。
-- 串行/并行两条路径下 engine 创建形态统一为 `VnpyBacktestEngine(bc)`（无运行期状态、无 dm）。
+### 边界要求（实际结果）
 
-**职责回收到 workflow**：由 `cli/workflows` 负责：
-
-- 创建 run。
-- 生成 study\_name。
-- `link_study(run_id, study_name)`。
-- 传入 `study_db_path`。
-- run 收尾。
-- 把 `git_hash`、`run_id` 在持久化阶段补全到结果对象（不通过 engine 传递）。
-
-### 边界要求
-
-- `backtest/runners.py` 不 import `DataManager`。
-- backtest 层不调用 `finish_run`。
-- backtest 层不调用 `link_study`。
-- `VnpyBacktestEngine` 构造和方法签名不再接受 `run_id` / `git_hash` 等运行期元数据。
-- 串行和并行路径下 engine 实例的创建参数形态一致。
+- `backtest/runners.py` **已删除**。
+- backtest 层不调用 `finish_run`（已被 persister 替代）。
+- backtest 层不调用 `link_study`（保留在 workflow，待 5.5 移除）。
+- engine 方法签名和状态注入未变（待 5.5 清理）。
 
 ### 验收标准
 
@@ -1096,8 +1082,117 @@ backtest/persister.py
 - run 与 study 关联仍存在。
 - 参数优化页可打开。
 - `engine_config.trial_index` / `git_hash` 仍正确写入到 `backtests` 表。
-- `execute_parameter_search` 参数从 12 减至 7-8，不再接收 `dm` / `run_id` / `cm` / `git_hash`。
+- `execute_parameter_search` → `run_param_search()` 直调，不经过中间编排函数。
 - 静态验证和真实回测验证通过。
+
+### 阶段 5 完成记录
+
+- **日期**：2026-06-21
+- **commit**：`69ad287` phase 5: delete runners.py + inline search/WF dispatch
+- **验证**：ruff ✅ mypy ✅ pytest 432 passed ✅ 串行+并行真实回测 ✅ optimizer.enabled=False 降级单次回测 ✅
+
+**遗留任务（移交 5.5/6/10）**：
+
+- engine 构造（`VnpyBacktestEngine(bc, dm)`）仍在 workflow → 5.5
+- `engine.set_run_id` / `set_git_hash` 状态注入仍在 workflow → 5.5
+- TqSdk api/bridge 构造仍在 workflow → 阶段 10
+- study DB 路径通过 `self._dm.store.db_path` 推导 → 阶段 6
+
+---
+
+## 阶段 5.5：把 engine 构造和搜索 dispatch 推回 backtest 域
+
+### 目标
+
+阶段 5 删除了 `runners.py`，但编排逻辑只是从 `backtest/runners.py` 搬到了 `cli/workflows/backtests_run.py`，没有真正回到 backtest 域。`backtests_run.py` 知道的关于 backtest 的事情还是太多：
+
+| workflow 不该知道 | 应推回 backtest 域 |
+|---|---|
+| `VnpyBacktestEngine(bc, dm)` + `set_git_hash` + `set_run_id` | `backtest/engine_factory.py` |
+| 串行/并行 dispatch + study 管理 + optimizer 选择 | `backtest/search.py` |
+| TqSdk api/bridge 构造（`TqApi` + `TqsdkStrategyBridge`） | `backtest/tqsdk_runner.py`（阶段 10） |
+
+### 当前问题
+
+`backtests_run.py` 的 `run_vnpy_search()` 和 `_do_vnpy_search()` 里：
+
+- L139: `VnpyBacktestEngine(bc, self._dm)` — engine 构造
+- L141-L148: `engine.set_git_hash(git_hash)` → `self._dm.store.create_run(...)` → `engine.set_run_id(run_id)` — 状态注入链
+- `_run_search` 里：串行 vs 并行 dispatch，包含 `from backtest.parallel import run_param_search_parallel` 惰性 import
+
+这些属于 backtest 域的内部实现细节，workflow 不应该知道。
+
+### 计划改动
+
+#### A. 新增 `backtest/engine_factory.py`
+
+```python
+def create_vnpy_engine(cm, dm, git_hash=None) -> tuple[VnpyBacktestEngine, int]:
+    """从配置构造 engine + 创建 run 记录，返回 (engine, run_id)"""
+    bc = cm.get_backtest_config()
+    engine = VnpyBacktestEngine(bc, dm)
+    if git_hash:
+        engine.set_git_hash(git_hash)
+    # ... 创建 run 记录、注入 run_id ...
+    return engine, run_id
+```
+
+workflow 侧变为：
+
+```python
+engine, run_id = create_vnpy_engine(self._cm, self._dm, git_hash)
+```
+
+#### B. 新增 `backtest/search.py`
+
+将 `_run_search` 的串行/并行 dispatch + study 管理收敛为一个函数：
+
+```python
+def run_search(
+    engine, req, strategy_params, datasets, run_id,
+    cm,  # 仅用于读 optimizer_cfg
+) -> SearchResult | None:
+    """执行参数搜索（串行/并行 dispatch 内部处理）"""
+```
+
+workflow 侧变为：
+
+```python
+result = run_search(engine, req, strategy_params, datasets, run_id, self._cm)
+```
+
+#### C. workflow 精简
+
+`run_vnpy_search()` → `_do_vnpy_search()` 从 ~30 行精简为 ~15 行：
+
+```python
+def run_vnpy_search(self, req):
+    git_hash = get_git_hash()
+    engine, run_id = create_vnpy_engine(self._cm, self._dm, git_hash)
+    logs = RunLogHelper(); finalizer = RunFinalizer(self._dm, logs)
+    logs.attach(run_id)
+    try:
+        self._do_vnpy_search(engine=engine, req=req, run_id=run_id, finalizer=finalizer)
+    finally:
+        logs.detach()
+```
+
+### 边界要求
+
+- `cli/workflows/backtests_run.py` 不再直接 import `VnpyBacktestEngine`。
+- workflow 不调用 `engine.set_run_id` / `engine.set_git_hash`。
+- workflow 不做串行/并行 dispatch（不 import `backtest.parallel`）。
+- 新增文件放在 `backtest/` 域，不 import `cli/` 任何模块。
+
+### 验收标准
+
+- ruff / mypy / pytest 全绿。
+- 串行和并行路径真实回测都可运行。
+- `engine_config.trial_index` / `git_hash` 仍写入 `backtests` 表。
+- workflow 文件中的 `VnpyBacktestEngine` import 消失。
+- workflow 中的 `from backtest.parallel import` 消失。
+
+---
 
 ## 阶段 6：拆出 Optuna 业务域契约
 
