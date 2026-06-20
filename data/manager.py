@@ -137,12 +137,12 @@ class DataManager:
             匹配的品种代码列表
         """
         # 如果用户提供的 pattern 不包含周期后缀，自动加上 interval
-        # 文件名格式: {symbol}.{interval}.csv → pattern 需要以 .{interval}. 结尾
+        # 文件名格式: {symbol}.{provider}.{interval}.csv → 需要 .* 跨过 provider 段
         if interval is None:
             interval = self._get_default_interval()
         # 简单判断：如果 pattern 中找不到 interval，就自动拼接
         if interval not in pattern:
-            pattern = f"{pattern}\\.{interval}\\."
+            pattern = f"{pattern}.*\\.{interval}\\."
         return self._collect_symbols(pattern)
 
     def search_and_load(
