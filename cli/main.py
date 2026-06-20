@@ -4,9 +4,9 @@ CLI 主入口模块
 提供命令行参数解析和命令分发功能，是整个 CLI 系统的核心入口。
 
 设计原则:
-    - 单一职责: 只负责参数解析和命令路由
-    - 无业务逻辑: 具体命令逻辑委托给各命令模块
-    - 可扩展性: 支持动态添加新命令
+    - 单一职责: 只负责子命令注册与分发
+    - 无业务逻辑: 具体命令逻辑、argparse 选项定义都委托给各命令模块
+    - 可扩展性: 新增命令只需在 commands/ 下加文件并在此处注册
 """
 
 import argparse
@@ -22,16 +22,17 @@ cm = ConfigManager()
 log_cfg = cm.get_system_logging_config()
 setup_logging(level=log_cfg.level, log_format=log_cfg.format)
 
-from cli.commands.backtest import cmd_backtest  # noqa: E402
-from cli.commands.export import cmd_export  # noqa: E402
-from cli.commands.report import cmd_report  # noqa: E402
-from cli.commands.tqsdk import cmd_live, cmd_test  # noqa: E402
+from cli.commands import backtest as backtest_cmd  # noqa: E402
+from cli.commands import export as export_cmd  # noqa: E402
+from cli.commands import report as report_cmd  # noqa: E402
+from cli.commands import tqsdk as tqsdk_cmd  # noqa: E402
 
 
 def main() -> None:
     """CLI 主入口函数
 
-    解析命令行参数并分发到对应的命令处理函数。
+    解析命令行参数并分发到对应的命令处理函数。argparse 选项的具体定义由
+    各命令模块的 `register(subparsers)` 函数负责，main 仅做注册与分发。
     """
     parser = argparse.ArgumentParser(
         description="策略工具箱 - 量化策略研发工具链",
@@ -40,145 +41,22 @@ def main() -> None:
     )
     sub = parser.add_subparsers(dest="command", title="子命令", required=True)
 
-    # ---- export ----
-    p = sub.add_parser(
-        "export",
-        help="导出Qlib格式CSV数据（支持多数据源，日期自动推算）",
-        description="从指定数据源获取K线数据，导出为Qlib标准CSV格式\n\n"
-        "日期默认由合约代码自动推算，例如 DCE.m2509 → 2025-05-01 ~ 2025-09-01",
-    )
-    p.add_argument("--symbol", required=True, help="品种代码，如 DCE.m2509")
-    p.add_argument("--start", default=None, help="开始日期 YYYY-MM-DD（默认由合约自动推算）")
-    p.add_argument("--end", default=None, help="结束日期 YYYY-MM-DD（默认由合约自动推算）")
-    p.add_argument("--source", default=None, choices=["tqsdk", "akshare"], help="数据源选择 (默认从配置文件读取)")
-    p.add_argument("--interval", default="1m", choices=["1m", "5m", "15m", "30m", "1h", "1d"], help="K线周期 (默认 1m)")
-    p.add_argument("--output", default=None, help="自定义输出路径（可选）")
-    p.add_argument("--force", action="store_true", help="强制覆盖已有CSV和元数据")
-
-    # ---- test（tqsdk 实时数据信号验证，不下单）----
-    p = sub.add_parser(
-        "test",
-        help="通过天勤实时数据验证策略信号链路（不下单）",
-        description="连接天勤实时行情驱动策略，打印交易信号用于验证链路正确性。\n\n"
-        "安全保证：test 命令代码路径中不包含下单逻辑，即使账号已绑定期货公司也不会下单。",
-    )
-    p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
-    p.add_argument("--symbol", required=True, help="合约代码 (e.g. SHFE.rb2509)")
-    p.add_argument("--gui", action="store_true", help="启用浏览器可视化 (默认关闭)")
-
-    # ---- backtest (统一回测命令) ----
-    p = sub.add_parser(
-        "backtest",
-        help="统一回测（默认 vnpy 引擎，可显式指定 --engine tqsdk）",
-        description="""统一回测命令。引擎默认 vnpy，可通过 --engine 显式切换。
-
-引擎选择:
-  --engine vnpy    (默认) 使用 vn.py 进行批量回测，支持参数搜索 / Walk-Forward
-                   - 单品种: --symbol DCE.m2509
-                   - 批量:   --pattern "DCE\\.m"
-                   - 全量:   省略 --symbol/--pattern
-                   - 仅生成文字报告 + 数据库落地
-
-  --engine tqsdk   使用 TqSdk 进行单标的回测，可启用 GUI（仅本引擎支持 --gui）
-                   - 必须指定 --symbol
-                   - 不支持 --pattern / --mode / --parallel
-                   - GUI 默认关闭，需显式 --gui 开启
-
-注意:
-  - --symbol / --pattern 仅控制标的过滤，不再影响引擎选择。
-  - --gui 仅在 --engine tqsdk 下生效，其他引擎下传入会给 warning。
-
-示例:
-  python main.py backtest --strategy ma --pattern "DCE\\.m"
-  python main.py backtest --engine vnpy --strategy ma --symbol DCE.m2509
-  python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui
-
-回测结果均会自动保存到数据库，可使用 report 命令查看详情。
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument(
-        "--engine",
-        choices=["vnpy", "tqsdk"],
-        default="vnpy",
-        help="回测引擎（默认 vnpy；tqsdk 仅支持单标的，可启用 GUI）",
-    )
-    p.add_argument("--symbol", default=None, help="品种代码，仅作为标的过滤；与引擎选择解耦")
-    p.add_argument(
-        "--pattern", default=None, help='文件名正则表达式（如 "DCE\\.m.*\\.1m\\." 匹配 DCE 豆粕的 1 分钟数据）'
-    )
-    p.add_argument("--start", default=None, help="开始日期 YYYY-MM-DD（可选）")
-    p.add_argument("--end", default=None, help="结束日期 YYYY-MM-DD（可选）")
-    p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
-    p.add_argument("--capital", type=float, default=None, help="初始资金（默认从配置文件读取）")
-    p.add_argument("--contract-size", type=int, default=None, help="合约乘数（默认从配置文件读取）")
-    p.add_argument(
-        "--gui", action="store_true", help="启用图形界面（仅 --engine tqsdk 生效，其他引擎下给 warning 后忽略）"
-    )
-    p.add_argument(
-        "--mode",
-        choices=["search", "walk-forward"],
-        default="search",
-        help="回测模式: search=参数搜索(默认), walk-forward=滚动验证（仅 --engine vnpy 生效）",
-    )
-    p.add_argument(
-        "--optimizer",
-        choices=["grid", "bayesian"],
-        default=None,
-        help="参数搜索引擎: grid=网格搜索, bayesian=贝叶斯优化 (默认读 TOML)",
-    )
-    p.add_argument("--trials", type=int, default=None, help="optimizer 最大试验次数（默认从配置文件读取）")
-    p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭，仅 --engine vnpy 生效）")
-    p.add_argument("--workers", type=int, default=None, help="并行进程数（默认 os.cpu_count()，仅 --parallel 时生效）")
-
-    # ---- report ----
-    p = sub.add_parser(
-        "report",
-        help="管理与查看回测数据",
-        description="""回测数据管理：列表、详情查看、数据清理、报告重建
-
-用法:
-  python main.py report                   列出最近 20 条回测
-  python main.py report --id 42           查看指定回测详情
-  python main.py report --clean 42        删除指定回测及关联数据
-  python main.py report --build           重建所有运行的可视化报告
-  python main.py report --build --run 1   重建指定运行的可视化报告
-  python main.py report --symbol DCE.m2509  按品种过滤列表
-  python main.py report --strategy ma      按策略名称过滤列表
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p.add_argument("--id", type=int, default=None, help="查看指定 ID 的详细报告")
-    p.add_argument("--clean", dest="clean_id", type=int, default=None, help="硬删除指定回测 ID 及关联数据 (不可撤销)")
-    p.add_argument("--build", action="store_true", help="重建可视化 HTML 报告")
-    p.add_argument("--run", type=int, default=None, dest="run_id", help="指定运行 ID (配合 --build 使用)")
-    p.add_argument("--symbol", default=None, help="按品种代码过滤")
-    p.add_argument("--strategy", default=None, help="按策略名称过滤")
-    p.add_argument("--limit", type=int, default=20, help="列表最大条数 (默认 20)")
-
-    # ---- live（天勤模拟/实盘交易）----
-    p = sub.add_parser(
-        "live",
-        help="天勤模拟/实盘交易（会下单，模拟/实盘取决于账号是否绑定期货公司）",
-        description="通过天勤 SDK 连接实时数据运行策略并下单。\n\n"
-        "模拟 vs 实盘：取决于天勤账号是否绑定期货公司账户。\n"
-        "  未绑定 → 模拟盘（虚拟资金，不影响真实账户）\n"
-        "  已绑定 → 实盘（真金白银，慎用！）",
-    )
-    p.add_argument("--symbol", default="DCE.m2509", help="品种代码")
-    p.add_argument("--gui", action="store_true", help="启用图形界面")
-    p.add_argument("--config", default=None, help="配置文件路径")
-    p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
+    # 注册子命令（args 定义在各命令模块内）
+    export_cmd.register(sub)
+    tqsdk_cmd.register_test(sub)
+    backtest_cmd.register(sub)
+    report_cmd.register(sub)
+    tqsdk_cmd.register_live(sub)
 
     args = parser.parse_args()
 
     # 命令分发映射
     command_handlers = {
-        "export": cmd_export,
-        "test": cmd_test,
-        "backtest": cmd_backtest,
-        "report": cmd_report,
-        "live": cmd_live,
+        "export": export_cmd.cmd_export,
+        "test": tqsdk_cmd.cmd_test,
+        "backtest": backtest_cmd.cmd_backtest,
+        "report": report_cmd.cmd_report,
+        "live": tqsdk_cmd.cmd_live,
     }
 
     try:

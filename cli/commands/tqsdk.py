@@ -32,6 +32,43 @@ from strategies.utils import apply_strategy_config, get_strategy_class_name, loa
 VALID_ACCOUNT_TYPES = ("tqsim", "tqkq", "tqaccount")
 
 
+def register_test(subparsers: Any) -> None:
+    """注册 test 子命令的 argparse 选项
+
+    `subparsers` 是 `parser.add_subparsers()` 返回的对象（`argparse._SubParsersAction`），
+    其类型在 argparse 中是私有的，因此使用 `Any` 表示。
+    """
+    p = subparsers.add_parser(
+        "test",
+        help="通过天勤实时数据验证策略信号链路（不下单）",
+        description="连接天勤实时行情驱动策略，打印交易信号用于验证链路正确性。\n\n"
+        "安全保证：test 命令代码路径中不包含下单逻辑，即使账号已绑定期货公司也不会下单。",
+    )
+    p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
+    p.add_argument("--symbol", required=True, help="合约代码 (e.g. SHFE.rb2509)")
+    p.add_argument("--gui", action="store_true", help="启用浏览器可视化 (默认关闭)")
+
+
+def register_live(subparsers: Any) -> None:
+    """注册 live 子命令的 argparse 选项
+
+    `subparsers` 是 `parser.add_subparsers()` 返回的对象（`argparse._SubParsersAction`），
+    其类型在 argparse 中是私有的，因此使用 `Any` 表示。
+    """
+    p = subparsers.add_parser(
+        "live",
+        help="天勤模拟/实盘交易（会下单，模拟/实盘取决于账号是否绑定期货公司）",
+        description="通过天勤 SDK 连接实时数据运行策略并下单。\n\n"
+        "模拟 vs 实盘：取决于天勤账号是否绑定期货公司账户。\n"
+        "  未绑定 → 模拟盘（虚拟资金，不影响真实账户）\n"
+        "  已绑定 → 实盘（真金白银，慎用！）",
+    )
+    p.add_argument("--symbol", default="DCE.m2509", help="品种代码")
+    p.add_argument("--gui", action="store_true", help="启用图形界面")
+    p.add_argument("--config", default=None, help="配置文件路径")
+    p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
+
+
 def build_account(account_info: Any | None, account_type_override: str | None = None) -> tuple[Any, Any]:
     """根据配置构造 tqsdk 账户对象。
 

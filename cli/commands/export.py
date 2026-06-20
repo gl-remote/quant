@@ -11,11 +11,38 @@
 
 import argparse
 import sys
+from typing import Any
 
 from loguru import logger
 
 from config import ConfigManager
 from data import DataManager, export_csv
+
+
+def register(subparsers: Any) -> None:
+    """注册 export 子命令的 argparse 选项
+
+    `subparsers` 是 `parser.add_subparsers()` 返回的对象（`argparse._SubParsersAction`），
+    其类型在 argparse 中是私有的，因此使用 `Any` 表示。
+    """
+    p = subparsers.add_parser(
+        "export",
+        help="导出Qlib格式CSV数据（支持多数据源，日期自动推算）",
+        description="从指定数据源获取K线数据，导出为Qlib标准CSV格式\n\n"
+        "日期默认由合约代码自动推算，例如 DCE.m2509 → 2025-05-01 ~ 2025-09-01",
+    )
+    p.add_argument("--symbol", required=True, help="品种代码，如 DCE.m2509")
+    p.add_argument("--start", default=None, help="开始日期 YYYY-MM-DD（默认由合约自动推算）")
+    p.add_argument("--end", default=None, help="结束日期 YYYY-MM-DD（默认由合约自动推算）")
+    p.add_argument("--source", default=None, choices=["tqsdk", "akshare"], help="数据源选择 (默认从配置文件读取)")
+    p.add_argument(
+        "--interval",
+        default="1m",
+        choices=["1m", "5m", "15m", "30m", "1h", "1d"],
+        help="K线周期 (默认 1m)",
+    )
+    p.add_argument("--output", default=None, help="自定义输出路径（可选）")
+    p.add_argument("--force", action="store_true", help="强制覆盖已有CSV和元数据")
 
 
 def cmd_export(args: argparse.Namespace) -> None:

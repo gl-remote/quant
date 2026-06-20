@@ -11,6 +11,7 @@
 
 import argparse
 import sys
+from typing import Any
 
 from loguru import logger
 
@@ -18,6 +19,37 @@ from config import ConfigManager
 from data import DataManager
 from data.output_paths import output_root
 from report import build_all, format_single_report, format_summary_report
+
+
+def register(subparsers: Any) -> None:
+    """注册 report 子命令的 argparse 选项
+
+    `subparsers` 是 `parser.add_subparsers()` 返回的对象（`argparse._SubParsersAction`），
+    其类型在 argparse 中是私有的，因此使用 `Any` 表示。
+    """
+    p = subparsers.add_parser(
+        "report",
+        help="管理与查看回测数据",
+        description="""回测数据管理：列表、详情查看、数据清理、报告重建
+
+用法:
+  python main.py report                   列出最近 20 条回测
+  python main.py report --id 42           查看指定回测详情
+  python main.py report --clean 42        删除指定回测及关联数据
+  python main.py report --build           重建所有运行的可视化报告
+  python main.py report --build --run 1   重建指定运行的可视化报告
+  python main.py report --symbol DCE.m2509  按品种过滤列表
+  python main.py report --strategy ma      按策略名称过滤列表
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p.add_argument("--id", type=int, default=None, help="查看指定 ID 的详细报告")
+    p.add_argument("--clean", dest="clean_id", type=int, default=None, help="硬删除指定回测 ID 及关联数据 (不可撤销)")
+    p.add_argument("--build", action="store_true", help="重建可视化 HTML 报告")
+    p.add_argument("--run", type=int, default=None, dest="run_id", help="指定运行 ID (配合 --build 使用)")
+    p.add_argument("--symbol", default=None, help="按品种代码过滤")
+    p.add_argument("--strategy", default=None, help="按策略名称过滤")
+    p.add_argument("--limit", type=int, default=20, help="列表最大条数 (默认 20)")
 
 
 def cmd_report(args: argparse.Namespace) -> None:
