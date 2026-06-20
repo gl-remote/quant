@@ -1171,7 +1171,45 @@ backtest/results.py
 
 ### 目标
 
-让 DataStore 回归数据库基础操作，把报表视图查询从 store 中拆出去。
+让 DataStore 回归数据库基础操作，把报表视图查询从 store 中拆出去。同时建立统一的 `ReportWorkflow`，让 `cmd_report` 和 `RunFinalizer` 复用同一套报表生成入口，消除当前"相同底层函数、不同编排方式"的双轨局面。
+
+### 设计约束（阶段 3.5 确立的分层规则）
+
+**报表 HTML 生成通过 `ReportWorkflow` 统一入口**：
+
+```text
+cmd_report --build          RunFinalizer.finish_success
+       │                           │
+       └─────────┬─────────────────┘
+                 │ ReportBuildRequest
+                 ▼
+          ReportWorkflow.build()
+                 │
+    ┌────────────┼────────────┐
+    ▼            ▼            ▼
+data_exports  frontend  entry_html
+```
+
+- `RunFinalizer` 在 finish 序列中调 `ReportWorkflow.build()`（工作流间调用）。
+- `cmd_report --build` 也调 `ReportWorkflow.build()`（commands → workflow 单向）。
+- `report/builder/orchestrator.py::build_all()` 被 `ReportWorkflow.build()` 替代后可以删除。
+
+**工作流间调用规则**：
+
+| 调用方向 | 允许 | 说明 |
+|---|---|---|
+| commands → workflows | 是 | 正常路由 |
+| workflows → workflows | 是 | 委托子任务（如 `RunFinalizer` → `ReportWorkflow`） |
+| workflows → commands | 否 | 依赖反转 |
+| workflows → argparse | 否 | 已消除 |
+
+核心判断：workflow 可以委托另一个 workflow 完成子任务，只要被调用方不反向依赖 commands 层。`ReportWorkflow` 只关心"给定 run_id，生成报表"，不关心调用方是 CLI 还是其他 workflow。
+
+**与阶段 3.5 的衔**：
+
+- report 命令的 args 定义已在阶段 3.5 下沉到 `register(subparsers)`。
+- 本阶段补齐业务层拆分：`cmd_report` 内部不再直接调 `DataManager` / `format_*_report`，改为构造 `ReportRequest` 后调 `ReportWorkflow` 对应方法。
+- 拆 `DataStore` 的 query 方法与建 `ReportWorkflow` 在本阶段一并完成，不分两个阶段。
 
 ### 当前问题
 
@@ -1187,7 +1225,20 @@ backtest/results.py
 
 ### 计划改动
 
-新增查询服务，例如：
+**A. 新增 `ReportWorkflow`**：
+
+```text
+cli/workflows/report.py
+```
+
+- `ReportWorkflow.build(request: ReportBuildRequest)` — 串联 data_exports → frontend → entry_html
+- `ReportWorkflow.get_summary(request)` — 查询 DB + 格式化摘要
+- `ReportWorkflow.get_detail(request)` — 查询单条回测详情
+- `ReportWorkflow.delete_backtest(request)` — 硬删除回测及关联数据
+
+`cmd_report` 和 `RunFinalizer` 都通过 `ReportWorkflow` 生成报表，消除双轨编排。
+
+**B. 新增查询服务**：
 
 ```text
 report/query.py
