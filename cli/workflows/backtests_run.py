@@ -28,12 +28,11 @@ from typing import Any, cast
 from loguru import logger
 
 from backtest import (
+    BacktestResultPersister,
     SearchResult,
     SearchResultPersister,
     VnpyBacktestEngine,
     WalkForwardPersister,
-    execute_parameter_search,
-    execute_walk_forward,
 )
 from cli.workflows.backtests_lifecycle import RunFinalizer, RunLogHelper
 from common.constants import (
@@ -409,6 +408,28 @@ class BacktestRunWorkflow:
             finalizer.finish_skipped(run_id)
             return
 
+        if not optimizer_cfg.enabled:
+            logger.info("optimizer.enabled=False，降级为单次回测（不搜索参数）")
+            pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
+            engine_results = engine.run(cast(Any, pairs))
+
+            bt_persister = BacktestResultPersister(self._dm)
+            for er in engine_results:
+                er.strategy_params = strategy_params
+                er.git_hash = git_hash
+                er.status = STATUS_FAILED if not er.success else STATUS_SUCCESS
+                if not er.success:
+                    bt_persister.persist_result(er, run_id=run_id, data_src=None)
+                    continue
+                data_src = next((f for s, _, f in datasets if s == er.symbol), None)
+                bt_id = bt_persister.persist_result(er, run_id=run_id, data_src=data_src)
+                bt_persister.persist_daily(bt_id, er.daily_results)
+                bt_persister.persist_trades(bt_id, er.fills)
+                bt_persister.validate_consistency(bt_id)
+
+            finalizer.finish_success(run_id)
+            return
+
         capital = req.capital if req.capital else bc.initial_capital
         contract_size = req.contract_size if req.contract_size else bc.contract_size
 
@@ -418,7 +439,6 @@ class BacktestRunWorkflow:
             bc=bc,
             strategy_params=strategy_params,
             datasets=datasets,
-            git_hash=git_hash,
             run_id=run_id,
             search_space=search_space,
             n_trials=n_trials,
@@ -475,7 +495,6 @@ class BacktestRunWorkflow:
         bc: BacktestConfig,
         strategy_params: dict[str, Any],
         datasets: list[tuple[str, KlineDataFrame, str]],
-        git_hash: str | None,
         run_id: int,
         search_space: dict[str, Any],
         n_trials: int,
@@ -484,13 +503,17 @@ class BacktestRunWorkflow:
         contract_size: int,
         optimizer_cfg: Any,
     ) -> SearchResult | None:
-        """实际执行串行 / 并行搜索的分发"""
+        """实际执行串行 / 并行搜索的分发
+
+        _do_vnpy_search 已做完前置校验（搜索空间非空 + optimizer.enabled）。
+        """
+        study_name = f"{req.strategy}_{run_engine}_r{run_id}"
+        self._dm.store.link_study(run_id, study_name)
+
         if req.parallel:
             from backtest.parallel import run_param_search_parallel
 
             datasets_simple = cast(list[tuple[str, Any]], [(s, d) for s, d, _ in datasets])
-            study_name = f"{req.strategy}_{run_engine}_r{run_id}"
-            self._dm.store.link_study(run_id, study_name)
 
             return run_param_search_parallel(
                 datasets=datasets_simple,
@@ -508,20 +531,23 @@ class BacktestRunWorkflow:
                 use_fixed_seed=optimizer_cfg.use_fixed_seed,
             )
 
-        return execute_parameter_search(
+        # 串行路径：直接调 optimizer.py 的 run_param_search
+        from backtest.optimizer import run_param_search
+
+        return run_param_search(
             engine=engine,
+            datasets=[(s, d) for s, d, _ in datasets],
             strategy_name=req.strategy,
+            search_space=search_space,
             strategy_params=strategy_params,
             capital=capital,
             contract_size=contract_size,
-            datasets=datasets,
             n_trials=n_trials,
-            optimizer_cfg=optimizer_cfg,
-            cm=self._cm,
-            optimizer_arg=req.optimizer,
-            git_hash=git_hash,
-            dm=self._dm,
-            run_id=run_id,
+            search_type=run_engine,
+            study_db_path=f"sqlite:///{self._dm.store.db_path}",
+            study_name=study_name,
+            random_seed=optimizer_cfg.random_seed,
+            use_fixed_seed=optimizer_cfg.use_fixed_seed,
         )
 
     # ── vnpy Walk-Forward：内部步骤 ─────────────────────
@@ -538,16 +564,13 @@ class BacktestRunWorkflow:
         run_id: int,
         finalizer: RunFinalizer,
     ) -> None:
-        capital = req.capital if req.capital else bc.initial_capital
-        contract_size = req.contract_size if req.contract_size else bc.contract_size
-
-        wf_result, _strategy_cls_name, sym = execute_walk_forward(
-            engine=engine,
+        sym = datasets[0][0]
+        df = datasets[0][1]
+        wf_result = engine.run_walk_forward(
+            data=df,
+            symbol=sym,
             strategy_name=req.strategy,
             strategy_params=strategy_params,
-            capital=capital,
-            contract_size=contract_size,
-            datasets=datasets,
         )
 
         if wf_result.get("success"):
