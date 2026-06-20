@@ -1002,6 +1002,12 @@ data/backtest_persistence.py
 
 这打破了 backtest 层和 data 层的边界。
 
+同时 `runners.py` 还面临以下问题：
+
+- **`execute_parameter_search` 参数膨胀**：当前 12 个参数（`engine`, `strategy_name`, `strategy_params`, `capital`, `contract_size`, `datasets`, `n_trials`, `optimizer_cfg`, `cm`, `optimizer_arg`, `git_hash`, `dm`, `run_id`），其中 `cm`, `git_hash`, `dm`, `run_id` 属于编排层关切，不应出现在这里。阶段 5 将这些移除后可减少到 7-8 个。
+- **`execute_parameter_search` 与 `execute_walk_forward` 无代码共享**：两者唯一共同点是接收 `engine` + `datasets`，但 search 要自己读配置/拼 study_name/调 optimizer，WF 只是简单调 `engine.run_walk_forward()`。没有共享接口或基类的必要，但当前放在同一个文件里制造了"它们有关系"的错觉。
+- **方法名易混淆**：`runners.py` 的 `execute_parameter_search` 是"编排函数"（含配置读取+校验+study 生命周期），而 `optimizer.py` 的 `run_param_search` 是"执行函数"（纯调 optimizer）。名字上 `execute_` vs `run_` 区别不够明显，调用方容易走错入口。
+
 另外，`VnpyBacktestEngine` 当前被当作"长期注入容器"，由调用方手动注入运行期状态：
 
 - `engine.set_run_id(run_id)`
@@ -1054,6 +1060,7 @@ data/backtest_persistence.py
 - run 与 study 关联仍存在。
 - 参数优化页可打开。
 - `engine_config.trial_index` / `git_hash` 仍正确写入到 `backtests` 表。
+- `execute_parameter_search` 参数从 12 减至 7-8，不再接收 `dm` / `run_id` / `cm` / `git_hash`。
 - 静态验证和真实回测验证通过。
 
 ## 阶段 6：拆出 Optuna 业务域契约
@@ -1074,6 +1081,26 @@ Optuna 相关逻辑散落在：
 - `engine_config.trial_index`。
 - `optuna.json` 导出。
 
+此外，**`OptunaOptimizer` 与 `ParallelBacktestOptimizer` 之间存在两处重复代码**：
+
+1. **`_create_grid_space` 各写一遍**：[`optimizer.py#L143-L162`](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L143-L162) 与 [`parallel.py#L230-L247`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L230-L247) 逻辑完全一样（遍历 search_space → 按 type 生成值列表）。
+2. **storage 标准化三份重复**：`sqlite:///` 前缀校验 + `os.path.abspath` + `os.makedirs` 的代码在 `OptunaOptimizer.optimize()`（[L213-L219](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L213-L219)）、`ParallelBacktestOptimizer.optimize()`（[L259-L266](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L259-L266)）各写一遍，workbench 路径也可能有第三份。
+
+另外，**`SearchResult` 转换有两处**：
+
+- [`optimizer.py#L349-L356`](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L349-L356) `run_param_search` 内 `OptunaResult` → `SearchResult`
+- [`parallel.py#L474-L481`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L474-L481) `run_param_search_parallel` 内同样的转换
+
+转换逻辑几乎一样，但各自独立。
+
+**方法名混淆风险**（与阶段 5 交叉）：
+
+- `optimizer.py::run_param_search`——纯执行函数，接收已拼好的参数，直接调 `OptunaOptimizer`。
+- `runners.py::execute_parameter_search`——编排函数，含配置读取、study 生命周期、**再调** `run_param_search`。
+- 调用方如果不仔细读签名，可能误走 `run_param_search` 导致缺失 study name / link_study 等步骤。
+
+阶段 6 目标是把"怎么拼 study_name/study_db_path"统一封装后，自然消除两处重复，并让 `execute_parameter_search` 退化成简单的 `optimizer = ...; return optimizer.optimize()` 形态。
+
 ### 计划改动
 
 新增业务域内 Optuna 契约：
@@ -1087,11 +1114,16 @@ report/optuna_query.py
 
 - `backtest/optuna_study.py`
   - `make_study_name(strategy, engine, run_id)`
-  - `study_db_url()`
+  - `make_study_url(db_path)` — 统一 `sqlite:///` 标准化（替代三份重复代码）
+  - `create_grid_space(search_space)` — 从 search_space 配置生成 grid 字典（替代两处重复）
+  - `optuna_result_to_search_result(opt_result, study_name)` — 统一 `OptunaResult` → `SearchResult` 转换
+  - `get_study(db_path, study_name, sampler, direction)` — 统一 `optuna.create_study` 调用
 - `report/optuna_query.py`
   - `get_optuna_data(run_id)`
   - `get_best_trial_index(run_id)`
   - 封装所有 Optuna 内部 SQL。
+
+**`OptunaOptimizer` 与 `ParallelBacktestOptimizer` 重构**：两者都改为通过 `optuna_study.py` 的工具函数获取 grid space 和 study url，消除各自重复的 `_create_grid_space` 和 storage 标准化。不再需要各自维护校验逻辑。
 
 ### 边界要求
 
@@ -1099,6 +1131,8 @@ report/optuna_query.py
 - backtest 层只接收 `study_name` / `study_db_path`。
 - report 层只通过 query service 获取优化展示数据。
 - Optuna 内部表结构只在一个模块中出现。
+- `OptunaOptimizer` 和 `ParallelBacktestOptimizer` 不再各自维护 `_create_grid_space` 和 storage 标准化逻辑，改为引入公用工具函数。
+- `SearchResult` 类型保留，但 `OptunaResult` → `SearchResult` 的转换逻辑由 `optuna_result_to_search_result()` 统一处理。
 - 本阶段只做边界封装，不改变 `optuna.json` 字段形态。如需扁平化 `trial_nums` / `trial_values` 等顶层字段，作为独立**契约扩展提案**评估，不混入本次模块边界重构。
 
 ### 验收标准
@@ -1107,6 +1141,7 @@ report/optuna_query.py
 - `optuna.json` 数据完整。
 - 前端参数优化页可打开。
 - best trial 过滤仍正确。
+- `_create_grid_space` 和 storage 标准化不再有重复代码。
 - 静态验证和真实回测验证通过。
 
 ## 阶段 7：Walk-Forward 结果强类型化
