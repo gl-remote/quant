@@ -1471,6 +1471,43 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
    - 未来若 builder 扩展（如 Python 生成图表内嵌、新增 `chart_writer.py` 等），多文件子包即合理，届时再评估是否合并入 `report/builder/`。
 
 
+## 长期展望（当前 roadmap 各阶段完成后的远景目标）
+
+### 最终形态：backtest 只输出 JSON 契约，不依赖 data/
+
+当前 roadmap 的阶段 4-10 是在 data/ 的现有基础上"铺板子"——用 `backtest/persister.py`、`report/query.py` 等服务类把 backtest 域和 data/ 隔离开。这是务实的中期方案，不是终点。
+
+远期目标：
+
+```text
+backtest/                          ← 只输出 JSON，不调任何 data/ 代码
+  └─ 执行结果 → contracts/ 定义的 JSON schema
+                                       │
+                     ┌─────────────────┼─────────────────┐
+                     │                 │                 │
+                     ▼                 ▼                 ▼
+              data/ 适配器       report/ 消费       消息队列
+              （写 SQLite）    （直接读 JSON）    （推给下游系统）
+```
+
+**具体原则**：
+
+1. **backtest/ 不再存在 `import data.manager` 或 `import data.store`**。执行结果通过 contracts/ 已有的 JSON schema 序列化后交由适配层处理。
+2. **contracts/ 扩展覆盖执行结果 schema**。当前 contracts 已有 `BacktestResult`、`DailyRecord`、`TradeRecord`，需要补全搜索和 WF 结果。覆盖所有回测模式的输出后，`backtest/` 对持久化的依赖自然消除。
+3. **data/ 适配器层独立演化**。当前 `DataManager` / `DataStore` 的问题（纯代理方法过多、`.store` 属性暴露）可以独立修复，不影响 backtest 域。
+4. **`dm.store.*` 调用链完全消失**。所有回测结果的写库/查询都通过 adapters/ 或 services/ 完成，workflow 不再直接接触 DataStore。
+
+### 演进行为
+
+```text
+阶段 4 —— 铺第一层板子：backtest/persister.py（背测域服务，内部持 dm）
+阶段 5-10 —— 各阶段逐步收窄 persister 的 data/ 使用面
+长期 —— backtest/persister.py 消失，被纯 JSON + 适配器替代
+```
+
+**data/ 的爆改可以无限期延后**，直到出现真正的触发信号（性能瓶颈、新存储需求、测试可 mock 性要求），不阻碍 backtest 域的业务演进。
+
+
 ## 每阶段完成记录模板
 
 每完成一个阶段，在对应阶段的"验收标准"之后追加 `### 阶段 X 完成记录` 小节：
