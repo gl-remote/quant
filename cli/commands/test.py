@@ -1,7 +1,7 @@
 """test 命令：通过天勤实时数据验证策略信号链路（不下单）
 
 本模块负责 CLI 层面的 argparse 定义、参数翻译与路由分发。
-具体业务编排由 `cli.workflows.tqsdk_realtime.TqsdkRealtimeWorkflow` 承担。
+具体业务编排由 `cli.workflows.realtime.TqsdkRealtimeWorkflow` 承担。
 
 安全保证：test 命令代码路径中不包含下单逻辑，即使账号已绑定期货公司也不会下单。
 """
@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from cli.workflows.tqsdk_realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
+from cli.workflows.realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
 
 
 def register(subparsers: Any) -> None:

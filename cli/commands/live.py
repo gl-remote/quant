@@ -1,7 +1,7 @@
 """live 命令：天勤模拟/实盘交易（会下单）
 
 本模块负责 CLI 层面的 argparse 定义、参数翻译与路由分发。
-具体业务编排由 `cli.workflows.tqsdk_realtime.TqsdkRealtimeWorkflow` 承担。
+具体业务编排由 `cli.workflows.realtime.TqsdkRealtimeWorkflow` 承担。
 
 模拟 vs 实盘：取决于天勤账号是否绑定期货公司账户。
   未绑定 → 模拟盘（虚拟资金，不影响真实账户）
@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from cli.workflows.tqsdk_realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
+from cli.workflows.realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
 
 
 def register(subparsers: Any) -> None:
