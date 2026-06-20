@@ -29,7 +29,9 @@ from loguru import logger
 
 from backtest import (
     SearchResult,
+    SearchResultPersister,
     VnpyBacktestEngine,
+    WalkForwardPersister,
     execute_parameter_search,
     execute_walk_forward,
 )
@@ -436,10 +438,10 @@ class BacktestRunWorkflow:
         )
 
         try:
-            _persist_search_results(
-                dm=self._dm,
+            search_persister = SearchResultPersister(self._dm)
+            all_ids = search_persister.persist_search_result(
                 result=result,
-                datasets=datasets,
+                datasets=cast(list[tuple[str, Any, str]], datasets),
                 search_type=run_engine,
                 study_name=result.study_name,
                 git_hash=git_hash,
@@ -447,6 +449,21 @@ class BacktestRunWorkflow:
             )
         except Exception:
             logger.exception("参数搜索结果持久化失败，部分数据可能未入库")
+            all_ids = []
+
+        print(f"\n============ {run_engine.upper()} 优化结果 ============")
+        print(f"  最优得分:  {result.best_value:.4f}")
+        print(f"  最优参数:  {result.best_params}")
+        print(f"  总试验数:  {result.n_trials}")
+        print(f"  回测ID:    {all_ids[:10]}{'...' if len(all_ids) > 10 else ''}")
+        print(f"  Study:     {result.study_name}")
+        print("===========================================\n")
+        if all_ids:
+            if len(all_ids) == 1:
+                print(f"\n💡 查看详细报告: python main.py report --id {all_ids[0]}")
+            else:
+                ids_str = ", ".join(str(i) for i in all_ids[:10])
+                print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
 
         finalizer.finish_success(run_id)
 
@@ -534,69 +551,26 @@ class BacktestRunWorkflow:
         )
 
         if wf_result.get("success"):
-            self._persist_walk_forward_result(
+            strategy = load_strategy(req.strategy)
+            wf_persister = WalkForwardPersister(self._dm)
+            bt_id = wf_persister.persist_walk_forward(
                 wf_result=wf_result,
-                req=req,
+                symbol=sym,
+                strategy=get_strategy_class_name(strategy),
+                strategy_params=serialize_strategy_params(strategy),
+                strategy_version=getattr(type(strategy), "VERSION", None),
                 git_hash=git_hash,
-                sym=sym,
+                start_date=req.start,
+                end_date=req.end,
                 data_src=datasets[0][2],
             )
+            logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
+            print(f"\n💡 查看报告: python main.py report --id {bt_id}")
+            self._dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
         else:
             logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
 
         finalizer.finish_success(run_id)
-
-    def _persist_walk_forward_result(
-        self,
-        *,
-        wf_result: dict[str, Any],
-        req: VnpyWalkForwardRequest,
-        git_hash: str | None,
-        sym: str,
-        data_src: str,
-    ) -> None:
-        """Walk-Forward 主记录 + daily/trades 持久化（阶段 4 会拆出 Persister）"""
-        strategy = load_strategy(req.strategy)
-        result = BacktestResult(
-            symbol=sym,
-            strategy=get_strategy_class_name(strategy),
-            status=STATUS_SUCCESS,
-            strategy_version=getattr(type(strategy), "VERSION", None),
-            git_hash=git_hash,
-            strategy_params=serialize_strategy_params(strategy),
-            start_date=req.start,
-            end_date=req.end,
-            engine_config={
-                "type": "vnpy",
-                "mode": "walk-forward",
-                "windows": wf_result.get("windows", 0),
-            },
-            sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
-            max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
-            total_return=wf_result.get("aggregate", {}).get("return_mean"),
-            daily_std=wf_result.get("aggregate", {}).get("return_std"),
-        )
-        bt_id = self._dm.insert_backtest(result, data_src=data_src)
-        logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
-
-        all_daily: list[dict[str, object]] = []
-        all_trades: list[dict[str, object]] = []
-        for wr in wf_result.get("window_results", []):
-            all_daily.extend(wr.get("daily_results", []))
-            all_trades.extend(wr.get("trades", []))
-        if all_daily:
-            try:
-                self._dm.insert_backtest_daily(bt_id, all_daily)
-            except Exception:
-                logger.exception("Walk-Forward 每日资金曲线持久化失败 [bt={}]", bt_id)
-        if all_trades:
-            try:
-                self._dm.insert_backtest_trades(bt_id, all_trades)
-            except Exception:
-                logger.exception("Walk-Forward 交易记录持久化失败 [bt={}]", bt_id)
-
-        print(f"\n💡 查看报告: python main.py report --id {bt_id}")
-        self._dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
 
     # ── TqSdk 持久化 ──────────────────────────────────
 
@@ -760,99 +734,3 @@ def _tq_backtest_gui_loop(api: Any) -> None:
             api.wait_update()
     except Exception:
         pass
-
-
-# ── 参数搜索结果持久化（阶段 3 原样保留；阶段 4 会拆出 SearchResultPersister） ──
-
-
-def _persist_results(
-    dm: DataManager,
-    results: list[BacktestResult] | BacktestResult,
-    run_id: int | None = None,
-    data_src: str | None = None,
-) -> int | list[int]:
-    """通用持久化：将 BacktestResult 写入数据库（单条或批量）"""
-    if isinstance(results, BacktestResult):
-        return dm.insert_backtest(results, run_id=run_id, data_src=data_src)
-
-    ids: list[int] = []
-    for r in results:
-        ids.append(dm.insert_backtest(r, run_id=run_id, data_src=data_src))
-    return ids
-
-
-def _persist_search_results(
-    dm: DataManager,
-    result: SearchResult,
-    datasets: list[tuple[str, KlineDataFrame, str]],
-    search_type: str,
-    study_name: str,
-    git_hash: str | None,
-    run_id: int | None = None,
-) -> list[int]:
-    """将 SearchResult 的 trial_data 统一持久化到数据库"""
-    engine_cfg = {
-        "type": "vnpy",
-        "optimizer": search_type,
-        "study_name": study_name,
-        "study_db": dm.store.db_path,
-    }
-    all_ids: list[int] = []
-    for i, trial in enumerate(result.trial_data):
-        trial_cfg = {**engine_cfg, "trial_index": i}
-        for er in trial.get("engine_results", []):
-            er.engine_config = trial_cfg
-            er.strategy_params = trial.get("strategy_params", {})
-            er.git_hash = git_hash
-
-            if not er.success:
-                er.status = STATUS_FAILED
-                _persist_results(
-                    dm, er, run_id=run_id, data_src=next((f for s, _, f in datasets if s == er.symbol), None)
-                )
-                continue
-
-            sym = er.symbol
-            data_src = next((f for s, _, f in datasets if s == sym), None)
-            er.status = STATUS_SUCCESS
-            bt_id = _persist_results(dm, er, run_id=run_id, data_src=data_src)
-            assert isinstance(bt_id, int)
-            all_ids.append(bt_id)
-
-            daily = er.daily_results
-            if daily:
-                try:
-                    dm.insert_backtest_daily(bt_id, daily)
-                except Exception:
-                    logger.exception("每日资金曲线持久化失败 [bt={}]", bt_id)
-
-            if er.fills:
-                try:
-                    dm.insert_backtest_trades(bt_id, er.fills)
-                except Exception:
-                    logger.exception("交易记录持久化失败 [bt={}]", bt_id)
-
-            try:
-                errors = dm.validate_consistency(bt_id)
-                if errors:
-                    for err in errors:
-                        logger.warning("数据一致性警告: {}", err)
-            except Exception:
-                logger.exception("数据一致性校验失败 [bt={}]", bt_id)
-
-    print(f"\n============ {search_type.upper()} 优化结果 ============")
-    print(f"  最优得分:  {result.best_value:.4f}")
-    print(f"  最优参数:  {result.best_params}")
-    print(f"  总试验数:  {result.n_trials}")
-    print(f"  回测ID:    {all_ids[:10]}{'...' if len(all_ids) > 10 else ''}")
-    print(f"  Study:     {result.study_name}")
-    print("===========================================\n")
-
-    if all_ids:
-        if len(all_ids) == 1:
-            print(f"\n💡 查看详细报告: python main.py report --id {all_ids[0]}")
-        else:
-            ids_str = ", ".join(str(i) for i in all_ids[:10])
-            print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
-
-    return all_ids

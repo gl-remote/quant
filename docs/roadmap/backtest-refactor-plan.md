@@ -946,10 +946,10 @@ cli/workflows/{backtests_run,realtime,backtests_lifecycle}.py
 
 ### 计划改动
 
-新增 data 域持久化契约：
+**新增 backtest 域持久化服务**（不在 data/ 创建新文件，放 backtest 域下）：
 
 ```text
-data/backtest_persistence.py
+backtest/persister.py
 ```
 
 包含：
@@ -963,6 +963,18 @@ data/backtest_persistence.py
   - `persist_search_result(search_result, datasets, search_type, study_name, git_hash, run_id)`
 - `WalkForwardPersister`
   - `persist_walk_forward(wf_result, result, datasets, run_id)`
+
+**对应修改现有文件**：
+
+- `cli/workflows/backtests_run.py`：删除 `_persist_search_results`（约 90 行的 `_do_vnpy_search` 末尾逻辑，含 `engine_config` 拼接、`trial_index` 写入、`BacktestParam` 写入、`_persist_results` 调用、`update_run_seed` 等），改为由 `SearchResultPersister` 和 `WalkForwardPersister` 统一处理。
+- `cli/workflows/backtests_run.py`：`_do_vnpy_walk_forward` 开头的 `_persist_result` 和 daily/trades 写库改为调 `WalkForwardPersister`。
+- **不改** `cli/workflows/backtests_lifecycle.py`（`RunFinalizer` 不持 persister，finish 序列不变）。
+
+**设计说明**：
+
+- persister 放在 `backtest/` 域而非 `data/` 层，因为它是 backtest 域对持久化的抽象——它理解 `SearchResult`、`WalkForwardResult` 这些背测领域对象。
+- persister 内部仍持 `DataManager` 引用调 CRUD，但 workflow 不再直接接触 `dm.store.*`。
+- 这是一个**中期铺板子措施**，不是最终形态。远期目标（见「长期展望」）中 persister 被纯 JSON + 适配器替代，backtest 域不再依赖 data/ 任何模块。
 
 ### 容错策略
 
@@ -978,11 +990,35 @@ data/backtest_persistence.py
 
 ### 验收标准
 
-- `cli/commands/backtest.py` 不再包含 `_persist_search_results`。
+- `cli/workflows/backtests_run.py` 不再包含 `_persist_search_results`。
+- `backtest/persister.py` 包含三个 Persister 类，workflow 通过 persister 写库。
 - `engine_config.trial_index` 仍正确写入。
 - 参数优化页仍能正确展示 best trial。
 - `equity.json` 和 `trades.json` 仍有数据。
 - 静态验证和真实回测验证通过。
+
+### 阶段 4 完成记录
+
+**实施日期**：2026-06-20
+
+**关键变化**：
+- 新建 `backtest/persister.py`（3 个 Persister 类，约 215 行）
+- `cli/workflows/backtests_run.py` 删除约 96 行老持久化逻辑（`_persist_search_results`、`_persist_results`、`_persist_walk_forward_result`）
+- workflow 改为调 `SearchResultPersister` 和 `WalkForwardPersister`
+- `backtest/__init__.py` 新增 3 个 persister 导出
+
+**文件变化**：
+| 文件 | 行数变化 | 说明 |
+|---|---|---|
+| `backtest/persister.py` | +215 | 新建 |
+| `cli/workflows/backtests_run.py` | −89 | 删除 96 行老代码，新增 64 行 persister 调用 + 打印逻辑 |
+| `backtest/__init__.py` | +4 | 导入+导出 3 个 persister |
+
+**遗留任务（移交后续阶段）**：
+- `_persist_tq_backtest_result` 仍在 workflow 中 → 阶段 10
+- `SearchResultPersister` 内部 `dm.store.db_path` 直接访问 → 阶段 6 封装
+- "engine 当容器"（`set_run_id` / `set_git_hash`）→ 阶段 5
+- `_persist_search_results` 中 `engine_config["study_db"]` 与 search_type/study_name 手拼 → 阶段 4 + 阶段 6
 
 ## 阶段 5：清理 backtest runners 对 data 层的依赖
 
