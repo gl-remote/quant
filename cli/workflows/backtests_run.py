@@ -1,0 +1,821 @@
+"""回测命令级编排（阶段 3）
+
+把原 `cli/commands/backtest.py` 中的 `_run_batch_backtest` / `_run_tq_backtest` 系列
+函数集中到本模块，通过 `BacktestRunRequest` + `BacktestRunWorkflow` 暴露统一入口。
+
+设计要点（阶段 3）：
+- CLI 只负责参数解析 → `BacktestRunRequest.from_args(args)` → `BacktestRunWorkflow().run(request)`
+- 引擎选择由 `request.engine` 决定（vnpy / tqsdk），与 `--symbol`/`--pattern` 完全解耦
+- `--gui` 仅 `tqsdk` 引擎下生效，其他引擎下 warn 后忽略
+- workflow 自持 `RunLogHelper` / `RunFinalizer`，CLI 不再手动 attach/detach
+
+阶段 3 范围（仅"搬迁"，不改语义）：
+- vnpy 路径：完整接入 run 生命周期（与重构前一致）
+- tqsdk 路径：仅做接口收敛 + 显式开关，不创建 run、不接 finalizer、不生成前端 JSON
+  → 阶段 10 再统一 TqSdk 与 vnpy 的 run 生命周期
+
+不在本阶段范围（移交后续阶段）：
+- `_persist_search_results` 拆分（阶段 4）
+- engine 状态注入清理（阶段 5）
+- TqSdk 接入 RunLogHelper / RunFinalizer / 持久化服务（阶段 10）
+"""
+
+from __future__ import annotations
+
+import argparse
+import subprocess
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, cast
+
+from loguru import logger
+
+from backtest import (
+    SearchResult,
+    VnpyBacktestEngine,
+    execute_parameter_search,
+    execute_walk_forward,
+)
+from cli.workflows.backtests_lifecycle import RunFinalizer, RunLogHelper
+from common.constants import (
+    LOG_STATUS_ERROR,
+    LOG_STATUS_INFO,
+    LOG_STATUS_SUCCESS,
+    MODE_MULTI,
+    MODE_SINGLE,
+    STATUS_FAILED,
+    STATUS_SUCCESS,
+)
+from common.schemas import KlineDataFrame
+from common.types import BacktestResult
+from config import ConfigManager
+from config.schemas import BacktestConfig
+from data import DataManager
+from strategies.utils import (
+    apply_strategy_config,
+    get_strategy_class_name,
+    load_strategy,
+    serialize_strategy_params,
+)
+
+# ── 请求对象 ────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class BacktestRunRequest:
+    """命令级请求对象，从 argparse Namespace 收敛为明确字段。
+
+    与 argparse 解耦，便于未来被 API / scheduler 复用。
+    """
+
+    strategy: str
+    engine: str  # "vnpy" | "tqsdk"
+    symbol: str | None
+    pattern: str | None
+    start: str | None
+    end: str | None
+    capital: float | None
+    contract_size: int | None
+    mode: str  # "search" | "walk-forward"
+    optimizer: str | None
+    trials: int | None
+    parallel: bool
+    workers: int | None
+    gui: bool
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> BacktestRunRequest:
+        """从 CLI argparse Namespace 构造请求对象"""
+        return cls(
+            strategy=args.strategy,
+            engine=getattr(args, "engine", "vnpy") or "vnpy",
+            symbol=args.symbol,
+            pattern=args.pattern,
+            start=args.start,
+            end=args.end,
+            capital=args.capital,
+            contract_size=getattr(args, "contract_size", None),
+            mode=getattr(args, "mode", "search") or "search",
+            optimizer=getattr(args, "optimizer", None),
+            trials=getattr(args, "trials", None),
+            parallel=bool(getattr(args, "parallel", False)),
+            workers=getattr(args, "workers", None),
+            gui=bool(getattr(args, "gui", False)),
+        )
+
+
+# ── Workflow 入口 ─────────────────────────────────────
+
+
+class BacktestRunWorkflow:
+    """命令级回测编排者。
+
+    提供两个公开入口：
+      - `run_vnpy(request)`：vnpy 批量路径（参数搜索 / Walk-Forward）
+      - `run_tqsdk(request)`：TqSdk 单标的路径
+
+    引擎选择 / 参数校验由调用方（`cli/commands/backtest.py`）负责，
+    workflow 只承担"已校验请求 → 业务编排"。
+
+    workflow 自持 `RunLogHelper` / `RunFinalizer`，CLI 不再手动管理日志。
+    """
+
+    def __init__(self) -> None:
+        self._cm = ConfigManager()
+        self._dm = DataManager(self._cm)
+
+    # ── vnpy 批量回测路径 ──────────────────────────────
+
+    def run_vnpy(self, request: BacktestRunRequest) -> None:
+        """vnpy 批量回测（含参数搜索 / Walk-Forward）
+
+        流程: 解析配置 → 加载数据 → 创建 engine + run → 模式分发 → finalize
+        """
+        bc, strategy_params, _, _, _ = _prepare_backtest_config(request, self._cm)
+
+        datasets = self._load_datasets(request, bc)
+        if datasets is None:
+            return
+
+        mode_label = MODE_SINGLE if (request.symbol and not request.pattern) else MODE_MULTI
+        mode_name = "参数搜索" if request.mode == "search" else "Walk-Forward"
+        logger.info(
+            "{}回测: {} 个品种 strategy={} mode={}",
+            "批量" if mode_label == MODE_MULTI else "单品种",
+            len(datasets),
+            request.strategy,
+            mode_name,
+        )
+
+        # ── 初始化 engine + run ──────────────
+        engine = VnpyBacktestEngine(bc, self._dm)
+        git_hash = get_git_hash()
+        engine.set_git_hash(git_hash)
+
+        run_engine_label = request.optimizer or self._cm.get_optimizer_config().engine or "grid"
+        run_id = self._dm.store.create_run(
+            strategy=request.strategy,
+            engine=run_engine_label if request.mode == "search" else "walk-forward",
+            symbols=len(datasets),
+        )
+        engine.set_run_id(run_id)
+
+        # ── run 生命周期：日志 + 收尾 ─────────
+        log_helper = RunLogHelper()
+        finalizer = RunFinalizer(self._dm, log_helper)
+        log_helper.attach(run_id)
+
+        try:
+            if request.mode == "walk-forward":
+                self._execute_walk_forward(
+                    engine=engine,
+                    request=request,
+                    bc=bc,
+                    strategy_params=strategy_params,
+                    datasets=datasets,
+                    git_hash=git_hash,
+                    run_id=run_id,
+                    finalizer=finalizer,
+                )
+            else:
+                self._execute_search(
+                    engine=engine,
+                    request=request,
+                    bc=bc,
+                    strategy_params=strategy_params,
+                    datasets=datasets,
+                    git_hash=git_hash,
+                    run_id=run_id,
+                    finalizer=finalizer,
+                )
+        except Exception as e:
+            logger.exception(f"回测执行失败: {e}")
+            finalizer.finish_failed(run_id, str(e))
+            self._dm.store.log(
+                "backtest",
+                f"失败: {e}",
+                symbol=request.symbol or MODE_MULTI,
+                status=LOG_STATUS_ERROR,
+            )
+            raise
+        finally:
+            log_helper.detach()
+
+    def _load_datasets(
+        self,
+        request: BacktestRunRequest,
+        bc: BacktestConfig,
+    ) -> list[tuple[str, KlineDataFrame, str]] | None:
+        """按 symbol/pattern 加载数据集；失败时打印日志并返回 None"""
+        if request.symbol and not request.pattern:
+            datasets = self._dm.load_kline([request.symbol], request.start, request.end, bc.interval)
+            if not datasets:
+                logger.error("品种数据加载失败")
+                return None
+            return datasets
+
+        datasets = self._dm.search_and_load(request.pattern or "", request.start, request.end, bc.interval)
+        if not datasets:
+            logger.error("所有品种数据加载失败")
+            return None
+        return datasets
+
+    def _execute_walk_forward(
+        self,
+        *,
+        engine: VnpyBacktestEngine,
+        request: BacktestRunRequest,
+        bc: BacktestConfig,
+        strategy_params: dict[str, Any],
+        datasets: list[tuple[str, KlineDataFrame, str]],
+        git_hash: str | None,
+        run_id: int,
+        finalizer: RunFinalizer,
+    ) -> None:
+        """Walk-Forward 模式执行与持久化"""
+        capital = request.capital if request.capital else bc.initial_capital
+        contract_size = request.contract_size if request.contract_size else bc.contract_size
+
+        wf_result, _strategy_cls_name, sym = execute_walk_forward(
+            engine=engine,
+            strategy_name=request.strategy,
+            strategy_params=strategy_params,
+            capital=capital,
+            contract_size=contract_size,
+            datasets=datasets,
+        )
+
+        if wf_result.get("success"):
+            self._persist_walk_forward_result(
+                wf_result=wf_result,
+                request=request,
+                git_hash=git_hash,
+                sym=sym,
+                data_src=datasets[0][2],
+            )
+        else:
+            logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
+
+        finalizer.finish_success(run_id)
+
+    def _persist_walk_forward_result(
+        self,
+        *,
+        wf_result: dict[str, Any],
+        request: BacktestRunRequest,
+        git_hash: str | None,
+        sym: str,
+        data_src: str,
+    ) -> None:
+        """Walk-Forward 主记录 + daily/trades 持久化（阶段 4 会拆出 Persister）"""
+        strategy = load_strategy(request.strategy)
+        result = BacktestResult(
+            symbol=sym,
+            strategy=get_strategy_class_name(strategy),
+            status=STATUS_SUCCESS,
+            strategy_version=getattr(type(strategy), "VERSION", None),
+            git_hash=git_hash,
+            strategy_params=serialize_strategy_params(strategy),
+            start_date=request.start,
+            end_date=request.end,
+            engine_config={
+                "type": "vnpy",
+                "mode": "walk-forward",
+                "windows": wf_result.get("windows", 0),
+            },
+            sharpe_ratio=wf_result.get("aggregate", {}).get("sharpe_mean"),
+            max_drawdown=wf_result.get("aggregate", {}).get("max_drawdown_mean"),
+            total_return=wf_result.get("aggregate", {}).get("return_mean"),
+            daily_std=wf_result.get("aggregate", {}).get("return_std"),
+        )
+        bt_id = self._dm.insert_backtest(result, data_src=data_src)
+        logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
+
+        # 拼接所有窗口的 OOS daily 和 trades 并持久化
+        all_daily: list[dict[str, object]] = []
+        all_trades: list[dict[str, object]] = []
+        for wr in wf_result.get("window_results", []):
+            all_daily.extend(wr.get("daily_results", []))
+            all_trades.extend(wr.get("trades", []))
+        if all_daily:
+            try:
+                self._dm.insert_backtest_daily(bt_id, all_daily)
+            except Exception:
+                logger.exception("Walk-Forward 每日资金曲线持久化失败 [bt={}]", bt_id)
+        if all_trades:
+            try:
+                self._dm.insert_backtest_trades(bt_id, all_trades)
+            except Exception:
+                logger.exception("Walk-Forward 交易记录持久化失败 [bt={}]", bt_id)
+
+        print(f"\n💡 查看报告: python main.py report --id {bt_id}")
+        self._dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
+
+    def _execute_search(
+        self,
+        *,
+        engine: VnpyBacktestEngine,
+        request: BacktestRunRequest,
+        bc: BacktestConfig,
+        strategy_params: dict[str, Any],
+        datasets: list[tuple[str, KlineDataFrame, str]],
+        git_hash: str | None,
+        run_id: int,
+        finalizer: RunFinalizer,
+    ) -> None:
+        """参数搜索模式执行与持久化（串行 / 并行）"""
+        optimizer_cfg = self._cm.get_optimizer_config()
+        n_trials = request.trials if request.trials else optimizer_cfg.n_trials
+        run_engine = request.optimizer or optimizer_cfg.engine or "grid"
+
+        sc = self._cm.get_trading_config(request.strategy)
+        search_space = (
+            sc.search_space or optimizer_cfg.strategy_spaces.get(request.strategy, {}) or optimizer_cfg.search_space
+        )
+        if not search_space:
+            logger.warning("搜索空间为空，跳过参数搜索")
+            finalizer.finish_skipped(run_id)
+            return
+
+        capital = request.capital if request.capital else bc.initial_capital
+        contract_size = request.contract_size if request.contract_size else bc.contract_size
+
+        result = self._run_search(
+            engine=engine,
+            request=request,
+            bc=bc,
+            strategy_params=strategy_params,
+            datasets=datasets,
+            git_hash=git_hash,
+            run_id=run_id,
+            search_space=search_space,
+            n_trials=n_trials,
+            run_engine=run_engine,
+            capital=capital,
+            contract_size=contract_size,
+            optimizer_cfg=optimizer_cfg,
+        )
+        if not result:
+            finalizer.finish_no_result(run_id)
+            return
+
+        # 保存实际使用的随机种子
+        self._dm.store.update_run_seed(
+            run_id=run_id,
+            use_fixed_seed=optimizer_cfg.use_fixed_seed,
+            random_seed=result.actual_seed,
+        )
+
+        try:
+            _persist_search_results(
+                dm=self._dm,
+                result=result,
+                datasets=datasets,
+                search_type=run_engine,
+                study_name=result.study_name,
+                git_hash=git_hash,
+                run_id=run_id,
+            )
+        except Exception:
+            logger.exception("参数搜索结果持久化失败，部分数据可能未入库")
+
+        finalizer.finish_success(run_id)
+
+    def _run_search(
+        self,
+        *,
+        engine: VnpyBacktestEngine,
+        request: BacktestRunRequest,
+        bc: BacktestConfig,
+        strategy_params: dict[str, Any],
+        datasets: list[tuple[str, KlineDataFrame, str]],
+        git_hash: str | None,
+        run_id: int,
+        search_space: dict[str, Any],
+        n_trials: int,
+        run_engine: str,
+        capital: float,
+        contract_size: int,
+        optimizer_cfg: Any,
+    ) -> SearchResult | None:
+        """实际执行串行 / 并行搜索的分发"""
+        if request.parallel:
+            from backtest.parallel import run_param_search_parallel
+
+            datasets_simple = cast(list[tuple[str, Any]], [(s, d) for s, d, _ in datasets])
+            study_name = f"{request.strategy}_{run_engine}_r{run_id}"
+            self._dm.store.link_study(run_id, study_name)
+
+            return run_param_search_parallel(
+                datasets=datasets_simple,
+                strategy_name=request.strategy,
+                search_space=search_space,
+                strategy_params=strategy_params,
+                backtest_config=bc,
+                run_id=run_id,
+                n_trials=n_trials,
+                search_type=run_engine,
+                n_workers=request.workers,
+                study_db_path=f"sqlite:///{self._dm.store.db_path}",
+                study_name=study_name,
+                random_seed=optimizer_cfg.random_seed,
+                use_fixed_seed=optimizer_cfg.use_fixed_seed,
+            )
+
+        return execute_parameter_search(
+            engine=engine,
+            strategy_name=request.strategy,
+            strategy_params=strategy_params,
+            capital=capital,
+            contract_size=contract_size,
+            datasets=datasets,
+            n_trials=n_trials,
+            optimizer_cfg=optimizer_cfg,
+            cm=self._cm,
+            optimizer_arg=request.optimizer,
+            git_hash=git_hash,
+            dm=self._dm,
+            run_id=run_id,
+        )
+
+    # ── TqSdk 单标的路径 ──────────────────────────────
+
+    def run_tqsdk(self, request: BacktestRunRequest) -> None:
+        """TqSdk 单标的回测（阶段 3 仅搬迁，未接 run 生命周期）
+
+        阶段 10 将统一接入 RunLogHelper / RunFinalizer / 前端 JSON。
+
+        前置：调用方需保证 `request.symbol` / `request.start` / `request.end` 已就绪
+        （由 `cli/commands/backtest.py` 完成校验）。
+        """
+        if request.pattern:
+            logger.warning("--engine tqsdk 不支持 --pattern，已忽略")
+        # 让类型收窄，配合上游 commands 层的入口校验
+        assert request.symbol is not None, "TqSdk 必须指定 --symbol（应由 commands 层校验）"
+        assert request.start is not None and request.end is not None, (
+            "TqSdk 必须指定 --start / --end（应由 commands 层校验）"
+        )
+
+        from common.tqsdk_imports import tqsdk
+        from strategies import TqsdkStrategyBridge
+
+        bc, strategy_params, _, _, _ = _prepare_backtest_config(request, self._cm)
+        account = self._cm.get_account_info()
+        git_hash = get_git_hash()
+
+        # ── 加载策略核心 + 计算总天数 ──────
+        strategy_core = load_strategy(request.strategy)
+        strategy_cls = get_strategy_class_name(strategy_core)
+        strategy_version = getattr(type(strategy_core), "VERSION", None)
+        total_days = _calc_total_days(request.start, request.end)
+
+        # ── 应用策略配置 ──────────────────
+        from strategies.ma_strategy import MACrossParams
+
+        strategy_config = MACrossParams()
+        apply_strategy_config(strategy_config, self._cm)
+
+        # ── 创建 State + 桥接 ────────────
+        from strategies.core.state import State
+
+        state = State(
+            symbol=request.symbol,
+            period=f"{strategy_params.get('kline_period', bc.interval)}m",
+            strategy_config=strategy_config,
+            capital=float(request.capital) if request.capital else float(bc.initial_capital),
+            contract_size=int(bc.contract_size),
+            margin=0.1,
+        )
+        bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
+
+        logger.info(
+            "回测: {} {}~{} 资金={} strategy={} GUI={}",
+            request.symbol,
+            request.start,
+            request.end,
+            request.capital,
+            strategy_cls,
+            request.gui,
+        )
+        self._dm.store.log(
+            "backtest",
+            f"开始: {request.symbol} {request.start}~{request.end} 资金={request.capital} strategy={strategy_cls}",
+            symbol=request.symbol,
+            status=LOG_STATUS_INFO,
+        )
+
+        # ── 创建 TqApi 并执行 ────────────
+        api = None
+        try:
+            auth = tqsdk.TqAuth(account.api_key, account.api_secret) if account else None
+            api = tqsdk.TqApi(
+                backtest=tqsdk.TqBacktest(
+                    start_dt=datetime.strptime(request.start, "%Y-%m-%d"),
+                    end_dt=datetime.strptime(request.end, "%Y-%m-%d"),
+                ),
+                auth=auth,
+                web_gui=request.gui,
+            )
+            cast(Any, bridge).initialize(api)
+            bridge.run(symbol=request.symbol)  # BacktestFinished 会正常传播
+        except tqsdk.BacktestFinished:
+            self._persist_tq_backtest_result(
+                bridge=bridge,
+                request=request,
+                strategy_cls=strategy_cls,
+                strategy_version=strategy_version,
+                total_days=total_days,
+                bc=bc,
+                strategy_core=strategy_core,
+                git_hash=git_hash,
+            )
+            if request.gui and api is not None:
+                _tq_backtest_gui_loop(api)
+        except Exception as e:
+            logger.exception(f"回测执行失败: {e}")
+            self._dm.store.log("backtest", f"失败: {e}", symbol=request.symbol, status=LOG_STATUS_ERROR)
+            self._persist_tq_failure(
+                request=request,
+                strategy_cls=strategy_cls,
+                strategy_version=strategy_version,
+                total_days=total_days,
+                bc=bc,
+                git_hash=git_hash,
+                error=str(e),
+            )
+            raise
+        finally:
+            if api:
+                api.close()
+
+    def _persist_tq_backtest_result(
+        self,
+        *,
+        bridge: Any,
+        request: BacktestRunRequest,
+        strategy_cls: str,
+        strategy_version: str | None,
+        total_days: int | None,
+        bc: BacktestConfig,
+        strategy_core: Any,
+        git_hash: str | None,
+    ) -> None:
+        """TqSdk 结果持久化：FIFO 计算盈亏 → 写入数据库 → 输出日志"""
+        from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
+        from common.formulas import calculate_fifo_profit
+
+        fills = bridge.fills
+        total_profit = calculate_fifo_profit(fills)
+        total_trades = len([f for f in fills if f.action == TRADE_ACTION_SELL])
+        effective_capital = float(request.capital) if request.capital else float(bc.initial_capital)
+
+        report = (
+            f"{'=' * 60}\n"
+            f"回测报告\n"
+            f"{'=' * 60}\n"
+            f"策略: {strategy_cls}\n"
+            f"品种: {request.symbol}\n"
+            f"区间: {request.start} ~ {request.end}\n"
+            f"初始资金: {effective_capital:,.2f}\n\n"
+            f"交易统计:\n"
+            f"  总交易次数: {total_trades}\n"
+            f"  总盈亏: {total_profit:,.2f}\n"
+            f"{'=' * 60}"
+        )
+        print(report)
+
+        bt_id = self._dm.insert_backtest(
+            BacktestResult(
+                symbol=request.symbol or "",
+                strategy=strategy_cls,
+                strategy_version=strategy_version,
+                git_hash=git_hash,
+                status=STATUS_SUCCESS,
+                total_trades=total_trades,
+                total_return=total_profit,
+                end_balance=effective_capital + total_profit,
+                start_date=request.start,
+                end_date=request.end,
+                total_days=total_days,
+                initial_capital=effective_capital,
+                commission_rate=bc.commission_rate,
+                slippage=bc.slippage,
+                price_tick=bc.price_tick,
+                contract_size=bc.contract_size,
+                kline_interval=bc.interval,
+                strategy_params=serialize_strategy_params(strategy_core),
+                engine_config={"type": "tqsdk", "gui": False},
+            )
+        )
+
+        if fills:
+            trade_dicts = [
+                {
+                    "datetime": f.timestamp,
+                    "symbol": f.symbol,
+                    "direction": "long" if f.action == TRADE_ACTION_BUY else "short",
+                    "offset": "open",
+                    "open_price": f.price,
+                    "close_price": f.price,
+                    "quantity": f.volume,
+                    "pnl": 0.0,
+                    "commission": 0.0,
+                    "reason": f.reason,
+                }
+                for f in fills
+            ]
+            self._dm.insert_backtest_trades(bt_id, trade_dicts)
+
+            logger.info("\n交易记录:")
+            for f in fills:
+                ts = f.timestamp[:10] if f.timestamp else "N/A"
+                tag = "买入" if f.action == TRADE_ACTION_BUY else "卖出"
+                logger.info(f"  {ts} {tag} {f.symbol} @ {f.price:.2f} x {f.volume}  原因: {f.reason}")
+
+        self._dm.store.log("backtest", f"完成:\n{report}", symbol=request.symbol, status=LOG_STATUS_SUCCESS)
+        print(f"\n💡 查看详细报告: python main.py report --id {bt_id}")
+
+    def _persist_tq_failure(
+        self,
+        *,
+        request: BacktestRunRequest,
+        strategy_cls: str,
+        strategy_version: str | None,
+        total_days: int | None,
+        bc: BacktestConfig,
+        git_hash: str | None,
+        error: str,
+    ) -> None:
+        """TqSdk 失败路径占位记录"""
+        result = BacktestResult(
+            symbol=request.symbol or "",
+            strategy=strategy_cls or "unknown",
+            strategy_version=strategy_version,
+            git_hash=git_hash,
+            status=STATUS_FAILED,
+            error_message=error,
+            start_date=request.start,
+            end_date=request.end,
+            total_days=total_days,
+            initial_capital=request.capital or bc.initial_capital,
+            commission_rate=bc.commission_rate,
+            slippage=bc.slippage,
+            price_tick=bc.price_tick,
+            contract_size=bc.contract_size,
+            kline_interval=bc.interval,
+            engine_config={"type": "tqsdk"},
+        )
+        self._dm.insert_backtest(result)
+
+
+# ── 独立辅助 ─────────────────────────────────────────────
+
+
+def get_git_hash() -> str | None:
+    """获取当前 Git 提交的短哈希值（7位）"""
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception as e:
+        logger.warning(f"获取 Git 哈希失败: {e}")
+    return None
+
+
+def _prepare_backtest_config(
+    request: BacktestRunRequest,
+    cm: ConfigManager,
+) -> tuple[BacktestConfig, dict[str, Any], str | None, float | None, int | None]:
+    """从请求 + 配置中心抽取公共回测配置项
+
+    Returns:
+        (bc, strategy_params, mode_override, capital_arg, contract_size_arg)
+    """
+    bc = cm.get_backtest_config()
+    sc = cm.get_strategy_config(request.strategy or "ma")
+    strategy_params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+    return bc, strategy_params, request.mode, request.capital, request.contract_size
+
+
+def _calc_total_days(start: str | None, end: str | None) -> int | None:
+    """根据日期字符串计算总天数；解析失败返回 None"""
+    try:
+        start_dt = datetime.strptime(start or "", "%Y-%m-%d")
+        end_dt = datetime.strptime(end or "", "%Y-%m-%d")
+        return (end_dt - start_dt).days + 1
+    except (ValueError, TypeError):
+        return None
+
+
+def _tq_backtest_gui_loop(api: Any) -> None:
+    """GUI 模式下的等待循环（阻塞直到用户关闭浏览器）"""
+    logger.info("\n图形界面已启动，关闭浏览器或Ctrl+C退出...")
+    try:
+        while True:
+            api.wait_update()
+    except Exception:
+        pass
+
+
+# ── 参数搜索结果持久化（阶段 3 原样搬入；阶段 4 会拆出 SearchResultPersister） ──
+
+
+def _persist_results(
+    dm: DataManager,
+    results: list[BacktestResult] | BacktestResult,
+    run_id: int | None = None,
+    data_src: str | None = None,
+) -> int | list[int]:
+    """通用持久化：将 BacktestResult 写入数据库（单条或批量）"""
+    if isinstance(results, BacktestResult):
+        return dm.insert_backtest(results, run_id=run_id, data_src=data_src)
+
+    ids: list[int] = []
+    for r in results:
+        ids.append(dm.insert_backtest(r, run_id=run_id, data_src=data_src))
+    return ids
+
+
+def _persist_search_results(
+    dm: DataManager,
+    result: SearchResult,
+    datasets: list[tuple[str, KlineDataFrame, str]],
+    search_type: str,
+    study_name: str,
+    git_hash: str | None,
+    run_id: int | None = None,
+) -> list[int]:
+    """将 SearchResult 的 trial_data 统一持久化到数据库"""
+    engine_cfg = {
+        "type": "vnpy",
+        "optimizer": search_type,
+        "study_name": study_name,
+        "study_db": dm.store.db_path,
+    }
+    all_ids: list[int] = []
+    for i, trial in enumerate(result.trial_data):
+        trial_cfg = {**engine_cfg, "trial_index": i}
+        for er in trial.get("engine_results", []):
+            er.engine_config = trial_cfg
+            er.strategy_params = trial.get("strategy_params", {})
+            er.git_hash = git_hash
+
+            if not er.success:
+                er.status = STATUS_FAILED
+                _persist_results(
+                    dm, er, run_id=run_id, data_src=next((f for s, _, f in datasets if s == er.symbol), None)
+                )
+                continue
+
+            sym = er.symbol
+            data_src = next((f for s, _, f in datasets if s == sym), None)
+            er.status = STATUS_SUCCESS
+            bt_id = _persist_results(dm, er, run_id=run_id, data_src=data_src)
+            assert isinstance(bt_id, int)
+            all_ids.append(bt_id)
+
+            daily = er.daily_results
+            if daily:
+                try:
+                    dm.insert_backtest_daily(bt_id, daily)
+                except Exception:
+                    logger.exception("每日资金曲线持久化失败 [bt={}]", bt_id)
+
+            if er.fills:
+                try:
+                    dm.insert_backtest_trades(bt_id, er.fills)
+                except Exception:
+                    logger.exception("交易记录持久化失败 [bt={}]", bt_id)
+
+            try:
+                errors = dm.validate_consistency(bt_id)
+                if errors:
+                    for err in errors:
+                        logger.warning("数据一致性警告: {}", err)
+            except Exception:
+                logger.exception("数据一致性校验失败 [bt={}]", bt_id)
+
+    print(f"\n============ {search_type.upper()} 优化结果 ============")
+    print(f"  最优得分:  {result.best_value:.4f}")
+    print(f"  最优参数:  {result.best_params}")
+    print(f"  总试验数:  {result.n_trials}")
+    print(f"  回测ID:    {all_ids[:10]}{'...' if len(all_ids) > 10 else ''}")
+    print(f"  Study:     {result.study_name}")
+    print("===========================================\n")
+
+    if all_ids:
+        if len(all_ids) == 1:
+            print(f"\n💡 查看详细报告: python main.py report --id {all_ids[0]}")
+        else:
+            ids_str = ", ".join(str(i) for i in all_ids[:10])
+            print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
+
+    return all_ids

@@ -10,7 +10,7 @@
   - runners:              批量回测编排器 (数据加载、Walk-Forward、参数搜索编排)
   - optimizer:            参数优化引擎 (Optuna 网格/贝叶斯搜索)
 
-注意: 单标的 TQ 回测已由 cli/commands/backtest.py:_run_tq_backtest 直接实现。
+注意: 单标的 TqSdk 回测由 cli/workflows/backtests_run.py:BacktestRunWorkflow._run_tqsdk_single 实现。
      报告生成已迁移至顶层 report/ 包。
      纯函数工具 (metrics/stats/formatting) 已提取至 common/ 模块。
      CSV 扫描/加载已迁移至 data/manager.py (DataManager)。

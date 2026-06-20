@@ -69,25 +69,41 @@ def main() -> None:
     # ---- backtest (统一回测命令) ----
     p = sub.add_parser(
         "backtest",
-        help="统一回测（自动选择引擎）",
-        description="""统一回测命令，根据标的数量自动选择回测引擎:
+        help="统一回测（默认 vnpy 引擎，可显式指定 --engine tqsdk）",
+        description="""统一回测命令。引擎默认 vnpy，可通过 --engine 显式切换。
 
-单标的模式: 当使用 --symbol 指定单一品种时，自动使用 TqSdk 进行图形化回测
-  - 支持 GUI 界面展示
-  - 实时查看回测过程
-  - 示例: python main.py backtest --symbol DCE.m2509 --start 2024-01-01 --end 2024-12-31 --gui
+引擎选择:
+  --engine vnpy    (默认) 使用 vn.py 进行批量回测，支持参数搜索 / Walk-Forward
+                   - 单品种: --symbol DCE.m2509
+                   - 批量:   --pattern "DCE\\.m"
+                   - 全量:   省略 --symbol/--pattern
+                   - 仅生成文字报告 + 数据库落地
 
-批量模式: 当使用 --pattern 或省略 --symbol 时，自动使用 vn.py 进行批量回测
-  - 支持正则表达式匹配多个品种
-  - 仅生成文字报告
-  - 数据自动落地到数据库
-  - 示例: python main.py backtest --pattern "DCE\\.m"
-          python main.py backtest  # 扫描全部品种
+  --engine tqsdk   使用 TqSdk 进行单标的回测，可启用 GUI（仅本引擎支持 --gui）
+                   - 必须指定 --symbol
+                   - 不支持 --pattern / --mode / --parallel
+                   - GUI 默认关闭，需显式 --gui 开启
+
+注意:
+  - --symbol / --pattern 仅控制标的过滤，不再影响引擎选择。
+  - --gui 仅在 --engine tqsdk 下生效，其他引擎下传入会给 warning。
+
+示例:
+  python main.py backtest --strategy ma --pattern "DCE\\.m"
+  python main.py backtest --engine vnpy --strategy ma --symbol DCE.m2509
+  python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui
 
 回测结果均会自动保存到数据库，可使用 report 命令查看详情。
 """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--symbol", default=None, help="品种代码（单品种模式，启用 TqSdk）")
+    p.add_argument(
+        "--engine",
+        choices=["vnpy", "tqsdk"],
+        default="vnpy",
+        help="回测引擎（默认 vnpy；tqsdk 仅支持单标的，可启用 GUI）",
+    )
+    p.add_argument("--symbol", default=None, help="品种代码，仅作为标的过滤；与引擎选择解耦")
     p.add_argument(
         "--pattern", default=None, help='文件名正则表达式（如 "DCE\\.m.*\\.1m\\." 匹配 DCE 豆粕的 1 分钟数据）'
     )
@@ -96,12 +112,14 @@ def main() -> None:
     p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
     p.add_argument("--capital", type=float, default=None, help="初始资金（默认从配置文件读取）")
     p.add_argument("--contract-size", type=int, default=None, help="合约乘数（默认从配置文件读取）")
-    p.add_argument("--gui", action="store_true", help="启用图形界面（仅单品种模式生效）")
+    p.add_argument(
+        "--gui", action="store_true", help="启用图形界面（仅 --engine tqsdk 生效，其他引擎下给 warning 后忽略）"
+    )
     p.add_argument(
         "--mode",
         choices=["search", "walk-forward"],
         default="search",
-        help="回测模式: search=参数搜索(默认), walk-forward=滚动验证",
+        help="回测模式: search=参数搜索(默认), walk-forward=滚动验证（仅 --engine vnpy 生效）",
     )
     p.add_argument(
         "--optimizer",
@@ -110,7 +128,7 @@ def main() -> None:
         help="参数搜索引擎: grid=网格搜索, bayesian=贝叶斯优化 (默认读 TOML)",
     )
     p.add_argument("--trials", type=int, default=None, help="optimizer 最大试验次数（默认从配置文件读取）")
-    p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭）")
+    p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭，仅 --engine vnpy 生效）")
     p.add_argument("--workers", type=int, default=None, help="并行进程数（默认 os.cpu_count()，仅 --parallel 时生效）")
 
     # ---- report ----

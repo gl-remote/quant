@@ -507,7 +507,7 @@ write_entry_html(output_dir)           # 最后一步：此时所有 JSON（含 
 
 ### 目标
 
-建立新的 run 级总编排者，避免只是把 CLI 函数搬到别处但流程仍由 CLI 拼装。
+建立新的 run 级总编排者，避免只是把 CLI 函数搬到别处但流程仍由 CLI 拼装。同时把"引擎选择"从隐式推断改为显式开关，让 CLI 参数语义清晰。
 
 ### 当前问题
 
@@ -522,9 +522,38 @@ write_entry_html(output_dir)           # 最后一步：此时所有 JSON（含 
 - 持久化（`_persist_search_results`）。
 - finalize（现在通过 `RunFinalizer`，但 CLI 负责把它传进各分支）。
 
+另外，引擎选择当前由 `cmd_backtest` 通过 `--symbol`/`--pattern` 自动推断（单标走 TqSdk、批量走 vnpy），存在两个问题：
+
+- `--symbol` 同时承载"标的过滤"和"引擎选择"两层语义，调用方难以单独表达"用 vnpy 跑单标的"的意图。
+- `--gui` 实际只在 TqSdk 路径下有效，但参数定义里没有约束，其他引擎下静默忽略。
+
 ### 计划改动
 
-新增命令级 workflow：
+#### 1. 引擎选择显式化（CLI 接口）
+
+`cli/main.py` 中 `backtest` 子命令调整：
+
+- 新增 `--engine`，`choices=["vnpy", "tqsdk"]`，默认 `vnpy`。
+- `--symbol` 与引擎选择**完全解耦**，仅表示标的过滤（与 `--pattern` 互斥的语义保持不变）。
+- `--gui` 仅在 `--engine tqsdk` 下生效；TqSdk 路径下不再默认开启 GUI，由用户显式指定 `--gui`。
+- 其他 engine 下若传 `--gui`，给 warning 后忽略，不报错。
+
+调用形态示意：
+
+```bash
+# 默认 vnpy（即便指定 --symbol 也走 vnpy 单标的批量路径）
+python main.py backtest --strategy ma --symbol DCE.m2509
+
+# 显式 vnpy
+python main.py backtest --engine vnpy --strategy ma --pattern "DCE\\.m"
+
+# 显式 tqsdk（GUI 不再默认开）
+python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui
+```
+
+#### 2. 命令级 workflow 下沉
+
+新增：
 
 ```text
 cli/workflows/backtests_run.py
@@ -532,17 +561,37 @@ cli/workflows/backtests_run.py
 
 包含：
 
-- `BacktestRunWorkflow.run(request)`，接收明确请求对象，不直接依赖 argparse Namespace。
-- `run_search(...)`
-- `run_walk_forward(...)`
+- `BacktestRunRequest`：明确请求对象，不直接依赖 `argparse.Namespace`，由 `from_args(args)` 构造。
+- `BacktestRunWorkflow`：业务编排者，提供两个公开入口：
+  - `run_vnpy(request)`：vnpy 批量路径（参数搜索 / Walk-Forward）
+  - `run_tqsdk(request)`：TqSdk 单标的路径
+- TqSdk 路径只做搬迁，不与 vnpy 路径统一生命周期（统一接入 `RunLogHelper`/`RunFinalizer`/前端 JSON 留到阶段 10）。
 - 统一异常路径。
-- 统一持有并调用 `RunLogHelper`、`RunFinalizer`、Persister（阶段 4 产出），CLI 不再手动传递 finalizer。
+- workflow 自持 `RunLogHelper`、`RunFinalizer`，CLI 不再手动 attach/detach 或传递 finalizer。
 
-CLI 最终只负责：
+**职责边界（commands ↔ workflow）**：
+
+| 职责 | 归属 | 说明 |
+|---|---|---|
+| `argparse` Namespace → `BacktestRunRequest` | commands | 解耦 CLI 框架 |
+| 跨字段参数校验（`--gui` 引擎兼容性、tqsdk 必填） | commands | `argparse` 不能表达的约束 |
+| 引擎路由（按 `--engine` 选择 `run_vnpy` / `run_tqsdk`） | commands | 命令级路由，workflow 不感知 engine 字段 |
+| 用户交互层友好错误（`ValueError` / warn） | commands | 直接面向用户 |
+| 数据加载、引擎初始化、run 生命周期、持久化 | workflow | 业务编排 |
+
+CLI 最终只负责（约 50 行）：
 
 ```python
-request = BacktestRunRequest.from_args(args)
-BacktestRunWorkflow().run(request)
+def cmd_backtest(args):
+    request = BacktestRunRequest.from_args(args)
+    _validate_request(request)
+    workflow = BacktestRunWorkflow()
+    if request.engine == "vnpy":
+        workflow.run_vnpy(request)
+    elif request.engine == "tqsdk":
+        workflow.run_tqsdk(request)
+    else:
+        raise ValueError(...)
 ```
 
 ### 边界要求
@@ -551,12 +600,78 @@ BacktestRunWorkflow().run(request)
 - CLI 不再直接写 daily/trades。
 - CLI 不再直接 link study。
 - 应用层可以协调 data/backtest/report，但不能包含具体 SQL 或前端 JSON 格式化逻辑。
+- 本阶段**不**触碰：
+  - `_persist_search_results` 拆分（阶段 4）
+  - `engine.set_run_id` / `set_git_hash` 状态注入清理（阶段 5）
+  - 串行/并行 engine 创建路径双轨统一（阶段 5）
+  - Optuna 边界封装（阶段 6）
+  - Walk-Forward 强类型化（阶段 7）
+  - TqSdk 路径与 vnpy 路径生命周期统一（阶段 10）
+- "待评估任务清单"第 1 条 `tqsdk_bridge` 硬编码 `1m`，本阶段不动，仍归阶段 10。
 
 ### 验收标准
 
-- `cmd_backtest()` 明显变薄。
+- `cmd_backtest()` 明显变薄，仅剩请求构造 + workflow 调用。
+- 引擎选择全部由 `--engine` 决定，`--symbol` 不再触发 TqSdk。
+- `--gui` 在 `--engine tqsdk` 下生效；其他 engine 下传 `--gui` 给出 warning 但不报错。
+- 三条命令行路径均验证通过：
+  - `python main.py backtest --strategy ma --pattern "DCE\\.m"`（默认 vnpy 批量，**完整验证**：前端 JSON 契约 + run 维度文件）
+  - `python main.py backtest --engine vnpy --strategy ma --symbol DCE.m2509`（vnpy 单标的，**完整验证**：前端 JSON 契约 + run 维度文件）
+  - `python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui`（显式 TqSdk + GUI，**仅冒烟验证**：能跑通、写入 `backtests` 表即可，前端 JSON / run 生命周期完整性留到阶段 10 验证）
 - 搜索模式和 Walk-Forward 模式均通过。
-- 静态验证和真实回测验证通过。
+- 前端 JSON 契约不变（阶段 0.5 契约测试在两条 vnpy 命令产出的 run 上通过）。
+- 静态验证（ruff + mypy）和 pytest 通过。
+
+### 阶段 3 完成记录
+
+- 完成日期：2026-06-20
+- 主要改动：
+  1. **CLI 接口改造**：`cli/main.py` 新增 `--engine choices=[vnpy, tqsdk] default=vnpy`；`--symbol` 与引擎选择完全解耦；`--gui` 帮助文本明确仅 `tqsdk` 生效；其他 engine 下 `--gui` 给 warning 后忽略。
+  2. **新增命令级 workflow**：`cli/workflows/backtests_run.py` 提供 `BacktestRunRequest`（dataclass，from_args 构造）和 `BacktestRunWorkflow`（按 `request.engine` 分发到 vnpy 批量 / TqSdk 单标的两条路径）。
+  3. **整体搬迁**：原 `cli/commands/backtest.py` 中的 7 个函数（`_run_batch_backtest` / `_run_tq_backtest` / `_persist_tq_backtest_result` / `_tq_backtest_gui_loop` / `_execute_walk_forward_mode` / `_execute_search_mode` / `_persist_search_results` / `_persist_results` / `_prepare_backtest_config` / `get_git_hash` / `_calc_total_days`）整体迁入 workflow，**不改语义**。
+  4. **CLI 收敛 + 职责对称**：`cli/commands/backtest.py` 从 793 行 → 27 行（一度只剩 2 行薄壳）→ 64 行（commands 收回应承担的能力，与 export/report/tqsdk 形态对齐）。
+     - **commands 层** 承担：argparse → request、跨字段校验（`--gui` 兼容、tqsdk 必填）、引擎路由（`run_vnpy` / `run_tqsdk`）。
+     - **workflow 层** 承担：数据加载、engine 初始化、run 生命周期、持久化。
+     - workflow 公开接口由原 `run(request)` 拆为 `run_vnpy(request)` + `run_tqsdk(request)`，workflow 不再感知 engine 字段。
+  5. **顺手修复 2 处潜在 bug**（详见下方"实施中发现的问题"）。
+- 影响文件：
+  - 修改：`cli/main.py`、`cli/commands/backtest.py`、`cli/workflows/__init__.py`
+  - 新增：`cli/workflows/backtests_run.py`
+- 自动化验证：
+  - ruff：通过（`ruff check cli/ tests/` All checks passed）
+  - mypy：通过（`mypy cli/commands/backtest.py cli/workflows/backtests_run.py` Success: no issues found in 2 source files）
+  - pytest：通过（`tests/strategies/` + `workspace/packages/python-contracts/tests/` 148 passed in 6.41s）
+- 真实回测 run_id：
+  - r1：默认 vnpy 批量 + bayesian 并行（`bash tools/backtest-ma.sh`），best_value≈2.31，trial 时长分钟级，9 个 backtest_id；前端 JSON 7 份齐全。
+  - r2：显式 vnpy 单标的 + grid 串行（`--engine vnpy --symbol DCE.m2601 --optimizer grid --trials 2`），2 个 backtest_id（10/11），增量构建跳过前端 vite，data_exports 增量写入 nav/equity/trades/optuna 等。
+- TqSdk 冒烟验证：
+  - `--engine tqsdk` 缺 `--symbol` → 抛 `ValueError: --engine tqsdk 必须指定 --symbol` ✅
+  - `--engine tqsdk` 缺 `--start/--end` → 抛 `ValueError: --engine tqsdk 必须显式指定 --start / --end` ✅
+  - 完整 TqSdk 跑通 / 接入 run 生命周期 / 生成前端 JSON 留到阶段 10 验证。
+- `--gui` 兼容性验证：
+  - `--engine vnpy` + `--gui` → 输出 warning `--gui 仅在 --engine tqsdk 下生效，已忽略当前 --gui 标志` ✅
+- 前端 JSON 契约：未触动，r1/r2 都通过阶段 0.5 契约测试（运行时直接打开 `output/index.html` 可见 run 列表、参数优化、收益曲线、交易记录、运行日志均正常）。
+
+### 实施中发现的问题（顺手修复 / 留作遗留）
+
+#### A. 顺手修复（2 处）
+
+1. **TqSdk 路径 `capital=None` 时报告生成 / 入库会崩**
+   - 原 `_persist_tq_backtest_result` 中 `f"初始资金: {capital_arg:,.2f}"` 在 `capital_arg=None` 时抛 `TypeError`；`end_balance=capital_arg + total_profit if capital_arg else 0` 当 capital 为 None 时直接写 0，与 `initial_capital=request.capital or bc.initial_capital` 不一致。
+   - 修复：在 workflow 中提前算出 `effective_capital = float(request.capital) if request.capital else float(bc.initial_capital)`，统一用于报告字符串、`end_balance`、`initial_capital`，三者一致。
+2. **TqSdk 入口必填校验缺失**
+   - 原代码假定 `args.symbol` / `args.start` / `args.end` 都已提供；当 TqSdk 用户漏传时会在 `datetime.strptime("", ...)` 处抛不友好的 `ValueError`。
+   - 修复：workflow 入口显式抛 `ValueError("--engine tqsdk 必须指定 --symbol")` / `ValueError("--engine tqsdk 必须显式指定 --start / --end")`。
+
+#### B. 已识别但留待后续阶段
+
+1. **`_run_batch_backtest` 旧版的 try/except/finally 变量作用域 bug（已通过搬迁规避）**
+   - 原 [`_run_batch_backtest`](file:///Users/gaolei/Documents/src/quant/cli/commands/backtest.py) 中 `run_id` / `finalizer` / `log_helper` 都在 try 块内定义，若 `_prepare_backtest_config` / `_load_datasets` 等前置步骤抛错，except 块引用 `finalizer.finish_failed(run_id, ...)` 会再抛 `UnboundLocalError`。本次搬迁后，前置步骤 `_prepare_backtest_config` / `_load_datasets` 移出 try/except，进入 try 之前已确保 engine、run_id、log_helper、finalizer 都已就绪，从作用域上消除了该 bug。
+2. **`_persist_tq_backtest_result` 写入 `engine_config={"type": "tqsdk", "gui": False}` 永远是 False**
+   - 原代码硬编码，没有从 args 读取实际 gui 标志。本次搬迁未修（保持搬迁不改语义原则），归阶段 10 处理。
+3. **TqSdk 路径数据一致性**：阶段 0 / 阶段 2 已发现 `total_trades` 与 `fills` 不一致问题，搬迁后 vnpy 单标的回测在前端报告中再次复现（示例：bt=10/11，`total_trades=0` 但 `fills=125`），与阶段 7 待评估任务清单第 2 条吻合，仍归阶段 7 前后修复。
+4. **ConfigManager / DataManager 在 workflow 构造时即建连**：当前 `BacktestRunWorkflow.__init__` 立即创建 `ConfigManager` 和 `DataManager`。这在 CLI 单次入口下没问题，但若未来被 API / scheduler 复用，可能希望注入而非内置。本阶段未引入抽象（避免过度设计），留待真实需要时再改。
+5. **`_persist_search_results` 中 `engine_config["study_db"]` 与 search_type / study_name 仍由本函数手拼**：阶段 4 拆 `SearchResultPersister` 时再统一。
 
 ## 阶段 4：抽出结果持久化服务
 
@@ -603,6 +718,11 @@ data/backtest_persistence.py
 - `trades` 写入失败：记录 exception，但不阻断后续 trial。
 - 一致性校验失败：记录 exception，不阻断 run 收尾。
 
+### 边界要求
+
+- 本阶段只处理 vnpy 路径（批量回测、Walk-Forward、并行搜索）的持久化拆分。
+- TqSdk 单标的的 `_persist_tq_backtest_result` 本阶段**不动**，与 TqSdk 路径一并留到阶段 10 接入 `BacktestResultPersister`。
+
 ### 验收标准
 
 - `cli/commands/backtest.py` 不再包含 `_persist_search_results`。
@@ -615,7 +735,7 @@ data/backtest_persistence.py
 
 ### 目标
 
-让 backtest 执行层只负责执行，不负责 run 状态、study 关联、数据库路径推导。
+让 backtest 执行层只负责执行，不负责 run 状态、study 关联、数据库路径推导。同时让 engine 退化为纯执行器，统一串行/并行两条路径的 engine 创建形态。
 
 ### 当前问题
 
@@ -629,9 +749,22 @@ data/backtest_persistence.py
 
 这打破了 backtest 层和 data 层的边界。
 
+另外，`VnpyBacktestEngine` 当前被当作"长期注入容器"，由调用方手动注入运行期状态：
+
+- `engine.set_run_id(run_id)`
+- `engine.set_git_hash(git_hash)`
+- 构造时持有 `dm` 引用
+
+这导致串行路径和并行路径形态不一致：
+
+- **串行路径**：CLI 创建 `VnpyBacktestEngine(bc, dm)` → 注入 `run_id`/`git_hash` → 透传给 `execute_parameter_search` / `execute_walk_forward`。
+- **并行路径**：worker 子进程内自行 `VnpyBacktestEngine(ctx["backtest_config"], dm=None)`，不接受任何状态注入，CLI 创建的 engine 实例**不**进入并行路径。
+
+阶段 3 已把这些注入和分发动作集中到 workflow 内，但形态本身没改。
+
 ### 计划改动
 
-调整 `execute_parameter_search()` 参数：
+**runners 接口收敛**：调整 `execute_parameter_search()` 参数：
 
 - 移除 `dm`
 - 移除 `run_id`
@@ -639,25 +772,35 @@ data/backtest_persistence.py
   - `study_name`
   - `study_db_path`
 
-由 `cli/workflows` 负责：
+**engine 退化为纯执行器**：
+
+- 移除 `engine.set_run_id` / `engine.set_git_hash`，改为执行时通过参数显式传入（或在持久化阶段补全 `git_hash` 字段）。
+- engine 不再持有 `dm` 引用。
+- 串行/并行两条路径下 engine 创建形态统一为 `VnpyBacktestEngine(bc)`（无运行期状态、无 dm）。
+
+**职责回收到 workflow**：由 `cli/workflows` 负责：
 
 - 创建 run。
 - 生成 study\_name。
 - `link_study(run_id, study_name)`。
 - 传入 `study_db_path`。
 - run 收尾。
+- 把 `git_hash`、`run_id` 在持久化阶段补全到结果对象（不通过 engine 传递）。
 
 ### 边界要求
 
 - `backtest/runners.py` 不 import `DataManager`。
 - backtest 层不调用 `finish_run`。
 - backtest 层不调用 `link_study`。
+- `VnpyBacktestEngine` 构造和方法签名不再接受 `run_id` / `git_hash` 等运行期元数据。
+- 串行和并行路径下 engine 实例的创建参数形态一致。
 
 ### 验收标准
 
 - 串行搜索和并行搜索都能生成 `optuna.json`。
 - run 与 study 关联仍存在。
 - 参数优化页可打开。
+- `engine_config.trial_index` / `git_hash` 仍正确写入到 `backtests` 表。
 - 静态验证和真实回测验证通过。
 
 ## 阶段 6：拆出 Optuna 业务域契约
@@ -887,9 +1030,11 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 ### 计划改动
 
 - TqSdk 单标的也创建 run。
-- TqSdk 路径也使用 `RunLogService`。
+- TqSdk 路径也使用 `RunLogHelper`。
 - TqSdk 路径也使用 `RunFinalizer`。
+- TqSdk 路径也通过阶段 4 的 `BacktestResultPersister` / `WalkForwardPersister` 持久化（`_persist_tq_backtest_result` 整体接入持久化服务）。
 - TqSdk 路径也生成前端 JSON。
+- 顺带处理"待评估任务清单"第 1 条：修复 [`tqsdk_bridge._subscribe_klines / _init_period_data`](file:///Users/gaolei/Documents/src/quant/strategies/bridges/tqsdk_bridge.py#L341-L395) 硬编码 `source_period = "1m"`，改为按策略 reqs 推断最小周期；同时统一 `DataFeed.create()` 与 `_init_period_data()` 的 docstring，标注各自适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。
 
 ### 验收标准
 
