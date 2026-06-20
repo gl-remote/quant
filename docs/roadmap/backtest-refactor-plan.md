@@ -673,6 +673,223 @@ def cmd_backtest(args):
 4. **ConfigManager / DataManager 在 workflow 构造时即建连**：当前 `BacktestRunWorkflow.__init__` 立即创建 `ConfigManager` 和 `DataManager`。这在 CLI 单次入口下没问题，但若未来被 API / scheduler 复用，可能希望注入而非内置。本阶段未引入抽象（避免过度设计），留待真实需要时再改。
 5. **`_persist_search_results` 中 `engine_config["study_db"]` 与 search_type / study_name 仍由本函数手拼**：阶段 4 拆 `SearchResultPersister` 时再统一。
 
+## 阶段 3.5：CLI 分层职责对齐与命令文件解耦
+
+### 背景
+
+阶段 3 完成后，code review 中暴露出三个分层错位问题，本质都是"args 的定义和消费没有放在同一个文件里"造成的认知断层：
+
+#### 问题 1：args 定义在 main，消费在 workflow，commands 只是信使
+
+```text
+cli/main.py                         ← p.add_argument("--engine"), p.add_argument("--symbol"), ...
+   ↓ args
+cli/commands/backtest.py            ← BacktestRunRequest.from_args(args) 仅做透传
+   ↓ args
+cli/workflows/backtests_run.py      ← getattr(args, "engine"), getattr(args, "symbol"), ...
+```
+
+字段在 main 出生、在 workflow 死亡，commands 既看不到字段定义、也看不到字段消费——commands 名义上承担了"参数路由"，但**实际既没翻译、也没校验**，是个空壳。
+
+#### 问题 2：`BacktestRunRequest` 是伪共性
+
+当前 dataclass 字段杂糅了三种互不相关工作流的输入：
+
+| 工作流 | 必需字段 | 不相关字段（None / False） |
+|---|---|---|
+| vnpy + search | strategy, capital, contract_size, symbol/pattern, optimizer, trials, parallel, workers | gui |
+| vnpy + walk-forward | strategy, capital, contract_size, symbol/pattern | optimizer, trials, parallel, workers, gui |
+| tqsdk | strategy, **symbol（必需）**, **start（必需）**, **end（必需）**, capital, gui | pattern, optimizer, trials, parallel, mode, contract_size |
+
+它们**唯一共性是"跑回测、写库、可能写报告"**——这是水平复用（lifecycle / helper），不是接口共性。当前一个 dataclass 强行装下所有字段，导致：
+
+- workflow 内部出现 `assert request.symbol is not None` 类型收窄；
+- 调用方有歧义（"传了 `gui` 但走 vnpy 时会被忽略"，要看 commands 校验才知道）；
+- 阶段 7 给 walk-forward 加窗口参数时，会污染另外两个工作流的 dataclass。
+
+#### 问题 3：`cli/commands/tqsdk.py` 一个文件装两个命令
+
+`cmd_test`（实时数据 + 不下单）与 `cmd_live`（实时数据 + 下单）是两个独立命令，但被合并在同一文件中，违反「一个文件一个命令」原则；同时它们的共性（接 TqApi、桥接策略、跑事件循环）没有抽到 workflow 层，导致后续若要加新的"实时数据驱动"命令（例如纸面跟单）必须复制粘贴。
+
+### 目标
+
+让 args **定义、校验、路由、消费**在同一文件内（commands），workflow 只接收**纯净的业务请求对象**，每个工作流字段最小化、类型自洽。
+
+### 计划改动
+
+#### A. args 定义下沉到 commands（适用于所有命令）
+
+引入 `register(subparsers) -> None` 模式：
+
+```text
+cli/commands/{export,test,live,backtest,report}.py
+  - register(subparsers): 调用 add_parser + add_argument，把本命令所有 argparse 选项定义在此
+  - cmd_xxx(args): 消费 args + 跨字段校验 + 路由 + 构造 *Request + 调 workflow
+```
+
+`cli/main.py` 改为：
+
+```python
+from cli.commands import backtest, export, live, report, test
+
+def main():
+    parser = argparse.ArgumentParser(...)
+    sub = parser.add_subparsers(dest="command", title="子命令", required=True)
+
+    backtest.register(sub)
+    export.register(sub)
+    test.register(sub)
+    live.register(sub)
+    report.register(sub)
+
+    args = parser.parse_args()
+    handlers = {
+        "backtest": backtest.cmd_backtest,
+        "export":   export.cmd_export,
+        "test":     test.cmd_test,
+        "live":     live.cmd_live,
+        "report":   report.cmd_report,
+    }
+    handlers[args.command](args)
+```
+
+main 不再写一行 `add_argument`。
+
+**范围**：
+- `backtest`、`export`、`test`、`live`、`report` 全部命令都迁到 register 模式。
+- `report` 仅迁 args 定义下沉，**不**做 Request / workflow 拆分（业务层拆分留给阶段 8）。
+
+#### B. backtest 工作流多入口拆分（消除伪共性）
+
+**workflow 暴露 3 个明确入口**：
+
+```python
+class BacktestRunWorkflow:
+    def run_vnpy_search(self, req: VnpySearchRequest) -> None: ...
+    def run_vnpy_walk_forward(self, req: VnpyWalkForwardRequest) -> None: ...
+    def run_tqsdk(self, req: TqsdkRequest) -> None: ...
+```
+
+**3 个 dataclass 字段最小化**：
+
+```python
+@dataclass(frozen=True)
+class VnpySearchRequest:
+    strategy: str
+    capital: float | None
+    contract_size: int | None
+    symbol: str | None              # 标的过滤
+    pattern: str | None             # 标的过滤
+    start: str | None
+    end: str | None
+    optimizer: str | None
+    trials: int | None
+    parallel: bool
+    workers: int | None
+
+@dataclass(frozen=True)
+class VnpyWalkForwardRequest:
+    strategy: str
+    capital: float | None
+    contract_size: int | None
+    symbol: str | None
+    pattern: str | None
+    start: str | None
+    end: str | None
+    # 阶段 7 在此扩展窗口参数
+
+@dataclass(frozen=True)
+class TqsdkRequest:
+    strategy: str
+    symbol: str                     # 必需，由 commands 校验后传入
+    start: str                      # 必需
+    end: str                        # 必需
+    capital: float | None
+    gui: bool
+```
+
+**commands 接管完整路由**：
+
+```python
+def cmd_backtest(args):
+    if args.gui and args.engine != "tqsdk":
+        logger.warning("--gui 仅在 --engine tqsdk 下生效，已忽略")
+
+    workflow = BacktestRunWorkflow()
+    if args.engine == "vnpy":
+        if args.mode == "walk-forward":
+            workflow.run_vnpy_walk_forward(_build_vnpy_wf_request(args))
+        else:
+            workflow.run_vnpy_search(_build_vnpy_search_request(args))
+    elif args.engine == "tqsdk":
+        _validate_tqsdk_args(args)              # 校验 symbol/start/end 必填
+        workflow.run_tqsdk(_build_tqsdk_request(args))
+    else:
+        raise ValueError(f"未知引擎: {args.engine!r}")
+```
+
+workflow 层不再感知 `engine` / `mode` 字段——这两个本就是 CLI 概念，不是业务概念。
+
+#### C. tqsdk.py 拆分为 test.py + live.py
+
+```text
+cli/commands/tqsdk.py            （删除）
+  ↓
+cli/commands/test.py             cmd_test + register
+cli/commands/live.py             cmd_live + register
+```
+
+#### D. 抽取 `cli/workflows/tqsdk_realtime.py`
+
+`test` 和 `live` 的共性是「连 TqApi → 桥接策略 → 订阅行情 → 跑事件循环」。差异是「策略下不下单」。
+
+```python
+# cli/workflows/tqsdk_realtime.py
+class TqsdkRealtimeWorkflow:
+    def run(self, req: TqsdkRealtimeRequest, bridge_factory) -> None:
+        """
+        bridge_factory: 由 commands 决定生成 SignalBridge（不下单，test 用）
+                        或 LiveBridge（下单，live 用）
+        """
+```
+
+commands 各自决定使用哪种 bridge 工厂，workflow 不持有"是否下单"开关。这一层让"加新的实时数据驱动命令"只需写新 commands 文件 + 选 bridge，不用改 workflow。
+
+### 边界要求
+
+- 本阶段**不**触碰：
+  - 任何业务逻辑（`run_vnpy_search` / `run_vnpy_walk_forward` / `run_tqsdk` 内部仍调用同样的 `_load_datasets` / engine 创建 / persist）
+  - 持久化拆分（阶段 4）
+  - engine 状态注入清理（阶段 5）
+  - report 业务层拆分（阶段 8）
+  - TqSdk 接入 run 生命周期（阶段 10）
+- workflow 模块**不**直接读 `argparse.Namespace`，所有字段由 commands 翻译为 *Request 后传入。
+- commands 不再透传 args 给 workflow；commands 是 args 的最后消费者。
+
+### 落地步骤
+
+按 commit 边界分 3 步：
+
+1. **commit A — args 定义下沉（register 模式）**：所有命令引入 `register(subparsers)`，main 改为调 register；commands 内部仍用旧的 `BacktestRunRequest`，**业务行为零变化**。
+2. **commit B — backtest 工作流多入口拆分**：拆 3 个 *Request、workflow 暴露 3 个公开入口、commands 完整接管路由；删除旧 `BacktestRunRequest`。
+3. **commit C — tqsdk 命令文件拆分 + tqsdk_realtime workflow**：拆 `tqsdk.py` → `test.py` + `live.py`，新增 `cli/workflows/tqsdk_realtime.py`，commands 各自选 bridge factory。
+
+每步独立 ruff + mypy + pytest 验证，B 步加真实回测验证。
+
+### 验收标准
+
+- `cli/main.py` 不再包含任何 `add_argument` 调用。
+- `cli/commands/{backtest,export,test,live,report}.py` 各自包含 `register` 与 `cmd_*`。
+- `cli/workflows/backtests_run.py` 暴露 `run_vnpy_search` / `run_vnpy_walk_forward` / `run_tqsdk` 三个入口；不存在 `BacktestRunRequest` 这种伪共性 dataclass。
+- `cli/workflows/backtests_run.py` 不直接 import `argparse`，不直接读 `args`。
+- `cli/commands/tqsdk.py` 文件不存在；`cli/commands/test.py` + `cli/commands/live.py` 各自存在。
+- 三条命令行路径仍通过：
+  - `python main.py backtest --strategy ma --pattern "DCE\\.m"`（默认 vnpy 批量）
+  - `python main.py backtest --engine vnpy --strategy ma --symbol DCE.m2509`（vnpy 单标的）
+  - `python main.py backtest --engine tqsdk --strategy ma --symbol DCE.m2509 --gui`（显式 TqSdk + GUI）
+- 前端 JSON 契约不变（阶段 0.5 契约测试通过）。
+- 静态验证（ruff + mypy）和 pytest 通过。
+
 ## 阶段 4：抽出结果持久化服务
 
 ### 目标
@@ -1059,6 +1276,8 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 验证
 阶段 3：BacktestRunWorkflow 命令级编排层
 验证
+阶段 3.5：CLI 分层职责对齐与命令文件解耦
+验证
 阶段 4：结果持久化服务
 验证
 阶段 5：清理 runners 对 data 层依赖
@@ -1087,7 +1306,8 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 4. 阶段 2：RunLogHelper + RunFinalizer。
 5. 阶段 2.5：拆解 build_dashboard 黑箱。
 6. 阶段 3：BacktestRunWorkflow 命令级编排层。
-7. 阶段 4：结果持久化服务。
+7. 阶段 3.5：CLI 分层职责对齐与命令文件解耦。
+8. 阶段 4：结果持久化服务。
 
 可后置但不能遗漏：
 

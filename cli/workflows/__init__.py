@@ -6,6 +6,7 @@ CLI 工作流子包
 模块列表:
     - backtests_lifecycle: 批量回测运行生命周期（RunLogHelper + RunFinalizer）
     - backtests_run: 命令级回测编排（多入口 + 三个 *Request 数据类）
+    - tqsdk_realtime: 天勤实时行情工作流（TqsdkRealtimeWorkflow + TqsdkRealtimeRequest）
 """
 
 from cli.workflows.backtests_lifecycle import RunFinalizer, RunLogHelper
@@ -15,11 +16,14 @@ from cli.workflows.backtests_run import (
     VnpySearchRequest,
     VnpyWalkForwardRequest,
 )
+from cli.workflows.tqsdk_realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
 
 __all__ = [
     "BacktestRunWorkflow",
     "RunFinalizer",
     "RunLogHelper",
+    "TqsdkRealtimeRequest",
+    "TqsdkRealtimeWorkflow",
     "TqsdkRequest",
     "VnpySearchRequest",
     "VnpyWalkForwardRequest",

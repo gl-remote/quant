@@ -24,8 +24,9 @@ setup_logging(level=log_cfg.level, log_format=log_cfg.format)
 
 from cli.commands import backtest as backtest_cmd  # noqa: E402
 from cli.commands import export as export_cmd  # noqa: E402
+from cli.commands import live as live_cmd  # noqa: E402
 from cli.commands import report as report_cmd  # noqa: E402
-from cli.commands import tqsdk as tqsdk_cmd  # noqa: E402
+from cli.commands import test as test_cmd  # noqa: E402
 
 
 def main() -> None:
@@ -43,20 +44,20 @@ def main() -> None:
 
     # 注册子命令（args 定义在各命令模块内）
     export_cmd.register(sub)
-    tqsdk_cmd.register_test(sub)
+    test_cmd.register(sub)
     backtest_cmd.register(sub)
     report_cmd.register(sub)
-    tqsdk_cmd.register_live(sub)
+    live_cmd.register(sub)
 
     args = parser.parse_args()
 
     # 命令分发映射
     command_handlers = {
         "export": export_cmd.cmd_export,
-        "test": tqsdk_cmd.cmd_test,
+        "test": test_cmd.cmd_test,
         "backtest": backtest_cmd.cmd_backtest,
         "report": report_cmd.cmd_report,
-        "live": tqsdk_cmd.cmd_live,
+        "live": live_cmd.cmd_live,
     }
 
     try:
