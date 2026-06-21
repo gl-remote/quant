@@ -52,6 +52,7 @@ class DataFeed:
 
         # 磁盘缓存目录（由 create() 设置）
         self._feeds_dir: str | None = None
+        self.loaded_from_cache: bool = False
 
         if requirements is not None:
             self.apply_requirements(requirements)
@@ -196,13 +197,8 @@ class DataFeed:
         dump_feed(self, feeds_dir)
 
     def save_cache(self) -> None:
-        """回测结束后保存缓存，仅在有新指标被计算过时才写入磁盘"""
-        if self._feeds_dir is None:
-            return
-        base_pd = self._periods.get(self._base_period) if self._base_period else None  # type: ignore[arg-type]
-        if base_pd is None or base_pd.length == 0:
-            return
-        if not base_pd.indicator_names:
+        """回测结束后保存缓存，只有本次是从 native 数据构造的才写盘"""
+        if self.loaded_from_cache or self._feeds_dir is None:
             return
         self.to_feeds(self._feeds_dir)
 
@@ -550,8 +546,10 @@ class DataFeed:
         feeds_dir = str(output_root() / "feeds" / symbol)
         feed = _try_load_from_disk(feeds_dir, all_loaded, requirements, src_date_range)
 
-        # 4. 构造（缓存由回测结束后的 save_cache() 写入，此处只存 feeds_dir）
-        if feed is None:
+        # 4. 构造/初始化缓存目录
+        if feed is not None:
+            feed._feeds_dir = feeds_dir
+        else:
             feed = cls(symbol=symbol, requirements=requirements)
             feed._feeds_dir = feeds_dir
             for period_name, df in all_loaded.items():  # type: ignore[assignment]
@@ -602,23 +600,7 @@ def _try_load_from_disk(
     if feed_date_range[0] != src_date_range[0] or feed_date_range[1] != src_date_range[1]:
         return None
 
-    existing_periods = set(feed.get_period_names())
-    existing_indicators = {
-        (pn, spec.name, tuple(sorted(spec.params.items())))
-        for pn in requirements.indicators
-        for spec in feed.get_registered_indicators(pn)
-    }
-
     feed.apply_requirements(requirements)
 
-    new_periods = set(feed.get_period_names()) - existing_periods
-    new_indicators = {
-        (pn, spec.name, tuple(sorted(spec.params.items())))
-        for pn in requirements.indicators
-        for spec in feed.get_registered_indicators(pn)
-    } - existing_indicators
-
-    if new_periods or new_indicators:
-        feed.to_feeds(feeds_dir)
-
+    feed.loaded_from_cache = True
     return feed
