@@ -142,6 +142,7 @@ def test_data_feed_basic():
     # 获取数据视图
     latest_bar = bars[-1]
     view = feed.get_data("1m", latest_bar.datetime, lookback_bars=10)
+    feed.calculate_indicators(view, "1m")
 
     print(f"周期: {view.period}")
     print(f"视图截止时间: {view.current_time}")
@@ -369,6 +370,7 @@ def test_calculate_period_incremental():
 
     # 初始指标（通过 get_data 惰性计算）
     view_initial = feed.get_data("1m", bars[-1].datetime, lookback_bars=30)
+    feed.calculate_indicators(view_initial, "1m")
     sma_5_initial = view_initial.indicator("1m_sma_5", -1)
     sma_10_initial = view_initial.indicator("1m_sma_10", -1)
     print(f"  初始历史: 30 根, 1m_sma_5={sma_5_initial:.4f}, 1m_sma_10={sma_10_initial:.4f}")
@@ -390,6 +392,7 @@ def test_calculate_period_incremental():
 
     # 通过 get_data 读取指标（惰性计算）
     view_after = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    feed.calculate_indicators(view_after, "1m")
     sma_5_after = view_after.indicator("1m_sma_5", -1)
     sma_10_after = view_after.indicator("1m_sma_10", -1)
     assert sma_5_after is not None and not math.isnan(sma_5_after)
@@ -397,6 +400,7 @@ def test_calculate_period_incremental():
 
     # 同时间点两次 get_data 结果应一致
     view_after2 = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    feed.calculate_indicators(view_after2, "1m")
     print(f"  新增 K 线后: 1m_sma_5={sma_5_after:.4f}")
     print(f"               1m_sma_10={sma_10_after:.4f}")
     assert abs(sma_5_after - view_after2.indicator("1m_sma_5", -1)) < 1e-9, "同时间点 get_data 结果应一致"
@@ -404,6 +408,7 @@ def test_calculate_period_incremental():
 
     # --- 场景 2：无新 K 线时多次 get_data 结果应一致 ---
     view_repeat = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    feed.calculate_indicators(view_repeat, "1m")
     assert abs(view_repeat.indicator("1m_sma_5", -1) - sma_5_after) < 1e-9, "无新数据时结果应一致"
 
     print("  ✅ 惰性计算一致性验证通过\n")
@@ -445,6 +450,7 @@ def test_tqsdk_path_simulation():
 
     # 初始指标（通过 get_data 惰性计算）
     view_init = feed.get_data("1m", bars[-1].datetime, lookback_bars=40)
+    feed.calculate_indicators(view_init, "1m")
     init_sma_5 = view_init.indicator("1m_sma_5", -1)
     init_ema_12 = view_init.indicator("1m_ema_12", -1)
     print(f"  初始化完成: {len(df)} 根 K 线, 1m_sma_5={init_sma_5:.4f}, 1m_ema_12={init_ema_12:.4f}")
@@ -468,12 +474,14 @@ def test_tqsdk_path_simulation():
 
     # 循环结束后通过 get_data 读取指标
     final_view = feed.get_data("1m", last_ts + timedelta(minutes=10), lookback_bars=50)
+    feed.calculate_indicators(final_view, "1m")
     final_sma_5 = final_view.indicator("1m_sma_5", -1)
     final_ema_12 = final_view.indicator("1m_ema_12", -1)
     print(f"  10 轮实时推送后: 1m_sma_5={final_sma_5:.4f}, 1m_ema_12={final_ema_12:.4f}")
 
     # --- 阶段 3：同时间点结果一致性验证 ---
     final_view2 = feed.get_data("1m", last_ts + timedelta(minutes=10), lookback_bars=50)
+    feed.calculate_indicators(final_view2, "1m")
     assert abs(final_view2.indicator("1m_sma_5", -1) - final_sma_5) < 1e-9
     assert abs(final_view2.indicator("1m_ema_12", -1) - final_ema_12) < 1e-9
     print("  ✅ 10 轮实时推送后的惰性计算结果一致\n")
@@ -520,6 +528,7 @@ def test_multi_period_consistency():
     initial_values = {}
     for period in ("1m", "5m", "15m"):
         view = feed.get_data(period, loaded_bars[period][-1].datetime, lookback_bars=20)
+        feed.calculate_indicators(view, period)
         initial_values[period] = view.indicator(f"{period}_sma_5", -1)
         print(f"  初始 {period}: {period}_sma_5={initial_values[period]:.4f}")
 
@@ -540,6 +549,7 @@ def test_multi_period_consistency():
 
     # 断言：主周期更新了；非主周期未更新（但读历史值应该仍能拿到）
     main_view = feed.get_data("1m", last_time + timedelta(minutes=5), lookback_bars=55)
+    feed.calculate_indicators(main_view, "1m")
     main_after = main_view.indicator("1m_sma_5", -1)
     assert main_after != initial_values["1m"], "主周期指标应随新 K 线更新"
     print(f"  主周期 1m 推送 5 根后: 1m_sma_5={main_after:.4f}（原值 {initial_values['1m']:.4f}）")
@@ -547,6 +557,7 @@ def test_multi_period_consistency():
     # 非主周期：值仍然可读，不应为 None/NaN
     for period in ("5m", "15m"):
         view = feed.get_data(period, loaded_bars[period][-1].datetime, lookback_bars=20)
+        feed.calculate_indicators(view, period)
         val = view.indicator(f"{period}_sma_5", -1)
         assert val is not None and not math.isnan(val), f"{period} 指标值应存在（初始化阶段已计算）"
         assert abs(val - initial_values[period]) < 1e-9, f"{period} 指标在无新数据时不应变化"

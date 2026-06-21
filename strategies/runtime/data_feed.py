@@ -12,12 +12,13 @@ import os
 from datetime import datetime as dt
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from loguru import logger
 
 from common.symbol_utils import parse_contract
 
-from ..core.indicators import IndicatorSpec
+from ..core.indicators import IndicatorSpec, generate_indicator_column_name
 from ..core.types import Bar
 from .aggregate import bar_start_time, parse_period_minutes
 from .events import Event, EventManager
@@ -232,169 +233,222 @@ class DataFeed:
         assert first is not None and last is not None
         return str(first.date()), str(last.date())
 
-    def _aggregate_period_view(
+    def _buffer_to_bar(self, buffer: list[pd.Series], target_minutes: int) -> Bar:
+        """将一组基础周期行聚合为一条高周期 Bar"""
+        agg_df = pd.DataFrame(buffer)
+        first_name = buffer[0].name
+        start_time = bar_start_time(pd.Timestamp(first_name), target_minutes)  # type: ignore[arg-type]
+        return Bar(
+            symbol=self.symbol,
+            datetime=start_time.to_pydatetime(),
+            open=float(agg_df["open"].iloc[0]),
+            high=float(agg_df["high"].max()),
+            low=float(agg_df["low"].min()),
+            close=float(agg_df["close"].iloc[-1]),
+            volume=float(agg_df["volume"].sum()),
+        )
+
+    def _full_aggregate(
+        self,
+        target_period: str,
+        target_minutes: int,
+        base_slice: pd.DataFrame,
+        bars_per_high: int,
+        target_pd: PeriodData,
+    ) -> None:
+        """首次全量聚合 — 遍历 base_slice 聚合成完整高周期 bar 并回填"""
+        completed: list[Bar] = []
+        buffer: list[pd.Series] = []
+        last_base_idx = -1
+        for _idx, row in base_slice.iterrows():
+            buffer.append(row)
+            if len(buffer) == bars_per_high:
+                completed.append(self._buffer_to_bar(buffer, target_minutes))
+                buffer = []
+            last_base_idx += 1
+        self._agg_cache[target_period] = {
+            "completed": completed,
+            "buffer": buffer,
+            "last_base_idx": last_base_idx,
+        }
+        for bar in completed:
+            target_pd.append_bar(bar)
+        target_pd.flush()
+
+    def _incremental_aggregate(
+        self,
+        target_minutes: int,
+        base_slice: pd.DataFrame,
+        bars_per_high: int,
+        cache: dict[str, Any],
+        target_pd: PeriodData,
+    ) -> None:
+        """增量聚合 — 只处理上次聚合后新增的基础周期行"""
+        last_base_idx = int(cache.get("last_base_idx", -1))
+        new_count = len(base_slice) - 1 - last_base_idx
+        if new_count <= 0:
+            return
+
+        completed = cache["completed"]  # type: ignore[assignment]
+        buffer = cache["buffer"]  # type: ignore[assignment]
+        for i in range(new_count):
+            idx = last_base_idx + 1 + i
+            row = base_slice.iloc[idx]
+            buffer.append(row)
+            if len(buffer) == bars_per_high:
+                bar = self._buffer_to_bar(buffer, target_minutes)
+                completed.append(bar)
+                target_pd.append_bar(bar)
+                buffer = []
+        cache["last_base_idx"] = len(base_slice) - 1  # type: ignore[assignment]
+        cache["buffer"] = buffer
+        target_pd.flush()
+
+    def _aggregate_period(
         self,
         target_period: str,
         current_time: pd.Timestamp,
-        lookback_bars: int,
         base_df: pd.DataFrame,
-    ) -> PeriodDataView | None:
-        """从基础周期数据聚合出高周期视图（带增量缓存）
+    ) -> None:
+        """聚合 base_df 到 _agg_cache 并回填到 PeriodData（增量）
 
-        首次调用时全量聚合所有基础K线，后续只处理新增K线。
-        避免每根1m K线都重新遍历所有历史数据导致的 O(N²) 性能问题。
+        三阶段流程的阶段1子步骤：只做聚合 + 回填，不构建视图。
+
+        先看 PeriodData 已有数据是否覆盖当前时间所属的周期边界，
+        如果已覆盖则跳过聚合（forming bar 由 get_data 单独补充）。
         """
         target_minutes = parse_period_minutes(target_period)
-        base_minutes = parse_period_minutes(self._base_period)  # type: ignore[arg-type]
+        assert self._base_period is not None
+        base_minutes = parse_period_minutes(self._base_period)
+
+        target_pd = self._periods[target_period]
+
+        # ── 先看 PeriodData 已有数据是否足够 ──
+        latest_high = target_pd.latest_time
+        if latest_high is not None:
+            current_period_start = bar_start_time(current_time, target_minutes)
+            if latest_high >= current_period_start:
+                return
 
         base_slice = base_df[base_df.index <= current_time]
         if len(base_slice) == 0:
-            return None
+            return
 
         bars_per_high = target_minutes // base_minutes
-
-        # ── 增量聚合缓存 ─────────────────────────────────
         cache = self._agg_cache.get(target_period)
+
         if cache is None:
-            # 首次调用：全量聚合
-            new_completed: list[Bar] = []
-            new_buffer: list[pd.Series] = []
-            last_base_idx = -1
-            for _idx, row in base_slice.iterrows():
-                new_buffer.append(row)
-                if len(new_buffer) == bars_per_high:
-                    agg_df = pd.DataFrame(new_buffer)
-                    first_idx_name = new_buffer[0].name
-                    start_time = bar_start_time(pd.Timestamp(first_idx_name), target_minutes)  # type: ignore[arg-type]
-                    new_completed.append(
-                        Bar(
-                            symbol=self.symbol,
-                            datetime=start_time.to_pydatetime(),
-                            open=float(agg_df["open"].iloc[0]),
-                            high=float(agg_df["high"].max()),
-                            low=float(agg_df["low"].min()),
-                            close=float(agg_df["close"].iloc[-1]),
-                            volume=float(agg_df["volume"].sum()),
-                        )
-                    )
-                    new_buffer = []
-                last_base_idx += 1
-            cache = {"completed": new_completed, "buffer": new_buffer, "last_base_idx": last_base_idx}
-            self._agg_cache[target_period] = cache
+            self._full_aggregate(target_period, target_minutes, base_slice, bars_per_high, target_pd)
         else:
-            # 后续调用：只处理新增的 K线
-            last_base_idx = int(cache.get("last_base_idx", -1))
-            new_count = len(base_slice) - 1 - last_base_idx
-            if new_count > 0:
-                completed = cache["completed"]  # type: ignore[assignment]
-                buffer = cache["buffer"]  # type: ignore[assignment]
-                for i in range(new_count):
-                    idx = last_base_idx + 1 + i
-                    row = base_slice.iloc[idx]
-                    buffer.append(row)
-                    if len(buffer) == bars_per_high:
-                        agg_df = pd.DataFrame(buffer)
-                        first_idx_name = buffer[0].name
-                        start_time = bar_start_time(pd.Timestamp(first_idx_name), target_minutes)  # type: ignore[arg-type]
-                        completed.append(
-                            Bar(
-                                symbol=self.symbol,
-                                datetime=start_time.to_pydatetime(),
-                                open=float(agg_df["open"].iloc[0]),
-                                high=float(agg_df["high"].max()),
-                                low=float(agg_df["low"].min()),
-                                close=float(agg_df["close"].iloc[-1]),
-                                volume=float(agg_df["volume"].sum()),
-                            )
-                        )
-                        buffer = []
-                cache["last_base_idx"] = len(base_slice) - 1  # type: ignore[assignment]
+            self._incremental_aggregate(target_minutes, base_slice, bars_per_high, cache, target_pd)
 
-        # 构造 forming bar（buffer 中不足一组的剩余部分）
-        buf = cache["buffer"]
-        if buf:
-            agg_df = pd.DataFrame(buf)  # type: ignore[arg-type]
-            bar_start = bar_start_time(agg_df.index[-1], target_minutes)
-            forming_bar = Bar(
-                symbol=self.symbol,
-                datetime=bar_start.to_pydatetime(),
-                open=float(agg_df["open"].iloc[0]),
-                high=float(agg_df["high"].max()),
-                low=float(agg_df["low"].min()),
-                close=float(agg_df["close"].iloc[-1]),
-                volume=float(agg_df["volume"].sum()),
-            )
-        else:
-            forming_bar = None
+    def _build_forming_bar(
+        self,
+        target_period: str,
+        current_time: pd.Timestamp,
+        base_df: pd.DataFrame,
+    ) -> Bar | None:
+        """从基础周期数据聚合高周期形成中的 bar（不完整周期）
 
-        # 构造视图
-        comp = cache["completed"]
+        周期边界（如 10:00 对 15m）不创建 forming bar：
+        _aggregate_period 已将刚完成的 bar 写入 PeriodData，不应重复。
+        """
+        target_minutes = parse_period_minutes(target_period)
+        base_minutes = parse_period_minutes(self._base_period)  # type: ignore[arg-type]
+        bars_per_high = target_minutes // base_minutes
 
-        # 去重（跨日期场景可能有相同起始时间的 bar）
-        seen_times: set[str] = set()
-        unique_bars: list[Bar] = []
-        for bar in comp:  # type: ignore[arg-type]
-            key = str(bar.datetime)
-            if key not in seen_times:
-                seen_times.add(key)
-                unique_bars.append(bar)
-
-        if not unique_bars and forming_bar is None:
+        period_start = bar_start_time(current_time, target_minutes)
+        # 周期边界：刚完成的 bar 已由 _aggregate_period 写入 PeriodData，无需 forming
+        if current_time == period_start:
             return None
 
-        agg_temp_pd = PeriodData(target_period)
-        for bar in unique_bars:
-            agg_temp_pd.append_bar(bar)
+        forming_base = base_df.loc[period_start:current_time]
+        if len(forming_base) == 0:
+            return None
+        # 完整周期不需要 forming bar
+        if len(forming_base) >= bars_per_high:
+            return None
 
-        # flush buffer 确保 data 属性返回完整数据
-        agg_temp_pd._ensure_flushed()  # type: ignore[attr-defined]
-
-        total = len(unique_bars)
-        start_idx = max(0, total - lookback_bars)
-        end_idx = total - 1
-
-        return PeriodDataView(
-            df_ref=agg_temp_pd.data,
-            events_ref=self._event_mgr.df,
-            start_idx=start_idx,
-            end_idx=end_idx,
-            current_time=current_time,
-            period=target_period,
-            forming_bar=forming_bar,
-            forming_indicators={},
-            base_df_ref=base_df,
+        return Bar(
+            symbol=self.symbol,
+            datetime=period_start.to_pydatetime(),
+            open=float(forming_base["open"].iloc[0]),
+            high=float(forming_base["high"].max()),
+            low=float(forming_base["low"].min()),
+            close=float(forming_base["close"].iloc[-1]),
+            volume=float(forming_base["volume"].sum()),
         )
 
-    def _pre_calculate_cache(self) -> None:
-        """预计算所有已注册指标并将结果写入基础周期的 DataFrame（缓存用）
+    def calculate_indicators(self, view: PeriodDataView, period_name: str) -> None:
+        """基于视图范围内的数据计算指标
 
-        在 create() 中持久化到磁盘前调用，确保 parquet 缓存包含指标列。
-        所有周期的指标统一写入基础周期的 _df（与 calculate_indicators 策略一致）。
+        结果写回 base 周期 DataFrame（_base_df_ref）并缓存在视图内部。
         """
-        if self._base_period is None:
+        registered_indicators = self.get_registered_indicators(period_name)
+        if not registered_indicators:
             return
-        base_pd = self._periods.get(self._base_period)
-        if base_pd is None or base_pd.length == 0:
+
+        view_df = view.to_calculation_df()
+        if len(view_df) == 0:
             return
-        latest = base_pd.latest_time
-        if latest is None:
-            return
-        total = base_pd.length
-        for pn in self.get_period_names():
-            indicators = self.get_registered_indicators(pn)
-            if not indicators:
+
+        for spec in registered_indicators:
+            col_name = generate_indicator_column_name(spec.name, spec.params, period=view.period)
+            if spec.func is None:
                 continue
-            view = self.get_data(pn, latest, total)
-            if view is not None:
-                view.calculate_indicators(indicators)
+
+            try:
+                result = spec.func(view_df, **spec.params)
+                result_series = pd.Series(result, index=view_df.index)
+                last_val = result_series.iloc[-1]
+                view.set_cached_indicator(col_name, float(last_val) if not pd.isna(last_val) else np.nan)
+                view.write_indicator_result(col_name, result_series)
+            except Exception as e:
+                logger.warning("指标计算失败 [{}][{}]: {}", view.period, spec.name, e)
+
+    def _build_high_period_view(
+        self,
+        period_name: str,
+        current_time_ts: pd.Timestamp,
+        lookback_bars: int,
+        base_df: pd.DataFrame,
+        period_data: PeriodData,
+    ) -> PeriodDataView:
+        """为高周期构建 PeriodDataView：从 base 聚合 → 切片视图 → 补充 forming bar
+
+        使用 latest_time 而非 current_time_ts：聚合数据只到最新完整 bar 的边界
+        （如 5m 周期下 current=10:04 但最新 5m bar 在 10:00，传入 10:04 会触发 time-after-latest 校验）
+        """
+        # 1a. 从 base 聚合回填到 PeriodData（增量缓存）
+        self._aggregate_period(period_name, current_time_ts, base_df)
+
+        # 1b. 从 PeriodData 切片获取视图（含历史聚合数据）
+        view_time = period_data.latest_time if period_data.latest_time is not None else current_time_ts
+        view = period_data.get_data(view_time, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
+
+        # 1c. 补充 forming bar（当前不完整周期内时）
+        forming_bar = self._build_forming_bar(period_name, current_time_ts, base_df)
+        if forming_bar is not None:
+            view = PeriodDataView(
+                df_ref=period_data.data,
+                events_ref=self._event_mgr.df,
+                start_idx=view.start_idx,
+                end_idx=view.end_idx,
+                current_time=current_time_ts,
+                period=period_name,
+                forming_bar=forming_bar,
+                forming_indicators={},
+                base_df_ref=base_df,
+            )
+        return view
 
     def get_data(
-        self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1, timeout: float | None = None
+        self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1
     ) -> PeriodDataView | None:
         """获取指定周期截止指定时间的逻辑视图
 
-        基础周期直接切片，高周期从基础周期数据现场聚合。
-        指标在视图范围内惰性计算。
+        只做阶段1（构建视图），不计算指标，不写回数据。
+        指标计算由 build_context 统一调用。
         """
         if period_name not in self._periods:
             raise KeyError(f"Period {period_name} not registered")
@@ -403,80 +457,97 @@ class DataFeed:
         period_data = self._periods[period_name]
         base_df = self._periods[self._base_period].data if self._base_period else None  # type: ignore[arg-type]
 
+        # ── 阶段1：构建视图 ──
         if period_name == self._base_period or self._base_period is None:
-            # 基础周期：直接切片
-            view: PeriodDataView | None = period_data.get_data(
-                current_time_ts, lookback_bars, self._event_mgr.df, base_df_ref=base_df
-            )
-        elif period_data.length > 0:
-            # 高周期有 native 数据：优先使用
-            native_latest = period_data.latest_time
-            if native_latest is not None and current_time_ts > native_latest:
-                # native 数据不够新 → 回退到聚合（含 forming bar）
-                base_data = self._periods.get(self._base_period)
-                if base_data is None or base_data.length == 0:
-                    return None
-                view = self._aggregate_period_view(period_name, current_time_ts, lookback_bars, base_data.data)
-            else:
-                view = period_data.get_data(current_time_ts, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
+            return period_data.get_data(current_time_ts, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
         else:
-            # 高周期无 native 数据：回退到从基础周期现场聚合
-            base_data = self._periods.get(self._base_period)
-            if base_data is None or base_data.length == 0:
+            # 高周期：统一走聚合，不再分 native / 聚合两条路径
+            if base_df is None or len(base_df) == 0:
                 return None
-            view = self._aggregate_period_view(period_name, current_time_ts, lookback_bars, base_data.data)
+            return self._build_high_period_view(period_name, current_time_ts, lookback_bars, base_df, period_data)
 
-        # 在视图上惰性计算指标
-        period_data = self._periods[period_name]
-        if view is not None:
-            view.calculate_indicators(period_data.registered_indicators)
-        return view
+    # ── 上下文构建 ────────────────────────────────────
+
+    def _get_period_views(
+        self,
+        requirements: DataRequirements,
+        current_time: pd.Timestamp,
+    ) -> dict[str, PeriodDataView]:
+        """阶段1：为所有需求周期构建视图"""
+        multi: dict[str, PeriodDataView] = {}
+        for period, req in requirements.periods.items():
+            view = self.get_data(period, current_time, req.lookback_bars)
+            if view is not None:
+                multi[period] = view
+        return multi
+
+    def _compute_all_indicators(self, views: dict[str, PeriodDataView]) -> None:
+        """阶段2：为所有周期视图计算指标（结果写回 base 周期 _df）"""
+        for period_name, view in views.items():
+            self.calculate_indicators(view, period_name)
+
+    def _filter_context_events(
+        self,
+        requirements: DataRequirements,
+        current_time: pd.Timestamp,
+        max_lookback: int,
+    ) -> list[Event]:
+        """阶段3：按需求筛选当前 bar 时间范围内的事件"""
+        events_req = requirements.events
+        if not events_req.include_global_events and not events_req.include_period_events:
+            return []
+
+        start_time: pd.Timestamp | None = None
+        try:
+            if self._base_period:
+                period_min = parse_period_minutes(self._base_period)
+                start_time = current_time - pd.Timedelta(minutes=period_min * max_lookback)
+        except Exception:
+            pass
+
+        all_events = self.get_events(start_time=start_time, end_time=current_time)
+        filtered: list[Event] = []
+
+        for event in all_events:
+            is_global = events_req.include_global_events and event.period is None
+            is_period_event = (
+                event.period in events_req.include_period_events or "*" in events_req.include_period_events
+            )
+            if not (is_global or is_period_event):
+                continue
+
+            if events_req.event_types and event.type not in events_req.event_types:
+                continue
+
+            filtered.append(event)
+
+        return filtered
 
     def build_context(
         self,
         requirements: DataRequirements,
         bar: Bar,
-        timeout: float | None = None,
     ) -> BarContext:
         """构造 BarContext 上下文对象
 
         build_context 是唯一计算入口，在这里调动已有的计算能力。
+
+        三阶段流程：
+        阶段1 — 构建各周期视图（get_data）
+        阶段2 — 计算指标（calculate_indicators）
+        阶段3 — 筛选事件（_filter_context_events）
         """
         current_time = pd.Timestamp(bar.datetime)
-        multi: dict[str, PeriodDataView] = {}
 
-        for period, req in requirements.periods.items():
-            view = self.get_data(period, current_time, req.lookback_bars, timeout)
-            if view is not None:
-                multi[period] = view
+        # ── 阶段1：构建各周期视图 ──
+        multi = self._get_period_views(requirements, current_time)
 
-        events: list[Event] = []
-        events_req = requirements.events
+        # ── 阶段2：计算指标（结果写回 base 周期 _df） ──
+        self._compute_all_indicators(multi)
 
-        if events_req.include_global_events or events_req.include_period_events:
-            max_lookback = max(req.lookback_bars for req in requirements.periods.values())
-            start_time: pd.Timestamp | None = None
-            try:
-                if self._base_period:
-                    period_min = parse_period_minutes(self._base_period)
-                    start_time = current_time - pd.Timedelta(minutes=period_min * max_lookback)
-            except Exception:
-                pass
-
-            all_events = self.get_events(start_time=start_time, end_time=current_time)
-
-            for event in all_events:
-                include = False
-                if events_req.include_global_events and event.period is None:
-                    include = True
-                if not include and events_req.include_period_events:
-                    if "*" in events_req.include_period_events or event.period in events_req.include_period_events:
-                        include = True
-                if include and events_req.event_types:
-                    if event.type not in events_req.event_types:
-                        include = False
-                if include:
-                    events.append(event)
+        # ── 阶段3：筛选事件 ──
+        max_lookback = max(req.lookback_bars for req in requirements.periods.values())
+        events = self._filter_context_events(requirements, current_time, max_lookback)
 
         if bar.symbol != self.symbol:
             logger.warning(
@@ -541,7 +612,7 @@ class DataFeed:
 
         # 3. 尝试磁盘序列化缓存
         feeds_dir = str(output_root() / "feeds" / symbol)
-        feed = _try_load_from_disk(feeds_dir, all_loaded, requirements, src_date_range)
+        feed = _try_load_from_disk(feeds_dir, requirements, src_date_range)
 
         # 4. 构造/初始化缓存目录
         if feed is not None:
@@ -575,7 +646,6 @@ def _source_date_range(source_df: pd.DataFrame | None) -> tuple[str, str] | None
 
 def _try_load_from_disk(
     feeds_dir: str,
-    all_loaded: dict[str, pd.DataFrame],
     requirements: DataRequirements,
     src_date_range: tuple[str, str] | None,
 ) -> DataFeed | None:
@@ -594,7 +664,7 @@ def _try_load_from_disk(
     if feed_date_range is None or src_date_range is None:
         return None
 
-    if feed_date_range[0] != src_date_range[0] or feed_date_range[1] != src_date_range[1]:
+    if feed_date_range != src_date_range:
         return None
 
     feed.apply_requirements(requirements)
