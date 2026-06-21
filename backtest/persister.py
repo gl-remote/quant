@@ -31,36 +31,20 @@ STATUS_FAILED = "failed"
 
 
 class BacktestResultPersister:
-    """基础背测结果持久化：单条/批量写入 + daily + trades + 校验
+    """背测结果持久化
 
-    所有方法有独立的 try/except，失败不阻断后续操作。
+    将所有调用方的模型字段注入 / 失败分支 / 明细写入 / 一致性校验
+    统一收进 persist_result，外部无需关心内部表结构。
+
+    历史遗留的 3 个底层写方法（persist_daily / persist_trades /
+    validate_consistency）降为私有，仅 WalkForwardPersister 这种
+    需要手动构造明细的特殊场景可直接调用。
     """
 
     def __init__(self, dm: Any) -> None:
         self._dm = dm
 
-    def persist_result(
-        self,
-        result: BacktestResult,
-        run_id: int | None = None,
-        data_src: str | None = None,
-    ) -> int:
-        """写入单条背测记录，返回 backtest_id"""
-        return self._dm.insert_backtest(result, run_id=run_id, data_src=data_src)  # type: ignore[no-any-return]
-
-    def persist_results(
-        self,
-        results: list[BacktestResult],
-        run_id: int | None = None,
-        data_src: str | None = None,
-    ) -> list[int]:
-        """批量写入背测记录，返回 backtest_id 列表"""
-        ids: list[int] = []
-        for r in results:
-            ids.append(self._dm.insert_backtest(r, run_id=run_id, data_src=data_src))
-        return ids
-
-    def persist_daily(self, backtest_id: int, daily: list[dict[str, object]]) -> None:
+    def _persist_daily(self, backtest_id: int, daily: list[dict[str, object]]) -> None:
         """写入每日资金曲线，失败仅打日志"""
         if not daily:
             return
@@ -69,7 +53,7 @@ class BacktestResultPersister:
         except Exception:
             logger.exception("每日资金曲线持久化失败 [bt={}]", backtest_id)
 
-    def persist_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> None:
+    def _persist_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> None:
         """写入交易明细，失败仅打日志"""
         if not trades:
             return
@@ -78,7 +62,7 @@ class BacktestResultPersister:
         except Exception:
             logger.exception("交易记录持久化失败 [bt={}]", backtest_id)
 
-    def validate_consistency(self, backtest_id: int) -> None:
+    def _validate_consistency(self, backtest_id: int) -> None:
         """校验数据一致性，失败仅打日志"""
         try:
             errors = self._dm.validate_consistency(backtest_id)
@@ -87,6 +71,42 @@ class BacktestResultPersister:
                     logger.warning("数据一致性警告: {}", err)
         except Exception:
             logger.exception("数据一致性校验失败 [bt={}]", backtest_id)
+
+    def persist_result(
+        self,
+        result: BacktestResult,
+        *,
+        run_id: int | None = None,
+        data_src: str | None = None,
+        skip_validation: bool = False,
+        strategy_params: dict[str, Any] | None = None,
+        git_hash: str | None = None,
+    ) -> int:
+        """写入完整的背测结果
+
+        封装以下步骤：
+        - 设置 strategy_params / git_hash（若传入）
+        - 根据 result.success 自动设置 status
+        - 失败的只写主记录，成功的全量写入（daily/trades/校验）
+        """
+        if strategy_params is not None:
+            result.strategy_params = strategy_params
+        if git_hash is not None:
+            result.git_hash = git_hash
+        result.status = STATUS_SUCCESS if result.success else STATUS_FAILED
+
+        bt_id: int = self._dm.insert_backtest(result, run_id=run_id, data_src=data_src)
+
+        if not result.success:
+            return bt_id
+
+        if result.daily_results:
+            self._persist_daily(bt_id, result.daily_results)
+        if result.fills:
+            self._persist_trades(bt_id, result.fills)
+        if not skip_validation:
+            self._validate_consistency(bt_id)
+        return bt_id
 
 
 class SearchResultPersister:
@@ -133,27 +153,18 @@ class SearchResultPersister:
             trial_cfg = {**engine_cfg, "trial_index": i}
             for er in trial.get("engine_results", []):
                 er.engine_config = trial_cfg
-                er.strategy_params = trial.get("strategy_params", {})
-                er.git_hash = git_hash
-
-                if not er.success:
-                    er.status = STATUS_FAILED
-                    self._bt_persister.persist_result(
-                        er,
-                        run_id=run_id,
-                        data_src=next((f for s, _, f in datasets if s == er.symbol), None),
-                    )
-                    continue
 
                 sym = er.symbol
                 data_src = next((f for s, _, f in datasets if s == sym), None)
-                er.status = STATUS_SUCCESS
-                bt_id = self._bt_persister.persist_result(er, run_id=run_id, data_src=data_src)
-                all_ids.append(bt_id)
-
-                self._bt_persister.persist_daily(bt_id, er.daily_results)
-                self._bt_persister.persist_trades(bt_id, er.fills)
-                self._bt_persister.validate_consistency(bt_id)
+                bt_id = self._bt_persister.persist_result(
+                    er,
+                    run_id=run_id,
+                    data_src=data_src,
+                    strategy_params=trial.get("strategy_params", {}),
+                    git_hash=git_hash,
+                )
+                if er.success:
+                    all_ids.append(bt_id)
 
         return all_ids
 
@@ -200,15 +211,23 @@ class WalkForwardPersister:
             total_return=wf_result_data.get("return_mean"),
             daily_std=wf_result_data.get("return_std"),
         )
-        bt_id = self._bt_persister.persist_result(result, data_src=data_src)
+        result.success = True
 
+        # 从各 window 聚合 daily_results / fills 写入明细表
         all_daily: list[dict[str, object]] = []
         all_trades: list[dict[str, object]] = []
         for wr in wf_result.get("window_results", []):
             all_daily.extend(wr.get("daily_results", []))
             all_trades.extend(wr.get("trades", []))
+        result.daily_results = all_daily
+        result.fills = all_trades  # BacktestResult.fills 承载 trades
 
-        self._bt_persister.persist_daily(bt_id, all_daily)
-        self._bt_persister.persist_trades(bt_id, all_trades)
-
+        bt_id = self._bt_persister.persist_result(
+            result,
+            data_src=data_src,
+            # 跳过一致性校验：WalkForward 的 BacktestResult 仅包含聚合指标，
+            # 没有 total_trades/total_days/total_commission 等 summary 字段，
+            # 校验会因 total_trades=0 vs 实际 trade 记录 >0 产生假阳性告警。
+            skip_validation=True,
+        )
         return bt_id

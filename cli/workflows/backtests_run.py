@@ -415,17 +415,14 @@ class BacktestRunWorkflow:
 
             bt_persister = BacktestResultPersister(self._dm)
             for er in engine_results:
-                er.strategy_params = strategy_params
-                er.git_hash = git_hash
-                er.status = STATUS_FAILED if not er.success else STATUS_SUCCESS
-                if not er.success:
-                    bt_persister.persist_result(er, run_id=run_id, data_src=None)
-                    continue
                 data_src = next((f for s, _, f in datasets if s == er.symbol), None)
-                bt_id = bt_persister.persist_result(er, run_id=run_id, data_src=data_src)
-                bt_persister.persist_daily(bt_id, er.daily_results)
-                bt_persister.persist_trades(bt_id, er.fills)
-                bt_persister.validate_consistency(bt_id)
+                bt_persister.persist_result(
+                    er,
+                    run_id=run_id,
+                    data_src=data_src,
+                    strategy_params=strategy_params,
+                    git_hash=git_hash,
+                )
 
             finalizer.finish_success(run_id)
             return
