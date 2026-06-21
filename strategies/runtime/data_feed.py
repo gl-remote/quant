@@ -550,7 +550,7 @@ class DataFeed:
         feeds_dir = str(output_root() / "feeds" / symbol)
         feed = _try_load_from_disk(feeds_dir, all_loaded, requirements, src_date_range)
 
-        # 4. 构造并持久化
+        # 4. 构造（缓存由回测结束后的 save_cache() 写入，此处只存 feeds_dir）
         if feed is None:
             feed = cls(symbol=symbol, requirements=requirements)
             feed._feeds_dir = feeds_dir
@@ -559,7 +559,6 @@ class DataFeed:
                     feed._periods[period_name].load_df(df, replace=True)  # type: ignore[arg-type]
                     if period_name != source_period:
                         feed._agg_cache.pop(period_name, None)  # 高周期用 native 数据，清聚合缓存
-            feed.to_feeds(feeds_dir)
 
         # 5. 写入内存缓存
         if src_date_range is not None:
