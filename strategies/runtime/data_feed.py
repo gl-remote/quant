@@ -193,14 +193,11 @@ class DataFeed:
 
     # --- 序列化 ────────────────────────────────────────
 
-    def to_feeds(self, feeds_dir: str) -> None:
-        dump_feed(self, feeds_dir)
-
     def save_cache(self) -> None:
         """回测结束后保存缓存，只有本次是从 native 数据构造的才写盘"""
         if self.loaded_from_cache or self._feeds_dir is None:
             return
-        self.to_feeds(self._feeds_dir)
+        dump_feed(self, self._feeds_dir)
 
     @classmethod
     def from_feeds(cls, feeds_dir: str) -> "DataFeed":
