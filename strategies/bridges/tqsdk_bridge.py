@@ -101,9 +101,10 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         # 多周期数据（run() 中初始化）
         self._klines: dict[str, KlineDataFrame] = {}
-        self._data_feed: DataFeed | None = None  # 用于指标注册/计算
+        self._data_feed: DataFeed | None = None
         self._caught_up: bool = False  # 是否已追上实时数据
-        self._api_owned: bool = False  # 是否由本 bridge 创建并负责关闭 API
+        self._tq_position: Any = None  # tqsdk 持仓对象引用（live 模式）
+        self._prev_target_vol: int = 0  # 上次目标持仓量，用于检测持仓变化
 
     @property
     def strategy(self) -> Strategy[T]:
@@ -117,7 +118,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     #  公开 API
     # ------------------------------------------------------------------ #
 
-    def _wait_update_with_timeout(self, timeout: float = 5.0) -> bool:
+    def _wait_update_with_timeout(self, timeout: float = 60.0) -> bool:
         """带超时的 wait_update()，避免非交易时段永久阻塞。
 
         tqsdk 的 api.wait_update() 会阻塞到天勤推送新数据为止。
@@ -236,6 +237,8 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         target_pos = None
         if on_signal is None:
             target_pos = tqsdk.TargetPosTask(self.api, symbol)
+            self._tq_position = self.api.get_position(symbol)
+            self._prev_target_vol = 0
 
         # 主循环只处理 INIT 之后新增的 bars
         prev_lens = {name: len(kl) for name, kl in self._klines.items()}
@@ -244,7 +247,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         no_data_count = 0
         while True:
-            if not self._wait_update_with_timeout(timeout=3.0):
+            if not self._wait_update_with_timeout(timeout=60.0):
                 no_data_count += 1
                 if no_data_count % 20 == 0:
                     logger.info(f"[run] 等待行情中... 已等待 {no_data_count * 3:.0f}s 无新数据（非交易时段）")
@@ -252,6 +255,8 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
                 continue
             no_data_count = 0
             self._dispatch_new_bars(prev_lens, on_signal, target_pos)
+            if self._tq_position is not None:
+                self._sync_position_from_tqsdk()
 
     def _dispatch_new_bars(
         self,
@@ -369,36 +374,32 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         reqs = self._strategy.data_requirements(self._state.strategy_config)
         has_indicators = bool(reqs and reqs.indicators)
 
-        # 1. 创建 DataFeed 并应用需求（注册周期、配置聚合、注册指标 一步到位）
-        self._data_feed = DataFeed(symbol=self.symbol)
+        # 1. 创建 DataFeed：构造函数传入 requirements 一步完成注册/配置
         if reqs:
-            self._data_feed.apply_requirements(reqs)
+            self._data_feed = DataFeed(symbol=self.symbol, requirements=reqs)
         else:
-            self._data_feed.register_period("1m")
+            from ..runtime.requirements import DataRequirements, PeriodRequirements
 
+            self._data_feed = DataFeed(
+                symbol=self.symbol,
+                requirements=DataRequirements(periods={"1m": PeriodRequirements(lookback_bars=1)}, indicators={}),
+            )
         logger.info("[init] DataFeed: 已配置需求，高周期将由内部聚合生成")
 
-        # 2. 加载源周期数据（kline_serial → PeriodData）
-        total_loaded = 0
+        # 2. 批量灌入源周期初始数据
         source_period = "1m"
         if source_period in self._klines:
             klines = self._klines[source_period]
             if len(klines) > 0:
-                pd_obj = self._data_feed.get_period(source_period)
-                if pd_obj is not None:
-                    df = self._klines_to_dataframe(klines)
-                    pd_obj.load_df(df)
-                    total_loaded += len(df)
-                    logger.info(
-                        f"[init]   {source_period}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}"
-                    )
-        logger.info(f"[init]   共加载 {total_loaded} 根K线到 PeriodData")
+                df = self._klines_to_dataframe(klines)
+                self._data_feed.feed_history_df(df)
+                logger.info(
+                    f"[init]   {source_period}: 加载 {len(df)} 根K线，最新={df.index[-1].strftime('%Y-%m-%d %H:%M')}"
+                )
 
-        # 3. 预计算指标（与回测路径一致，全量计算一次）
+        # 3. 指标在 build_context 时惰性计算，无需预计算
+
         if has_indicators:
-            t0 = time.time()
-            self._data_feed.calculate_all()
-            logger.info(f"[init]   指标计算完成，耗时 {time.time() - t0:.3f}s")
             self._log_indicator_snapshot("初始历史数据")
 
     def _log_indicator_snapshot(self, label: str) -> None:
@@ -460,36 +461,6 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             volume=float(klines.volume.iloc[idx]),
         )
 
-    def _build_multi_context(self, current_bar: Bar) -> dict[str, Any]:
-        """构造多周期 PeriodDataView 字典（供 strategy.on_bar 使用）
-
-        通过 DataFeed.get_data() 公共 API 获取各周期视图，天然防偷看。
-        """
-        if self._data_feed is None:
-            return {}
-        reqs = self._strategy.data_requirements(self._state.strategy_config)
-        multi: dict[str, Any] = {}
-        for period_name in self._klines:
-            pd_obj = self._data_feed.get_period(period_name)
-            if pd_obj is None or pd_obj.length == 0:
-                continue
-            lookback = (
-                reqs.periods[period_name].lookback_bars if reqs and period_name in reqs.periods else pd_obj.length
-            )
-            view = self._data_feed.get_data(period_name, current_bar.datetime, lookback)
-            if view is not None:
-                multi[period_name] = view
-        return multi
-
-    def _update_period_and_recalc(self, bar: Bar) -> None:
-        """喂入一根源周期 K 线到 DataFeed，高周期自动聚合更新
-
-        聚合由 DataFeed 内部完成，调用方不用关心哪些周期需要聚合。
-        """
-        if self._data_feed is None:
-            return
-        self._data_feed.feed_bar(bar)
-
     # ------------------------------------------------------------------ #
     #  内部方法：K线处理 & 策略驱动
     # ------------------------------------------------------------------ #
@@ -498,45 +469,67 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     def _on_bar_1m(self, klines: KlineDataFrame, idx: int) -> Signal:
         """从源周期 kline_serial 构造完整 BarContext 并驱动策略
 
-        流程: 源周期 kline → Bar → 喂入 DataFeed → 自动聚合高周期 → 构造 context → on_bar
+        流程: 源周期 kline → Bar → 喂入 DataFeed → build_context → on_bar
         """
         bar = self._kline_to_bar(klines, idx)
-        self._update_period_and_recalc(bar)
-        multi = self._build_multi_context(bar)
+        assert self._data_feed is not None, "_init_period_data 必须已在主循环前执行"
+        self._data_feed.feed_bar(bar)
 
-        ctx = BarContext(symbol=self.symbol, bar=bar, multi=multi, events=[])
+        reqs = self._strategy.data_requirements(self._state.strategy_config)
+        if reqs:
+            ctx = self._data_feed.build_context(reqs, bar)
+        else:
+            ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
         self._update_peak_prices(bar)
         return self._strategy.on_bar(self._state, ctx)
 
     def _execute_order(self, target_pos: Any, signal: Signal, price: float) -> None:
         """通过 TargetPosTask 执行下单（仅 live 模式调用）
 
+        TargetPosTask.set_target_volume() 是异步的——只设置目标持仓，
+        实际成交由天勤后台自行处理。成交结果在 _run_event_loop 中
+        通过 api.is_changing(position) 轮询检测。
+
         安全边界: 此方法仅在 on_signal=None 时被调用，
         即只有 live 命令的代码路径会到达这里。
         """
         if signal.action == TRADE_ACTION_BUY:
             target_pos.set_target_volume(signal.volume)
-            self.notify_fill(signal, price)
         elif signal.action == TRADE_ACTION_SELL:
             target_pos.set_target_volume(0)
-            self.notify_fill(signal, price)
 
-    # ------------------------------------------------------------------ #
-    #  保留的旧方法（无状态 on_bar / notify_fill / peak 价格更新）
-    # ------------------------------------------------------------------ #
+    def _sync_position_from_tqsdk(self) -> None:
+        """从天勤实际持仓同步 state.position
 
-    @check_types
-    def on_bar(self, kline_data: KlineDataFrame, idx: int = -1) -> Signal:
-        """处理单根 K 线（无多周期、无指标计算的简化版）
-
-        主要用于简单测试场景。生产环境请使用 run()。
+        在 _run_event_loop 主循环中每次 wait_update 后调用，
+        通过 api.is_changing(position) 检测持仓变化，仅在有变化时更新。
         """
-        if kline_data.empty:
-            return Signal()
-        bar = self._kline_to_bar(kline_data, idx)
-        ctx = BarContext(symbol=self.symbol, bar=bar, multi={}, events=[])
-        self._update_peak_prices(bar)
-        return self._strategy.on_bar(self._state, ctx)
+        from strategies.core.types import StrategyPosition
+
+        pos = self._tq_position
+        if not self.api.is_changing(pos):
+            return
+
+        vol_long = int(pos.volume_long)
+        target_vol = vol_long  # tqsdk 用 volume_long 表示多方向持仓量
+        if target_vol != self._prev_target_vol:
+            if target_vol > 0:
+                self._state.position = StrategyPosition(
+                    direction=TRADE_DIRECTION_LONG,
+                    entry_price=float(pos.open_price_long),
+                    volume=target_vol,
+                    highest_price=float(pos.open_price_long),
+                    lowest_price=float(pos.open_price_long),
+                )
+                logger.info(
+                    "持仓更新: direction=LONG volume={} price={:.2f}",
+                    target_vol,
+                    float(pos.open_price_long),
+                )
+            else:
+                self._state.position = StrategyPosition()
+                logger.info("持仓更新: 已清仓")
+            self._prev_target_vol = target_vol
 
     def _update_peak_prices(self, bar: Bar) -> None:
         """更新持仓期间的 peak 价格，在调用 strategy.on_bar 前执行"""
