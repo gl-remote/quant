@@ -50,6 +50,9 @@ class DataFeed:
         # key=period_name, value={"completed": list[Bar], "buffer": list[pd.Series], "last_base_idx": int}
         self._agg_cache: dict[str, dict[str, Any]] = {}
 
+        # 磁盘缓存目录（由 create() 设置）
+        self._feeds_dir: str | None = None
+
         if requirements is not None:
             self.apply_requirements(requirements)
 
@@ -191,6 +194,17 @@ class DataFeed:
 
     def to_feeds(self, feeds_dir: str) -> None:
         dump_feed(self, feeds_dir)
+
+    def save_cache(self) -> None:
+        """回测结束后保存缓存，仅在有新指标被计算过时才写入磁盘"""
+        if self._feeds_dir is None:
+            return
+        base_pd = self._periods.get(self._base_period) if self._base_period else None  # type: ignore[arg-type]
+        if base_pd is None or base_pd.length == 0:
+            return
+        if not base_pd.indicator_names:
+            return
+        self.to_feeds(self._feeds_dir)
 
     @classmethod
     def from_feeds(cls, feeds_dir: str) -> "DataFeed":
@@ -358,6 +372,29 @@ class DataFeed:
             base_df_ref=base_df,
         )
 
+    def _pre_calculate_cache(self) -> None:
+        """预计算所有已注册指标并将结果写入基础周期的 DataFrame（缓存用）
+
+        在 create() 中持久化到磁盘前调用，确保 parquet 缓存包含指标列。
+        所有周期的指标统一写入基础周期的 _df（与 calculate_indicators 策略一致）。
+        """
+        if self._base_period is None:
+            return
+        base_pd = self._periods.get(self._base_period)
+        if base_pd is None or base_pd.length == 0:
+            return
+        latest = base_pd.latest_time
+        if latest is None:
+            return
+        total = base_pd.length
+        for pn in self.get_period_names():
+            indicators = self.get_registered_indicators(pn)
+            if not indicators:
+                continue
+            view = self.get_data(pn, latest, total)
+            if view is not None:
+                view.calculate_indicators(indicators)
+
     def get_data(
         self, period_name: str, current_time: pd.Timestamp | dt, lookback_bars: int = 1, timeout: float | None = None
     ) -> PeriodDataView | None:
@@ -516,6 +553,7 @@ class DataFeed:
         # 4. 构造并持久化
         if feed is None:
             feed = cls(symbol=symbol, requirements=requirements)
+            feed._feeds_dir = feeds_dir
             for period_name, df in all_loaded.items():  # type: ignore[assignment]
                 if len(df) > 0:
                     feed._periods[period_name].load_df(df, replace=True)  # type: ignore[arg-type]

@@ -137,6 +137,10 @@ class VnpyBacktestBridge(CtaTemplate):
         logger.debug(f"[{self.strategy_name}] 策略停止 | fills={fills_count} buys={buys} sells={sells}")
         self.write_log(f"策略停止: fills={fills_count} buys={buys} sells={sells}")
 
+        # 回测结束后，如有新计算的指标则更新磁盘缓存
+        if self._data_feed is not None:
+            self._data_feed.save_cache()
+
     def _log_data_feed_summary(self, label: str = "") -> None:
         """输出 DataFeed 内容摘要到日志文件（前端运行日志 Tab 可查看）
 
