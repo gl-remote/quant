@@ -50,7 +50,7 @@ def parse_period_minutes(period: str) -> int:
     raise ValueError(f"无法解析周期: {period}")
 
 
-def _bar_start_time(ts: pd.Timestamp, period_minutes: int) -> pd.Timestamp:
+def bar_start_time(ts: pd.Timestamp, period_minutes: int) -> pd.Timestamp:
     """计算时间戳所属的高周期 bar 起始时间
 
     例如：10:34 属于 1h 周期 → 起始时间为 10:00
@@ -66,12 +66,4 @@ def _bar_start_time(ts: pd.Timestamp, period_minutes: int) -> pd.Timestamp:
     return ts.normalize() + pd.Timedelta(minutes=bar_start_minutes)
 
 
-def get_forming_bar_start(current_source_time: pd.Timestamp, target_period: str) -> pd.Timestamp:
-    """获取当前源周期时间所属的高周期 bar 起始时间（供 DataFeed 内部调用）
 
-    :param current_source_time: 当前源周期 bar 的时间戳
-    :param target_period: 目标周期名称，如 "5m", "15m", "1h"
-    :return: 高周期 bar 的起始时间
-    """
-    period_minutes = parse_period_minutes(target_period)
-    return _bar_start_time(current_source_time, period_minutes)
