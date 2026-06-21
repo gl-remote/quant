@@ -47,12 +47,7 @@ def _init_worker(
     backtest_config: BacktestConfig,
     run_id: int,
 ) -> None:
-    """子进程初始化：每个 worker 启动时执行一次
-
-    1. 初始化全局上下文
-    2. 预构造 DataFeed 写入运行时缓存，让 Bridge.on_init
-       调 DataFeed.create() 时命中的内存缓存直接返回，避免重复构建。
-    """
+    """子进程初始化：每个 worker 启动时执行一次"""
     global _WORKER_CTX
     _WORKER_CTX["datasets"] = datasets
     _WORKER_CTX["strategy_name"] = strategy_name
@@ -72,35 +67,6 @@ def _init_worker(
         enqueue=True,
     )
     logger.debug(f"[worker {pid}] 初始化完成")
-
-    # ── 预构造 DataFeed 写入运行时缓存 ──
-    # 使用 load_strategy_and_config 获取策略专属配置类型，
-    # 构造 DataFeed 后写入 set_cached_feed，后续 trial 的
-    # Bridge.on_init → DataFeed.create() 命中缓存直接返回。
-    from strategies.runtime import set_cached_feed
-    from strategies.runtime.data_feed import DataFeed, _source_date_range
-
-    from .strategy_factory import load_strategy_and_config
-
-    strategy_cls, config = load_strategy_and_config(strategy_name, strategy_params)
-    reqs = strategy_cls().data_requirements(config)
-
-    if reqs is not None and reqs.periods:
-        for symbol, df in datasets:
-            feed = DataFeed(symbol=symbol)
-            feed.apply_requirements(reqs)
-
-            feed_df = df.copy()
-            if "datetime" in feed_df.columns:
-                feed_df = feed_df.set_index("datetime")
-            feed.feed_history_df(feed_df)
-            feed.calculate_all()
-
-            src_range = _source_date_range(feed_df)
-            if src_range is not None:
-                set_cached_feed(symbol, feed, src_range[0], src_range[1])
-
-        logger.debug(f"[worker {pid}] DataFeed 缓存预填完成: {len(datasets)} 品种")
 
 
 def _execute_trial(params: dict[str, Any], trial_seed: int = 0) -> dict[str, Any]:
