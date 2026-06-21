@@ -321,7 +321,7 @@ class DataManager:
 
         for symbol in symbols:
             data_src = self._resolve_data_src(symbol, interval, candidates)
-            cache_key = f"{symbol}_{interval}_{start_date}_{end_date}"
+            cache_key = f"{symbol}_{interval}"
 
             if cache_key in self._data_cache:
                 logger.debug(f"从缓存加载数据: {symbol}")

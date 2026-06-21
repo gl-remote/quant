@@ -78,8 +78,8 @@ class PeriodData:
         )
         self._df.index.name = "datetime"
 
-        # 形成中的 bar：高周期聚合时，未完成的 bar 暂存于此
-        # 完成后通过 complete_forming_bar() 追加到 _df
+        # 形成中的 bar：由 _aggregate_period_view 构造视图时使用
+        # 或由 calculate_indicators 在拼接 forming bar 时引用
         self._forming_bar: Bar | None = None
         # 形成中 bar 的指标缓存 {indicator_name: value}
         self._forming_indicators: dict[str, float] = {}
@@ -183,14 +183,7 @@ class PeriodData:
             self._append_df(df)
 
     def update_forming_bar(self, bar: Bar) -> None:
-        """更新形成中的 bar（不写入 _df）
-
-        高周期聚合时，形成中的 bar 暂存于 _forming_bar，不写入 _df。
-        只更新 high/low/close/volume，不改变 open 和时间戳。
-
-        :param bar: 用于更新的基础周期 bar 数据
-        :raises RuntimeError: 如果没有 forming bar（需先调用 set_forming_bar）
-        """
+        """更新形成中的 bar（不写入 _df）"""
         if self._forming_bar is None:
             raise RuntimeError("No forming bar to update, call set_forming_bar first")
         self._forming_bar = Bar(
@@ -202,22 +195,13 @@ class PeriodData:
             close=bar.close,
             volume=self._forming_bar.volume + bar.volume,
         )
-        # 形成中 bar 更新后，指标缓存失效
         self._forming_indicators.clear()
 
     def set_forming_bar(self, bar: Bar) -> None:
-        """设置新的形成中 bar（高周期新 bar 开始形成时调用）
-
-        :param bar: 新的形成中 bar
-        """
         self._forming_bar = bar
         self._forming_indicators.clear()
 
     def complete_forming_bar(self) -> None:
-        """将形成中的 bar 完成并追加到 _df
-
-        当高周期 bar 形成完毕（新 bar 开始）时调用，将 _forming_bar 追加到 _df。
-        """
         if self._forming_bar is None:
             return
         self.append_bar(self._forming_bar)
@@ -226,16 +210,13 @@ class PeriodData:
 
     @property
     def has_forming_bar(self) -> bool:
-        """是否存在形成中的 bar"""
         return self._forming_bar is not None
 
     @property
     def forming_bar(self) -> Bar | None:
-        """获取形成中的 bar（只读）"""
         return self._forming_bar
 
     def reset(self) -> None:
-        """清空所有数据（_df、forming bar、指标缓存），保留注册的指标配置"""
         self._df = pd.DataFrame(
             columns=["open", "high", "low", "close", "volume"],
             dtype="float64",
@@ -531,6 +512,46 @@ class PeriodDataView:
         self._period = period
         self._forming_bar = forming_bar
         self._forming_indicators = forming_indicators or {}
+        self._indicator_cache: dict[str, float] = {}
+
+    def calculate_indicators(self, registered_indicators: list[IndicatorSpec]) -> None:
+        """基于视图范围内的数据计算指标，结果缓存在视图内部
+
+        不写回 _df_ref。指标计算仅基于视图中可见的已完成 bar + forming bar。
+        """
+        if not registered_indicators:
+            return
+
+        from ..core.indicators import generate_indicator_column_name
+
+        # 取视图范围内的 _df 子集
+        if self._df_count > 0:
+            view_df = self._df_ref.iloc[self._start_idx : self._end_idx + 1].copy()
+        else:
+            view_df = pd.DataFrame(columns=self._df_ref.columns, dtype="float64")
+
+        # 拼接 forming bar
+        if self._forming_bar is not None:
+            forming_row = _forming_bar_to_series(self._forming_bar)
+            view_df = pd.concat([view_df, forming_row.to_frame().T])
+
+        if len(view_df) == 0:
+            return
+
+        for spec in registered_indicators:
+            col_name = generate_indicator_column_name(spec.name, spec.params)
+            if spec.func is None:
+                continue
+            if col_name in self._indicator_cache:
+                continue
+
+            try:
+                result = spec.func(view_df, **spec.params)
+                result_series = pd.Series(result, index=view_df.index)
+                last_val = result_series.iloc[-1]
+                self._indicator_cache[col_name] = float(last_val) if not pd.isna(last_val) else np.nan
+            except Exception as e:
+                logger.warning("指标计算失败 [{}][{}]: {}", self._period, spec.name, e)
 
     @property
     def current_time(self) -> pd.Timestamp:
@@ -595,15 +616,19 @@ class PeriodDataView:
         :param idx: 索引位置，支持负索引（相对于视图）
         :return: 指标值，索引越界或指标不存在返回None
         """
+        # 优先从视图内部缓存取（指标已在 build_context 时算好缓存在这里）
+        if name in self._indicator_cache:
+            return self._indicator_cache[name]
+
         pos_idx = self._resolve_idx(idx)
         if pos_idx is None:
             return None
 
-        # forming bar 的指标从缓存取
+        # forming bar 的指标从 _forming_indicators 取
         if self._forming_bar is not None and pos_idx == self._df_count:
             return self._forming_indicators.get(name)
 
-        # 从 _df 中取
+        # 从 _df 中取（兼容预计算指标的场景）
         if name not in self._df_ref.columns:
             return None
 

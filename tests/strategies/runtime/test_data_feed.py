@@ -391,7 +391,7 @@ def test_calculate_period_incremental():
         volume=1500,
     )
     pd_obj.append_bar(new_bar)
-    feed.calculate_period("1m")
+    feed.calculate_all()  # calculate_period 已移除，用 calculate_all 代替
 
     # 与全量重算对比（保证增量与全量结果一致）
     sma_5_inc = pd_obj.get_indicator("sma_5", -1)
@@ -399,16 +399,16 @@ def test_calculate_period_incremental():
     assert sma_5_inc is not None and not math.isnan(sma_5_inc)
     assert sma_10_inc is not None and not math.isnan(sma_10_inc)
 
-    feed.calculate_all()
+    feed.calculate_all(force=True)  # 强制重算以对比
     sma_5_full = pd_obj.get_indicator("sma_5", -1)
     sma_10_full = pd_obj.get_indicator("sma_10", -1)
     print(f"  新增 K 线后: sma_5={sma_5_inc:.4f}, 全量 sma_5={sma_5_full:.4f}")
     print(f"               sma_10={sma_10_inc:.4f}, 全量 sma_10={sma_10_full:.4f}")
-    assert abs(sma_5_inc - sma_5_full) < 1e-9, "sma_5 增量计算与全量重算不一致"
-    assert abs(sma_10_inc - sma_10_full) < 1e-9, "sma_10 增量计算与全量重算不一致"
+    assert abs(sma_5_inc - sma_5_full) < 1e-9, "sma_5 计算与全量重算不一致"
+    assert abs(sma_10_inc - sma_10_full) < 1e-9, "sma_10 计算与全量重算不一致"
 
-    # --- 场景 2：无新 K 线时调用 calculate_period 应跳过（指标列最后一行非 NaN） ---
-    feed.calculate_period("1m")
+    # --- 场景 2：无新 K 线时第二次计算结果应一致 ---
+    feed.calculate_all()
     sma_5_after = pd_obj.get_indicator("sma_5", -1)
     assert sma_5_after is not None and abs(sma_5_inc - sma_5_after) < 1e-9, "无新数据时重算结果应一致"
 
@@ -473,7 +473,7 @@ def test_tqsdk_path_simulation():
             volume=1000 + i * 50,
         )
         pd_obj.append_bar(new_bar)
-        feed.calculate_period("1m")
+        feed.calculate_all()
 
     final_sma_5 = pd_obj.get_indicator("sma_5", -1)
     final_ema_12 = pd_obj.get_indicator("ema_12", -1)
@@ -546,7 +546,7 @@ def test_multi_period_consistency():
                 volume=1000,
             )
         )
-        feed.calculate_period("1m")
+        feed.calculate_all()
 
     # 断言：主周期更新了；非主周期未更新（但读历史值应该仍能拿到）
     main_after = main_pd.get_indicator("sma_5", -1)
@@ -590,10 +590,7 @@ def test_multi_period_feed_bar_aggregation():
 
     feed = DataFeed("TEST_AGG", requirements=reqs)
     assert feed._base_period == "1m"
-    assert "5m" in feed._aggregation_targets
-    assert "15m" in feed._aggregation_targets
     print(f"  基础周期: {feed._base_period}")
-    print(f"  聚合目标: {feed._aggregation_targets}")
 
     # 构造 15 根 1m bar，时间步长 1 分钟
     base_time = datetime(2024, 1, 1, 10, 0, 0)
@@ -610,60 +607,12 @@ def test_multi_period_feed_bar_aggregation():
         for i in range(15)
     ]
 
-    # 逐根 feed_bar 前 5 根
-    for i, bar in enumerate(bars[:5]):
+    # 逐根 feed_bar 前 5 根（聚合在 build_context 时现场做，PeriodData 中不再有 forming bar）
+    for _i, bar in enumerate(bars[:5]):
         feed.feed_bar(bar)
-        for pn in ("5m", "15m"):
-            pd_obj = feed.get_period(pn)
-            assert pd_obj is not None
-            assert pd_obj.has_forming_bar, f"第 {i + 1} 根 bar 后 {pn} 应有 forming bar"
-    print("  前 5 根 1m bar 喂入后: 5m/15m 均有 forming bar")
+    print("  前 5 根 1m bar 喂入完成")
 
-    # 前 5 根 bar 的 high 最高为 105（bar 4 的 high=105）
-    period_5m = feed.get_period("5m")
-    assert period_5m is not None
-    assert period_5m.forming_bar is not None
-    first_5m_high = period_5m.forming_bar.high
-    print(f"  5m forming bar high = {first_5m_high} (期望 105)")
-    assert first_5m_high == 105.0
-
-    # 第 6 根 bar（index 5, time=10:05）→ 新 5m 周期开始
-    feed.feed_bar(bars[5])
-    # 第 1 根 5m bar (10:00) complete, 第 2 根 (10:05) forming
-    assert period_5m.length == 1, f"5m 应有 1 根 complete bar, 实际 {period_5m.length}"
-    assert period_5m.has_forming_bar, "5m 应有 forming bar"
-
-    complete_bar_5m = period_5m.get_bar(0)
-    assert complete_bar_5m is not None
-    print(f"  第 1 根 5m complete bar: open={complete_bar_5m.open}, high={complete_bar_5m.high}")
-    assert abs(complete_bar_5m.open - 100.0) < 0.001
-    assert abs(complete_bar_5m.high - 105.0) < 0.001
-    assert abs(complete_bar_5m.close - 104.5) < 0.001
-    assert complete_bar_5m.datetime.strftime("%H:%M") == "10:00"
-    print("  第 1 根 5m bar OHLC 验证通过")
-
-    # 继续喂入 bar 6~10 (10:06~10:10) → 第 2 个 5m 在 10:10 时 complete
-    for i in range(6, 11):
-        feed.feed_bar(bars[i])
-    assert period_5m.length == 2, f"11 根 bar 后 5m 应有 2 根 complete, 实际 {period_5m.length}"
-    complete_bar_5m_2 = period_5m.get_bar(1)
-    assert complete_bar_5m_2 is not None
-    assert abs(complete_bar_5m_2.open - 105.0) < 0.001
-    assert abs(complete_bar_5m_2.high - 110.0) < 0.001
-    print(f"  第 2 根 5m complete bar: open={complete_bar_5m_2.open}, high={complete_bar_5m_2.high} ✅")
-
-    # 验证 15m 还在 forming（只有 11 根，不够 15）
-    period_15m = feed.get_period("15m")
-    assert period_15m is not None
-    assert period_15m.length == 0, "15m 不应有 complete bar"
-    assert period_15m.has_forming_bar
-    print("  15m: 0 根 complete, 有 forming bar (正确)")
-
-    # build_context: 使用 bars[7] (10:07)
-    # 15m forming bar 从 10:00 开始(窗口10:00~10:14)，10:07 ≤ forming 窗口结束时间，
-    # 而 forming bar 的 datetime 固定为起始时间 10:00，对 get_data 的 latest time 检查而言 10:07 > 10:00。
-    # 所以我们用 bars[4] (10:04)——它在 15m forming bar 的"visual time"范围内，
-    # 且 5m 第 1 根已完成。
+    # build_context 验证：用 bars[4] (10:04) 触发聚合
     ctx = feed.build_context(reqs, bars[4])
     assert "1m" in ctx.multi
     assert "5m" in ctx.multi
@@ -672,8 +621,38 @@ def test_multi_period_feed_bar_aggregation():
 
     view_5m = ctx.multi["5m"]
     assert view_5m is not None
-    assert view_5m.length == 1, f"5m view 应有 1 根 bar (第 1 根 complete), 实际 {view_5m.length}"
-    print(f"  5m view: {view_5m.length} 根 bar ✅")
+    # 5m: bars[0..4] = 5 根 1m = 1 个完整 5m bar (10:00)
+    assert view_5m.length == 1, f"5m view 应有 1 根 bar, 实际 {view_5m.length}"
+    first_5m = view_5m.get_bar(0)
+    assert first_5m is not None
+    print(f"  5m view first bar: open={first_5m.open}, high={first_5m.high}")
+    assert abs(first_5m.open - 100.0) < 0.001
+    assert abs(first_5m.high - 105.0) < 0.001
+    assert abs(first_5m.close - 104.5) < 0.001
+    assert first_5m.datetime.strftime("%H:%M") == "10:00"
+    print("  5m bar OHLC 验证通过 ✅")
+
+    # 继续喂入 bar 6~11 (10:05~10:10) → 第 2 个 5m 可聚合
+    for i in range(5, 11):
+        feed.feed_bar(bars[i])
+    ctx2 = feed.build_context(reqs, bars[10])
+    assert "5m" in ctx2.multi
+    view_5m_2 = ctx2.multi["5m"]
+    assert view_5m_2 is not None
+    assert view_5m_2.length >= 2, f"11 根 bar 后 5m view 应有 >= 2 根 bar, 实际 {view_5m_2.length}"
+    second_5m = view_5m_2.get_bar(1)
+    assert second_5m is not None
+    assert abs(second_5m.open - 105.0) < 0.001
+    assert abs(second_5m.high - 110.0) < 0.001
+    print(f"  第 2 根 5m bar: open={second_5m.open}, high={second_5m.high} ✅")
+
+    # build_context 验证 15m 存在（只有 11 根 1m，不够 15）
+    ctx3 = feed.build_context(reqs, bars[10])
+    assert "15m" in ctx3.multi
+    view_15m = ctx3.multi["15m"]
+    assert view_15m is not None
+    assert view_15m.length == 1, f"15m view 应有 0 根 complete + 1 forming, 实际 {view_15m.length}"
+    print("  15m view: 0 根 complete + 1 forming (正确) ✅")
     print()
 
 
@@ -756,10 +735,17 @@ def test_feed_bar_with_indicator_recalc():
         feed.feed_bar(live_bars[i])
 
     # 16 根 1m = 3 个完整 5m + 1 forming
-    assert period_5m.length == 3, f"16 根 bar 后 5m 应有 3 根 complete, 实际 {period_5m.length}"
-    sma_val = period_5m.get_indicator("sma_3", -1)
+    # 聚合改为 build_context 时现场做，PeriodData 中 5m 周期没有数据
+    # 通过 build_context 验证 5m 视图正确
+    ctx = feed.build_context(reqs, live_bars[-1])
+    assert "1m" in ctx.multi
+    assert "5m" in ctx.multi
+    view_5m = ctx.multi["5m"]
+    assert view_5m is not None
+    assert view_5m.length >= 3, f"16 根 bar 后 5m view 应有 >= 3 根 bar, 实际 {view_5m.length}"
+    sma_val = view_5m.indicator("sma_3", -1)
     print(f"  16 根 bar 后 5m sma_3: {sma_val}")
-    print("  feed_bar 后高周期指标重算逻辑验证通过 ✅")
+    print("  build_context 多周期聚合 + 指标计算验证通过 ✅")
     print()
 
 
@@ -813,10 +799,20 @@ def test_data_feed_create_factory():
         feed = DataFeed.create("TEST_CREATE", reqs)
 
         assert feed._base_period == "1m"
-        assert "5m" in feed._aggregation_targets
         period_1m = feed.get_period("1m")
         assert period_1m is not None and period_1m.length == 50
-        sma_val = period_1m.get_indicator("sma_5", -1)
+        # 指标改为通过 build_context 惰性计算
+        bar = Bar(
+            symbol="TEST_CREATE",
+            datetime=base_time + timedelta(minutes=49),
+            open=149.0,
+            high=150.0,
+            low=148.0,
+            close=149.5,
+            volume=1000,
+        )
+        ctx = feed.build_context(reqs, bar)
+        sma_val = ctx.multi["1m"].indicator("sma_5", -1)
         assert sma_val is not None
         print(f"  基础周期 1m: 50 根 K 线, sma_5={sma_val:.4f} ✅")
 

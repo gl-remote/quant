@@ -94,7 +94,6 @@ def _init_worker(
             if "datetime" in feed_df.columns:
                 feed_df = feed_df.set_index("datetime")
             feed.feed_history_df(feed_df)
-            feed.build_aggregations()
             feed.calculate_all()
 
             src_range = _source_date_range(feed_df)
