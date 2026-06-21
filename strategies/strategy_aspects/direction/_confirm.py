@@ -119,7 +119,9 @@ def _make_confirm_decorator(
             # 评估条件
             period_view = ctx.multi.get(metric.period)
             if period_view is not None:
-                col = generate_indicator_column_name(metric.indicator.name, metric.indicator.params)
+                col = generate_indicator_column_name(
+                    metric.indicator.name, metric.indicator.params, period=metric.period
+                )
                 # 模板列名需要解析
                 resolved_col = _resolve_template(col, state.strategy_config)
                 value = period_view.indicator(resolved_col, -1)

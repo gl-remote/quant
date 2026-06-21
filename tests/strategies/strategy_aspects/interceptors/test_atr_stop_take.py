@@ -28,7 +28,7 @@ from strategies import (
     State,
     StrategyPosition,
 )
-from strategies.core.indicators import sma_func
+from strategies.core.indicators import generate_indicator_column_name, sma_func
 from strategies.strategy_aspects import with_atr_stop_take_profit, with_stop_take_profit
 from strategies.strategy_aspects.primitives import StrategyAspects
 
@@ -66,7 +66,8 @@ class _MockMultiCtx:
         self.multi: dict[str, _MockPeriodView] = {}
         self.aspects = StrategyAspects()
         if atr_value is not None:
-            self.multi[period] = _MockPeriodView({"atr_14": atr_value})
+            atr_col = generate_indicator_column_name("atr", {"period": 14}, period=period)
+            self.multi[period] = _MockPeriodView({atr_col: atr_value})
 
 
 class _MockBar:

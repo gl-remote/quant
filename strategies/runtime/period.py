@@ -13,7 +13,7 @@ import pandas as pd
 from loguru import logger
 from numpy.typing import NDArray
 
-from ..core.indicators import IndicatorSpec, generate_indicator_column_name
+from ..core.indicators import IndicatorSpec
 from ..core.types import Bar
 from .events import Event
 
@@ -70,35 +70,44 @@ class PeriodData:
         """
         self.period = period
 
-        # K线数据（OHLCV） + 指标数据（合并在一起，索引统一为datetime）
-        # 索引为空的 DataFrame，后续加载数据时会自动设置 datetime 索引
         self._df: pd.DataFrame = pd.DataFrame(
             columns=["open", "high", "low", "close", "volume"],
             dtype="float64",
         )
         self._df.index.name = "datetime"
 
-        # 形成中的 bar：由 _aggregate_period_view 构造视图时使用
-        # 或由 calculate_indicators 在拼接 forming bar 时引用
-        self._forming_bar: Bar | None = None
-        # 形成中 bar 的指标缓存 {indicator_name: value}
-        self._forming_indicators: dict[str, float] = {}
-
         # 已注册的指标列表
         self._registered_indicators: list[IndicatorSpec] = []
+
+        # 游标：记录上一次 get_data 找到的索引，避免重复二分查找
+        # -1 表示尚未查找；回测时严格顺序推进，每次 O(1)
+        self._cursor: int = -1
+
+        # append_bar 缓冲：减少 pd.concat 频次
+        self._bar_buffer: list[pd.DataFrame] = []
+        self._buffered_times: set[pd.Timestamp] = set()
+
+    def _ensure_flushed(self) -> None:
+        """将 _bar_buffer 中的数据批量 flush 到 _df"""
+        if not self._bar_buffer:
+            return
+        batch = pd.concat(self._bar_buffer, ignore_index=False)
+        self._df = pd.concat([self._df, batch], ignore_index=False)
+        self._bar_buffer.clear()
+        self._buffered_times.clear()
 
     @property
     def first_time(self) -> pd.Timestamp | None:
         """获取最早数据时间戳"""
+        self._ensure_flushed()
         if len(self._df) == 0:
             return None
         return cast(pd.Timestamp, self._df.index[0])
 
     @property
     def latest_time(self) -> pd.Timestamp | None:
-        """获取最新数据时间戳（含形成中 bar）"""
-        if self._forming_bar is not None:
-            return pd.Timestamp(self._forming_bar.datetime)
+        """获取最新数据时间戳"""
+        self._ensure_flushed()
         if len(self._df) == 0:
             return None
         return cast(pd.Timestamp, self._df.index[-1])
@@ -106,6 +115,7 @@ class PeriodData:
     @property
     def length(self) -> int:
         """获取当前数据长度（K线数量）"""
+        self._ensure_flushed()
         return len(self._df)
 
     @property
@@ -122,6 +132,8 @@ class PeriodData:
         if len(new_df) == 0:
             return
 
+        self._ensure_flushed()
+
         if len(self._df) > 0:
             last_time = self._df.index[-1]
             first_new_time = new_df.index[0]
@@ -131,20 +143,28 @@ class PeriodData:
         if len(self._df) == 0:
             self._df = new_df.copy()
         else:
-            self._df = pd.concat([self._df, new_df])
+            self._df = pd.concat([self._df, new_df], ignore_index=False)
 
     def append_bar(self, bar: Bar) -> None:
         """追加单根K线
 
+        若 bar 时间已存在则静默忽略（DataFeed 初始数据加载与实时推送可能重叠）。
+
         :param bar: 单根K线数据
-        :raises ValueError: 如果 bar 时间 <= 已有最新时间
         """
         bar_time = pd.Timestamp(bar.datetime)
-        new_df = pd.DataFrame(
+        # 检查 _df + buffer 双重去重（不 flush buffer 以保证 append_bar 的 O(1) 摊销）
+        if bar_time in self._df.index or bar_time in self._buffered_times:
+            return
+
+        row = pd.DataFrame(
             {"open": [bar.open], "high": [bar.high], "low": [bar.low], "close": [bar.close], "volume": [bar.volume]},
             index=pd.Index([bar_time], name="datetime"),
         )
-        self._append_df(new_df)
+        self._bar_buffer.append(row)
+        self._buffered_times.add(bar_time)
+        if len(self._bar_buffer) >= 100:
+            self._ensure_flushed()
 
     def append_bars(self, bars: list[Bar]) -> None:
         """批量追加K线数据（用于回测初始化）
@@ -179,42 +199,11 @@ class PeriodData:
         """
         if replace:
             self._df = df.copy()
+            self._cursor = -1
+            self._bar_buffer.clear()
+            self._buffered_times.clear()
         else:
             self._append_df(df)
-
-    def update_forming_bar(self, bar: Bar) -> None:
-        """更新形成中的 bar（不写入 _df）"""
-        if self._forming_bar is None:
-            raise RuntimeError("No forming bar to update, call set_forming_bar first")
-        self._forming_bar = Bar(
-            symbol=self._forming_bar.symbol,
-            datetime=self._forming_bar.datetime,
-            open=self._forming_bar.open,
-            high=max(self._forming_bar.high, bar.high),
-            low=min(self._forming_bar.low, bar.low),
-            close=bar.close,
-            volume=self._forming_bar.volume + bar.volume,
-        )
-        self._forming_indicators.clear()
-
-    def set_forming_bar(self, bar: Bar) -> None:
-        self._forming_bar = bar
-        self._forming_indicators.clear()
-
-    def complete_forming_bar(self) -> None:
-        if self._forming_bar is None:
-            return
-        self.append_bar(self._forming_bar)
-        self._forming_bar = None
-        self._forming_indicators.clear()
-
-    @property
-    def has_forming_bar(self) -> bool:
-        return self._forming_bar is not None
-
-    @property
-    def forming_bar(self) -> Bar | None:
-        return self._forming_bar
 
     def reset(self) -> None:
         self._df = pd.DataFrame(
@@ -222,16 +211,21 @@ class PeriodData:
             dtype="float64",
         )
         self._df.index.name = "datetime"
-        self._forming_bar = None
-        self._forming_indicators.clear()
+        self._cursor = -1
+        self._bar_buffer.clear()
+        self._buffered_times.clear()
 
     def register_indicator(self, spec: IndicatorSpec) -> None:
         """注册需要计算的指标
 
         :param spec: IndicatorSpec 指标定义对象
         """
-        for existing in self._registered_indicators:
+        for i, existing in enumerate(self._registered_indicators):
             if existing.name == spec.name and existing.params == spec.params:
+                # 已存在的同名指标可能 func=None（来自磁盘反序列化），
+                # 用新注册的完整 IndicatorSpec（含 func）替换
+                if spec.func is not None and existing.func is None:
+                    self._registered_indicators[i] = spec
                 return
         self._registered_indicators.append(spec)
 
@@ -245,92 +239,12 @@ class PeriodData:
         """获取已注册的指标配置列表（只读副本）"""
         return list(self._registered_indicators)
 
-    def calculate_indicators(self, force: bool = False) -> None:
-        """计算所有注册指标
-
-        跳过已计算且最后一行非 NaN 的指标，对需要计算的指标做全量计算。
-        对于有 forming bar 的周期，在临时拼接的 DataFrame 上计算，
-        结果分别写回 _df 和 _forming_indicators，不修改 _df 本身。
-
-        首次计算（列不存在或 force=True）时对全量数据计算，
-        后续增量更新仅计算 window 尾部。
-
-        :param force: 强制全量重算，清除已有的部分指标结果
-        """
-        if not self._registered_indicators:
-            return
-
-        for spec in self._registered_indicators:
-            col_name = generate_indicator_column_name(spec.name, spec.params)
-
-            # 跳过已计算且最后一行非 NaN 的指标（force 模式下不跳过）
-            # 如有 forming bar，还需其指标缓存也已计算
-            if not force and col_name in self._df.columns:
-                if len(self._df) > 0 and not self._df[col_name].isna().iloc[-1]:
-                    if self._forming_bar is None or col_name in self._forming_indicators:
-                        continue
-
-            if spec.func is None:
-                continue
-
-            try:
-                window = spec.window if isinstance(spec.window, int) else 250
-                is_first_compute = force or col_name not in self._df.columns
-
-                # 首次计算/强制重算：对全量数据计算；增量更新：仅计算 window 尾部
-                if is_first_compute:
-                    compute_df = self._df
-                else:
-                    tail_len = min(window, len(self._df))
-                    compute_df = self._df.tail(tail_len)
-
-                # 拼接 forming bar 到临时 DataFrame，不修改 _df
-                if self._forming_bar is not None:
-                    forming_row = _forming_bar_to_series(self._forming_bar)
-                    compute_df = pd.concat([compute_df, forming_row.to_frame().T])
-
-                if len(compute_df) == 0:
-                    continue
-
-                result = spec.func(compute_df, **spec.params)
-                result_series = pd.Series(result, index=compute_df.index)
-
-                # 结果写回 _df（只写 _df 中存在的行）
-                if col_name not in self._df.columns:
-                    self._df[col_name] = np.nan
-                df_mask = compute_df.index.isin(self._df.index)
-                self._df.loc[compute_df.index[df_mask], col_name] = result_series[df_mask]
-
-                # forming bar 的指标值写入缓存
-                if self._forming_bar is not None:
-                    forming_time = pd.Timestamp(self._forming_bar.datetime)
-                    if forming_time in result_series.index:
-                        val = result_series[forming_time]
-                        self._forming_indicators[col_name] = float(val) if not pd.isna(val) else np.nan
-
-            except Exception as e:
-                logger.warning("指标计算失败 [{}][{}]: {}", self.period, spec.name, e)
-
-    def append_indicators(self, indicators: pd.DataFrame) -> None:
-        """追加指标数据
-
-        指标DataFrame要求：
-        1. 索引必须与K线的datetime对齐
-        2. 列名应为指标名（如 "sma_10", "ema_20")
-
-        :param indicators: 指标DataFrame，行数应等于或小于当前K线数
-        :raises ValueError: 如果索引不匹配
-        """
-        # 验证索引
-        if len(indicators) > len(self._df):
-            raise ValueError("Indicators DataFrame has more rows than K-line data")
-
-        # 合并指标数据
-        for col in indicators.columns:
-            self._df[col] = indicators[col]
-
     def get_data(
-        self, current_time: pd.Timestamp | dt, lookback_bars: int = 1, events_df: pd.DataFrame | None = None
+        self,
+        current_time: pd.Timestamp | dt,
+        lookback_bars: int = 1,
+        events_df: pd.DataFrame | None = None,
+        base_df_ref: pd.DataFrame | None = None,
     ) -> "PeriodDataView":
         """获取截止指定时间点的逻辑视图（只读，用于策略安全访问）
 
@@ -340,51 +254,39 @@ class PeriodData:
         3. 不受后续数据更新影响，保证数据一致性（Append-Only）
         4. 可指定需要的历史K线数，限定视图范围
         5. 逻辑视图，不复制数据，通过索引范围访问原始数据
-        6. 若存在形成中 bar 且时间 <= current_time，视图会包含它
 
         :param current_time: 当前时间，视图将只包含<=此时间的数据
         :param lookback_bars: 需要的历史K线数，从current_time往前数，默认1根
         :param events_df: 事件DataFrame（由DataFeed传入）
+        :param base_df_ref: 基础周期的 _df 引用（指标写回目标）
         :return: PeriodDataView只读逻辑视图对象
         :raises ValueError: 如果current_time晚于最新数据时间，或lookback_bars <= 0
         """
         if lookback_bars <= 0:
             raise ValueError("lookback_bars must be positive")
 
+        self._ensure_flushed()
+
         current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
 
-        # 检查时间是否有效（考虑 forming bar）
-        # forming bar 的时间戳是其起始时间（如 10:00），但 visual 上它覆盖到
-        # (start, start + period_minutes] 的时间范围。因此允许 current_time 位于
-        # (forming_bar.datetime, forming_bar.datetime + period] 区间内。
         latest = self.latest_time
         if latest is not None and current_time_ts > latest:
-            # 检查是否在 forming bar 的 effective 范围内
-            forming_end = None
-            try:
-                from .aggregate import parse_period_minutes
+            raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
 
-                period_minutes = parse_period_minutes(self.period)
-                if latest is not None:
-                    forming_end = latest + pd.Timedelta(minutes=period_minutes)
-            except Exception:
-                pass
-            if forming_end is None or current_time_ts > forming_end:
-                raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
-
-        # 判断 forming bar 是否应包含在视图中
-        include_forming = False
-        if self._forming_bar is not None:
-            forming_time = pd.Timestamp(self._forming_bar.datetime)
-            if forming_time <= current_time_ts:
-                include_forming = True
-
-        # 找到截止时间对应的索引（ffill: 取 <= current_time 的最后一根 bar）
-        if len(self._df) > 0:
+        # 游标快速路径：回测严格顺序推进，每次 O(1)
+        # 只有当 cursor + 1 的时间正好匹配时才走快速路径
+        if self._cursor >= 0 and self._cursor + 1 < len(self._df):
+            if self._df.index[self._cursor + 1] == current_time_ts:
+                self._cursor += 1
+                end_idx = self._cursor
+            else:
+                end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method="ffill")[0]
+                self._cursor = end_idx
+        elif len(self._df) > 0:
             end_idx = self._df.index.get_indexer(pd.Index([current_time_ts]), method="ffill")[0]
-            # end_idx < 0 表示 current_time 在第一根 bar 之前，没有可见的完整 bar
+            self._cursor = end_idx
         else:
-            end_idx = -1  # _df 为空，没有完整 bar
+            end_idx = -1
 
         # 计算起始索引
         start_idx = max(0, end_idx - lookback_bars + 1) if end_idx >= 0 else 0
@@ -396,8 +298,9 @@ class PeriodData:
             end_idx=end_idx,
             current_time=current_time_ts,
             period=self.period,
-            forming_bar=self._forming_bar if include_forming else None,
-            forming_indicators=self._forming_indicators if include_forming else None,
+            forming_bar=None,
+            forming_indicators=None,
+            base_df_ref=base_df_ref,
         )
 
     def get_bar(self, idx: int) -> Bar | None:
@@ -492,6 +395,7 @@ class PeriodDataView:
         period: str,
         forming_bar: Bar | None = None,
         forming_indicators: dict[str, float] | None = None,
+        base_df_ref: pd.DataFrame | None = None,
     ):
         """初始化逻辑视图（内部使用，不应直接构造）
 
@@ -503,6 +407,7 @@ class PeriodDataView:
         :param period: 周期名称
         :param forming_bar: 形成中的 bar（作为虚拟最后一行）
         :param forming_indicators: 形成中 bar 的指标缓存
+        :param base_df_ref: 基础周期的 _df 引用（所有周期的指标统一写回此处）
         """
         self._df_ref = df_ref
         self._events_ref = events_ref
@@ -513,11 +418,12 @@ class PeriodDataView:
         self._forming_bar = forming_bar
         self._forming_indicators = forming_indicators or {}
         self._indicator_cache: dict[str, float] = {}
+        self._base_df_ref = base_df_ref
 
     def calculate_indicators(self, registered_indicators: list[IndicatorSpec]) -> None:
-        """基于视图范围内的数据计算指标，结果缓存在视图内部
+        """基于视图范围内的数据计算指标
 
-        不写回 _df_ref。指标计算仅基于视图中可见的已完成 bar + forming bar。
+        结果写回 _base_df_ref（所有周期统一写回基础周期 DataFrame）并缓存在视图内部。
         """
         if not registered_indicators:
             return
@@ -539,7 +445,7 @@ class PeriodDataView:
             return
 
         for spec in registered_indicators:
-            col_name = generate_indicator_column_name(spec.name, spec.params)
+            col_name = generate_indicator_column_name(spec.name, spec.params, period=self._period)
             if spec.func is None:
                 continue
             if col_name in self._indicator_cache:
@@ -550,6 +456,10 @@ class PeriodDataView:
                 result_series = pd.Series(result, index=view_df.index)
                 last_val = result_series.iloc[-1]
                 self._indicator_cache[col_name] = float(last_val) if not pd.isna(last_val) else np.nan
+
+                # 写回 _base_df_ref（所有周期统一写回基础周期 DataFrame）
+                if self._base_df_ref is not None:
+                    self._base_df_ref.loc[result_series.index, col_name] = result_series
             except Exception as e:
                 logger.warning("指标计算失败 [{}][{}]: {}", self._period, spec.name, e)
 
@@ -612,12 +522,12 @@ class PeriodDataView:
         """通过索引获取指标值（索引相对于视图）
         注意：此方法不触发计算，指标不存在返回 None
 
-        :param name: 指标名称，如 "sma_10"
+        :param name: 指标名称，如 "sma_10"（已含周期前缀，由调用方生成）
         :param idx: 索引位置，支持负索引（相对于视图）
         :return: 指标值，索引越界或指标不存在返回None
         """
-        # 优先从视图内部缓存取（指标已在 build_context 时算好缓存在这里）
-        if name in self._indicator_cache:
+        # 仅在 idx=-1（最近值）时优先从缓存取，避免缓存值与请求索引不一致
+        if idx == -1 and name in self._indicator_cache:
             return self._indicator_cache[name]
 
         pos_idx = self._resolve_idx(idx)
@@ -628,8 +538,14 @@ class PeriodDataView:
         if self._forming_bar is not None and pos_idx == self._df_count:
             return self._forming_indicators.get(name)
 
-        # 从 _df 中取（兼容预计算指标的场景）
-        if name not in self._df_ref.columns:
+        # 从 _base_df_ref 或 _df_ref 中取指标（列名已含周期前缀，直接匹配）
+        target_df: pd.DataFrame | None = None
+        if self._base_df_ref is not None and name in self._base_df_ref.columns:
+            target_df = self._base_df_ref
+        elif name in self._df_ref.columns:
+            target_df = self._df_ref
+
+        if target_df is None:
             return None
 
         real_idx = self._start_idx + pos_idx
@@ -637,7 +553,7 @@ class PeriodDataView:
             return None
 
         try:
-            return float(self._df_ref[name].iloc[real_idx])
+            return float(target_df[name].iloc[real_idx])
         except IndexError:
             return None
 
@@ -713,10 +629,15 @@ class PeriodDataView:
 
     def indicator_series(self, name: str) -> pd.Series:
         """便捷方法：获取指标序列（含 forming bar 的指标值）"""
-        if self._df_count > 0:
-            if name not in self._df_ref.columns:
-                raise KeyError(f"Indicator {name} not found")
-            result = self._df_ref[name].iloc[self._start_idx : self._end_idx + 1].copy()
+        # 从 _base_df_ref 或 _df_ref 取数据
+        target_df: pd.DataFrame | None = None
+        if self._base_df_ref is not None and name in self._base_df_ref.columns:
+            target_df = self._base_df_ref
+        elif name in self._df_ref.columns:
+            target_df = self._df_ref
+
+        if self._df_count > 0 and target_df is not None:
+            result = target_df[name].iloc[self._start_idx : self._end_idx + 1].copy()
         else:
             result = pd.Series(dtype="float64", name=name)
 

@@ -113,14 +113,9 @@ def _make_ctx(
         view = _period_data_view(period_name, close_prices[-lookback:])
         multi[period_name] = view
 
-    # 设置信号相关的指标值
+    # 设置信号相关的指标值（每个视图用周期前缀的列名）
     if is_long is not None:
-        sma_short_name = generate_indicator_column_name("sma", {"period": 5})
-        sma_long_name = generate_indicator_column_name("sma", {"period": 20})
-        macd_name = generate_indicator_column_name("macd", {"fast": 12, "slow": 26, "signal": 9})
-        kdj_name = generate_indicator_column_name("kdj", {"n": 9, "k_period": 3, "d_period": 3})
-
-        for view in multi.values():
+        for period_name, view in multi.items():
             last_idx = view._end_idx
             if last_idx < 0:
                 continue
@@ -128,16 +123,21 @@ def _make_ctx(
             last_time = df.index[last_idx]
             base_price = close_prices[-1]
 
+            sma_short_col = generate_indicator_column_name("sma", {"period": 5}, period=period_name)
+            sma_long_col = generate_indicator_column_name("sma", {"period": 20}, period=period_name)
+            macd_col = generate_indicator_column_name("macd", {"fast": 12, "slow": 26, "signal": 9}, period=period_name)
+            kdj_col = generate_indicator_column_name("kdj", {"n": 9, "k_period": 3, "d_period": 3}, period=period_name)
+
             if is_long:
-                df.at[last_time, sma_short_name] = base_price * 1.01
-                df.at[last_time, sma_long_name] = base_price
-                df.at[last_time, macd_name] = 0.1
-                df.at[last_time, kdj_name] = 15.0
+                df.at[last_time, sma_short_col] = base_price * 1.01
+                df.at[last_time, sma_long_col] = base_price
+                df.at[last_time, macd_col] = 0.1
+                df.at[last_time, kdj_col] = 15.0
             else:
-                df.at[last_time, sma_short_name] = base_price
-                df.at[last_time, sma_long_name] = base_price * 1.01
-                df.at[last_time, macd_name] = -0.1
-                df.at[last_time, kdj_name] = 85.0
+                df.at[last_time, sma_short_col] = base_price
+                df.at[last_time, sma_long_col] = base_price * 1.01
+                df.at[last_time, macd_col] = -0.1
+                df.at[last_time, kdj_col] = 85.0
 
     return BarContext(
         symbol="TEST",

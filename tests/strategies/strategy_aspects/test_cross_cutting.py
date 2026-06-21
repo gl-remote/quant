@@ -169,7 +169,7 @@ class TestInterceptorSkipsAdvisory:
         strat = _S()
         # 多头持仓，入场价 100，当前价 106 → 涨幅 6% > 5% 止盈
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=106.0, lowest_price=99.0)
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}}, close=106.0)
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=106.0)
 
         signal = strat.on_bar(state, ctx)
 
@@ -200,7 +200,7 @@ class TestInterceptorPassesThrough:
 
         strat = _S()
         state = _make_state()  # 无持仓
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}})
 
         strat.on_bar(state, ctx)
 
@@ -222,7 +222,7 @@ class TestInterceptorPassesThrough:
         strat = _S()
         # 多头持仓，入场价 100，当前价 99 → 跌幅 1% < 3% 止损，不触发
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=101.0, lowest_price=99.0)
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}}, close=99.0)
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=99.0)
 
         strat.on_bar(state, ctx)
 
@@ -361,7 +361,7 @@ class TestMultipleInterceptorPriority:
         # 固定止损：跌幅 4% > 3% → 触发
         # ATR 止损：ATR=1.0, multiplier=2.0, max_loss=2.0, close(96) < 100-2=98 → 也触发
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=101.0, lowest_price=96.0)
-        ctx = _make_ctx({"15m": {"atr_14": 1.0}}, close=96.0)
+        ctx = _make_ctx({"15m": {"15m_atr_14": 1.0}}, close=96.0)
 
         signal = strat.on_bar(state, ctx)
 
@@ -394,9 +394,9 @@ class TestAdvisoryIsolation:
         strat = _S()
         ctx = _make_ctx(
             {
-                "1m": {"macd_12_9_26": 0.5},
-                "5m": {"sma_10": 100.0},
-                "15m": {"sma_40": 99.0},
+                "1m": {"1m_macd_12_9_26": 0.5},
+                "5m": {"5m_sma_10": 100.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -424,9 +424,9 @@ class TestAdvisoryIsolation:
         # SMA 5m < SMA 15m → trend 不满足
         ctx = _make_ctx(
             {
-                "1m": {"macd_12_9_26": 0.5},
-                "5m": {"sma_10": 98.0},
-                "15m": {"sma_40": 99.0},
+                "1m": {"1m_macd_12_9_26": 0.5},
+                "5m": {"5m_sma_10": 98.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()

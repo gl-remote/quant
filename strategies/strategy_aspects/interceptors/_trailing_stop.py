@@ -15,7 +15,7 @@ from common.constants import (
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
 )
-from strategies.core.indicators import atr_func
+from strategies.core.indicators import atr_func, generate_indicator_column_name
 
 
 def with_trailing_stop(period: str = "15m") -> Any:
@@ -94,7 +94,7 @@ def with_trailing_stop(period: str = "15m") -> Any:
             if period_view is None:
                 return original_on_bar(self, state, ctx)
 
-            atr_col = f"atr_{config.atr_period}"
+            atr_col = generate_indicator_column_name("atr", {"period": config.atr_period}, period=period)
             atr_value = period_view.indicator(atr_col, -1)
             if atr_value is None or atr_value <= 0:
                 return original_on_bar(self, state, ctx)

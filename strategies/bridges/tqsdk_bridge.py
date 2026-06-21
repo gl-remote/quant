@@ -39,6 +39,7 @@ from common.schemas import KlineDataFrame  # noqa: E402
 from common.tqsdk_imports import tqsdk  # noqa: E402
 from common.typing import check_types  # noqa: E402
 from strategies.runtime import BarContext, DataFeed  # noqa: E402
+from strategies.runtime.aggregate import parse_period_minutes  # noqa: E402
 
 # 周期名称 → tqsdk duration 秒数映射
 _PERIOD_MAP: dict[str, int] = {
@@ -47,8 +48,27 @@ _PERIOD_MAP: dict[str, int] = {
     "15m": 900,
     "30m": 1800,
     "1h": 3600,
-    "d": 86400,
+    "2h": 7200,
+    "4h": 14400,
+    "1d": 86400,
 }
+
+
+def _source_period_from_requirements(reqs: Any) -> str:
+    """从 DataRequirements 中解出最小周期名称
+
+    Args:
+        reqs: 策略声明的 DataRequirements 对象，或 None
+
+    Returns:
+        最小周期名称，如 "5m"；无 requirements 时返回 "1m" 作为兜底
+    """
+    if reqs is None:
+        return "1m"
+    all_periods: set[str] = set(reqs.periods)
+    for period in reqs.indicators:
+        all_periods.add(period)
+    return min(all_periods, key=parse_period_minutes)
 
 
 def _to_datetime(raw_dt: int) -> datetime:
@@ -102,6 +122,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
         # 多周期数据（run() 中初始化）
         self._klines: dict[str, KlineDataFrame] = {}
         self._data_feed: DataFeed | None = None
+        self._source_period: str | None = None  # 在 _subscribe_klines 中确定
         self._caught_up: bool = False  # 是否已追上实时数据
         self._tq_position: Any = None  # tqsdk 持仓对象引用（live 模式）
         self._prev_target_vol: int = 0  # 上次目标持仓量，用于检测持仓变化
@@ -268,7 +289,8 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         聚合模式下只有源周期数据，高周期由 DataFeed 自动聚合。
         """
-        source_period = "1m"
+        assert self._source_period is not None, "源周期未初始化"
+        source_period = self._source_period
         klines = self._klines.get(source_period)
         if klines is None:
             return
@@ -279,7 +301,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             self._caught_up = True
             self._log_indicator_snapshot("追上实时数据")
         for i in range(prev_lens.get(source_period, 0), current_len):
-            signal = self._on_bar_1m(klines=klines, idx=i)
+            signal = self._on_bar(klines=klines, idx=i)
             if signal.action:
                 close_price = float(klines.close.iloc[i])
                 if on_signal:
@@ -348,8 +370,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         高周期由 DataFeed 内部聚合生成，无需从网络订阅。
         """
-        # 只订阅源周期（1m）数据
-        self._klines["1m"] = self.api.get_kline_serial(self.symbol, 60)
+        reqs = self._strategy.data_requirements(self._state.strategy_config)
+        source_period = _source_period_from_requirements(reqs)
+        self._source_period = source_period
+        duration = _PERIOD_MAP.get(source_period)
+        if duration is None:
+            raise ValueError(f"不支持 tqsdk 订阅的周期: {source_period}")
+        self._klines[source_period] = self.api.get_kline_serial(self.symbol, duration)
 
     def _klines_to_dataframe(self, klines: KlineDataFrame) -> Any:
         """将 tqsdk kline_serial DataFrame 转换为 PeriodData 可加载的格式
@@ -371,8 +398,11 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
         前置条件: _subscribe_klines() + _wait_for_initial_data() 已执行
         """
+        assert self._source_period is not None, "_subscribe_klines 必须先于 _init_period_data 执行"
         reqs = self._strategy.data_requirements(self._state.strategy_config)
         has_indicators = bool(reqs and reqs.indicators)
+
+        source_period = self._source_period
 
         # 1. 创建 DataFeed：构造函数传入 requirements 一步完成注册/配置
         if reqs:
@@ -382,12 +412,13 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
 
             self._data_feed = DataFeed(
                 symbol=self.symbol,
-                requirements=DataRequirements(periods={"1m": PeriodRequirements(lookback_bars=1)}, indicators={}),
+                requirements=DataRequirements(
+                    periods={source_period: PeriodRequirements(lookback_bars=1)}, indicators={}
+                ),
             )
         logger.info("[init] DataFeed: 已配置需求，高周期将由内部聚合生成")
 
         # 2. 批量灌入源周期初始数据
-        source_period = "1m"
         if source_period in self._klines:
             klines = self._klines[source_period]
             if len(klines) > 0:
@@ -466,7 +497,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
     # ------------------------------------------------------------------ #
 
     @check_types
-    def _on_bar_1m(self, klines: KlineDataFrame, idx: int) -> Signal:
+    def _on_bar(self, klines: KlineDataFrame, idx: int) -> Signal:
         """从源周期 kline_serial 构造完整 BarContext 并驱动策略
 
         流程: 源周期 kline → Bar → 喂入 DataFeed → build_context → on_bar

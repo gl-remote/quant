@@ -27,13 +27,17 @@ class IndicatorSpec:
     func: Callable[..., NDArray[np.float64]] | None = None
 
 
-def generate_indicator_column_name(name: str, params: dict[str, Any]) -> str:
-    """生成指标列名，按参数名称排序确保确定性"""
+def generate_indicator_column_name(name: str, params: dict[str, Any], period: str = "") -> str:
+    """生成指标列名，按参数名称排序确保确定性
+
+    :param name: 指标名称，如 "sma"
+    :param params: 参数 dict，如 {"period": 10}
+    :param period: 周期前缀，如 "5m" — 结果 "5m_sma_10"
+    """
     sorted_params = sorted(params.items())
     param_parts = [f"{value}" for _, value in sorted_params]
-    if param_parts:
-        return f"{name}_{'_'.join(param_parts)}"
-    return name
+    base = f"{name}_{'_'.join(param_parts)}" if param_parts else name
+    return f"{period}_{base}" if period else base
 
 
 def sma_func(df: pd.DataFrame, period: int) -> NDArray[np.float64]:

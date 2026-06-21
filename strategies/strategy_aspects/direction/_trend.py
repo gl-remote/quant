@@ -59,12 +59,16 @@ def _make_trend_decorator(
             right_value = None
 
             if left_view is not None:
-                left_col = generate_indicator_column_name(left.indicator.name, left.indicator.params)
+                left_col = generate_indicator_column_name(
+                    left.indicator.name, left.indicator.params, period=left.period
+                )
                 left_col = _resolve_template(left_col, state.strategy_config)
                 left_value = left_view.indicator(left_col, -1)
 
             if right_view is not None:
-                right_col = generate_indicator_column_name(right.indicator.name, right.indicator.params)
+                right_col = generate_indicator_column_name(
+                    right.indicator.name, right.indicator.params, period=right.period
+                )
                 right_col = _resolve_template(right_col, state.strategy_config)
                 right_value = right_view.indicator(right_col, -1)
 

@@ -106,7 +106,8 @@ class TestConfirmLongWhen:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}})
+
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -127,7 +128,7 @@ class TestConfirmLongWhen:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": -0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": -0.5}})
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -181,7 +182,7 @@ class TestConfirmLongWhen:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}})
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -199,7 +200,7 @@ class TestConfirmLongWhen:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"kdj_3_3_9": 15.0}})
+        ctx = _make_ctx({"1m": {"1m_kdj_3_3_9": 15.0}})
         state = _make_state()  # kdj_oversold = 20.0
         strat.on_bar(state, ctx)
 
@@ -237,7 +238,7 @@ class TestConfirmShortWhen:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": -0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": -0.5}})
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -281,8 +282,8 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 100.0},
-                "15m": {"sma_40": 99.0},
+                "5m": {"5m_sma_10": 100.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -308,8 +309,8 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 99.0},
-                "15m": {"sma_40": 100.0},
+                "5m": {"5m_sma_10": 99.0},
+                "15m": {"15m_sma_40": 100.0},
             }
         )
         state = _make_state()
@@ -332,7 +333,7 @@ class TestTrendLongWhenCompare:
         ctx = _make_ctx(
             {
                 "5m": {},  # 缺失 sma_10
-                "15m": {"sma_40": 99.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -354,7 +355,7 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 100.0},
+                "5m": {"5m_sma_10": 100.0},
                 "15m": {},  # 缺失 sma_40
             }
         )
@@ -377,8 +378,8 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 100.0},
-                "15m": {"sma_40": 99.0},
+                "5m": {"5m_sma_10": 100.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -418,8 +419,8 @@ class TestTrendShortWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 99.0},
-                "15m": {"sma_40": 100.0},
+                "5m": {"5m_sma_10": 99.0},
+                "15m": {"15m_sma_40": 100.0},
             }
         )
         state = _make_state()
@@ -472,9 +473,9 @@ class TestMultipleDecorators:
         strat = _S()
         ctx = _make_ctx(
             {
-                "1m": {"macd_12_9_26": 0.5},
-                "5m": {"macd_12_9_26": 0.3, "sma_10": 100.0},
-                "15m": {"sma_40": 99.0},
+                "1m": {"1m_macd_12_9_26": 0.5},
+                "5m": {"5m_macd_12_9_26": 0.3, "5m_sma_10": 100.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -569,7 +570,7 @@ class TestDiagnosticsAutoWrite:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}})
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -587,7 +588,7 @@ class TestDiagnosticsAutoWrite:
                 return None
 
         strat = _S()
-        ctx = _make_ctx({"1m": {"macd_12_9_26": -0.5}})
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": -0.5}})
         state = _make_state()
         strat.on_bar(state, ctx)
 
@@ -627,8 +628,8 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 100.0},
-                "15m": {"sma_40": 99.0},
+                "5m": {"5m_sma_10": 100.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -651,8 +652,8 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 98.0},
-                "15m": {"sma_40": 99.0},
+                "5m": {"5m_sma_10": 98.0},
+                "15m": {"15m_sma_40": 99.0},
             }
         )
         state = _make_state()
@@ -676,7 +677,7 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"sma_10": 100.0},
+                "5m": {"5m_sma_10": 100.0},
                 "15m": {},  # 缺失 sma_40
             }
         )

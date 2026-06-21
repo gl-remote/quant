@@ -5,6 +5,8 @@
 
 from datetime import datetime, timedelta
 
+import numpy as np
+
 from strategies.core.indicators import IndicatorSpec, ema_func, sma_func
 from strategies.core.types import Bar
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
@@ -77,9 +79,8 @@ def make_view(
 
     # 添加指标
     if indicators:
-        bar_times = [pd.Timestamp(bar.datetime) for bar in bars]
-        indicators_df = pd.DataFrame(indicators, index=bar_times)
-        period_data.append_indicators(indicators_df)
+        for col_name, values in indicators.items():
+            period_data.set_indicator_column(col_name, np.array(values, dtype=np.float64))
 
     # 构建事件DataFrame
     events_df = None
@@ -138,9 +139,6 @@ def test_data_feed_basic():
     df = pd.DataFrame(data).set_index("datetime")
     feed.load_history_df("1m", df)
 
-    # 预计算所有指标
-    feed.calculate_all()
-
     # 获取数据视图
     latest_bar = bars[-1]
     view = feed.get_data("1m", latest_bar.datetime, lookback_bars=10)
@@ -149,8 +147,8 @@ def test_data_feed_basic():
     print(f"视图截止时间: {view.current_time}")
     print(f"视图包含 K 线数量: {view.length}")
     print(f"最新收盘价: {view.close(-1):.2f}")
-    print(f"SMA(5): {view.indicator('sma_5', -1):.2f}")
-    print(f"SMA(10): {view.indicator('sma_10', -1):.2f}")
+    print(f"SMA(5): {view.indicator('1m_sma_5', -1):.2f}")
+    print(f"SMA(10): {view.indicator('1m_sma_10', -1):.2f}")
     print()
 
 
@@ -333,29 +331,28 @@ def test_make_view():
 
 
 def test_calculate_period_incremental():
-    """测试 DataFeed 的增量计算逻辑（tqsdk 主循环路径）
+    """测试 DataFeed 惰性计算（get_data 自动触发的指标计算）
 
-    模拟实时模式：先加载历史 → calculate_all 预计算 → 逐根 K 线 append_bar
-    → calculate_period(main_period, incremental=True)。
+    模拟实时模式：先加载历史 → feed_bar 逐根推送 → get_data 读取指标。
 
     验证项：
-    1. 增量计算后的指标值与全量重算结果一致（保证回测/实盘一致性）
-    2. 没有新 K 线时第二次调用 calculate_period 不会重复计算（跳过逻辑生效）
+    1. 初始数据加载后指标可读
+    2. 新 bar 推送后指标更新（通过 get_data 惰性计算）
+    3. 同时间点的 get_data 结果一致
     """
     import math
 
-    print("=== 测试 calculate_period 增量计算 ===\n")
+    import pandas as pd
+
+    print("=== 测试惰性计算（get_data 自动指标计算）===\n")
 
     feed = DataFeed("TEST_INC")
     feed.register_period("1m")
     feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
     feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 10}, window=10, func=sma_func))
 
-    # 初始历史：30 根 K 线（模拟 tqsdk 推送的历史数据）
+    # 初始历史：30 根 K 线
     bars = generate_test_bars(30)
-    # 转换为 DataFrame 加载
-    import pandas as pd
-
     data = [
         {
             "datetime": pd.Timestamp(b.datetime),
@@ -369,17 +366,16 @@ def test_calculate_period_incremental():
     ]
     df = pd.DataFrame(data).set_index("datetime")
     feed.load_history_df("1m", df)
-    feed.calculate_all()
 
-    pd_obj = feed.get_period("1m")
-    assert pd_obj is not None
-    sma_5_initial = pd_obj.get_indicator("sma_5", -1)
-    sma_10_initial = pd_obj.get_indicator("sma_10", -1)
-    print(f"  初始历史: 30 根, sma_5={sma_5_initial:.4f}, sma_10={sma_10_initial:.4f}")
+    # 初始指标（通过 get_data 惰性计算）
+    view_initial = feed.get_data("1m", bars[-1].datetime, lookback_bars=30)
+    sma_5_initial = view_initial.indicator("1m_sma_5", -1)
+    sma_10_initial = view_initial.indicator("1m_sma_10", -1)
+    print(f"  初始历史: 30 根, 1m_sma_5={sma_5_initial:.4f}, 1m_sma_10={sma_10_initial:.4f}")
     assert sma_5_initial is not None and not math.isnan(sma_5_initial)
     assert sma_10_initial is not None and not math.isnan(sma_10_initial)
 
-    # --- 场景 1：append 1 根新 K 线 + calculate_period(incremental=True) ---
+    # --- 场景 1：feed_bar 1 根新 K 线后指标应更新 ---
     last_time = bars[-1].datetime
     new_bar = Bar(
         symbol="TEST",
@@ -390,48 +386,46 @@ def test_calculate_period_incremental():
         close=105.5,
         volume=1500,
     )
-    pd_obj.append_bar(new_bar)
-    feed.calculate_all()  # calculate_period 已移除，用 calculate_all 代替
+    feed.get_period("1m").append_bar(new_bar)
 
-    # 与全量重算对比（保证增量与全量结果一致）
-    sma_5_inc = pd_obj.get_indicator("sma_5", -1)
-    sma_10_inc = pd_obj.get_indicator("sma_10", -1)
-    assert sma_5_inc is not None and not math.isnan(sma_5_inc)
-    assert sma_10_inc is not None and not math.isnan(sma_10_inc)
+    # 通过 get_data 读取指标（惰性计算）
+    view_after = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    sma_5_after = view_after.indicator("1m_sma_5", -1)
+    sma_10_after = view_after.indicator("1m_sma_10", -1)
+    assert sma_5_after is not None and not math.isnan(sma_5_after)
+    assert sma_10_after is not None and not math.isnan(sma_10_after)
 
-    feed.calculate_all(force=True)  # 强制重算以对比
-    sma_5_full = pd_obj.get_indicator("sma_5", -1)
-    sma_10_full = pd_obj.get_indicator("sma_10", -1)
-    print(f"  新增 K 线后: sma_5={sma_5_inc:.4f}, 全量 sma_5={sma_5_full:.4f}")
-    print(f"               sma_10={sma_10_inc:.4f}, 全量 sma_10={sma_10_full:.4f}")
-    assert abs(sma_5_inc - sma_5_full) < 1e-9, "sma_5 计算与全量重算不一致"
-    assert abs(sma_10_inc - sma_10_full) < 1e-9, "sma_10 计算与全量重算不一致"
+    # 同时间点两次 get_data 结果应一致
+    view_after2 = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    print(f"  新增 K 线后: 1m_sma_5={sma_5_after:.4f}")
+    print(f"               1m_sma_10={sma_10_after:.4f}")
+    assert abs(sma_5_after - view_after2.indicator("1m_sma_5", -1)) < 1e-9, "同时间点 get_data 结果应一致"
+    assert abs(sma_10_after - view_after2.indicator("1m_sma_10", -1)) < 1e-9, "同时间点 get_data 结果应一致"
 
-    # --- 场景 2：无新 K 线时第二次计算结果应一致 ---
-    feed.calculate_all()
-    sma_5_after = pd_obj.get_indicator("sma_5", -1)
-    assert sma_5_after is not None and abs(sma_5_inc - sma_5_after) < 1e-9, "无新数据时重算结果应一致"
+    # --- 场景 2：无新 K 线时多次 get_data 结果应一致 ---
+    view_repeat = feed.get_data("1m", new_bar.datetime, lookback_bars=30)
+    assert abs(view_repeat.indicator("1m_sma_5", -1) - sma_5_after) < 1e-9, "无新数据时结果应一致"
 
-    print("  ✅ 增量计算跳过逻辑与一致性验证通过\n")
+    print("  ✅ 惰性计算一致性验证通过\n")
 
 
 def test_tqsdk_path_simulation():
-    """模拟 tqsdk 实时链路：load_df(kline_serial) → calculate_all → N 轮 append_bar+calculate_period
+    """模拟 tqsdk 实时链路：feed_bar 逐根推送 → get_data 惰性计算指标
 
-    这是 test/live 命令的核心数据流程，保证 tqsdk 路径与回测路径一致。
+    test/live 命令的核心数据流程，保证 tqsdk 路径与回测路径一致。
     """
     import math
 
     import pandas as pd
 
-    print("=== 模拟 tqsdk 实时链路 ===\n")
+    print("=== 模拟 tqsdk 实时链路（惰性计算模式）===\n")
 
     feed = DataFeed("TQSDK_SIM")
     feed.register_period("1m")
     feed.register_indicator("1m", IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
     feed.register_indicator("1m", IndicatorSpec(name="ema", params={"period": 12}, window=12, func=ema_func))
 
-    # --- 阶段 1：模拟 tqsdk kline_serial 的初始历史数据 ---
+    # --- 阶段 1：加载初始历史数据 ---
     bars = generate_test_bars(40)
     df = pd.DataFrame(
         [
@@ -447,19 +441,17 @@ def test_tqsdk_path_simulation():
         ]
     )
     df.set_index("datetime", inplace=True)
+    feed.load_history_df("1m", df)
 
-    pd_obj = feed.get_period("1m")
-    assert pd_obj is not None
-    pd_obj.load_df(df)
-    feed.calculate_all()
-
-    init_sma_5 = pd_obj.get_indicator("sma_5", -1)
-    init_ema_12 = pd_obj.get_indicator("ema_12", -1)
-    print(f"  初始化完成: {len(df)} 根 K 线, sma_5={init_sma_5:.4f}, ema_12={init_ema_12:.4f}")
+    # 初始指标（通过 get_data 惰性计算）
+    view_init = feed.get_data("1m", bars[-1].datetime, lookback_bars=40)
+    init_sma_5 = view_init.indicator("1m_sma_5", -1)
+    init_ema_12 = view_init.indicator("1m_ema_12", -1)
+    print(f"  初始化完成: {len(df)} 根 K 线, 1m_sma_5={init_sma_5:.4f}, 1m_ema_12={init_ema_12:.4f}")
     assert init_sma_5 is not None and not math.isnan(init_sma_5)
     assert init_ema_12 is not None and not math.isnan(init_ema_12)
 
-    # --- 阶段 2：模拟 10 轮实时推送（append_bar + calculate_period） ---
+    # --- 阶段 2：模拟 10 轮实时推送（feed_bar 逐根推送） ---
     last_ts = bars[-1].datetime
     live_prices = [100 + i * 0.3 for i in range(10)]
     for i, price in enumerate(live_prices):
@@ -472,27 +464,27 @@ def test_tqsdk_path_simulation():
             close=price + 0.2,
             volume=1000 + i * 50,
         )
-        pd_obj.append_bar(new_bar)
-        feed.calculate_all()
+        feed.get_period("1m").append_bar(new_bar)
 
-    final_sma_5 = pd_obj.get_indicator("sma_5", -1)
-    final_ema_12 = pd_obj.get_indicator("ema_12", -1)
-    print(f"  10 轮实时推送后: sma_5={final_sma_5:.4f}, ema_12={final_ema_12:.4f}")
+    # 循环结束后通过 get_data 读取指标
+    final_view = feed.get_data("1m", last_ts + timedelta(minutes=10), lookback_bars=50)
+    final_sma_5 = final_view.indicator("1m_sma_5", -1)
+    final_ema_12 = final_view.indicator("1m_ema_12", -1)
+    print(f"  10 轮实时推送后: 1m_sma_5={final_sma_5:.4f}, 1m_ema_12={final_ema_12:.4f}")
 
-    # --- 阶段 3：与全量重算对比（保证增量结果=全量结果） ---
-    feed.calculate_all()
-    assert abs(pd_obj.get_indicator("sma_5", -1) - final_sma_5) < 1e-9
-    assert abs(pd_obj.get_indicator("ema_12", -1) - final_ema_12) < 1e-9
-    print("  ✅ 10 轮实时推送后的增量结果与全量重算一致\n")
+    # --- 阶段 3：同时间点结果一致性验证 ---
+    final_view2 = feed.get_data("1m", last_ts + timedelta(minutes=10), lookback_bars=50)
+    assert abs(final_view2.indicator("1m_sma_5", -1) - final_sma_5) < 1e-9
+    assert abs(final_view2.indicator("1m_ema_12", -1) - final_ema_12) < 1e-9
+    print("  ✅ 10 轮实时推送后的惰性计算结果一致\n")
 
 
 def test_multi_period_consistency():
-    """多周期场景：主周期逐根增量，非主周期在初始化阶段计算完整后保持不变
+    """多周期场景：feed_bar 逐根写入 → get_data 惰性计算指标
 
-    验证 tqsdk 路径下的多周期行为与设计意图一致：
-    - 主周期 (1m)：每轮 append_bar + calculate_period → 指标值更新
-    - 非主周期 (5m/15m)：仅初始化时 calculate_all 计算过，不增量重算
-      （策略读这些周期的指标时读的是历史最新值，不期望"实时"更新）
+    验证 tgsk 路径下的多周期行为：
+    - 主周期 (1m)：每轮 feed_bar → get_data 指标值更新
+    - 非主周期 (5m/15m)：仅历史数据，通过 get_data 惰性计算
     """
     import math
 
@@ -503,12 +495,13 @@ def test_multi_period_consistency():
         feed.register_period(period)
         feed.register_indicator(period, IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func))
 
-    # 初始加载：1m=50 根，5m=30 根，15m=20 根（tqsdk 各周期独立推送）
+    # 初始加载：1m=50 根，5m=30 根，15m=20 根
     import pandas as pd
 
+    loaded_bars: dict[str, list[Bar]] = {}
     for period, n in [("1m", 50), ("5m", 30), ("15m", 20)]:
         bars = generate_test_bars(n)
-        # 转换为 DataFrame 加载
+        loaded_bars[period] = bars
         data = [
             {
                 "datetime": pd.Timestamp(b.datetime),
@@ -522,20 +515,18 @@ def test_multi_period_consistency():
         ]
         df = pd.DataFrame(data).set_index("datetime")
         feed.load_history_df(period, df)
-    feed.calculate_all()
 
-    # 记录初始值
+    # 记录初始值（通过 get_data）
     initial_values = {}
     for period in ("1m", "5m", "15m"):
-        pd_obj = feed.get_period(period)
-        initial_values[period] = pd_obj.get_indicator("sma_5", -1)
-        print(f"  初始 {period}: sma_5={initial_values[period]:.4f}, {len(pd_obj._df)} 根K线")  # pyright: ignore[reportPrivateUsage]
+        view = feed.get_data(period, loaded_bars[period][-1].datetime, lookback_bars=20)
+        initial_values[period] = view.indicator(f"{period}_sma_5", -1)
+        print(f"  初始 {period}: {period}_sma_5={initial_values[period]:.4f}")
 
     # 只对主周期 (1m) 做 5 轮实时推送
-    main_pd = feed.get_period("1m")
-    last_time = datetime.now()
+    last_time = loaded_bars["1m"][-1].datetime
     for i in range(5):
-        main_pd.append_bar(
+        feed.get_period("1m").append_bar(
             Bar(
                 symbol="MULTI_PERIOD",
                 datetime=last_time + timedelta(minutes=i + 1),
@@ -546,21 +537,20 @@ def test_multi_period_consistency():
                 volume=1000,
             )
         )
-        feed.calculate_all()
 
     # 断言：主周期更新了；非主周期未更新（但读历史值应该仍能拿到）
-    main_after = main_pd.get_indicator("sma_5", -1)
+    main_view = feed.get_data("1m", last_time + timedelta(minutes=5), lookback_bars=55)
+    main_after = main_view.indicator("1m_sma_5", -1)
     assert main_after != initial_values["1m"], "主周期指标应随新 K 线更新"
-    print(f"  主周期 1m 推送 5 根后: sma_5={main_after:.4f}（原值 {initial_values['1m']:.4f}）")
+    print(f"  主周期 1m 推送 5 根后: 1m_sma_5={main_after:.4f}（原值 {initial_values['1m']:.4f}）")
 
-    # 非主周期：值仍然可读（因为初始化时算过了），不应为 None/NaN
+    # 非主周期：值仍然可读，不应为 None/NaN
     for period in ("5m", "15m"):
-        pd_obj = feed.get_period(period)
-        val = pd_obj.get_indicator("sma_5", -1)
+        view = feed.get_data(period, loaded_bars[period][-1].datetime, lookback_bars=20)
+        val = view.indicator(f"{period}_sma_5", -1)
         assert val is not None and not math.isnan(val), f"{period} 指标值应存在（初始化阶段已计算）"
-        # 非主周期在没有新增数据前提下值应与初始化一致
         assert abs(val - initial_values[period]) < 1e-9, f"{period} 指标在无新数据时不应变化"
-        print(f"  非主周期 {period}: sma_5={val:.4f}（与初始化一致）")
+        print(f"  非主周期 {period}: {period}_sma_5={val:.4f}（与初始化一致）")
 
     print("  ✅ 多周期一致性验证通过\n")
 
@@ -743,8 +733,8 @@ def test_feed_bar_with_indicator_recalc():
     view_5m = ctx.multi["5m"]
     assert view_5m is not None
     assert view_5m.length >= 3, f"16 根 bar 后 5m view 应有 >= 3 根 bar, 实际 {view_5m.length}"
-    sma_val = view_5m.indicator("sma_3", -1)
-    print(f"  16 根 bar 后 5m sma_3: {sma_val}")
+    sma_val = view_5m.indicator("5m_sma_3", -1)
+    print(f"  16 根 bar 后 5m 5m_sma_3: {sma_val}")
     print("  build_context 多周期聚合 + 指标计算验证通过 ✅")
     print()
 
@@ -812,9 +802,9 @@ def test_data_feed_create_factory():
             volume=1000,
         )
         ctx = feed.build_context(reqs, bar)
-        sma_val = ctx.multi["1m"].indicator("sma_5", -1)
+        sma_val = ctx.multi["1m"].indicator("1m_sma_5", -1)
         assert sma_val is not None
-        print(f"  基础周期 1m: 50 根 K 线, sma_5={sma_val:.4f} ✅")
+        print(f"  基础周期 1m: 50 根 K 线, 1m_sma_5={sma_val:.4f} ✅")
 
     # 场景 2：DataFeed.create() 返回的 DataFeed 能正常 build_context
     print("2. build_context 正常")
