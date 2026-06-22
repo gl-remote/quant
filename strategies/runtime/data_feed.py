@@ -320,14 +320,17 @@ class DataFeed:
     ) -> PeriodDataView:
         """为高周期构建 PeriodDataView：从 base 聚合（含 forming bar）→ 切片视图 → 挂 forming bar
 
-        使用 latest_time 而非 current_time_ts：聚合数据只到最新完整 bar 的边界
-        （如 5m 周期下 current=10:04 但最新 5m bar 在 10:00，传入 10:04 会触发 time-after-latest 校验）
+        view_time 以 current_time 为上限：缓存可能含未来 bar，
+        用 current_time 兜底确保视图不超出实时时间窗口。
+        forming bar 随后独立挂到视图末尾。
         """
         # 1a. 从 base 聚合：完整周期写回 PeriodData，当前未完成周期返回为 forming bar
         forming_bar = self._aggregate_period(period_name, current_time_ts, base_df)
 
-        # 1b. 从 PeriodData 切片获取视图（含历史聚合数据）
-        view_time = period_data.latest_time if period_data.latest_time is not None else current_time_ts
+        # 1b. 从 PeriodData 切片获取视图（用 current_time 兜底，防缓存未来 bar）
+        view_time = period_data.latest_time
+        if view_time is None or view_time > current_time_ts:
+            view_time = current_time_ts
         view = period_data.get_data(view_time, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
 
         # 1c. 把 forming bar 挂到视图末尾（聚合阶段已算好，无需重复扫描 base_df）
