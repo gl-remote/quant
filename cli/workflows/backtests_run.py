@@ -19,6 +19,7 @@
 
 from __future__ import annotations
 
+import cProfile
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -49,6 +50,7 @@ from common.types import BacktestResult
 from config import ConfigManager
 from config.schemas import BacktestConfig
 from data import DataManager
+from strategies.runtime.data_feed import DataFeed
 from strategies.utils import (
     apply_strategy_config,
     get_strategy_class_name,
@@ -74,6 +76,9 @@ class VnpySearchRequest:
     trials: int | None
     parallel: bool
     workers: int | None
+    profile: bool = False
+    no_search: bool = False
+    dump_indicators: bool = False
 
 
 @dataclass(frozen=True)
@@ -399,6 +404,22 @@ class BacktestRunWorkflow:
         n_trials = req.trials if req.trials else optimizer_cfg.n_trials
         run_engine = req.optimizer or optimizer_cfg.engine or "grid"
 
+        # 命令行 --no-search 覆盖配置 optimizer.enabled（单向：仅能关闭）
+        search_enabled = optimizer_cfg.enabled and not req.no_search
+
+        if not search_enabled:
+            logger.info("参数搜索已关闭，降级为单次回测（用默认策略参数）")
+            self._run_single_backtest(
+                engine=engine,
+                req=req,
+                strategy_params=strategy_params,
+                datasets=datasets,
+                git_hash=git_hash,
+                run_id=run_id,
+                finalizer=finalizer,
+            )
+            return
+
         sc = self._cm.get_trading_config(req.strategy)
         search_space = (
             sc.search_space or optimizer_cfg.strategy_spaces.get(req.strategy, {}) or optimizer_cfg.search_space
@@ -406,25 +427,6 @@ class BacktestRunWorkflow:
         if not search_space:
             logger.warning("搜索空间为空，跳过参数搜索")
             finalizer.finish_skipped(run_id)
-            return
-
-        if not optimizer_cfg.enabled:
-            logger.info("optimizer.enabled=False，降级为单次回测（不搜索参数）")
-            pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
-            engine_results = engine.run(cast(Any, pairs))
-
-            bt_persister = BacktestResultPersister(self._dm)
-            for er in engine_results:
-                data_src = next((f for s, _, f in datasets if s == er.symbol), None)
-                bt_persister.persist_result(
-                    er,
-                    run_id=run_id,
-                    data_src=data_src,
-                    strategy_params=strategy_params,
-                    git_hash=git_hash,
-                )
-
-            finalizer.finish_success(run_id)
             return
 
         capital = req.capital if req.capital else bc.initial_capital
@@ -481,6 +483,44 @@ class BacktestRunWorkflow:
             else:
                 ids_str = ", ".join(str(i) for i in all_ids[:10])
                 print(f"\n💡 查看报告: python main.py report --id <ID>  (可用 ID: {ids_str})")
+
+        finalizer.finish_success(run_id)
+
+    def _run_single_backtest(
+        self,
+        *,
+        engine: VnpyBacktestEngine,
+        req: VnpySearchRequest,
+        strategy_params: dict[str, Any],
+        datasets: list[tuple[str, KlineDataFrame, str]],
+        git_hash: str | None,
+        run_id: int,
+        finalizer: RunFinalizer,
+    ) -> None:
+        """不搜索参数，用默认策略参数跑单次回测（支持 --profile / --dump-indicators）"""
+        DataFeed.dump_indicators_default = req.dump_indicators
+        pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
+        if req.profile:
+            profile_path = Path(f"output/profiles/backtest_{req.strategy}_{datetime.now():%Y%m%d_%H%M%S}.prof")
+            profile_path.parent.mkdir(parents=True, exist_ok=True)
+            profiler = cProfile.Profile()
+            engine_results = profiler.runcall(cast(Any, engine.run), cast(Any, pairs))
+            profiler.dump_stats(str(profile_path))
+            logger.info("性能分析结果已保存: {}", profile_path)
+            logger.info("查看方式: snakeviz {}", profile_path)
+        else:
+            engine_results = engine.run(cast(Any, pairs))
+
+        bt_persister = BacktestResultPersister(self._dm)
+        for er in engine_results:
+            data_src = next((f for s, _, f in datasets if s == er.symbol), None)
+            bt_persister.persist_result(
+                er,
+                run_id=run_id,
+                data_src=data_src,
+                strategy_params=strategy_params,
+                git_hash=git_hash,
+            )
 
         finalizer.finish_success(run_id)
 

@@ -72,6 +72,11 @@ from .serialization import dump_feed, load_feed
 class DataFeed:
     """管理单个品种的多周期数据"""
 
+    # 类级默认开关：是否把指标列回写 base_df（仅 debug/落地需要）。
+    # feed 在 vnpy bridge 深处构造，无法逐参数传入，故用类属性作为进程级默认；
+    # 调用方（如单次回测 --dump-indicators）在 engine.run 前设置即可。
+    dump_indicators_default: bool = False
+
     def __init__(
         self,
         symbol: str,
@@ -92,6 +97,10 @@ class DataFeed:
         # 磁盘缓存目录（由 create() 设置）
         self._feeds_dir: str | None = None
         self.loaded_from_cache: bool = False
+
+        # 是否把指标列回写 base_df（仅 debug/落地需要；默认关闭以省运行时开销）
+        # 初值取类级默认，调用方可在 engine.run 前通过 DataFeed.dump_indicators_default 设置
+        self.dump_indicators: bool = DataFeed.dump_indicators_default
 
         if requirements is not None:
             self.apply_requirements(requirements)
@@ -342,7 +351,10 @@ class DataFeed:
     def calculate_indicators(self, view: PeriodDataView, period_name: str) -> None:
         """基于视图范围内的数据计算指标
 
-        DataFeed 决定算什么、用什么数据；视图负责存储自身结果（缓存 + 回写 base）。
+        DataFeed 决定算什么、用什么数据；视图负责存储自身结果。
+        运行时策略只读 _indicator_cache（idx=-1），不读 base_df 指标列，
+        因此默认不回写 base_df（省开销）。仅当 dump_indicators 显式开启时回写，
+        供 debug / 落地查看。
         """
         registered_indicators = self.get_registered_indicators(period_name)
         if not registered_indicators:
@@ -359,7 +371,7 @@ class DataFeed:
             try:
                 result = spec.func(view_df, **spec.params)
                 result_series = pd.Series(result, index=view_df.index)
-                view.store_indicator(col_name, result_series)
+                view.store_indicator(col_name, result_series, persist=self.dump_indicators)
             except Exception as e:
                 logger.warning("指标计算失败 [{}][{}]: {}", period_name, spec.name, e)
 

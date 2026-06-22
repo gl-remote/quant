@@ -101,6 +101,17 @@ def register(subparsers: Any) -> None:
     p.add_argument("--trials", type=int, default=None, help="optimizer 最大试验次数（默认从配置文件读取）")
     p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭，仅 --engine vnpy 生效）")
     p.add_argument("--workers", type=int, default=None, help="并行进程数（默认 os.cpu_count()，仅 --parallel 时生效）")
+    p.add_argument("--profile", action="store_true", help="启用性能分析（仅串行模式，写 .prof 文件供 snakeviz 查看）")
+    p.add_argument(
+        "--no-search",
+        action="store_true",
+        help="关闭参数搜索，降级为单次回测（覆盖配置 optimizer.enabled，仅 --engine vnpy 生效）",
+    )
+    p.add_argument(
+        "--dump-indicators",
+        action="store_true",
+        help="把指标列回写到基础周期 DataFrame 供 debug 查看（仅单次回测生效，有性能开销）",
+    )
 
 
 def cmd_backtest(args: argparse.Namespace) -> None:
@@ -157,6 +168,9 @@ def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
         trials=args.trials,
         parallel=bool(args.parallel),
         workers=args.workers,
+        profile=bool(args.profile),
+        no_search=bool(args.no_search),
+        dump_indicators=bool(args.dump_indicators),
     )
 
 

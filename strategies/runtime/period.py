@@ -557,19 +557,21 @@ class PeriodDataView:
 
         return df
 
-    def store_indicator(self, col_name: str, result_series: pd.Series) -> None:
+    def store_indicator(self, col_name: str, result_series: pd.Series, persist: bool = True) -> None:
         """存储一列指标计算结果（视图自身的数据写入，由 DataFeed 计算后调用）
 
-        - 缓存视图最后一个位置的值，供 idx=-1 快速读取
-        - 将非 NaN 结果写回基础周期 DataFrame（所有周期统一写回 base）
-          只写非 NaN，避免预热期 NaN 覆盖历史正确值
-        - 高周期视图额外把最新值写到 current_time 行
-          （result 索引是周期边界，当前 base 时间戳也需记录，保证实时性）
+        - 缓存视图最后一个位置的值，供 idx=-1 快速读取（运行时策略只读这个）
+        - persist=True 时额外把结果写回基础周期 DataFrame，供回测结束后落地 parquet：
+          - 将非 NaN 结果写回 base_df（所有周期统一写回 base）
+            只写非 NaN，避免预热期 NaN 覆盖历史正确值
+          - 高周期视图额外把最新值写到 current_time 行
+            （result 索引是周期边界，当前 base 时间戳也需记录，保证实时性）
+        - persist=False 时跳过 base_df 回写（如 loaded_from_cache：不再落地，回写无消费者）
         """
         last_val = result_series.iloc[-1]
         self._indicator_cache[col_name] = float(last_val) if not pd.isna(last_val) else np.nan
 
-        if self._base_df_ref is None:
+        if not persist or self._base_df_ref is None:
             return
         non_nan = result_series.notna()
         if non_nan.any():

@@ -23,6 +23,9 @@ def _make_args(**overrides):
         "trials": None,
         "parallel": False,
         "workers": None,
+        "profile": False,
+        "no_search": False,
+        "dump_indicators": False,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
