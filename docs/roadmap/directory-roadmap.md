@@ -313,6 +313,29 @@ Dockerfile 命名跟随“可部署运行单元”，不强制跟随业务域目
 
 `scripts/build.sh`、Dockerfile、K8s manifest 应使用同一运行单元名称，方便 CI 和部署系统统一映射。
 
+### 原则 8：测试是横切验证层，顶层化，单向依赖所有业务域
+
+`tests/`（未来 `workspace/tests/`）保持顶层单一目录，**不**拆进各业务域。它与「原则 2 业务域内聚」不冲突，因为测试是一个**横切关切**，不是第 N 个业务域：
+
+```text
+data / strategy / backtest / trading / report ...   ← 业务域，平级，按契约相互依赖
+tests                                               ← 横切验证层，单向依赖所有业务域，不被任何域依赖
+scripts                                             ← 横切工程操作层（同理放根级）
+```
+
+`tests` 与 `scripts` 是同一类东西——都不属于任何单一业务域、服务于全部域，因此都不进业务域目录。区别只在 `tests` 管正确性、`scripts` 管工程操作。
+
+量化对正确性的强需求，使测试体系膨胀到接近一个独立关切：除单元测试外，还包含数值精度回归、历史数据回放、策略 PnL 基准对拍、滑点/手续费边界、可见性语义校验，以及专门的测试基础设施（fixture 数据集、golden files、对拍工具、确定性随机种子）。这些天然横切多个业务域，正是测试顶层化的合理性来源。
+
+测试目录组织规则：
+
+1. **严格与被测项目目录对齐**：`tests/<domain>/` ↔ `workspace/<domain>/`，便于定位。
+2. **跨域 / `common` 的影响由依赖它的各业务域测试覆盖**：不为 `common` 单设测试域；改 `common` 由各依赖域的测试暴露问题。
+3. **域间复用走共享 fixture / 测试工具**（放 `tests/` 公共层或 `workspace/packages`），**不**让一个域的测试硬调另一个域的 test case，避免测试间反向耦合。
+4. **依赖方向单向**：测试 import 业务域代码，业务域代码永不 import 测试。
+
+这条原则同时为「按业务域切分 pre-commit 增量验证」提供前置依据：当测试按域组织且域内自覆盖完整后，`files: ^<domain>/` 即可安全地只触发该域的检查；在此之前 commit 仍走全量门槛兜底（参见 `scripts/test.sh` 顶部演进规划）。
+
 ---
 
 ## 五、当前目录到未来目录的映射
@@ -326,7 +349,7 @@ Dockerfile 命名跟随“可部署运行单元”，不强制跟随业务域目
 | `backtest/` | `workspace/backtest/python/` | 回测、优化、walk-forward |
 | `cli/` | `workspace/cli/python/` | 命令行入口、命令分发和命令级 workflows；`cli/commands` 负责适配命令行，`cli/workflows` 负责编排跨域任务 |
 | `report/` | `workspace/report/python/` + `workspace/report/web/` | Python 报告生成和 Web 报告展示分离到同一业务域 |
-| `tests/` | `workspace/tests/` | 可继续按业务域组织测试 |
+| `tests/` | `workspace/tests/` | 横切验证层，保持顶层单一目录（不拆进各业务域），内部按域子目录与被测代码对齐，详见原则 8 |
 | `docs/` | `workspace/docs/` | 长期可迁移；当前先保留根目录 docs |
 | `tools/` | `workspace/tools/` | 业务辅助工具 |
 | Dockerfile / Compose / K8s | `deploy/docker/`、`deploy/compose/`、`deploy/k8s/` | 按运行单元组织部署文件，不放入业务域目录 |

@@ -64,6 +64,3 @@ def bar_start_time(ts: pd.Timestamp, period_minutes: int) -> pd.Timestamp:
     minutes_since_midnight = ts.hour * 60 + ts.minute
     bar_start_minutes = (minutes_since_midnight // period_minutes) * period_minutes
     return ts.normalize() + pd.Timedelta(minutes=bar_start_minutes)
-
-
-

@@ -6,35 +6,54 @@
 #   git commit → Git 自动执行 .git/hooks/pre-commit
 #   → 该脚本读取本文件 → 按定义顺序执行各检查项
 #   → 全部通过才允许提交
+#
+# ──────────────────────────────────────────────────────────────────────────
+# 【模式：统一调用 scripts/test.sh】
+# 所有检查项都委托给 scripts/test.sh 的子命令，验证口径只有那一处事实来源，
+# 避免 pre-commit / CI / 人 / AI 各拼一套导致范围漂移。
+#   ruff lint   → scripts/test.sh lint    （只检查不 --fix，纯门槛不改文件）
+#   ruff format → scripts/test.sh format  （--check 只报告不重写）
+#   mypy        → scripts/test.sh type
+#   pytest      → scripts/test.sh unit
+# 当前为全量门槛（always_run）；未来若要改增量/分阶段，先读 scripts/test.sh
+# 顶部的「演进规划 / 给 AI 的提醒」，与用户对齐后再动。
+# ──────────────────────────────────────────────────────────────────────────
 
 repos:
-  # === Python Lint + Format (ruff) ===
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.6
-    hooks:
-      # Lint: 代码风格 + 潜在 bug 检测（自动修复能修的问题）
-      - id: ruff
-        args: [--fix]
-      # Format: 代码格式化检查
-      - id: ruff-format
-
-  # === 类型检查 (mypy) ===
   - repo: local
     hooks:
-      - id: mypy-check
-        name: mypy type check
-        entry: uv run python -m mypy --config-file pyproject.toml common/ data/ backtest/ strategies/
+      # === Python Lint (ruff check) ===
+      - id: lint
+        name: ruff lint (scripts/test.sh lint)
+        entry: bash scripts/test.sh lint
         language: system
         types: [python]
         pass_filenames: false
         always_run: true
 
-  # === 快速冒烟测试 ===
-  - repo: local
-    hooks:
-      - id: pytest-smoke
-        name: pytest smoke test
-        entry: uv run python -m pytest tests/ -q --tb=short -x
+      # === Python Format 检查 (ruff format --check) ===
+      - id: format
+        name: ruff format check (scripts/test.sh format)
+        entry: bash scripts/test.sh format
         language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      # === 类型检查 (mypy) ===
+      - id: type
+        name: mypy type check (scripts/test.sh type)
+        entry: bash scripts/test.sh type
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
+      # === 单元测试 (pytest) ===
+      - id: unit
+        name: pytest (scripts/test.sh unit)
+        entry: bash scripts/test.sh unit
+        language: system
+        types: [python]
         pass_filenames: false
         always_run: true
