@@ -10,73 +10,166 @@
 #   - format 用 `--check`，只报告不重写。
 #
 # 用法:
-#   bash scripts/test.sh            # 全量: lint + format + typecheck + pytest
-#   bash scripts/test.sh lint       # 仅 ruff lint
-#   bash scripts/test.sh format     # 仅 ruff format 检查
-#   bash scripts/test.sh type       # 仅 mypy
-#   bash scripts/test.sh unit       # 仅 pytest
+#   bash scripts/test.sh                  # 全量: lint + format + type + unit
+#   bash scripts/test.sh lint             # 全量仅 ruff lint
+#   bash scripts/test.sh type             # 全量仅 mypy
+#   bash scripts/test.sh <stage> <domain> # 只验某业务域（增量）
+#       例: bash scripts/test.sh lint backtest   只 ruff check backtest/
+#           bash scripts/test.sh unit strategies 只 pytest tests/strategies/
+#   <stage>  = lint | format | type | unit | all（缺省 all）
+#   <domain> = common|config|data|backtest|strategies|report|cli|contracts|report-web
+#              （可选，缺省全量 Python；report-web 走前端工具链 eslint/tsc/vitest）
 #
 # ----------------------------------------------------------------------------
-# 【演进规划 / 给 AI 的提醒】
+# 【设计 / 给 AI 的提醒】
 # ----------------------------------------------------------------------------
-# 当前定位（已确认，暂不改）：
-#   - scripts/test.sh = 全量验证基准（低频、显式调用，慢无所谓）
-#   - .pre-commit-config.yaml = commit 时的闸（现状 mypy/pytest 仍是 always_run 全量）
+# 两层职责（与 directory-roadmap 原则 8 对齐）：
+#   - scripts/test.sh = 验证「内容层」：跑什么检查、什么口径、域→路径映射的单一事实来源
+#   - .pre-commit-config.yaml = 验证「触发层」：何时跑、对哪些文件跑（git 集成，files 正则）
+# pre-commit 已按业务域切分：改 <domain>/ 只触发该域的 lint/format/type/unit，
+# 全量回归靠显式 `bash scripts/test.sh` 或 CI 兜底。
 #
-# 未来可选的「精细化」方向（pre-commit + scripts/ 组合能做到，但现在没必要做，
-# 只有当「全量太慢」成为真实痛点时才值得拧这些旋钮）：
-#   1. pre-commit 的 `files`/`exclude` 正则 —— 按路径精确划定 hook 触发范围
-#   2. pre-commit 的 `pass_filenames: true` —— 把改动文件作为 $@ 传给脚本，实现「改哪验哪」
-#   3. pre-commit 的 `stages: [pre-push]` —— 快的(ruff)走 commit，慢的(mypy/pytest)走 push
-#   4. pre-commit 的 `entry: bash scripts/check.sh` —— pre-commit 算文件范围，scripts/ 管验证口径
-#   分层示意：pre-commit(增量,秒级) → pre-push(相关目录) → CI/手动(全量四件套 + e2e 真实回测)
+# 多工具链：report 域含 python(report/) + web(report/web/) 两种形态，验证体系不同：
+#   - report      → 先 ruff+mypy+pytest（Python），再追加 eslint+tsc+vitest（前端）。
+#                   流程决策：改 report 域任何文件都前后端都验一遍（前后端强交互）。
+#   - report-web  → 只跑前端工具链（eslint+tsc+vitest），供单独验证前端时使用。
 #
-# ⚠️ AI 注意：将来若有人要改动 scripts/ 下脚本或 .pre-commit-config.yaml 的验证分工，
-#    必须先把上面这个「全量基准 vs 增量闸」的定位和精细化方向提醒用户，确认后再动手。
-#    精细度有维护代价（配置变复杂、新人/AI 要理解为什么某 hook 只在 push 跑），精细 ≠ 更好。
+# 按域切的依据：测试已按域与源码目录对齐（tests/<domain>/ ↔ <domain>/）。
+# 「某域测试覆盖不全」是 tests 自身的完备性问题，与本验证流程正交——按域切恰好
+# 能把覆盖不足暴露出来（改 A 域挂了说明 tests/A 不够），不该用全量兜底去掩盖。
+#
+# ⚠️ AI 注意：将来若有人要改动 scripts/ 下脚本或 .pre-commit-config.yaml 的验证分工
+#    （如增量↔全量切换、stages 分 commit/push、域划分调整），必须先把上述「内容层 vs
+#    触发层」「按域切 vs 全量兜底」的取舍提醒用户，确认后再动手。精细度有维护代价。
 # ============================================================================
 
 set -euo pipefail
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
 cd "$ROOT_DIR"
 
-# mypy 范围与 pre-commit 保持一致
+WEB_DIR="report/web"
+
+# 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
 MYPY_TARGETS=(common/ data/ backtest/ strategies/)
 
+# 业务域 → 源码路径（lint/format/type 的目标）
+resolve_src() {
+    case "$1" in
+        common|config|data|backtest|strategies|report|cli) echo "$1/" ;;
+        contracts) echo "workspace/packages/python-contracts/src/" ;;
+        *) echo "" ;;
+    esac
+}
+
+# 业务域 → 测试路径（unit 的目标）
+resolve_test() {
+    case "$1" in
+        common|config|data|backtest|strategies|report|cli) echo "tests/$1/" ;;
+        contracts) echo "workspace/packages/python-contracts/tests/" ;;
+        *) echo "" ;;
+    esac
+}
+
 run_lint() {
-    echo "── [lint] ruff check ──"
-    ruff check .
+    echo "── [lint] ruff check $* ──"
+    ruff check "$@"
 }
 
 run_format() {
-    echo "── [format] ruff format --check ──"
-    ruff format --check .
+    echo "── [format] ruff format --check $* ──"
+    ruff format --check "$@"
 }
 
 run_type() {
-    echo "── [type] mypy ──"
-    uv run python -m mypy --config-file pyproject.toml "${MYPY_TARGETS[@]}"
+    echo "── [type] mypy $* ──"
+    uv run python -m mypy --config-file pyproject.toml "$@"
 }
 
 run_unit() {
-    echo "── [unit] pytest ──"
-    uv run python -m pytest tests/ workspace/packages/python-contracts/tests/ -q --tb=short
+    if [ "$#" -eq 0 ]; then
+        echo -e "${YELLOW}── [unit] 该域无测试目录，跳过 ──${NC}"
+        return 0
+    fi
+    echo "── [unit] pytest $* ──"
+    # 覆盖 pyproject 的 addopts（含 --cov=. 全量覆盖率），按域验证时不需要全量 coverage
+    uv run python -m pytest "$@" -o addopts="" -p no:cacheprovider -q --tb=short
+}
+
+# ── 前端（report-web）工具链：stage 语义对齐 Python 侧 ──
+web_lint()   { echo "── [lint] eslint ──";  (cd "$WEB_DIR" && npm run --silent lint); }
+web_type()   { echo "── [type] tsc --noEmit ──"; (cd "$WEB_DIR" && npx --no-install tsc --noEmit); }
+web_unit()   { echo "── [unit] vitest run ──"; (cd "$WEB_DIR" && npx --no-install vitest run); }
+web_format() { echo -e "${YELLOW}── [format] 前端无独立 prettier 脚本，eslint 已含风格，跳过 ──${NC}"; }
+
+run_web_stage() {
+    case "$1" in
+        lint)   web_lint ;;
+        format) web_format ;;
+        type)   web_type ;;
+        unit)   web_unit ;;
+        all)    web_lint; web_type; web_unit ;;
+        *) echo -e "${RED}未知 stage: $1${NC}"; exit 1 ;;
+    esac
 }
 
 STAGE="${1:-all}"
+DOMAIN="${2:-}"
+
+# 前端域单独分流到前端工具链
+if [ "$DOMAIN" = "report-web" ]; then
+    run_web_stage "$STAGE"
+    echo -e "${GREEN}✓ 验证通过${NC}"
+    exit 0
+fi
+
+# 解析目标路径：传 domain 则按域，否则全量
+if [ -n "$DOMAIN" ]; then
+    SRC="$(resolve_src "$DOMAIN")"
+    if [ -z "$SRC" ]; then
+        echo -e "${RED}未知业务域: $DOMAIN${NC}"
+        echo "可选: common|config|data|backtest|strategies|report|cli|contracts"
+        exit 1
+    fi
+    TST="$(resolve_test "$DOMAIN")"
+    SRC_PATHS=("$SRC")
+    TYPE_PATHS=("$SRC")
+    # 测试目录可能尚未建立，不存在则 unit 跳过
+    if [ -d "$TST" ]; then
+        TEST_PATHS=("$TST")
+    else
+        TEST_PATHS=()
+    fi
+else
+    SRC_PATHS=(.)
+    TYPE_PATHS=("${MYPY_TARGETS[@]}")
+    TEST_PATHS=(tests/ workspace/packages/python-contracts/tests/)
+fi
+
 case "$STAGE" in
-    lint)   run_lint ;;
-    format) run_format ;;
-    type)   run_type ;;
-    unit)   run_unit ;;
-    all)    run_lint; run_format; run_type; run_unit ;;
-    *) echo -e "${RED}未知参数: $STAGE (可选: lint/format/type/unit/all)${NC}"; exit 1 ;;
+    lint)   run_lint "${SRC_PATHS[@]}" ;;
+    format) run_format "${SRC_PATHS[@]}" ;;
+    type)   run_type "${TYPE_PATHS[@]}" ;;
+    unit)   run_unit "${TEST_PATHS[@]}" ;;
+    all)
+        run_lint "${SRC_PATHS[@]}"
+        run_format "${SRC_PATHS[@]}"
+        run_type "${TYPE_PATHS[@]}"
+        run_unit "${TEST_PATHS[@]}"
+        ;;
+    *) echo -e "${RED}未知 stage: $STAGE (可选: lint/format/type/unit/all)${NC}"; exit 1 ;;
 esac
+
+# report 域含前后端：Python 跑完后追加前端工具链（流程决策——改 report 前后端都验）
+if [ "$DOMAIN" = "report" ]; then
+    echo "── report 前端 ──"
+    run_web_stage "$STAGE"
+fi
 
 echo -e "${GREEN}✓ 验证通过${NC}"
