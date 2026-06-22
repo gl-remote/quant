@@ -288,7 +288,6 @@ class PeriodData:
             current_time=current_time_ts,
             period=self.period,
             forming_bar=None,
-            forming_indicators=None,
             base_df_ref=base_df_ref,
         )
 
@@ -360,7 +359,7 @@ class PeriodDataView:
     【形成中 bar 的处理】
     - forming_bar 不在 _df 中，作为虚拟最后一行附加在视图末尾
     - 视图索引：0..N-1 为 _df 中的行，N 为 forming_bar（如果存在）
-    - forming_indicators 提供形成中 bar 的指标值
+    - 视图最后一个位置的指标值由 _indicator_cache 提供（DataFeed 计算后回填）
     """
 
     def __init__(
@@ -372,7 +371,6 @@ class PeriodDataView:
         current_time: pd.Timestamp,
         period: str,
         forming_bar: Bar | None = None,
-        forming_indicators: dict[str, float] | None = None,
         base_df_ref: pd.DataFrame | None = None,
     ):
         """初始化逻辑视图（内部使用，不应直接构造）
@@ -384,7 +382,6 @@ class PeriodDataView:
         :param current_time: 视图的截止时间
         :param period: 周期名称
         :param forming_bar: 形成中的 bar（作为虚拟最后一行）
-        :param forming_indicators: 形成中 bar 的指标缓存
         :param base_df_ref: 基础周期的 _df 引用（所有周期的指标统一写回此处）
         """
         self._df_ref = df_ref
@@ -394,7 +391,6 @@ class PeriodDataView:
         self._current_time = current_time
         self._period = period
         self._forming_bar = forming_bar
-        self._forming_indicators = forming_indicators or {}
         self._indicator_cache: dict[str, float] = {}
         self._base_df_ref = base_df_ref
 
@@ -479,9 +475,9 @@ class PeriodDataView:
         if pos_idx is None:
             return None
 
-        # forming bar 的指标从 _forming_indicators 取
+        # forming bar 是视图最后一个位置，其指标值只存在于缓存中
         if self._forming_bar is not None and pos_idx == self._df_count:
-            return self._forming_indicators.get(name)
+            return self._indicator_cache.get(name)
 
         # 从 _base_df_ref 或 _df_ref 中取指标（列名已含周期前缀，直接匹配）
         target_df: pd.DataFrame | None = None
@@ -558,25 +554,26 @@ class PeriodDataView:
 
         return df
 
-    def set_cached_indicator(self, col_name: str, value: float) -> None:
-        """设置指标缓存值"""
-        self._indicator_cache[col_name] = value
+    def store_indicator(self, col_name: str, result_series: pd.Series) -> None:
+        """存储一列指标计算结果（视图自身的数据写入，由 DataFeed 计算后调用）
 
-    def write_indicator_result(self, col_name: str, result_series: pd.Series) -> None:
-        """将指标计算结果写回基础周期 DataFrame
-
-        高周期视图会将最新值额外写入当前时间戳。
+        - 缓存视图最后一个位置的值，供 idx=-1 快速读取
+        - 将非 NaN 结果写回基础周期 DataFrame（所有周期统一写回 base）
+          只写非 NaN，避免预热期 NaN 覆盖历史正确值
+        - 高周期视图额外把最新值写到 current_time 行
+          （result 索引是周期边界，当前 base 时间戳也需记录，保证实时性）
         """
+        last_val = result_series.iloc[-1]
+        self._indicator_cache[col_name] = float(last_val) if not pd.isna(last_val) else np.nan
+
         if self._base_df_ref is None:
             return
         non_nan = result_series.notna()
         if non_nan.any():
             self._base_df_ref.loc[result_series.index[non_nan], col_name] = result_series[non_nan]
 
-        if self._df_ref is not self._base_df_ref:
-            last_val = result_series.iloc[-1]
-            if not pd.isna(last_val):
-                self._base_df_ref.loc[self._current_time, col_name] = float(last_val)
+        if self._df_ref is not self._base_df_ref and not pd.isna(last_val):
+            self._base_df_ref.loc[self._current_time, col_name] = float(last_val)
 
     # --- 便捷访问器 ---
 

@@ -67,7 +67,6 @@ def _period_data_view(
         current_time=pd.Timestamp(times[-1]),
         period=period_name,
         forming_bar=None,
-        forming_indicators={},
     )
 
 

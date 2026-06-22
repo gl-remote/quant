@@ -12,7 +12,6 @@ import os
 from datetime import datetime as dt
 from typing import Any
 
-import numpy as np
 import pandas as pd
 from loguru import logger
 
@@ -382,7 +381,7 @@ class DataFeed:
     def calculate_indicators(self, view: PeriodDataView, period_name: str) -> None:
         """基于视图范围内的数据计算指标
 
-        结果写回 base 周期 DataFrame（_base_df_ref）并缓存在视图内部。
+        DataFeed 决定算什么、用什么数据；视图负责存储自身结果（缓存 + 回写 base）。
         """
         registered_indicators = self.get_registered_indicators(period_name)
         if not registered_indicators:
@@ -393,18 +392,15 @@ class DataFeed:
             return
 
         for spec in registered_indicators:
-            col_name = generate_indicator_column_name(spec.name, spec.params, period=view.period)
             if spec.func is None:
                 continue
-
+            col_name = generate_indicator_column_name(spec.name, spec.params, period=period_name)
             try:
                 result = spec.func(view_df, **spec.params)
                 result_series = pd.Series(result, index=view_df.index)
-                last_val = result_series.iloc[-1]
-                view.set_cached_indicator(col_name, float(last_val) if not pd.isna(last_val) else np.nan)
-                view.write_indicator_result(col_name, result_series)
+                view.store_indicator(col_name, result_series)
             except Exception as e:
-                logger.warning("指标计算失败 [{}][{}]: {}", view.period, spec.name, e)
+                logger.warning("指标计算失败 [{}][{}]: {}", period_name, spec.name, e)
 
     def _build_high_period_view(
         self,
@@ -437,7 +433,6 @@ class DataFeed:
                 current_time=current_time_ts,
                 period=period_name,
                 forming_bar=forming_bar,
-                forming_indicators={},
                 base_df_ref=base_df,
             )
         return view
