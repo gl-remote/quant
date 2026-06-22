@@ -314,28 +314,29 @@ class DataFeed:
         target_pd = self._periods[target_period]
         current_period_start = bar_start_time(current_time, target_minutes)
 
-        base_upto_now = base_df[base_df.index <= current_time]
-        if len(base_upto_now) == 0:
+        # 二分定位截止 current_time 的位置（searchsorted 要求 index 有序，满足）
+        hi = base_df.index.searchsorted(current_time, side="right")
+        if hi == 0:
             return None
 
-        # ── 1. 完整 bar 回填（增量）──
-        backfill = base_upto_now
+        # ── 1. 完整 bar 回填（增量）：仅处理 latest_time 之后的新行 ──
         latest_high = target_pd.latest_time
-        if latest_high is not None:
-            backfill = backfill[backfill.index > latest_high]
-        if len(backfill) > 0:
-            group_keys = backfill.index.map(lambda ts: bar_start_time(pd.Timestamp(ts), target_minutes))
-            for start, group in backfill.groupby(group_keys):
-                start_ts = pd.Timestamp(start)  # type: ignore[arg-type]
+        lo = base_df.index.searchsorted(latest_high, side="right") if latest_high is not None else 0
+        if lo < hi:
+            backfill = base_df.iloc[lo:hi]
+            group_keys = backfill.index.floor(f"{target_minutes}min")  # type: ignore[attr-defined]
+            for start_ts, group in backfill.groupby(group_keys):
                 # 只回填已集齐的完整周期；当前未集齐周期留给 forming
                 if not (start_ts == current_period_start and len(group) < bars_per_high):
                     target_pd.append_bar(self._rows_to_bar(group, start_ts))
             target_pd.flush()
 
-        # ── 2. forming bar 生成（独立于回填，预载场景也照常）──
-        current_group = base_upto_now[base_upto_now.index >= current_period_start]
-        if 0 < len(current_group) < bars_per_high:
-            return self._rows_to_bar(current_group, current_period_start)
+        # ── 2. forming bar 生成（用实时 base，独立于 PeriodData 已有数据）──
+        form_lo = base_df.index.searchsorted(current_period_start, side="left")
+        if form_lo < hi:
+            current_group = base_df.iloc[form_lo:hi]
+            if len(current_group) < bars_per_high:
+                return self._rows_to_bar(current_group, current_period_start)
         return None
 
     def calculate_indicators(self, view: PeriodDataView, period_name: str) -> None:
