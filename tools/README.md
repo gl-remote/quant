@@ -11,6 +11,7 @@
 | 脚本 | 用途 |
 |------|------|
 | `backtest-ma.sh` | 启动 MA 策略全链路回测（包含网格搜索） |
+| `backtest-debug.sh` | DEBUG 单次回测（关搜索 + 指标落地 + 重建报告，可选 --profile） |
 | `clean_data.sh` | 清理回测/Optuna 数据，保留 CSV 和 metadata |
 | `fetch_data.sh` | 拉取多品种多周期 K 线数据（调用 `fetch_data.py`） |
 | `fetch_data.py` | 单品种单周期数据拉取逻辑（被 `fetch_data.sh` 调用） |
