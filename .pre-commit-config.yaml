@@ -94,3 +94,15 @@ repos:
         language: system
         files: ^workspace/packages/python-contracts/
         pass_filenames: false
+
+      # 兜底：检测落在所有域 hook 之外的改动文件（如 main.py / pyproject.toml /
+      # scripts/ / 根级新文件）。always_run + 不设 files = 每次 commit 都跑、收到全部
+      # 改动文件；脚本只提示不拦截（exit 0）。目的是让盲区文件在 commit 输出里可见，
+      # AI 据此判断是否提醒用户，避免「长期无人注意的未覆盖文件」。
+      - id: uncovered-changes
+        name: uncovered changes notice (scripts/test.sh _uncovered)
+        entry: bash scripts/test.sh _uncovered
+        language: system
+        always_run: true
+        pass_filenames: true
+        verbose: true  # Passed 也显示输出，否则提示会被 pre-commit 吞掉，AI 看不到

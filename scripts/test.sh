@@ -77,6 +77,15 @@ resolve_test() {
     esac
 }
 
+# 已被某个 pre-commit 域 hook 覆盖的路径前缀（与 .pre-commit-config.yaml 的 files 对应）。
+# 落在这些前缀外的改动 = 不会触发任何域 hook 的盲区。
+# 维护规则：在 .pre-commit-config.yaml 新增/调整域 hook 时，同步更新此清单。
+COVERED_PREFIXES=(
+    "common/" "config/" "data/" "backtest/" "strategies/" "report/" "cli/"
+    "tests/"                                  # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
+    "workspace/packages/python-contracts/"    # contracts 域
+)
+
 run_lint() {
     echo "── [lint] ruff check $* ──"
     ruff check "$@"
@@ -121,6 +130,27 @@ run_web_stage() {
 
 STAGE="${1:-all}"
 DOMAIN="${2:-}"
+
+# ── 兜底：检测未被任何域 hook 覆盖的改动文件 ──
+# 由 pre-commit 的 always_run hook 调用（pass_filenames: true），$2..$N 为改动文件列表。
+# 只提示、不拦截（exit 0）：让 AI 在 commit 输出里看到盲区文件，自行决定是否通知用户。
+if [ "$STAGE" = "_uncovered" ]; then
+    shift || true
+    uncovered=()
+    for f in "$@"; do
+        covered=0
+        for p in "${COVERED_PREFIXES[@]}"; do
+            case "$f" in "$p"*) covered=1; break ;; esac
+        done
+        [ "$covered" -eq 0 ] && uncovered+=("$f")
+    done
+    if [ "${#uncovered[@]}" -gt 0 ]; then
+        echo -e "${YELLOW}⚠ 以下改动文件不在任何 pre-commit 域 hook 覆盖范围内（未被验证）：${NC}"
+        for f in "${uncovered[@]}"; do echo "    $f"; done
+        echo -e "${YELLOW}  （AI：请判断是否需要提醒用户为这些文件补充测试覆盖或纳入某业务域。）${NC}"
+    fi
+    exit 0
+fi
 
 # 前端域单独分流到前端工具链
 if [ "$DOMAIN" = "report-web" ]; then
