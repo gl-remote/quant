@@ -974,12 +974,13 @@ def test_aggregate_period_semantic():
 
 
 def test_aggregate_with_existing_data():
-    """测试高周期 PeriodData 已有数据时，new tick 仍能产生 forming bar
+    """测试回测场景：高周期 PeriodData 预载了全部未来 bar 时，视图只取已可见的完整 bar
 
-    场景：第一次运行时 15m 数据从缓存加载（已有完整 bar），
-    新的 5m tick 到来时应产生 forming bar，不被缓存数据吞掉。
+    回测时 15m PeriodData 一开始就持有所有未来 K 线。视图必须按可见性
+    语义切片：15m@T 须等 current_time >= T+(15m-5m)=T+10m 才可见，
+    不能因为 PeriodData 里有未来数据就提前看到。
     """
-    print("=== 测试高周期已有数据时仍能产生 forming bar ===\n")
+    print("=== 测试高周期预载全部未来 bar 时的可见性 ===\n")
 
     reqs = DataRequirements(
         periods={
@@ -992,38 +993,79 @@ def test_aggregate_with_existing_data():
 
     feed = DataFeed("TEST_PRELOAD", requirements=reqs)
 
-    # 模拟缓存加载：直接往 15m PeriodData 塞一根完整 bar @10:00
+    # 预载全部未来 15m bar：10:00、10:15、10:30（值用 200+，便于和实时 base 区分）
     import pandas as pd
 
-    cached_time = pd.Timestamp(datetime(2024, 1, 1, 10, 0, 0))
+    times = [pd.Timestamp(datetime(2024, 1, 1, 10, 0, 0)) + timedelta(minutes=15 * i) for i in range(3)]
     df = pd.DataFrame(
-        {"open": [100.0], "high": [105.0], "low": [99.0], "close": [104.0], "volume": [3000]},
-        index=pd.Index([cached_time], name="datetime"),
+        {
+            "open": [200.0, 210.0, 220.0],
+            "high": [205.0, 215.0, 225.0],
+            "low": [199.0, 209.0, 219.0],
+            "close": [204.0, 214.0, 224.0],
+            "volume": [3000, 3000, 3000],
+        },
+        index=pd.Index(times, name="datetime"),
     )
     feed.get_period("15m").load_df(df, replace=True)  # type: ignore[union-attr]
-    print("  预加载 15m PeriodData: 1 根完整 bar @10:00 ✅")
+    print("  预载 15m PeriodData: 完整 bar @10:00/10:15/10:30 (值 200+) ✅")
 
-    # 第一根实时 5m tick @10:05（属于同一个 15m@10:00 周期）
+    # 同时喂入 base 5m 数据（值 100+，与预载的 200+ 区分），让 base_df 推进
+    for i in range(7):  # 10:00 ~ 10:30
+        feed.feed_bar(
+            Bar(
+                symbol="TEST_PRELOAD",
+                datetime=datetime(2024, 1, 1, 10, 0, 0) + timedelta(minutes=5 * i),
+                open=100 + i,
+                high=105 + i,
+                low=99 + i,
+                close=104 + i,
+                volume=1000,
+            )
+        )
+
+    # current=10:05 → 完整 15m@10:00 不可见（窗口前推）；但 forming 15m@10:00 用实时 base 生成
     bar_05 = Bar(
         symbol="TEST_PRELOAD",
         datetime=datetime(2024, 1, 1, 10, 5, 0),
         open=101,
-        high=103,
+        high=106,
         low=100,
-        close=102,
+        close=105,
         volume=1000,
     )
-    feed.feed_bar(bar_05)
     ctx = feed.build_context(reqs, bar_05)
     view_15m = ctx.multi["15m"]
     assert view_15m is not None
-    # 1 根完整(从缓存) + 1 forming(新的实时数据)
-    assert view_15m.length >= 2, f"应有 >= 2 根(1 cached complete + 1 forming), 实际 {view_15m.length}"
-    forming = view_15m.get_bar(-1)
-    assert forming is not None
-    assert forming.datetime.strftime("%H:%M") == "10:00", f"forming bar 时间应为 10:00, 实际 {forming.datetime}"
-    assert abs(forming.open - 101.0) < 0.001, f"forming bar open 应为 101.0, 实际 {forming.open}"
-    print("  10:05 — forming bar 来自实时 5m 数据 ✅")
+    last_bar = view_15m.get_bar(-1)
+    assert last_bar is not None
+    # 最新可见 bar 是 forming 15m@10:00，值来自实时 base（100+），不是预载的 200+
+    assert last_bar.datetime == datetime(2024, 1, 1, 10, 0, 0), (
+        f"10:05 最新可见应为 forming 15m@10:00, 实际 {last_bar.datetime}"
+    )
+    assert last_bar.open < 150, f"forming bar 应来自实时 base(100+), 实际 open={last_bar.open}"
+    print("  10:05 — 完整 15m@10:00 不可见，forming 15m@10:00 用实时 base 顶替 ✅")
+
+    # current=10:10 → 15m@10:00 最后子bar(10:10)到达，完整 bar 转正可见
+    bar_10 = Bar(
+        symbol="TEST_PRELOAD",
+        datetime=datetime(2024, 1, 1, 10, 10, 0),
+        open=102,
+        high=107,
+        low=101,
+        close=106,
+        volume=1000,
+    )
+    ctx2 = feed.build_context(reqs, bar_10)
+    view_15m = ctx2.multi["15m"]
+    assert view_15m is not None
+    last_bar = view_15m.get_bar(-1)
+    assert last_bar is not None
+    # 15m@10:00 完整可见（窗口 visible_time=10:00 命中），10:15/10:30 仍不可见
+    assert last_bar.datetime == datetime(2024, 1, 1, 10, 0, 0), (
+        f"10:10 最新可见应为 15m@10:00, 实际 {last_bar.datetime}"
+    )
+    print("  10:10 — 15m@10:00 完整 bar 转正可见，预载未来 bar(10:15/10:30) 不可见 ✅")
     print()
 
 

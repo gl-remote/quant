@@ -195,7 +195,7 @@ BarContext(
 |---|---|---|
 | `append_bar(bar)` | `None` | 追加单根 K 线；时间已存在则静默忽略 |
 | `append_bars(bars)` | `None` | 批量追加 |
-| `get_data(current_time, lookback_bars=1, events_df=None, base_df_ref=None)` | `PeriodDataView` | 构建只读视图；`current_time` 晚于最新数据或 `lookback_bars<=0` 抛 `ValueError` |
+| `get_data(current_time, lookback_bars=1, events_df=None, base_df_ref=None)` | `PeriodDataView` | 构建只读视图，返回 index <= current_time 的已有数据（current_time 超出已有数据时 ffill 落到最后一根）；`lookback_bars<=0` 抛 `ValueError` |
 | `get_indicator(name, idx)` | `float \| None` | 按绝对索引取指标 |
 | `set_indicator_column(name, data)` | `None` | 直接写入整列指标 |
 

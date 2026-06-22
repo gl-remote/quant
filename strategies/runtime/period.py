@@ -237,8 +237,15 @@ class PeriodData:
     ) -> "PeriodDataView":
         """获取截止指定时间点的逻辑视图（只读，用于策略安全访问）
 
+        本方法是通用容器行为：返回 index <= current_time 的已有数据。
+        它不感知 base 周期，也不判断高周期 bar 的"完整性可见"语义
+        （如 15m@10:00 须等三根 5m 集齐到 10:10 才可见）——该约束由
+        上游 DataFeed 负责：只把完整 bar 写入 PeriodData，并以前推的
+        visible_time 作为切片上界。current_time 超出已有数据时，ffill
+        自然落到最后一根已有 bar，返回"截止当前的全部已有数据"。
+
         视图特性：
-        1. 只包含截止到current_time的数据，不包含之后的未来数据
+        1. 只包含 index <= current_time 的已有数据，不含未来数据
         2. 只读访问，策略无法修改原始数据
         3. 不受后续数据更新影响，保证数据一致性（Append-Only）
         4. 可指定需要的历史K线数，限定视图范围
@@ -249,7 +256,7 @@ class PeriodData:
         :param events_df: 事件DataFrame（由DataFeed传入）
         :param base_df_ref: 基础周期的 _df 引用（指标写回目标）
         :return: PeriodDataView只读逻辑视图对象
-        :raises ValueError: 如果current_time晚于最新数据时间，或lookback_bars <= 0
+        :raises ValueError: 如果lookback_bars <= 0
         """
         if lookback_bars <= 0:
             raise ValueError("lookback_bars must be positive")
@@ -257,10 +264,6 @@ class PeriodData:
         self.flush()
 
         current_time_ts: pd.Timestamp = pd.Timestamp(current_time)  # type: ignore[assignment]
-
-        latest = self.latest_time
-        if latest is not None and current_time_ts > latest:
-            raise ValueError(f"current_time {current_time_ts} is after latest data time {latest}")
 
         # 游标快速路径：回测严格顺序推进，每次 O(1)
         # 只有当 cursor + 1 的时间正好匹配时才走快速路径

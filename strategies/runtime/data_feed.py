@@ -6,6 +6,50 @@ DataFeed 管理单个品种的多周期数据，统一对外 API。
 - 基础周期数据通过 feed_history_df / feed_bar 加载
 - 指标计算推迟到 build_context → get_data 时按需惰性计算
 - 高周期在 build_context 时从基础周期数据现场聚合
+
+================================================================================
+高周期聚合与可见性规范（严格定义 DataFeed 的正确行为，改代码前务必先读）
+================================================================================
+
+术语（以 base=5m、target=15m 为例，bars_per_high = 15 / 5 = 3）：
+- 高周期 bar 的时间戳 T 是该周期的左边界。
+- 15m@T 由 3 根 5m 子 bar 组成：T、T+5m、T+10m。
+  例：15m@10:00 = 5m 的 {10:00, 10:05, 10:10}。
+- 一根 15m@T "完整可见" 当且仅当它最后一根子 bar(T+10m) 已到达，
+  即 current_time >= T + (target - base)。
+- 在完整可见之前，用当前周期已到达的 base 子 bar 聚合出一根未集齐的
+  "forming bar" 顶替，提供实时性（每来一根 base bar 刷新一次）。
+
+由此推导出两个时间，各司其职、互不耦合：
+- visible_time = current_time - (target - base)
+  完整 bar 的切片上界。get_data 以 ffill 取 index <= visible_time 的
+  最新完整 bar。预载的未来 bar 也被此窗口挡在视图外。
+- forming 目标周期 = bar_start_time(current_time, target)
+  取 [周期起点, current_time] 的 base 子 bar，未集齐(<bars_per_high)才生成。
+
+注意：latest_time 只表示"已有数据到哪了"（数据边界语义），不参与
+可见性判断。可见性完全由 visible_time 决定。
+
+逐-tick 行为对照表（base=5m / target=15m，纯实时无预载）：
+
+    current(5m) | view 最后一根 15m bar      | forming 包含的 5m 子 bar
+    ------------|---------------------------|--------------------------
+    09:45       | forming 15m@09:45         | {09:45}
+    09:50       | forming 15m@09:45         | {09:45, 09:50}
+    09:55       | 完整 15m@09:45            | （3 根集齐转完整，无 forming）
+    10:00       | forming 15m@10:00         | {10:00}
+    10:05       | forming 15m@10:00         | {10:00, 10:05}
+    10:10       | 完整 15m@10:00            | （3 根集齐转完整，无 forming）
+    10:15       | forming 15m@10:15         | {10:15}
+
+即：每个 15m 周期的前两根 5m tick 显示 forming（1 根、2 根子 bar），
+第三根 5m tick 集齐转为完整 bar；完整 15m@T 在 current=T+10m 时定型可见。
+
+回测预载场景（PeriodData 一开始就持有全部未来完整 bar）：
+- 完整 bar 的可见性仍由 visible_time 窗口控制，未到期的未来 bar 不可见。
+- forming bar 独立于 PeriodData 已有数据照常生成（用实时 base 聚合），
+  以保证"完整 bar 尚不可见时由 forming 顶替"的实时性不被预载数据破坏。
+================================================================================
 """
 
 import os
@@ -250,13 +294,17 @@ class DataFeed:
     ) -> Bar | None:
         """从 base_df 聚合高周期 bar：完整周期写入 PeriodData，返回当前未完成周期的 forming bar
 
-        三阶段流程的阶段1子步骤。依赖 base_df 时间有序，无需排序：
-        - 按 bar_start_time 把基础行分组到各高周期
-        - 集齐 bars_per_high 根（或属于已过去的周期）→ 完整 bar，写入 PeriodData
-        - 当前周期未集齐 → forming bar，返回给调用方挂到 view 上
-        - 用 PeriodData.latest_time 增量切片，只处理尚未定型的区间
+        三阶段流程的阶段1子步骤。依赖 base_df 时间有序，无需排序。职责分两块：
 
-        例：15m 周期下，bar 10:00 = 基础 5m 的 10:00 + 10:05 + 10:10 三根。
+        1. 完整 bar 回填（增量）：把已集齐的高周期 bar 写入 PeriodData。
+           用 latest_time 增量切片，跳过已写入区间（append_bar 幂等）。
+        2. forming bar 生成（独立于回填）：取当前周期 [current_period_start, current_time]
+           的 base 数据聚合成未集齐的 bar。即便 PeriodData 已预载该周期的完整 bar
+           （回测场景），forming 仍照常生成——完整 bar 受可见性窗口限制不可见，
+           正由 forming bar 顶替提供实时性。
+
+        例：15m 周期下，完整 bar 10:00 = 基础 5m 的 10:00 + 10:05 + 10:10 三根；
+        在 current=10:00 时，10:00 周期未集齐，forming = {10:00} 一根。
         """
         target_minutes = parse_period_minutes(target_period)
         assert self._base_period is not None
@@ -266,25 +314,29 @@ class DataFeed:
         target_pd = self._periods[target_period]
         current_period_start = bar_start_time(current_time, target_minutes)
 
-        base_slice = base_df[base_df.index <= current_time]
-        # 增量：跳过已写入 PeriodData 的时间点（append_bar 幂等，重复写入安全）
-        latest_high = target_pd.latest_time
-        if latest_high is not None:
-            base_slice = base_slice[base_slice.index > latest_high]
-        if len(base_slice) == 0:
+        base_upto_now = base_df[base_df.index <= current_time]
+        if len(base_upto_now) == 0:
             return None
 
-        forming_bar: Bar | None = None
-        group_keys = base_slice.index.map(lambda ts: bar_start_time(pd.Timestamp(ts), target_minutes))
-        for start, group in base_slice.groupby(group_keys):
-            start_ts = pd.Timestamp(start)  # type: ignore[arg-type]
-            bar = self._rows_to_bar(group, start_ts)
-            if start_ts == current_period_start and len(group) < bars_per_high:
-                forming_bar = bar  # 当前周期未集齐 → forming
-            else:
-                target_pd.append_bar(bar)  # 完整（或已过去的）周期 → 持久化
-        target_pd.flush()
-        return forming_bar
+        # ── 1. 完整 bar 回填（增量）──
+        backfill = base_upto_now
+        latest_high = target_pd.latest_time
+        if latest_high is not None:
+            backfill = backfill[backfill.index > latest_high]
+        if len(backfill) > 0:
+            group_keys = backfill.index.map(lambda ts: bar_start_time(pd.Timestamp(ts), target_minutes))
+            for start, group in backfill.groupby(group_keys):
+                start_ts = pd.Timestamp(start)  # type: ignore[arg-type]
+                # 只回填已集齐的完整周期；当前未集齐周期留给 forming
+                if not (start_ts == current_period_start and len(group) < bars_per_high):
+                    target_pd.append_bar(self._rows_to_bar(group, start_ts))
+            target_pd.flush()
+
+        # ── 2. forming bar 生成（独立于回填，预载场景也照常）──
+        current_group = base_upto_now[base_upto_now.index >= current_period_start]
+        if 0 < len(current_group) < bars_per_high:
+            return self._rows_to_bar(current_group, current_period_start)
+        return None
 
     def calculate_indicators(self, view: PeriodDataView, period_name: str) -> None:
         """基于视图范围内的数据计算指标
@@ -320,18 +372,24 @@ class DataFeed:
     ) -> PeriodDataView:
         """为高周期构建 PeriodDataView：从 base 聚合（含 forming bar）→ 切片视图 → 挂 forming bar
 
-        view_time 以 current_time 为上限：缓存可能含未来 bar，
-        用 current_time 兜底确保视图不超出实时时间窗口。
+        view_time 由 current_time 前推一个"窗口"(target - base)推算：
+        高周期 bar T 的最后一根子 bar 落在 T+(target-base)，故 T 可见
+        当且仅当 current_time >= T+(target-base)，即 T <= view_time。
+        这样即便 PeriodData 预载了全部未来 bar，也只会取到已可见的完整 bar。
         forming bar 随后独立挂到视图末尾。
         """
         # 1a. 从 base 聚合：完整周期写回 PeriodData，当前未完成周期返回为 forming bar
         forming_bar = self._aggregate_period(period_name, current_time_ts, base_df)
 
-        # 1b. 从 PeriodData 切片获取视图（用 current_time 兜底，防缓存未来 bar）
-        view_time = period_data.latest_time
-        if view_time is None or view_time > current_time_ts:
-            view_time = current_time_ts
-        view = period_data.get_data(view_time, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
+        # 1b. 切片完整 bar：view_time = visible_time（可见窗口上界）
+        #   高周期 bar T 的最后一根子 bar 落在 T+(target-base)，故 T 完整可见
+        #   当且仅当 current_time >= T+(target-base)，即 T <= visible_time。
+        #   get_data 用 ffill 取 <= visible_time 的最后一根完整 bar；
+        #   预载未来 bar 也会被窗口挡在外面。
+        target_minutes = parse_period_minutes(period_name)
+        base_minutes = parse_period_minutes(self._base_period)  # type: ignore[arg-type]
+        visible_time = current_time_ts - pd.Timedelta(minutes=target_minutes - base_minutes)
+        view = period_data.get_data(visible_time, lookback_bars, self._event_mgr.df, base_df_ref=base_df)
 
         # 1c. 把 forming bar 挂到视图末尾（聚合阶段已算好，无需重复扫描 base_df）
         if forming_bar is not None:
