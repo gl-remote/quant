@@ -848,8 +848,182 @@ def test_data_feed_create_factory():
         feed2 = DataFeed.create("TEST_CACHE", reqs)
         assert feed2 is feed1, "缓存命中应返回同一对象"
         print("  内存缓存命中 ✅")
-
     cache_module.clear_cache()
+    print()
+
+
+def test_aggregate_period_semantic():
+    """测试高周期聚合语义：15m@10:00 = 5m[10:00, 10:05, 10:10]
+
+    验证语义约束（用户确定的定义）：
+    - 10:00 → 15m 新周期开始，有 forming bar
+    - 10:05 → forming bar 更新（含 2 根 5m bar）
+    - 10:10 → 集齐 3 根 5m bar，15m@10:00 定型为完整 bar 写入 PeriodData
+    - 10:15 → 新周期 15m@10:15 有新的 forming bar
+    """
+    print("=== 测试高周期聚合语义：15m@10:00 = 5m[10:00, 10:05, 10:10] ===\n")
+
+    reqs = DataRequirements(
+        periods={
+            "5m": PeriodRequirements(lookback_bars=5),
+            "15m": PeriodRequirements(lookback_bars=3),
+        },
+        indicators={},
+        events=EventsRequirements.no_events(),
+    )
+
+    feed = DataFeed("TEST_15M_SEMANTIC", requirements=reqs)
+    assert feed._base_period == "5m"
+
+    base_time = datetime(2024, 1, 1, 10, 0, 0)
+
+    # ── 10:00 — 第 1 根 5m bar，15m@10:00 周期开始 ──
+    bar_00 = Bar(
+        symbol="TEST_15M_SEMANTIC",
+        datetime=base_time,
+        open=100,
+        high=101,
+        low=99,
+        close=100,
+        volume=1000,
+    )
+    feed.feed_bar(bar_00)
+    ctx = feed.build_context(reqs, bar_00)
+    view_15m = ctx.multi["15m"]
+    assert view_15m is not None
+    assert view_15m.length == 1, f"10:00 应有 1 根(forming), 实际 {view_15m.length}"
+    bar_10_00 = view_15m.get_bar(0)
+    assert bar_10_00 is not None
+    assert abs(bar_10_00.open - 100.0) < 0.001
+    assert abs(bar_10_00.high - 101.0) < 0.001
+    print("  10:00 — forming bar (1 根 5m): open=100, high=101 ✅")
+
+    # ── 10:05 — 第 2 根 5m bar，forming bar 更新 ──
+    bar_05 = Bar(
+        symbol="TEST_15M_SEMANTIC",
+        datetime=base_time + timedelta(minutes=5),
+        open=101,
+        high=103,
+        low=100,
+        close=102,
+        volume=1000,
+    )
+    feed.feed_bar(bar_05)
+    ctx2 = feed.build_context(reqs, bar_05)
+    view_15m = ctx2.multi["15m"]
+    assert view_15m is not None
+    assert view_15m.length == 1, f"10:05 应有 1 根(forming), 实际 {view_15m.length}"
+    bar_10_05 = view_15m.get_bar(0)
+    assert bar_10_05 is not None
+    assert abs(bar_10_05.open - 100.0) < 0.001  # open 始终是第一根 5m bar 的 open
+    assert abs(bar_10_05.high - 103.0) < 0.001  # high 已包含 101→103
+    assert abs(bar_10_05.close - 102.0) < 0.001  # close 是最后一根 5m bar
+    print("  10:05 — forming bar (2 根 5m): open=100, high=103, close=102 ✅")
+
+    # ── 10:10 — 第 3 根 5m bar，15m@10:00 集齐定型 ──
+    bar_10 = Bar(
+        symbol="TEST_15M_SEMANTIC",
+        datetime=base_time + timedelta(minutes=10),
+        open=102,
+        high=105,
+        low=101,
+        close=104,
+        volume=1000,
+    )
+    feed.feed_bar(bar_10)
+    ctx3 = feed.build_context(reqs, bar_10)
+    view_15m = ctx3.multi["15m"]
+    assert view_15m is not None
+    # 15m@10:00 已定型为完整 bar，当前时间 10:10 == 10:10 所在周期边界(10:00)
+    # 15m@10:00 完整后应不再有 forming bar（当前周期已集齐/已定型）
+    assert view_15m.length == 1, f"10:10 应有 1 根完整 bar, 实际 {view_15m.length}"
+    complete = view_15m.get_bar(0)
+    assert complete is not None
+    assert complete.datetime.strftime("%H:%M") == "10:00"
+    assert abs(complete.open - 100.0) < 0.001
+    assert abs(complete.high - 105.0) < 0.001
+    assert abs(complete.low - 99.0) < 0.001
+    assert abs(complete.close - 104.0) < 0.001
+    print("  10:10 — 15m@10:00 定型为完整 bar: O=100 H=105 L=99 C=104 ✅")
+
+    # ── 10:15 — 新 5m bar 进入 15m@10:15 周期 ──
+    bar_15 = Bar(
+        symbol="TEST_15M_SEMANTIC",
+        datetime=base_time + timedelta(minutes=15),
+        open=105,
+        high=106,
+        low=104,
+        close=105,
+        volume=1000,
+    )
+    feed.feed_bar(bar_15)
+    ctx4 = feed.build_context(reqs, bar_15)
+    view_15m = ctx4.multi["15m"]
+    assert view_15m is not None
+    # 1 根完整(10:00) + 1 forming(10:15)
+    assert view_15m.length == 2, f"10:15 应有 2 根(1 complete + 1 forming), 实际 {view_15m.length}"
+    bar_0 = view_15m.get_bar(0)
+    assert bar_0 is not None
+    assert bar_0.datetime.strftime("%H:%M") == "10:00"  # 完整 bar
+    forming = view_15m.get_bar(-1)
+    assert forming is not None
+    assert forming.datetime.strftime("%H:%M") == "10:15"  # 新 forming
+    assert abs(forming.open - 105.0) < 0.001
+    print("  10:15 — 1 根完整(10:00) + 1 forming(10:15) ✅")
+    print()
+
+
+def test_aggregate_with_existing_data():
+    """测试高周期 PeriodData 已有数据时，new tick 仍能产生 forming bar
+
+    场景：第一次运行时 15m 数据从缓存加载（已有完整 bar），
+    新的 5m tick 到来时应产生 forming bar，不被缓存数据吞掉。
+    """
+    print("=== 测试高周期已有数据时仍能产生 forming bar ===\n")
+
+    reqs = DataRequirements(
+        periods={
+            "5m": PeriodRequirements(lookback_bars=5),
+            "15m": PeriodRequirements(lookback_bars=3),
+        },
+        indicators={},
+        events=EventsRequirements.no_events(),
+    )
+
+    feed = DataFeed("TEST_PRELOAD", requirements=reqs)
+
+    # 模拟缓存加载：直接往 15m PeriodData 塞一根完整 bar @10:00
+    import pandas as pd
+
+    cached_time = pd.Timestamp(datetime(2024, 1, 1, 10, 0, 0))
+    df = pd.DataFrame(
+        {"open": [100.0], "high": [105.0], "low": [99.0], "close": [104.0], "volume": [3000]},
+        index=pd.Index([cached_time], name="datetime"),
+    )
+    feed.get_period("15m").load_df(df, replace=True)  # type: ignore[union-attr]
+    print("  预加载 15m PeriodData: 1 根完整 bar @10:00 ✅")
+
+    # 第一根实时 5m tick @10:05（属于同一个 15m@10:00 周期）
+    bar_05 = Bar(
+        symbol="TEST_PRELOAD",
+        datetime=datetime(2024, 1, 1, 10, 5, 0),
+        open=101,
+        high=103,
+        low=100,
+        close=102,
+        volume=1000,
+    )
+    feed.feed_bar(bar_05)
+    ctx = feed.build_context(reqs, bar_05)
+    view_15m = ctx.multi["15m"]
+    assert view_15m is not None
+    # 1 根完整(从缓存) + 1 forming(新的实时数据)
+    assert view_15m.length >= 2, f"应有 >= 2 根(1 cached complete + 1 forming), 实际 {view_15m.length}"
+    forming = view_15m.get_bar(-1)
+    assert forming is not None
+    assert forming.datetime.strftime("%H:%M") == "10:00", f"forming bar 时间应为 10:00, 实际 {forming.datetime}"
+    assert abs(forming.open - 101.0) < 0.001, f"forming bar open 应为 101.0, 实际 {forming.open}"
+    print("  10:05 — forming bar 来自实时 5m 数据 ✅")
     print()
 
 
@@ -867,5 +1041,7 @@ if __name__ == "__main__":
     test_multi_period_feed_bar_aggregation()
     test_feed_bar_with_indicator_recalc()
     test_data_feed_create_factory()
+    test_aggregate_period_semantic()
+    test_aggregate_with_existing_data()
 
     print("所有测试完成!")
