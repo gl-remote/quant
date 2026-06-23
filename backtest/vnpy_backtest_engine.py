@@ -31,7 +31,7 @@ from config.app_config import BacktestConfig
 from strategies.utils import serialize_strategy_params
 
 from .data_utils import calculate_date_range, df_to_vnpy_datalines, resolve_interval
-from .results import aggregate_walk_forward
+from .results import WalkForwardResult, WalkForwardWindowResult, aggregate_walk_forward
 from .strategy_factory import create_strategy_class
 
 
@@ -294,7 +294,7 @@ class VnpyBacktestEngine:
         val_size: int | None = None,
         test_size: int | None = None,
         step: int | None = None,
-    ) -> dict[str, Any]:
+    ) -> WalkForwardResult:
         """执行 Walk-Forward 时间序列验证回测
 
         Args:
@@ -305,12 +305,12 @@ class VnpyBacktestEngine:
             train_size/val_size/test_size/step: 窗口参数
 
         Returns:
-            walk_forward 结果字典
+            WalkForwardResult 强类型结果对象
         """
         from .walk_forward import walk_forward_split, walk_forward_split_by_ratio
 
         if data is None or data.empty:
-            return {"success": False, "error": "数据为空", "windows": 0}
+            return WalkForwardResult(success=False, windows=0, error="数据为空")
 
         if train_size is not None and val_size is not None and test_size is not None:
             step_val = step or max(1, test_size // 2)
@@ -319,14 +319,14 @@ class VnpyBacktestEngine:
             windows = walk_forward_split_by_ratio(data)
 
         if not windows:
-            return {"success": False, "error": "无法生成窗口", "windows": 0}
+            return WalkForwardResult(success=False, windows=0, error="无法生成窗口")
 
         logger.info(f"Walk-Forward: {len(windows)} 个窗口, {symbol}")
 
         window_results = self._execute_walk_forward_windows(windows, symbol, strategy_name, strategy_params)
 
         if not window_results:
-            return {"success": False, "error": "所有窗口回测失败", "windows": len(windows)}
+            return WalkForwardResult(success=False, windows=len(windows), error="所有窗口回测失败")
 
         aggregate = aggregate_walk_forward(window_results)
 
@@ -338,13 +338,13 @@ class VnpyBacktestEngine:
             f"盈利窗口比={aggregate.positive_window_ratio:.0%}"
         )
 
-        return {
-            "success": True,
-            "symbol": symbol,
-            "windows": len(windows),
-            "window_results": window_results,
-            "aggregate": aggregate.to_dict(),
-        }
+        return WalkForwardResult(
+            success=True,
+            symbol=symbol,
+            windows=len(windows),
+            window_results=window_results,
+            aggregate=aggregate,
+        )
 
     def _execute_walk_forward_windows(
         self,
@@ -352,7 +352,7 @@ class VnpyBacktestEngine:
         symbol: str,
         strategy_name: str,
         strategy_params: dict[str, Any],
-    ) -> list[dict[str, Any]]:
+    ) -> list[WalkForwardWindowResult]:
         """执行 Walk-Forward 的所有窗口回测
 
         Args:
@@ -362,9 +362,9 @@ class VnpyBacktestEngine:
             strategy_params: 策略参数字典
 
         Returns:
-            每个窗口的结果列表: [{window, train_rows, test_rows, train_start, test_end, statistics, ...}]
+            每个窗口的 WalkForwardWindowResult 列表
         """
-        window_results: list[dict[str, Any]] = []
+        window_results: list[WalkForwardWindowResult] = []
         for wi, (train_df, val_df, test_df) in enumerate(windows):
             logger.debug(f"\n>>> Walk-Forward 窗口 {wi + 1}/{len(windows)}")
             train_results = self._run_backtest(
@@ -392,20 +392,20 @@ class VnpyBacktestEngine:
                 continue
 
             window_results.append(
-                {
-                    "window": wi,
-                    "train_rows": len(train_df),
-                    "val_rows": len(val_df),
-                    "test_rows": len(test_df),
-                    "train_start": str(train_df["datetime"].iloc[0])[:10],
-                    "train_end": str(train_df["datetime"].iloc[-1])[:10],
-                    "test_start": str(test_df["datetime"].iloc[0])[:10],
-                    "test_end": str(test_df["datetime"].iloc[-1])[:10],
-                    "statistics": test_result.get("statistics", {}),
-                    "statistics_is": train_result.get("statistics", {}),
-                    "daily_results": test_result.get("daily_results", []),
-                    "trades": test_result.get("trades", []),
-                }
+                WalkForwardWindowResult(
+                    window=wi,
+                    train_rows=len(train_df),
+                    val_rows=len(val_df),
+                    test_rows=len(test_df),
+                    train_start=str(train_df["datetime"].iloc[0])[:10],
+                    train_end=str(train_df["datetime"].iloc[-1])[:10],
+                    test_start=str(test_df["datetime"].iloc[0])[:10],
+                    test_end=str(test_df["datetime"].iloc[-1])[:10],
+                    statistics=test_result.get("statistics", {}),
+                    statistics_is=train_result.get("statistics", {}),
+                    daily_results=test_result.get("daily_results", []),
+                    trades=test_result.get("trades", []),
+                )
             )
         return window_results
 

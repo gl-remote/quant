@@ -610,7 +610,7 @@ class BacktestRunWorkflow:
             strategy_params=strategy_params,
         )
 
-        if wf_result.get("success"):
+        if wf_result.success:
             strategy = load_strategy(req.strategy)
             wf_persister = WalkForwardPersister(self._dm)
             bt_id = wf_persister.persist_walk_forward(
@@ -624,11 +624,11 @@ class BacktestRunWorkflow:
                 end_date=req.end,
                 data_src=datasets[0][2],
             )
-            logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.get('windows', 0)}")
+            logger.info(f"Walk-Forward 完成: id={bt_id}, 窗口={wf_result.windows}")
             print(f"\n💡 查看报告: python main.py report --id {bt_id}")
             self._dm.store.log("backtest", f"Walk-Forward 完成: {sym}", symbol=sym, status=LOG_STATUS_SUCCESS)
         else:
-            logger.error(f"Walk-Forward 失败: {wf_result.get('error')}")
+            logger.error(f"Walk-Forward 失败: {wf_result.error}")
 
         finalizer.finish_success(run_id)
 

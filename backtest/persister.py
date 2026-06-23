@@ -24,6 +24,7 @@ from loguru import logger
 from common.types import BacktestResult
 
 from .optimizer import SearchResult
+from .results import WalkForwardResult
 
 # ── 状态常量（与 workflow 共享，避免跨层 import 冲突） ────────
 STATUS_SUCCESS = "success"
@@ -172,7 +173,7 @@ class SearchResultPersister:
 class WalkForwardPersister:
     """Walk-Forward 结果的持久化
 
-    将 wf_result（dict）转为 BacktestResult，写入主记录 + daily + trades。
+    将 wf_result（WalkForwardResult）转为 BacktestResult，写入主记录 + daily + trades。
     """
 
     def __init__(self, dm: Any) -> None:
@@ -180,7 +181,7 @@ class WalkForwardPersister:
 
     def persist_walk_forward(
         self,
-        wf_result: dict[str, Any],
+        wf_result: WalkForwardResult,
         symbol: str,
         strategy: str,
         strategy_params: dict[str, Any],
@@ -191,7 +192,9 @@ class WalkForwardPersister:
         data_src: str,
     ) -> int:
         """持久化 Walk-Forward 结果，返回 backtest_id"""
-        wf_result_data = wf_result.get("aggregate", {})
+        aggregate = wf_result.aggregate
+        if aggregate is None:
+            raise ValueError("Walk-Forward 结果缺少 aggregate，无法持久化")
         result = BacktestResult(
             symbol=symbol,
             strategy=strategy,
@@ -204,21 +207,21 @@ class WalkForwardPersister:
             engine_config={
                 "type": "vnpy",
                 "mode": "walk-forward",
-                "windows": wf_result.get("windows", 0),
+                "windows": wf_result.windows,
             },
-            sharpe_ratio=wf_result_data.get("sharpe_mean"),
-            max_drawdown=wf_result_data.get("max_drawdown_mean"),
-            total_return=wf_result_data.get("return_mean"),
-            daily_std=wf_result_data.get("return_std"),
+            sharpe_ratio=aggregate.sharpe_mean,
+            max_drawdown=aggregate.max_drawdown_mean,
+            total_return=aggregate.return_mean,
+            daily_std=aggregate.return_std,
         )
         result.success = True
 
         # 从各 window 聚合 daily_results / fills 写入明细表
         all_daily: list[dict[str, object]] = []
         all_trades: list[dict[str, object]] = []
-        for wr in wf_result.get("window_results", []):
-            all_daily.extend(wr.get("daily_results", []))
-            all_trades.extend(wr.get("trades", []))
+        for wr in wf_result.window_results:
+            all_daily.extend(wr.daily_results)
+            all_trades.extend(wr.trades)
         result.daily_results = all_daily
         result.fills = all_trades  # BacktestResult.fills 承载 trades
 

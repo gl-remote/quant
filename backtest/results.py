@@ -4,6 +4,8 @@
 提供:
   - aggregate_walk_forward: Walk-Forward 窗口结果聚合
   - WalkForwardAggregate: 聚合统计 dataclass
+  - WalkForwardWindowResult: 单窗口结果 dataclass
+  - WalkForwardResult: Walk-Forward 整体结果 dataclass
 
 从 VnpyBacktestEngine.run_walk_forward 中提取，
 使聚合逻辑可独立测试和复用。
@@ -11,7 +13,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -65,15 +68,67 @@ class WalkForwardAggregate:
         }
 
 
+@dataclass
+class WalkForwardWindowResult:
+    """Walk-Forward 单窗口结果
+
+    Attributes:
+        window: 窗口索引（从 0 开始）
+        train_rows: 训练集行数
+        val_rows: 验证集行数
+        test_rows: 测试集行数
+        train_start: 训练集起始日期（YYYY-MM-DD）
+        train_end: 训练集结束日期
+        test_start: 测试集起始日期
+        test_end: 测试集结束日期
+        statistics: 测试集（OOS）统计
+        statistics_is: 训练集（IS）统计
+        daily_results: 测试集每日结果
+        trades: 测试集成交记录
+    """
+
+    window: int
+    train_rows: int
+    val_rows: int
+    test_rows: int
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+    statistics: dict[str, Any] = field(default_factory=dict)
+    statistics_is: dict[str, Any] = field(default_factory=dict)
+    daily_results: list[dict[str, Any]] = field(default_factory=list)
+    trades: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class WalkForwardResult:
+    """Walk-Forward 整体结果
+
+    Attributes:
+        success: 是否成功
+        windows: 窗口数
+        symbol: 合约代码
+        error: 失败原因（success 为 False 时有效）
+        window_results: 各窗口结果
+        aggregate: 聚合统计
+    """
+
+    success: bool
+    windows: int
+    symbol: str = ""
+    error: str | None = None
+    window_results: list[WalkForwardWindowResult] = field(default_factory=list)
+    aggregate: WalkForwardAggregate | None = None
+
+
 def aggregate_walk_forward(
-    window_results: list[dict],
+    window_results: list[WalkForwardWindowResult],
 ) -> WalkForwardAggregate:
     """对 Walk-Forward 各窗口结果进行聚合统计
 
     Args:
-        window_results: 窗口结果列表，每个 dict 包含:
-            - statistics: 测试集统计
-            - statistics_is: 训练集统计
+        window_results: 窗口结果列表（WalkForwardWindowResult）
 
     Returns:
         WalkForwardAggregate 聚合统计
@@ -86,8 +141,8 @@ def aggregate_walk_forward(
     oos_returns: list[float] = []
 
     for w in window_results:
-        stats = w.get("statistics", {})
-        is_stats = w.get("statistics_is", {})
+        stats = w.statistics
+        is_stats = w.statistics_is
         returns.append(parse_percentage(stats.get("total_return", 0)))
         sharpes.append(float(stats.get("sharpe_ratio", 0)))
         drawdowns.append(parse_percentage(stats.get("max_drawdown", 0)))

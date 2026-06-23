@@ -1287,6 +1287,25 @@ backtest/results.py
 - daily/trades 不丢失。
 - 静态验证和真实回测验证通过。
 
+### 阶段 7 完成记录
+
+- **日期**：2026-06-23
+
+**关键变化**：
+- `backtest/results.py` 新增 `WalkForwardWindowResult`（单窗口结果）和 `WalkForwardResult`（整体结果）两个 dataclass
+- `aggregate_walk_forward()` 入参由 `list[dict]` 改为 `list[WalkForwardWindowResult]`，通过属性访问取 `statistics` / `statistics_is`
+- `VnpyBacktestEngine.run_walk_forward()` 返回 `WalkForwardResult`，`_execute_walk_forward_windows()` 返回 `list[WalkForwardWindowResult]`，不再手拼 dict
+- `WalkForwardPersister.persist_walk_forward()` 入参改为 `WalkForwardResult`，用属性访问替代 `.get()`，并在 `aggregate is None` 时显式报错
+- `cli/workflows/backtests_run.py::_do_vnpy_walk_forward()` 改用 `wf_result.success` / `.windows` / `.error` 属性访问
+- `backtest/__init__.py` 导出 `WalkForwardResult`、`WalkForwardWindowResult`
+
+**边界达成**：
+- `run_walk_forward()` 返回强类型对象 ✅
+- persister 依赖强类型对象，不再解析嵌套 dict ✅
+- report 输出 JSON 字段形态不变（daily/trades 仍按原结构写入明细表）✅
+
+**验证**：ruff ✅ mypy ✅ pytest 432 passed ✅
+
 ## 阶段 8：拆分 report query 和 DataStore
 
 ### 目标

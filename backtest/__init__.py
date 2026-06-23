@@ -28,7 +28,12 @@ from .optuna_study import (
 )
 from .parallel import ParallelBacktestOptimizer, run_param_search_parallel
 from .persister import BacktestResultPersister, SearchResultPersister, WalkForwardPersister
-from .results import WalkForwardAggregate, aggregate_walk_forward
+from .results import (
+    WalkForwardAggregate,
+    WalkForwardResult,
+    WalkForwardWindowResult,
+    aggregate_walk_forward,
+)
 from .strategy_factory import StrategyFactory, create_strategy_class, load_strategy_and_config
 from .vnpy_backtest_engine import VnpyBacktestEngine
 from .walk_forward import (
@@ -47,6 +52,8 @@ __all__ = [
     "resolve_interval",
     "aggregate_walk_forward",
     "WalkForwardAggregate",
+    "WalkForwardResult",
+    "WalkForwardWindowResult",
     "walk_forward_split",
     "walk_forward_split_by_ratio",
     "validate_window_params",
