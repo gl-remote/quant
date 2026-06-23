@@ -29,9 +29,9 @@
 # pre-commit 已按业务域切分：改 <domain>/ 只触发该域的 lint/format/type/unit，
 # 全量回归靠显式 `bash scripts/test.sh` 或 CI 兜底。
 #
-# 多工具链：report 域含 python(report/) + web(report/web/) 两种形态，验证体系不同：
+# 多工具链：report 域含 Python(workspace/report/) + 前端(workspace/report/web/) 两种形态，验证体系不同：
 #   - report      → 先 ruff+mypy+pytest（Python），再追加 eslint+tsc+vitest（前端）。
-#                   流程决策：改 report 域任何文件都前后端都验一遍（前后端强交互）。
+#                   流程决策：改 workspace/report/ 域任何文件都前后端都验一遍（前后端强交互）。
 #   - report-web  → 只跑前端工具链（eslint+tsc+vitest），供单独验证前端时使用。
 #
 # 按域切的依据：测试已按域与源码目录对齐（tests/<domain>/ ↔ <domain>/）。
@@ -54,7 +54,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
 cd "$ROOT_DIR"
 
-WEB_DIR="report/web"
+WEB_DIR="workspace/report/web"
 
 # 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
 MYPY_TARGETS=(common/ data/ backtest/ strategies/)
@@ -62,7 +62,8 @@ MYPY_TARGETS=(common/ data/ backtest/ strategies/)
 # 业务域 → 源码路径（lint/format/type 的目标）
 resolve_src() {
     case "$1" in
-        common|config|data|backtest|strategies|report|cli) echo "$1/" ;;
+        common|config|data|backtest|strategies|cli) echo "$1/" ;;
+        report) echo "workspace/report/" ;;
         contracts) echo "workspace/packages/python-contracts/src/" ;;
         *) echo "" ;;
     esac
@@ -81,7 +82,7 @@ resolve_test() {
 # 落在这些前缀外的改动 = 不会触发任何域 hook 的盲区。
 # 维护规则：在 .pre-commit-config.yaml 新增/调整域 hook 时，同步更新此清单。
 COVERED_PREFIXES=(
-    "common/" "config/" "data/" "backtest/" "strategies/" "report/" "cli/"
+    "common/" "config/" "data/" "backtest/" "strategies/" "cli/" "workspace/report/"
     "tests/"                                  # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
     "workspace/packages/python-contracts/"    # contracts 域
 )

@@ -11,7 +11,7 @@ import os
 
 import pandas as pd
 import pytest
-from conftest import insert_full_backtest
+from tests.conftest import insert_full_backtest
 
 from common.constants import STATUS_FAILED
 from common.schemas import (

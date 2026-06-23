@@ -3,10 +3,17 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["cli", "common", "config", "data", "backtest", "strategies", "strategies.strategy_aspects", "strategies.strategy_aspects.direction", "strategies.strategy_aspects.interceptors", "report"]
+packages = [
+    "cli", "common", "config", "data", "backtest",
+    "strategies", "strategies.strategy_aspects",
+    "strategies.strategy_aspects.direction",
+    "strategies.strategy_aspects.interceptors",
+    "strategies.core", "strategies.runtime", "strategies.bridges",
+    "strategies.utils",
+]
 
 [tool.uv.workspace]
-members = ["workspace/packages/python-contracts"]
+members = ["workspace/packages/python-contracts", "workspace/report"]
 
 [project]
 name = "quantsmith"
@@ -38,7 +45,11 @@ dependencies = [
     "pyarrow>=14",
     "ta-lib>=0.5",
     "pandera>=0.18",
+    "quantsmith-report",  # workspace member: report 域
 ]
+
+[tool.uv.sources]
+quantsmith-report = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -57,10 +68,10 @@ default = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "workspace/packages/python-contracts/tests"]
-pythonpath = ["."]
+pythonpath = []
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage"
+addopts = "-v --tb=short --strict-markers --cov=. --cov-report=term-missing --cov-report=html:output/coverage --import-mode=importlib"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "core: tests for strategy core module",

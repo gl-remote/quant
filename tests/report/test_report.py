@@ -7,7 +7,7 @@
     - 公共 API 导入
 """
 
-from conftest import insert_full_backtest
+from tests.conftest import insert_full_backtest
 
 from common.constants import STATUS_FAILED, STATUS_SUCCESS
 from common.types import BacktestResult

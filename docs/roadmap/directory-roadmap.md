@@ -524,3 +524,27 @@ workspace/packages/
 - `BuildCache`/`KlineCache` 默认值改为 `output_root()`
 - `DataFeed.create()` feeds 目录 / `parallel.py` workers 目录 改用 `output_root()`
 - ruff + mypy + pytest contracts 全部通过
+
+### 阶段 2（2026-06-24）
+
+> roadmap 原规划：选择 report 域试点迁移到 `workspace/report/`。
+
+**已完成**：
+
+- `report/` → `workspace/report/`（git mv，保留完整 git 历史）
+- `workspace/report/pyproject.toml`：独立 Python 项目，name=`quantsmith-report`
+  - `package-dir = {"report" = "."}` — 物理目录 `workspace/report/` 映射为 Python 包 `report`
+  - 依赖 `quantsmith`（主项目，提供 data、common 等包）
+  - `[tool.uv.sources] quantsmith = { workspace = true }` — workspace 内依赖解析
+- 主项目 `pyproject.toml` 调整：
+  - `packages` 列表移除 `report`（不再由主项目打包）
+  - `[tool.uv.workspace] members` 添加 `workspace/report`
+  - `dependencies` 添加 `quantsmith-report`
+  - `[tool.uv.sources] quantsmith-report = { workspace = true }`
+  - `pythonpath` 改为 `[]`（不再需要项目根在 sys.path 中）
+  - `addopts` 添加 `--import-mode=importlib`（解决 pytest + editable install 兼容性）
+- `tests/__init__.py`：让 tests 成为 Python 包（importlib 模式需要）
+- `tests/report/test_report.py`、`tests/data/test_database.py`：`from conftest import` → `from tests.conftest import`
+- CI、pre-commit、scripts/test.sh：`report/web` → `workspace/report/web`
+
+**验证**：ruff + mypy（82 文件）+ pytest（431 passed）全部通过

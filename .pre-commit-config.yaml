@@ -27,8 +27,8 @@
 #    「设计 / 给 AI 的提醒」，与用户对齐后再动。
 # ──────────────────────────────────────────────────────────────────────────
 
-# 多工具链：report 域含 python(report/) + web(report/web/) 两种形态。
-#   verify-report 一个 hook 覆盖前后端：改 report/ 任何文件都跑 Python(ruff+mypy+
+# 多工具链：report 域含 Python(workspace/report/) + 前端(workspace/report/web/) 两种形态。
+#   verify-report 一个 hook 覆盖前后端：改 workspace/report/ 任何文件都跑 Python(ruff+mypy+
 #   pytest) + 前端(eslint+tsc+vitest)。前后端强交互，流程上一起验。
 #   （注：前/后端各自是否覆盖数据协议变动，是测试自身完备性问题，与此流程决策正交。）
 #
@@ -78,7 +78,7 @@ repos:
         name: verify report py+web (scripts/test.sh all report)
         entry: bash scripts/test.sh all report
         language: system
-        files: ^report/
+        files: ^workspace/report/
         pass_filenames: false
 
       - id: verify-cli

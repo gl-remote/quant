@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
-
 from report.output_paths import logs_json_path, run_log_path, workers_dir
 
 if TYPE_CHECKING:
