@@ -2,6 +2,14 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.package-dir]
+cli = "workspace/cli"
+common = "workspace/common"
+config = "workspace/config"
+data = "workspace/data"
+backtest = "workspace/backtest"
+strategies = "workspace/strategies"
+
 [tool.setuptools]
 packages = [
     "cli", "common", "config", "data", "backtest",
@@ -67,7 +75,7 @@ url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "workspace/packages/python-contracts/tests"]
+testpaths = ["workspace/tests", "workspace/packages/python-contracts/tests"]
 pythonpath = []
 python_files = "test_*.py"
 python_functions = "test_*"
@@ -100,9 +108,9 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 
 [tool.ruff.lint.per-file-ignores]
 # strategies/__init__.py 的 import 顺序不能改（避免循环导入）
-"strategies/__init__.py" = ["I001"]
+"workspace/strategies/__init__.py" = ["I001"]
 # 独立脚本需要 sys.path.insert
-"tools/fetch_data.py" = ["E402"]
+"workspace/tools/fetch_data.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -135,15 +143,15 @@ reportMissingTypeStubs = false
 [tool.coverage.run]
 source = ["."]
 omit = [
-    "tests/*",
+    "workspace/tests/*",
     ".plan/*",
-    "docs/*",
+    "workspace/docs/*",
     "*/__pycache__/*",
     ".vscode/*",
     "main.py",
-    "strategies/bridges/*",
-    "data/exporter.py",
-    "backtest/vnpy_backtest_engine.py",
+    "workspace/strategies/bridges/*",
+    "workspace/data/exporter.py",
+    "workspace/backtest/vnpy_backtest_engine.py",
 ]
 
 [tool.coverage.report]

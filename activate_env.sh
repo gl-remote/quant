@@ -33,5 +33,5 @@ echo "本仓库通过 uv 管理 Python 环境，所有 Python 命令请用 uv ru
 echo "示例:"
 echo "  uv run python main.py test"
 echo "  uv run python main.py backtest --symbol DCE.m2509"
-echo "  uv run pytest tests/strategies/ --tb=short"
-echo "  ruff check strategies/ tests/strategies/"
+echo "  uv run pytest workspace/tests/ --tb=short"
+echo "  ruff check workspace/strategies/ workspace/tests/"

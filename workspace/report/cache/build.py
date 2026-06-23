@@ -25,9 +25,8 @@ import os
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
 from data.output_paths import output_root
+from loguru import logger
 
 
 class BuildCache:

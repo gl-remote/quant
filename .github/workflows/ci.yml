@@ -42,10 +42,10 @@ jobs:
         run: ruff format --check .
 
       - name: Type check with mypy
-        run: mypy common/ data/ backtest/ strategies/
+        run: mypy workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/
 
       - name: Test with pytest
-        run: pytest tests/ --cov=. --cov-report=term --cov-fail-under=60
+        run: pytest workspace/tests/ --cov=. --cov-report=term --cov-fail-under=60
 
       - name: Frontend lint
         working-directory: workspace/report/web

@@ -10,9 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from loguru import logger
-
 from data import DataManager
+from loguru import logger
 
 from ..cache import BuildCache
 from ..writer import (

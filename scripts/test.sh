@@ -57,12 +57,12 @@ cd "$ROOT_DIR"
 WEB_DIR="workspace/report/web"
 
 # 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
-MYPY_TARGETS=(common/ data/ backtest/ strategies/)
+MYPY_TARGETS=(workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/)
 
 # 业务域 → 源码路径（lint/format/type 的目标）
 resolve_src() {
     case "$1" in
-        common|config|data|backtest|strategies|cli) echo "$1/" ;;
+        common|config|data|backtest|strategies|cli) echo "workspace/$1/" ;;
         report) echo "workspace/report/" ;;
         contracts) echo "workspace/packages/python-contracts/src/" ;;
         *) echo "" ;;
@@ -72,7 +72,7 @@ resolve_src() {
 # 业务域 → 测试路径（unit 的目标）
 resolve_test() {
     case "$1" in
-        common|config|data|backtest|strategies|report|cli) echo "tests/$1/" ;;
+        common|config|data|backtest|strategies|report|cli) echo "workspace/tests/$1/" ;;
         contracts) echo "workspace/packages/python-contracts/tests/" ;;
         *) echo "" ;;
     esac
@@ -82,8 +82,9 @@ resolve_test() {
 # 落在这些前缀外的改动 = 不会触发任何域 hook 的盲区。
 # 维护规则：在 .pre-commit-config.yaml 新增/调整域 hook 时，同步更新此清单。
 COVERED_PREFIXES=(
-    "common/" "config/" "data/" "backtest/" "strategies/" "cli/" "workspace/report/"
-    "tests/"                                  # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
+    "workspace/common/" "workspace/config/" "workspace/data/" "workspace/backtest/"
+    "workspace/strategies/" "workspace/cli/" "workspace/report/"
+    "workspace/tests/"                                # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
     "workspace/packages/python-contracts/"    # contracts 域
 )
 
@@ -109,6 +110,14 @@ run_unit() {
     fi
     echo "── [unit] pytest $* ──"
     # 覆盖 pyproject 的 addopts（含 --cov=. 全量覆盖率），按域验证时不需要全量 coverage
+    #
+    # contracts 域的测试（workspace/packages/python-contracts/tests/）有独立的
+    # conftest.py，与主项目 workspace/tests/conftest.py 冲突（都解析为 tests.conftest），
+    # 需要从项目根之外分开跑。主项目全量时分别调两次 run_unit 来处理。
+    if [ "$*" = "workspace/packages/python-contracts/tests/" ]; then
+        (cd workspace/packages/python-contracts && uv run python -m pytest tests/ -q --tb=short -o "addopts=" -p no:cacheprovider)
+        return $?
+    fi
     uv run python -m pytest "$@" -o addopts="" -p no:cacheprovider -q --tb=short
 }
 
@@ -180,19 +189,31 @@ if [ -n "$DOMAIN" ]; then
 else
     SRC_PATHS=(.)
     TYPE_PATHS=("${MYPY_TARGETS[@]}")
-    TEST_PATHS=(tests/ workspace/packages/python-contracts/tests/)
+    TEST_PATHS=(workspace/tests/ workspace/packages/python-contracts/tests/)
 fi
 
 case "$STAGE" in
     lint)   run_lint "${SRC_PATHS[@]}" ;;
     format) run_format "${SRC_PATHS[@]}" ;;
     type)   run_type "${TYPE_PATHS[@]}" ;;
-    unit)   run_unit "${TEST_PATHS[@]}" ;;
+    unit)
+        if [ -z "$DOMAIN" ]; then
+            run_unit workspace/tests/
+            run_unit workspace/packages/python-contracts/tests/
+        else
+            run_unit "${TEST_PATHS[@]}"
+        fi
+        ;;
     all)
         run_lint "${SRC_PATHS[@]}"
         run_format "${SRC_PATHS[@]}"
         run_type "${TYPE_PATHS[@]}"
-        run_unit "${TEST_PATHS[@]}"
+        if [ -z "$DOMAIN" ]; then
+            run_unit workspace/tests/
+            run_unit workspace/packages/python-contracts/tests/
+        else
+            run_unit "${TEST_PATHS[@]}"
+        fi
         ;;
     *) echo -e "${RED}未知 stage: $STAGE (可选: lint/format/type/unit/all)${NC}"; exit 1 ;;
 esac

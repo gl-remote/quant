@@ -43,35 +43,35 @@ repos:
         name: verify common (scripts/test.sh all common)
         entry: bash scripts/test.sh all common
         language: system
-        files: ^common/
+        files: ^workspace/common/
         pass_filenames: false
 
       - id: verify-config
         name: verify config (scripts/test.sh all config)
         entry: bash scripts/test.sh all config
         language: system
-        files: ^config/
+        files: ^workspace/config/
         pass_filenames: false
 
       - id: verify-data
         name: verify data (scripts/test.sh all data)
         entry: bash scripts/test.sh all data
         language: system
-        files: ^data/
+        files: ^workspace/data/
         pass_filenames: false
 
       - id: verify-backtest
         name: verify backtest (scripts/test.sh all backtest)
         entry: bash scripts/test.sh all backtest
         language: system
-        files: ^backtest/
+        files: ^workspace/backtest/
         pass_filenames: false
 
       - id: verify-strategies
         name: verify strategies (scripts/test.sh all strategies)
         entry: bash scripts/test.sh all strategies
         language: system
-        files: ^strategies/
+        files: ^workspace/strategies/
         pass_filenames: false
 
       - id: verify-report
@@ -85,7 +85,7 @@ repos:
         name: verify cli (scripts/test.sh all cli)
         entry: bash scripts/test.sh all cli
         language: system
-        files: ^cli/
+        files: ^workspace/cli/
         pass_filenames: false
 
       - id: verify-contracts
