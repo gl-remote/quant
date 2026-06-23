@@ -194,7 +194,7 @@ class Strategy(ABC):
 class VnpyBacktestEngine:
     def __init__(self, backtest_config: BacktestConfig, dm: DataManager)
     def run(self, pairs: list[tuple[str, DataFrame, Strategy]]) -> list[dict]
-    def run_walk_forward(self, data, symbol, strategy, ...) -> dict
+    def run_walk_forward(self, data, symbol, strategy, ...) -> WalkForwardResult
 ```
 
 ---

@@ -86,7 +86,7 @@ class MyStrategy(Strategy):
 ```python
 class VnpyBacktestEngine:
     def run(self, pairs: list[tuple[str, DataFrame, Strategy]]) -> list[BacktestResult]
-    def run_walk_forward(self, data, symbol, strategy, ...) -> dict
+    def run_walk_forward(self, data, symbol, strategy, ...) -> WalkForwardResult
 ```
 
 ---
