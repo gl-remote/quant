@@ -159,7 +159,6 @@ class ParallelBacktestOptimizer:
         search_type: str = "bayesian",
         n_workers: int | None = None,
         batch_size: int | None = None,
-        study_db_path: str = "",
         study_name: str = "",
         run_id: int = 0,
         random_seed: int = 42,
@@ -174,7 +173,6 @@ class ParallelBacktestOptimizer:
         self._search_type = search_type
         self._n_workers = n_workers or os.cpu_count() or 4
         self._batch_size = batch_size or self._n_workers
-        self._study_db_path = study_db_path
         self._use_fixed_seed = use_fixed_seed
         self._run_id = run_id
 
@@ -192,50 +190,28 @@ class ParallelBacktestOptimizer:
         # 预计算 search_space 的 fixed_distributions
         self._fixed_distributions = _build_fixed_distributions(search_space)
 
-    def _create_grid_space(self) -> dict[str, list[Any]]:
-        """将 search_space 转换为 {"param": [values, ...]} 格式"""
-        grid: dict[str, list[Any]] = {}
-        for name, config in self._search_space.items():
-            ptype = config.get("type", "int")
-            if ptype == "categorical":
-                grid[name] = list(config.get("choices", []))
-            else:
-                low = config.get("low", 0)
-                high = config.get("high", 10)
-                step = config.get("step", 1)
-                values: list[Any] = []
-                current = low
-                while current <= high:
-                    values.append(current)
-                    current += step  # type: ignore[operator]
-                grid[name] = values
-        return grid
-
     def optimize(self) -> OptunaResult:
         """执行并行优化
 
         Returns:
             OptunaResult 包含最优参数、全部 trial 数据、study 实例
         """
+        from data.optuna_query import get_optuna_url
+
+        from .optuna_study import create_grid_space, get_study
+
         result = OptunaResult()
 
         # ── 创建 study ───────────────────────────────
-        storage: str | None = None
-        if self._study_db_path:
-            if self._study_db_path.startswith("sqlite:///"):
-                storage = self._study_db_path
-            else:
-                db_path = os.path.abspath(self._study_db_path)
-                os.makedirs(os.path.dirname(db_path), exist_ok=True)
-                storage = f"sqlite:///{db_path}"
-            logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
+        storage = get_optuna_url()
+        logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
 
         # ── 选择 sampler ─────────────────────────────
         sampler: optuna.samplers.BaseSampler
         total_trials: int
 
         if self._search_type == "grid":
-            grid_space = self._create_grid_space()
+            grid_space = create_grid_space(self._search_space)
             sampler = optuna.samplers.GridSampler(grid_space, seed=self._actual_seed)
             n_combinations = 0 if not grid_space else 1
             for values in grid_space.values():
@@ -246,12 +222,10 @@ class ParallelBacktestOptimizer:
             sampler = optuna.samplers.TPESampler(seed=self._actual_seed)  # type: ignore[assignment]
             total_trials = self._n_trials
 
-        study = optuna.create_study(
+        study = get_study(
             study_name=self._study_name,
-            direction="maximize",
             storage=storage,
             sampler=sampler,
-            load_if_exists=True,
         )
 
         if total_trials == 0:
@@ -392,12 +366,13 @@ def run_param_search_parallel(
     search_type: str = "bayesian",
     n_workers: int | None = None,
     batch_size: int | None = None,
-    study_db_path: str = "",
     study_name: str = "",
     random_seed: int = 42,
     use_fixed_seed: bool = False,
 ) -> SearchResult:
     """执行并行参数搜索（Grid 全并行 / Bayesian 分批并行）
+
+    Optuna 数据库路径由 data 层管理（get_optuna_url），调用方无需关心。
 
     Args:
         datasets: [(symbol, DataFrame), ...]
@@ -410,7 +385,6 @@ def run_param_search_parallel(
         search_type: "grid" 或 "bayesian"
         n_workers: 并行进程数（默认 os.cpu_count()）
         batch_size: Bayesian 每批并行数（默认 n_workers）
-        study_db_path: Optuna study 存储路径
         study_name: 自定义 study 名称
         random_seed: 随机种子
         use_fixed_seed: 是否使用固定随机种子
@@ -429,18 +403,12 @@ def run_param_search_parallel(
         search_type=search_type,
         n_workers=n_workers,
         batch_size=batch_size,
-        study_db_path=study_db_path,
         study_name=study_name,
         random_seed=random_seed,
         use_fixed_seed=use_fixed_seed,
     )
+    from .optuna_study import optuna_result_to_search_result
+
     opt_result = optimizer.optimize()
 
-    return SearchResult(
-        best_params=opt_result.best_params,
-        best_value=opt_result.best_value,
-        n_trials=len(opt_result.trial_data),
-        study_name=optimizer.study_name,
-        trial_data=opt_result.trial_data,
-        actual_seed=opt_result.actual_seed,
-    )
+    return optuna_result_to_search_result(opt_result, optimizer.study_name)

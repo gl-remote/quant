@@ -544,8 +544,10 @@ class BacktestRunWorkflow:
 
         _do_vnpy_search 已做完前置校验（搜索空间非空 + optimizer.enabled）。
         """
-        study_name = f"{req.strategy}_{run_engine}_r{run_id}"
-        self._dm.store.link_study(run_id, study_name)
+        from backtest.optuna_study import link_study, make_study_name
+
+        study_name = make_study_name(req.strategy, run_engine, run_id)
+        link_study(run_id, study_name)
 
         if req.parallel:
             from backtest.parallel import run_param_search_parallel
@@ -562,7 +564,6 @@ class BacktestRunWorkflow:
                 n_trials=n_trials,
                 search_type=run_engine,
                 n_workers=req.workers,
-                study_db_path=f"sqlite:///{self._dm.store.db_path}",
                 study_name=study_name,
                 random_seed=optimizer_cfg.random_seed,
                 use_fixed_seed=optimizer_cfg.use_fixed_seed,
@@ -581,7 +582,6 @@ class BacktestRunWorkflow:
             contract_size=contract_size,
             n_trials=n_trials,
             search_type=run_engine,
-            study_db_path=f"sqlite:///{self._dm.store.db_path}",
             study_name=study_name,
             random_seed=optimizer_cfg.random_seed,
             use_fixed_seed=optimizer_cfg.use_fixed_seed,

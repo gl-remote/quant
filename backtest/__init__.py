@@ -17,7 +17,15 @@
 """
 
 from .data_utils import df_to_vnpy_datalines, resolve_interval
-from .optimizer import OptunaOptimizer, OptunaResult, SearchResult, run_param_search
+from .optimizer import OptunaOptimizer, OptunaResult, run_param_search
+from .optuna_study import (
+    SearchResult,
+    create_grid_space,
+    get_study,
+    link_study,
+    make_study_name,
+    optuna_result_to_search_result,
+)
 from .parallel import ParallelBacktestOptimizer, run_param_search_parallel
 from .persister import BacktestResultPersister, SearchResultPersister, WalkForwardPersister
 from .results import WalkForwardAggregate, aggregate_walk_forward
@@ -49,6 +57,11 @@ __all__ = [
     "OptunaOptimizer",
     "OptunaResult",
     "SearchResult",
+    "create_grid_space",
+    "get_study",
+    "link_study",
+    "make_study_name",
+    "optuna_result_to_search_result",
     "BacktestResultPersister",
     "SearchResultPersister",
     "WalkForwardPersister",

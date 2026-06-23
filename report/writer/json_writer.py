@@ -128,7 +128,9 @@ def export_trades_json(run_id: int, dm: DataManager | None = None) -> None:
     from data.models import Backtest, BacktestTrade
 
     dm = _get_dm(dm)
-    best_trial_index = dm.store.get_best_trial_index(run_id)
+    from data.optuna_query import get_best_trial_index
+
+    best_trial_index = get_best_trial_index(run_id)
 
     all_trades: dict[str, list[dict[str, Any]]] = {}
     for bt in Backtest.select(Backtest.id, Backtest.symbol, Backtest.engine_config).where(

@@ -33,7 +33,6 @@
 
 from __future__ import annotations
 
-import os
 import random
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -109,7 +108,6 @@ class OptunaOptimizer:
         capital: float | None = None,
         contract_size: int | None = None,
         n_trials: int = 50,
-        study_db_path: str = "",
         search_type: str = "bayesian",
         study_name: str = "",
         random_seed: int = 42,
@@ -123,7 +121,6 @@ class OptunaOptimizer:
         self._capital = capital
         self._contract_size = contract_size
         self._n_trials = n_trials
-        self._study_db_path = study_db_path
         self._search_type = search_type
         self._use_fixed_seed = use_fixed_seed
         # 确定实际使用的种子
@@ -139,27 +136,6 @@ class OptunaOptimizer:
         else:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             self._study_name = f"{strategy_name}_{ts}"
-
-    def _create_grid_space(self) -> dict[str, list[Any]]:
-        """将 search_space 转换为 GridSampler 格式"""
-        grid_space = {}
-        for param_name, config in self._search_space.items():
-            ptype = config.get("type", "int")
-            low = config.get("low", 0)
-            high = config.get("high", 10)
-            step = config.get("step", 1)
-
-            if ptype == "categorical":
-                grid_space[param_name] = config.get("choices", [])
-            else:
-                # 生成数值序列
-                values = []
-                current = low
-                while current <= high:
-                    values.append(current)
-                    current += step
-                grid_space[param_name] = values
-        return grid_space
 
     def optimize(self) -> OptunaResult:
         """执行 Optuna 优化（严格单线程）
@@ -208,20 +184,19 @@ class OptunaOptimizer:
         # 抑制 optuna 默认日志
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-        # 创建 study（SQLite 持久化 或 仅内存）
-        storage: str | None = None
-        if self._study_db_path:
-            if self._study_db_path.startswith("sqlite:///"):
-                storage = self._study_db_path
-            else:
-                db_path = os.path.abspath(self._study_db_path)
-                os.makedirs(os.path.dirname(db_path), exist_ok=True)
-                storage = f"sqlite:///{db_path}"
-            logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
+        # 创建 study（使用 data 层管理的共享数据库）
+        from data.optuna_query import get_optuna_url
+
+        from .optuna_study import get_study
+
+        storage = get_optuna_url()
+        logger.info("Optuna study 存储: {} ({})", self._study_name, storage)
 
         # 根据搜索类型选择 sampler
         if self._search_type == "grid":
-            grid_space = self._create_grid_space()
+            from .optuna_study import create_grid_space
+
+            grid_space = create_grid_space(self._search_space)
             sampler = optuna.samplers.GridSampler(grid_space, seed=self._actual_seed)
             if not grid_space:
                 n_trials = 0
@@ -235,12 +210,10 @@ class OptunaOptimizer:
             sampler = optuna.samplers.TPESampler(seed=self._actual_seed)  # type: ignore[assignment]
             n_trials = self._n_trials
 
-        study = optuna.create_study(
+        study = get_study(
             study_name=self._study_name,
-            direction="maximize",
             storage=storage,
             sampler=sampler,
-            load_if_exists=True,
         )
 
         # 严格单线程：n_jobs=1, show_progress_bar=False
@@ -304,12 +277,13 @@ def run_param_search(
     contract_size: int,
     n_trials: int,
     search_type: str,
-    study_db_path: str = "",
     study_name: str = "",
     random_seed: int = 42,
     use_fixed_seed: bool = False,
 ) -> SearchResult:
     """执行参数搜索（网格或贝叶斯，严格单线程）
+
+    Optuna 数据库路径由 data 层管理（get_optuna_url），调用方无需关心。
 
     Args:
         engine: 回测引擎实例
@@ -321,7 +295,6 @@ def run_param_search(
         contract_size: 合约乘数
         n_trials: 最大试验次数
         search_type: "grid" 或 "bayesian"
-        study_db_path: Optuna study 存储路径
         study_name: 自定义 study 名称
         random_seed: 随机种子，用于保证复现性
         use_fixed_seed: 是否使用固定随机种子（默认不使用）
@@ -338,19 +311,13 @@ def run_param_search(
         capital=capital,
         contract_size=contract_size,
         n_trials=n_trials,
-        study_db_path=study_db_path,
         search_type=search_type,
         study_name=study_name,
         random_seed=random_seed,
         use_fixed_seed=use_fixed_seed,
     )
+    from .optuna_study import optuna_result_to_search_result
+
     opt_result = optimizer.optimize()
 
-    return SearchResult(
-        best_params=opt_result.best_params,
-        best_value=opt_result.best_value,
-        n_trials=len(opt_result.trial_data),
-        study_name=optimizer.study_name,
-        trial_data=opt_result.trial_data,
-        actual_seed=opt_result.actual_seed,
-    )
+    return optuna_result_to_search_result(opt_result, optimizer.study_name)

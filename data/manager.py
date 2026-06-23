@@ -490,8 +490,14 @@ class DataManager:
         return self.store.get_equity_data(backtest_id)
 
     def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
-        """获取 Optuna 优化数据"""
-        return self.store.get_optuna_data(run_id)
+        """获取 Optuna 优化数据
+
+        委托给 data.optuna_query，不再经过 DataStore。
+        数据库连接由调用方（DataManager）确保已初始化。
+        """
+        from .optuna_query import get_optuna_data as _query
+
+        return _query(run_id)
 
     # ── 资源管理 ────────────────────────────────────────────
 
