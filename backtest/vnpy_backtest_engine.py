@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import numpy as np
 import pandas as pd
 from loguru import logger
 
@@ -118,8 +119,13 @@ class VnpyBacktestEngine:
             start_date=data_start,
             end_date=data_end,
             total_days=total_days,
-            # ── 核心绩效指标（vnpy calculate_statistics 直接输出）───
-            total_trades=stats.get("total_trade_count", stats.get("total_trades", 0)) or 0,
+            # ── 核心绩效指标（优先 vnpy，缺失时从成交自行计算）──
+            total_trades=(
+                stats.get("total_trade_count")
+                or stats.get("total_trades")
+                or (stats.get("win_trades", 0) + stats.get("loss_trades", 0))
+            )
+            or 0,
             total_return=stats.get("total_return", 0.0) or 0.0,
             end_balance=stats.get("end_balance", self.initial_capital) or self.initial_capital,
             annual_return=stats.get("annual_return"),
@@ -503,6 +509,19 @@ class VnpyBacktestEngine:
             # ── 步骤 7: 从逐笔交易计算附加统计 ──
             self._calculate_trade_stats(statistics, formatted_trades)
 
+            # ── 步骤 8: 爆仓状态检测 ──
+            # vnpy calculate_statistics() 在爆仓(balance≤0)时所有指标返回 0，
+            # 此时从 daily_results 自行计算补上核心统计。
+            if (
+                statistics
+                and not statistics.get("sharpe_ratio")
+                and not statistics.get("max_drawdown")
+                and formatted_trades
+                and not daily_results.empty
+            ):
+                logger.warning(f"[{symbol}] 检测到爆仓，从 daily_results 重新计算统计指标")
+                _override_blown_up_stats(statistics, daily_results, self.initial_capital)
+
             logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
 
             results.append(
@@ -861,3 +880,67 @@ class VnpyBacktestEngine:
         statistics["win_loss_ratio"] = avg_win_val / avg_loss_val if avg_loss_val > 0 else 0
         statistics["max_consecutive_win"] = max_consecutive_win
         statistics["max_consecutive_loss"] = max_consecutive_loss
+
+
+def _override_blown_up_stats(
+    statistics: dict[str, Any],
+    daily_df: pd.DataFrame,
+    capital: float,
+) -> None:
+    """vnpy 爆仓时所有统计指标为 0，从 daily_results 自行计算补上
+
+    不修改传入 statistics 中已有的 win/loss/win_rate 等自行计算字段，
+    仅覆盖 vnpy 因爆仓跳过而未正确计算的核心统计字段。
+
+    Args:
+        statistics: vnpy calculate_statistics() 返回的字典，被就地修改
+        daily_df: calculate_result() 返回的 DataFrame（列: net_pnl, commission, slippage, turnover, trade_count）
+        capital: 初始资金
+    """
+    if daily_df is None or daily_df.empty:
+        return
+
+    df = daily_df.copy()
+    required_cols = {"net_pnl", "commission", "slippage", "turnover", "trade_count"}
+    if not required_cols.issubset(df.columns):
+        return
+
+    # ── 计算衍生列 ──
+    df["balance"] = df["net_pnl"].cumsum() + capital
+    ratio = df["balance"] / df["balance"].shift(1)
+    df["return"] = np.where(ratio > 0, np.log(ratio), 0.0)
+    df["highlevel"] = df["balance"].cummax()
+    df["drawdown"] = df["balance"] - df["highlevel"]
+    df["ddpercent"] = np.where(df["highlevel"] > 0, df["drawdown"] / df["highlevel"] * 100, 0.0)
+
+    total_days = len(df)
+    end_balance = float(df["balance"].iloc[-1])
+    total_return = (end_balance / capital - 1) * 100
+    annual_days = 252.0
+    annual_return = total_return / total_days * annual_days if total_days else 0.0
+    daily_return_mean = float(df["return"].mean() * 100)
+    return_std = float(df["return"].std() * 100)
+
+    # ── 覆盖 vnpy 返回的 0 值 ──
+    statistics["end_balance"] = end_balance
+    statistics["total_return"] = total_return
+    statistics["annual_return"] = annual_return
+    statistics["total_net_pnl"] = float(df["net_pnl"].sum())
+    statistics["daily_net_pnl"] = float(df["net_pnl"].sum() / total_days) if total_days else 0.0
+    statistics["total_commission"] = float(df["commission"].sum())
+    statistics["daily_commission"] = float(df["commission"].sum() / total_days) if total_days else 0.0
+    statistics["total_slippage"] = float(df["slippage"].sum())
+    statistics["daily_slippage"] = float(df["slippage"].sum() / total_days) if total_days else 0.0
+    statistics["total_turnover"] = float(df["turnover"].sum())
+    statistics["daily_turnover"] = float(df["turnover"].sum() / total_days) if total_days else 0.0
+    statistics["profit_days"] = int((df["net_pnl"] > 0).sum())
+    statistics["loss_days"] = int((df["net_pnl"] < 0).sum())
+    statistics["total_trade_count"] = int(df["trade_count"].sum())
+    statistics["daily_trade_count"] = float(df["trade_count"].sum() / total_days) if total_days else 0.0
+    statistics["max_drawdown"] = float(df["drawdown"].min())
+    statistics["max_ddpercent"] = float(df["ddpercent"].min())
+    statistics["daily_return"] = daily_return_mean
+    statistics["return_std"] = return_std
+    statistics["sharpe_ratio"] = daily_return_mean / return_std * (annual_days**0.5) if return_std > 0 else 0.0
+    max_ddpercent = statistics.get("max_ddpercent", 0) or 0
+    statistics["return_drawdown_ratio"] = -total_return / max_ddpercent if max_ddpercent else 0.0

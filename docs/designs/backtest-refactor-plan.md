@@ -1,5 +1,10 @@
 # 回测链路分阶段重构计划
 
+> 类型：Design / 已实现设计记录  
+> 状态：阶段 0-9 已完成，阶段 10 已移出主线  
+> 完成日期：2026-06-23  
+> Git 参考：`90dd62f docs(plan): restore full roadmap archive & defer TqSdk lifecycle unification`
+
 ## 背景
 
 近期为了修复回测数据采集、参数优化页、日志落盘、前端报告生成等问题，临时把较多编排逻辑集中到了 `cli/commands/backtest.py`。当前功能可以跑通，但模块边界已经变得混乱：

@@ -36,3 +36,44 @@ uv sync --all-groups             # 安装项目本体 + 所有 dependency-groups
 - **Types & docs**: Full mypy-compatible type hints, docstrings for public APIs
 - **Style**: Imports (stdlib → third-party → internal), line ≤120, double quotes
 - **Deliverable**: Pass ruff + mypy, include tests
+
+## 设计文档归档规范（`docs/designs/`）
+
+已完成的设计规格、重构计划归档到 `docs/designs/`。必须遵守以下格式：
+
+### 1. 文件头 metadata
+
+每个文件在标题后紧跟 metadata 块：
+
+```markdown
+# 文档标题
+
+> 类型：Design / 已实现设计记录  
+> 状态：已实现 / 已完成 / 阶段 X-Y 已完成...  
+> 完成日期：YYYY-MM-DD  
+> Git 参考：`commit_hash commit_message`
+
+## 正文...
+```
+
+- `类型`：已完成设计用 `已实现设计记录`，已废弃用 `历史设计记录`
+- `状态`：如实标注，如 `已实现`、`阶段 0-9 已完成，阶段 10 已移出主线`
+- `完成日期`：最后一个阶段/功能完成的日期
+- `Git 参考`：与本设计最相关的终态 commit（通常是 docs 归档或功能完成 commit）
+
+### 2. 废弃文档标记
+
+如果设计被后续方案取代，在 metadata 后追加红色警告：
+
+```markdown
+> ⚠️ **历史文档** — YYYY-MM-DD 起该方案已废弃。
+>
+> 保留供架构演进记录参考。
+```
+
+### 3. 归档时机
+
+- 对应功能/重构已全部完成时即时归档
+- 从 `docs/roadmap/` 移至 `docs/designs/`
+- 移动前补全 metadata header（roadmap 阶段的文档可能没有）
+- 不修改正文内容（保留完整演进记录）
