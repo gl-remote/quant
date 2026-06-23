@@ -57,6 +57,9 @@ config/conf.local.toml
 logs/
 .vntrader/
 
+# Node
+node_modules/
+
 # Data files
 *.csv
 *.xlsx

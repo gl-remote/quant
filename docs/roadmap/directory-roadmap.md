@@ -93,43 +93,33 @@ quant/
       shared-config/
 
     data/
-      python/
       tools/
       docs/
 
     strategy/
-      python/
       docs/
 
     backtest/
-      python/
       docs/
 
     trading/
-      python/
       contracts/
       docs/
 
     report/
-      python/
-      web/
       contracts/
       docs/
 
     risk/
-      python/
       contracts/
       docs/
 
     monitor/
-      web/
-      api/
       docs/
 
     cli/
-      python/
-        commands/
-        workflows/
+      commands/
+      workflows/
 
     tests/
     docs/
@@ -186,14 +176,15 @@ workspace/apps/
 
 `workspace/packages/` 是例外：它不表示业务域，而表示跨业务域、跨语言或跨运行环境复用的可安装共享包与契约。
 
-### 原则 3：业务域内最多一层语言或形态目录
+### 原则 3：业务域内不按语言或形态划分子目录
+
+业务域目录下直接放置该域的所有代码、资源和文档，不按 `python/`、`web/`、`api/` 等语言或形态拆分。
 
 可以：
 
 ```text
-workspace/report/python/
-workspace/report/web/
-workspace/report/contracts/
+workspace/report/        # Python 包、前端、文档共存
+workspace/trading/       # Python 包、契约、文档共存
 ```
 
 不建议：
@@ -344,11 +335,11 @@ scripts                                             ← 横切工程操作层（
 |----------|----------|------|
 | `common/` | 短期保留在当前 Python 项目内；长期可抽为 `workspace/packages/python-common/` | 多个 Python 服务复用且 API 稳定后再抽 package |
 | `config/` | `workspace/packages/shared-config/` 或业务域内配置模块 | 跨域共享配置契约可进 shared-config；业务私有配置留在业务域内 |
-| `data/` | `workspace/data/python/` | 行情、数据源、数据存储、数据管理 |
-| `strategies/` | `workspace/strategy/python/` | 策略核心、运行期结构、桥接器 |
-| `backtest/` | `workspace/backtest/python/` | 回测、优化、walk-forward |
-| `cli/` | `workspace/cli/python/` | 命令行入口、命令分发和命令级 workflows；`cli/commands` 负责适配命令行，`cli/workflows` 负责编排跨域任务 |
-| `report/` | `workspace/report/python/` + `workspace/report/web/` | Python 报告生成和 Web 报告展示分离到同一业务域 |
+| `data/` | `workspace/data/` | 行情、数据源、数据存储、数据管理 |
+| `strategies/` | `workspace/strategy/` | 策略核心、运行期结构、桥接器 |
+| `backtest/` | `workspace/backtest/` | 回测、优化、walk-forward |
+| `cli/` | `workspace/cli/` | 命令行入口、命令分发和命令级 workflows |
+| `report/` | `workspace/report/` | Python 报告生成和 Web 报告展示共存于同一业务域 |
 | `tests/` | `workspace/tests/` | 横切验证层，保持顶层单一目录（不拆进各业务域），内部按域子目录与被测代码对齐，详见原则 8 |
 | `docs/` | `workspace/docs/` | 长期可迁移；当前先保留根目录 docs |
 | `tools/` | `workspace/tools/` | 业务辅助工具 |
@@ -385,10 +376,10 @@ cli/commands -> cli/workflows -> data/strategy/backtest/trading/report
 
 ```text
 workspace/report/
-  python/
-  web/
-  contracts/
-  docs/
+  # Python 包（__init__.py, builder/, cache/, reporter/, writer/ 等）
+  # 前端（web/）
+  # 文档（README.md, docs/）
+  # 契约（contracts/，如有）
 ```
 
 试点成功后，再推广到其他业务域。
