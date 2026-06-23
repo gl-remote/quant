@@ -9,7 +9,7 @@
 # 从子模块导入核心功能
 import contextlib
 
-from .builder import build_all, write_nav_json
+from .builder import write_nav_json
 from .output_paths import logs_json_path, nav_json_path, run_data_dir, run_dir, run_log_path, workers_dir
 from .reporter import build_optuna_spec, format_single_report, format_summary_report
 
@@ -21,7 +21,6 @@ with contextlib.suppress(ImportError):
 __all__ = [
     "format_single_report",  # 格式化单个回测报告
     "format_summary_report",  # 格式化回测汇总报告
-    "build_all",  # 构建完整报告（数据+前端）
     "write_nav_json",  # 写入导航JSON数据
     "build_optuna_spec",  # 生成Optuna图表配置
     "run_dir",

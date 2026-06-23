@@ -96,21 +96,27 @@ class RunFinalizer:
         """内部收尾，单调线性时序（每步只做一件事）：
 
         1. finish_run        — DB 状态标记，让数据导出读到最新 status
-        2. run_data_exports  — 导出业务数据 JSON
-        3. build_frontend    — 构建前端 bundle（增量可跳过）
-        4. detach            — 停止写 run.log，避免后续日志污染 logs.json
-        5. export_json       — run.log + worker 日志 → logs.json
-        6. write_entry_html  — 最后一步，此时所有 JSON（含 logs.json）已就绪，只打包一次
+        2. ReportWorkflow.build — 统一报表入口，按序执行：
+             run_data_exports → build_frontend → [hook] → write_entry_html
+           其中 hook（detach + export_json）在 frontend 之后、entry_html 之前执行，
+           确保 logs.json 落盘后再打包入口 HTML，只打包一次。
         """
-        from report.builder import build_frontend, run_data_exports, write_entry_html
+        from cli.workflows.report import ReportBuildRequest, ReportWorkflow
 
-        output_dir = str(_output_root())
         self._dm.store.finish_run(run_id, status)
-        run_data_exports(output_dir, run_id)
-        build_frontend(output_dir)
+        ReportWorkflow(self._dm).build(
+            ReportBuildRequest(
+                run_id=run_id,
+                incremental=True,
+                output_dir=str(_output_root()),
+                before_entry_html=lambda: self._export_logs(run_id),
+            )
+        )
+
+    def _export_logs(self, run_id: int) -> None:
+        """frontend 之后、entry_html 之前的 hook：停止 run.log 写入并导出 logs.json"""
         self._helper.detach()
         self._helper.export_json(run_id)
-        write_entry_html(output_dir)
 
     def finish_success(self, run_id: int) -> None:
         """正常完成"""

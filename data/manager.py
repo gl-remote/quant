@@ -478,16 +478,32 @@ class DataManager:
         return self.store.get_all_runs()
 
     def get_run_summary(self, run_id: int) -> list[dict[str, object]]:
-        """获取每品种最优回测记录"""
-        return self.store.get_run_summary(run_id)
+        """获取每品种最优回测记录
+
+        委托给 data.report_queries，不再经过 DataStore。
+        """
+        from .report_queries import get_run_summary as _query
+
+        self._init_store()
+        return _query(run_id)
 
     def get_backtests_for_run(self, run_id: int) -> list[dict[str, object]]:
-        """获取某 run 下所有回测记录（含参数和日线数据）"""
-        return self.store.get_backtests_for_run(run_id)
+        """获取某 run 下所有回测记录（含参数和日线数据）
+
+        委托给 data.report_queries，不再经过 DataStore。
+        """
+        from .report_queries import get_backtests_for_run as _query
+
+        return _query(self.store, run_id)
 
     def get_equity_data(self, backtest_id: int) -> dict[str, object] | None:
-        """获取指定回测记录的资金曲线数据"""
-        return self.store.get_equity_data(backtest_id)
+        """获取指定回测记录的资金曲线数据
+
+        委托给 data.report_queries，不再经过 DataStore。
+        """
+        from .report_queries import get_equity_data as _query
+
+        return _query(self.store, backtest_id)
 
     def get_optuna_data(self, run_id: int) -> dict[str, object] | None:
         """获取 Optuna 优化数据

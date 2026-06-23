@@ -1421,6 +1421,30 @@ data/report_queries.py
 - run summary、equity、trades 都正常。
 - 静态验证和真实回测验证通过。
 
+### 阶段 8 完成记录
+
+- **日期**：2026-06-23
+
+**关键变化**：
+- 新增 `data/report_queries.py`：迁入 `get_run_summary` / `get_backtests_for_run` / `get_equity_data` 及辅助 `_filter_by_best_trial` / `_update_best_for_symbol`，让 `DataStore` 回归数据库基础 CRUD
+- `data/store.py` 删除上述报表查询方法与辅助；模块 docstring 同步标注迁出说明
+- `data/manager.py` 三个查询方法改为委托 `data.report_queries`（`get_run_summary` 走模块函数，`get_backtests_for_run` / `get_equity_data` 复用 `store.query_daily` 传入 store 实例）
+- 新增 `cli/workflows/report.py`：`ReportWorkflow` + 四个请求 dataclass（`ReportBuildRequest` / `ReportSummaryRequest` / `ReportDetailRequest` / `ReportDeleteRequest`）
+  - `build()` 串联 data_exports → frontend → **可选 hook** → entry_html；`before_entry_html` 在 frontend 之后、entry_html 之前执行
+  - `get_summary` / `get_detail` / `delete_backtest` 统一查询/删除入口
+- 删除 `report/builder/orchestrator.py::build_all`，同步清理 `report/builder/__init__.py` 与 `report/__init__.py` 的导出
+- `cmd_report`（list / show / clean / build）改为构造 `Report*Request` 后调 `ReportWorkflow`
+- `RunFinalizer._finalize()` 改用 `ReportWorkflow.build()` + hook（`detach` + `export_json`）注入 logs.json 落盘时序，真正合并双轨编排
+- `cli/workflows/__init__.py` 导出 `ReportWorkflow` 及四个请求对象
+
+**边界达成**：
+- report builder 通过 `ReportWorkflow` 统一入口生成报表，不再有 `build_all` 与 `RunFinalizer` 双轨编排 ✅
+- 报表查询从 `DataStore` 拆出到 `data/report_queries.py`，`DataStore` 仅保留基础 CRUD ✅
+- Optuna SQL 查询仍集中在 `data/optuna_query.py` ✅
+- JSON 输出字段形态不变 ✅
+
+**验证**：ruff ✅ mypy ✅ pytest 431 passed ✅
+
 ## 阶段 9：持久化幂等性和重跑策略
 
 ### 目标

@@ -15,10 +15,16 @@ from typing import Any
 
 from loguru import logger
 
+from cli.workflows.report import (
+    ReportBuildRequest,
+    ReportDeleteRequest,
+    ReportDetailRequest,
+    ReportSummaryRequest,
+    ReportWorkflow,
+)
 from config import ConfigManager
 from data import DataManager
 from data.output_paths import output_root
-from report import build_all, format_single_report, format_summary_report
 
 
 def register(subparsers: Any) -> None:
@@ -71,29 +77,32 @@ def cmd_report(args: argparse.Namespace) -> None:
 
     cm = ConfigManager()
     dm = DataManager(cm)
+    workflow = ReportWorkflow(dm)
 
     try:
         if args.clean_id is not None:
-            _cmd_clean(dm, args.clean_id)
+            _cmd_clean(workflow, args.clean_id)
         elif args.id is not None:
-            _cmd_show(dm, args.id)
+            _cmd_show(workflow, args.id)
         else:
-            _cmd_list(dm, args.symbol, args.strategy, args.limit or 20)
+            _cmd_list(workflow, args.symbol, args.strategy, args.limit or 20)
 
     except Exception as e:
         logger.exception(f"report 命令执行失败: {e}")
         sys.exit(1)
 
 
-def _cmd_list(dm: DataManager, symbol: str | None = None, strategy: str | None = None, limit: int = 20) -> None:
+def _cmd_list(
+    workflow: ReportWorkflow, symbol: str | None = None, strategy: str | None = None, limit: int = 20
+) -> None:
     """列出回测记录"""
-    report = format_summary_report(dm, symbol=symbol, strategy=strategy, limit=limit)
+    report = workflow.get_summary(ReportSummaryRequest(symbol=symbol, strategy=strategy, limit=limit))
     print(report)
 
 
-def _cmd_show(dm: DataManager, backtest_id: int) -> None:
+def _cmd_show(workflow: ReportWorkflow, backtest_id: int) -> None:
     """展示单条回测详细报告"""
-    report = format_single_report(dm, backtest_id)
+    report = workflow.get_detail(ReportDetailRequest(backtest_id=backtest_id))
     print(report)
 
     print("\n💡 可视化报告: python main.py report --build  (或打开 output/index.html)")
@@ -105,28 +114,31 @@ def _cmd_build(run_id: int | None = None) -> None:
     Args:
         run_id: 指定重建某个 run（None 则重建所有）
     """
+    cm = ConfigManager()
+    dm = DataManager(cm)
+    workflow = ReportWorkflow(dm)
+
     if run_id is not None:
         # 重建指定 run
         print(f"重建运行 r{run_id} 的可视化报告...")
-        build_all(output_dir=str(output_root()), run_id=run_id, incremental=False)
+        workflow.build(ReportBuildRequest(run_id=run_id, incremental=False, output_dir=str(output_root())))
     else:
         # 重建所有 run（从数据库查询，不依赖 output 目录）
         print("重建所有运行的可视化报告...")
-        cm = ConfigManager()
-        dm = DataManager(cm)
         runs = dm.get_all_runs()
-        dm.close()
         if not runs:
             print("没有找到运行记录")
+            dm.close()
             return
         for r in runs:
-            rid = r["id"]
+            rid = int(str(r["id"]))
             print(f"  → 重建 r{rid}...")
-            build_all(output_dir=str(output_root()), run_id=int(str(rid)), incremental=False)
+            workflow.build(ReportBuildRequest(run_id=rid, incremental=False, output_dir=str(output_root())))
+        dm.close()
     print("完成。")
 
 
-def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
+def _cmd_clean(workflow: ReportWorkflow, backtest_id: int) -> None:
     """硬删除回测记录"""
     print(f"\n⚠️  即将删除回测记录 id={backtest_id} 及其所有关联数据")
     print("   此操作不可撤销！\n")
@@ -136,7 +148,7 @@ def _cmd_clean(dm: DataManager, backtest_id: int) -> None:
         print("   已取消。")
         return
 
-    ok = dm.delete_backtest(backtest_id)
+    ok = workflow.delete_backtest(ReportDeleteRequest(backtest_id=backtest_id))
     if ok:
         print(f"   ✓ 已删除回测记录 id={backtest_id}")
     else:

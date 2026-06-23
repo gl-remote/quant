@@ -6,8 +6,8 @@
 - frontend:     构建前端 bundle
 - entry_html:   打包入口 HTML（快照内联）
 
-orchestrator.build_all 是薄封装，按序串联三者，供手动重建使用。
-run 收尾路径可直接调用各环节以精确控制时序。
+三个环节由 `cli.workflows.report.ReportWorkflow.build()` 统一串联，
+供手动重建（cmd_report）与 run 收尾（RunFinalizer）复用。
 """
 
 from __future__ import annotations
@@ -16,10 +16,8 @@ from ..writer import write_nav_json
 from .data_exports import run_data_exports
 from .entry_html import write_entry_html
 from .frontend import build_frontend
-from .orchestrator import build_all
 
 __all__ = [
-    "build_all",
     "run_data_exports",
     "build_frontend",
     "write_entry_html",
