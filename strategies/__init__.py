@@ -251,16 +251,23 @@ from .utils import (
     serialize_strategy_params,
 )
 
-# 桥接器（可选导入，可能有依赖缺失）
-try:
-    from .bridges import VnpyBacktestBridge
-except ImportError:
-    VnpyBacktestBridge = None  # type: ignore[assignment, misc]
+# 桥接器（延迟导入，避免 import strategies 时触发 vnpy/tqsdk 副作用）
+# 使用 __getattr__ 实现按需加载，仅在用户显式访问时才 import bridge 模块。
+# 常规策略开发（core/runtime/aspects）不会触发 vnpy/tqsdk 初始化。
 
-try:
-    from .bridges import TqsdkStrategyBridge
-except ImportError:
-    TqsdkStrategyBridge = None  # type: ignore[assignment, misc]
+
+def __getattr__(name: str) -> object:
+    """延迟导入桥接器，避免模块加载时触发 vnpy/tqsdk 的文件 IO 副作用。"""
+    _bridge_map = {
+        "VnpyBacktestBridge": ".bridges",
+        "TqsdkStrategyBridge": ".bridges",
+    }
+    if name in _bridge_map:
+        import importlib
+
+        module = importlib.import_module(_bridge_map[name], __name__)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     # 版本号
