@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import random
+from dataclasses import dataclass
 
 import pandas as pd
 import pytest
@@ -16,6 +17,8 @@ import pytest
 from backtest.parallel import ParallelBacktestOptimizer, _execute_trial, run_param_search_parallel
 from backtest.vnpy_backtest_engine import VnpyBacktestEngine
 from config.app_config import BacktestConfig
+from strategies import Signal, Strategy
+from strategies.runtime import DataRequirements, EventsRequirements
 
 # ── 辅助函数 ─────────────────────────────────────────────
 
@@ -66,6 +69,51 @@ def make_basic_config(**overrides) -> BacktestConfig:
     return BacktestConfig(**kwargs)
 
 
+# ── 模拟策略（不声明任何数据需求，回测完全使用内存 df）──────
+
+
+@dataclass
+class _NoopParams:
+    """空参数集——模拟策略不需要任何可调参数"""
+
+
+class _NoopStrategy(Strategy[_NoopParams]):
+    """不声明任何数据需求的最小策略
+
+    data_requirements 返回空 periods/indicators 的 DataRequirements，
+    使 DataFeed.create() 命中空 feed 分支，整个回测不访问磁盘数据。
+    on_bar 永不发信号。
+    """
+
+    name = "noop"
+    VERSION = "test-noop1"
+
+    def data_requirements(self, config: _NoopParams) -> DataRequirements:
+        return DataRequirements(periods={}, indicators={}, events=EventsRequirements.no_events())
+
+    def on_bar(self, state, ctx) -> Signal:  # type: ignore[override]
+        return Signal()
+
+    def on_fill(self, fill) -> None:
+        pass
+
+
+def _install_noop_strategy(monkeypatch) -> None:
+    """把策略加载入口替换为返回 _NoopStrategy 实例
+
+    engine 在两处加载策略：strategy_factory 模块级 import，以及
+    _get_strategy_version 运行时 from strategies import load_strategy。
+    两处都需替换。
+    """
+
+    def _fake_load_strategy(strategy_name=None, **kwargs):
+        return _NoopStrategy()
+
+    monkeypatch.setattr("backtest.strategy_factory.load_strategy", _fake_load_strategy)
+    monkeypatch.setattr("strategies.load_strategy", _fake_load_strategy)
+
+
+
 def _run_single_backtest(batch_mode: bool) -> tuple:
     """在同步上下文中运行单次回测（用于 batch_mode 对比测试）
 
@@ -104,20 +152,25 @@ class TestBatchMode:
         # batch_mode 下 backtest_id 应为 None（占位的 -1 在 _create_backtest_result 中被忽略）
         assert results[0].backtest_id is None or results[0].backtest_id == -1
 
-    def test_batch_mode_dm_none(self) -> None:
-        """batch_mode=True + dm=None 正常执行，不报错"""
+    def test_batch_mode_dm_none(self, monkeypatch) -> None:
+        """batch_mode=True 用纯内存数据跑通回测，不依赖磁盘上的品种文件
+
+        通过注入一个不声明任何数据需求的模拟策略，使 DataFeed.create() 命中
+        空 periods 分支（返回空 feed，不访问磁盘），回测完全使用传入的内存 df。
+        """
         df = make_price_df()
         config = make_basic_config()
+
+        _install_noop_strategy(monkeypatch)
+
         engine = VnpyBacktestEngine(config)
-        pairs = [("DCE.m2501", df, "ma_strategy", {"fast": 5, "slow": 20})]
+        pairs = [("DCE.m2501", df, "noop_strategy", {})]
         results = engine.run(pairs, batch_mode=True)
 
         assert len(results) == 1
-        # 回测应该能正常跑完，拿到结果
-        if results[0].success:
-            assert results[0].total_trades >= 0
-        else:
-            pytest.skip(f"策略执行异常（可能因缺少 vnpy 依赖）: {results[0].error_message}")
+        # 回测应正常跑完（不再因数据加载失败而 skip）
+        assert results[0].success, f"回测未成功: {results[0].error_message}"
+        assert results[0].total_trades >= 0
 
     def test_batch_mode_with_multiple_symbols(self) -> None:
         """batch_mode=True 下多品种回测正常"""

@@ -522,7 +522,8 @@ class DataFeed:
         self._compute_all_indicators(multi)
 
         # ── 阶段3：筛选事件 ──
-        max_lookback = max(req.lookback_bars for req in requirements.periods.values())
+        lookbacks = [req.lookback_bars for req in requirements.periods.values()]
+        max_lookback = max(lookbacks) if lookbacks else 0
         events = self._filter_context_events(requirements, current_time, max_lookback)
 
         if bar.symbol != self.symbol:
@@ -554,7 +555,8 @@ class DataFeed:
         for period in requirements.indicators:
             all_periods.add(period)
         if not all_periods:
-            raise ValueError(f"requirements 未声明任何周期，无法推断基础周期: symbol={symbol}")
+            # 未声明任何周期：返回不含任何周期的空 DataFeed，由调用方按需使用
+            return cls(symbol=symbol)
         source_period = min(all_periods, key=parse_period_minutes)
 
         # 1. 获取所有要求周期的 native K线数据

@@ -17,6 +17,7 @@ Grid Search 全并行，Bayesian Search 分批并行。
 
 from __future__ import annotations
 
+import atexit
 import multiprocessing as mp
 import os
 import random
@@ -39,6 +40,27 @@ from .optimizer import OptunaResult, SearchResult
 # 不存在多进程共享冲突。
 _WORKER_CTX: dict[str, Any] = {}
 
+# 子进程日志 sink id，供 _cleanup_worker 退出时移除，避免文件句柄泄漏。
+_WORKER_LOGGER_ID: int | None = None
+
+
+def _cleanup_worker() -> None:
+    """子进程退出时清理：移除 _init_worker 注册的日志 sink，关闭文件句柄。
+
+    通过 atexit 注册，确保进程正常退出或被进程池回收时都能释放资源。
+    清理失败不应阻断进程退出，因此吞掉异常。
+    """
+    global _WORKER_LOGGER_ID
+    if _WORKER_LOGGER_ID is None:
+        return
+    try:
+        logger.remove(_WORKER_LOGGER_ID)
+    except Exception:
+        # sink 已被移除或 loguru 内部状态异常时忽略
+        pass
+    finally:
+        _WORKER_LOGGER_ID = None
+
 
 def _init_worker(
     datasets: list[tuple[str, pd.DataFrame]],
@@ -48,7 +70,7 @@ def _init_worker(
     run_id: int,
 ) -> None:
     """子进程初始化：每个 worker 启动时执行一次"""
-    global _WORKER_CTX
+    global _WORKER_CTX, _WORKER_LOGGER_ID
     _WORKER_CTX["datasets"] = datasets
     _WORKER_CTX["strategy_name"] = strategy_name
     _WORKER_CTX["strategy_params"] = strategy_params
@@ -60,51 +82,69 @@ def _init_worker(
     logs_dir = str(workers_dir(run_id))
     os.makedirs(logs_dir, exist_ok=True)
     pid = os.getpid()
-    logger.add(
+    _WORKER_LOGGER_ID = logger.add(
         os.path.join(logs_dir, f"worker_{pid}.log"),
         level="DEBUG",
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
         enqueue=True,
     )
+    # 注册退出清理，确保日志 sink 文件句柄被释放
+    atexit.register(_cleanup_worker)
     logger.debug(f"[worker {pid}] 初始化完成")
 
 
 def _execute_trial(params: dict[str, Any], trial_seed: int = 0) -> dict[str, Any]:
     """在子进程中执行单个 trial（模块顶层函数，spawn 兼容 pickle）
 
+    单个 trial 的异常被隔离在此函数内：捕获后返回 success=False 的最差分结果，
+    避免一个 trial 崩溃导致整批 future.result() 抛错、丢失已完成的其他 trial。
+
     Args:
         params: 当前 trial 的搜索参数（含分布采样值）
         trial_seed: trial 级别随机种子
 
     Returns:
-        dict: {search_params, value, engine_results, strategy_params, strategy_name}
+        dict: {search_params, value, engine_results, strategy_params, strategy_name, success[, error]}
     """
     ctx = _WORKER_CTX
 
     random.seed(trial_seed)
 
-    from .vnpy_backtest_engine import VnpyBacktestEngine
-
-    engine = VnpyBacktestEngine(ctx["backtest_config"])
     merged_params = {**ctx["strategy_params"], **params}
-    pairs = [(sym, df, ctx["strategy_name"], merged_params) for sym, df in ctx["datasets"]]
-    engine_results = engine.run(pairs, batch_mode=True)
+    try:
+        from .vnpy_backtest_engine import VnpyBacktestEngine
 
-    # Calmar 比率均值（与现有 OptunaOptimizer.objective 保持一致）
-    calmars = [
-        (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
-        for r in engine_results
-        if r.success and (r.max_ddpercent or 0) != 0
-    ]
-    score = float(sum(calmars) / len(calmars)) if calmars else -999.0
+        engine = VnpyBacktestEngine(ctx["backtest_config"])
+        pairs = [(sym, df, ctx["strategy_name"], merged_params) for sym, df in ctx["datasets"]]
+        engine_results = engine.run(pairs, batch_mode=True)
 
-    return {
-        "search_params": params,
-        "value": score,
-        "engine_results": engine_results,
-        "strategy_params": merged_params,
-        "strategy_name": ctx["strategy_name"],
-    }
+        # Calmar 比率均值（与现有 OptunaOptimizer.objective 保持一致）
+        calmars = [
+            (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
+            for r in engine_results
+            if r.success and (r.max_ddpercent or 0) != 0
+        ]
+        score = float(sum(calmars) / len(calmars)) if calmars else -999.0
+
+        return {
+            "search_params": params,
+            "value": score,
+            "engine_results": engine_results,
+            "strategy_params": merged_params,
+            "strategy_name": ctx["strategy_name"],
+            "success": True,
+        }
+    except Exception as exc:
+        logger.error("[worker {}] trial 执行失败 params={}: {}", os.getpid(), params, exc)
+        return {
+            "search_params": params,
+            "value": -999.0,
+            "engine_results": [],
+            "strategy_params": merged_params,
+            "strategy_name": ctx["strategy_name"],
+            "success": False,
+            "error": str(exc),
+        }
 
 
 def _build_fixed_distributions(
@@ -240,6 +280,8 @@ class ParallelBacktestOptimizer:
         # ── 启动进程池并执行 ─────────────────────────
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
+        trial_data: list[dict[str, Any]] = []
+        interrupted = False
         with ProcessPoolExecutor(
             max_workers=self._n_workers,
             mp_context=mp.get_context("spawn"),
@@ -255,16 +297,37 @@ class ParallelBacktestOptimizer:
                 ),
             ),
         ) as pool:
-            if self._search_type == "grid":
-                trial_data = self._execute_grid(pool, study, total_trials)
-            else:
-                trial_data = self._execute_bayesian(pool, study, total_trials)
+            try:
+                if self._search_type == "grid":
+                    self._execute_grid(pool, study, total_trials, trial_data)
+                else:
+                    self._execute_bayesian(pool, study, total_trials, trial_data)
+            except KeyboardInterrupt:
+                # 用户中断：取消未开始的任务并尽快回收子进程，保留已完成结果
+                interrupted = True
+                logger.warning("收到中断信号，正在停止并行优化（已完成 {} 个 trial）", len(trial_data))
+                pool.shutdown(wait=False, cancel_futures=True)
 
-        result.best_params = study.best_params
-        result.best_value = study.best_value or 0.0
+        # 中断或正常完成都尽量构建结果（study 可能无完成 trial）
+        try:
+            result.best_params = study.best_params
+            result.best_value = study.best_value or 0.0
+        except (ValueError, RuntimeError):
+            # 无任何完成的 trial 时 best_params/best_value 会抛错
+            result.best_params = {}
+            result.best_value = 0.0
         result.trial_data = trial_data
         result.study = study
         result.actual_seed = self._actual_seed
+
+        if interrupted:
+            logger.info(
+                "并行优化被中断: 已完成 {} 个 trial, best_value={:.4f} study={}",
+                len(trial_data),
+                result.best_value,
+                self._study_name,
+            )
+            return result
 
         logger.info(
             "并行优化完成: best_value={:.4f} best_params={} study={} seed={} workers={}",
@@ -281,10 +344,12 @@ class ParallelBacktestOptimizer:
         pool: ProcessPoolExecutor,
         study: optuna.Study,
         n_trials: int,
-    ) -> list[dict[str, Any]]:
+        trial_data: list[dict[str, Any]],
+    ) -> None:
         """Grid Search: study.ask(全部) → pool.submit 全并行 → study.tell(全部)
 
         GridSampler 已注册网格空间，study.ask() 自动返回下一组组合参数。
+        结果实时追加到外部传入的 trial_data，确保中断时已完成结果不丢失。
         """
         distributions = _build_fixed_distributions(self._search_space)
         trial_objects: list[optuna.trial.Trial] = []
@@ -297,7 +362,6 @@ class ParallelBacktestOptimizer:
             future = pool.submit(_execute_trial, trial.params, seed)
             future_to_trial[future] = trial
 
-        trial_data: list[dict[str, Any]] = []
         with tqdm(total=n_trials, desc="Grid Search") as pbar:
             for future in as_completed(future_to_trial):
                 outcome = future.result()
@@ -310,20 +374,19 @@ class ParallelBacktestOptimizer:
                 trial_data.append(outcome)
                 pbar.update(1)
 
-        return trial_data
-
     def _execute_bayesian(
         self,
         pool: ProcessPoolExecutor,
         study: optuna.Study,
         n_trials: int,
-    ) -> list[dict[str, Any]]:
+        trial_data: list[dict[str, Any]],
+    ) -> None:
         """Bayesian Search: 循环 study.ask(batch) → submit → tell
 
         通过 fixed_distributions 向 TPESampler 注册搜索空间，
         确保 trial.params 包含真实采样值而非空 dict。
+        结果实时追加到外部传入的 trial_data，确保中断时已完成结果不丢失。
         """
-        trial_data: list[dict[str, Any]] = []
         remaining = n_trials
         trial_idx = 0
 
@@ -347,8 +410,6 @@ class ParallelBacktestOptimizer:
 
                 trial_idx += bs
                 remaining -= bs
-
-        return trial_data
 
     @property
     def study_name(self) -> str:
