@@ -1198,7 +1198,7 @@ data/optuna_query.py         # Optuna 内部表操作层（data 层）
 ### 阶段 6 完成记录
 
 - **日期**：2026-06-23
-- **commit**：（提交中）
+- **commit**：`9afa0ac`
 
 **关键变化**：
 - 新建 `backtest/optuna_study.py` — Optuna 业务域契约（5 个工具函数）
