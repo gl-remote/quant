@@ -468,67 +468,53 @@ class VnpyBacktestEngine:
                 )
                 bt_id = bt_placeholder.id
 
-            try:
-                # 创建 vnpy 引擎并执行回测
-                engine = self._prepare_vnpy_engine(
-                    vt_symbol=vt_symbol,
-                    full_symbol=symbol,
-                    interval=interval,
-                    start_dt=df["datetime"].iloc[0].to_pydatetime(),
-                    end_dt=df["datetime"].iloc[-1].to_pydatetime(),
-                    rate=cr,
-                    slippage_val=sl,
-                    size=cs,
-                    pricetick=pt,
-                    capital=int(self.initial_capital),
-                    strategy_name=strategy_name,
-                    strategy_params=strategy_params,
-                    bt_id=bt_id,
-                    margin=mg,
-                )
-                engine.history_data = bars
+            # 创建 vnpy 引擎并执行回测
+            # fail-fast（阶段 9）：单个回测的任何异常直接上抛，不再软着陆。
+            # 回测失败说明存在严重问题，整个 run 应立即终止，由顶层
+            # _handle_vnpy_failure 标记 run=failed + 落日志后非零退出。
+            engine = self._prepare_vnpy_engine(
+                vt_symbol=vt_symbol,
+                full_symbol=symbol,
+                interval=interval,
+                start_dt=df["datetime"].iloc[0].to_pydatetime(),
+                end_dt=df["datetime"].iloc[-1].to_pydatetime(),
+                rate=cr,
+                slippage_val=sl,
+                size=cs,
+                pricetick=pt,
+                capital=int(self.initial_capital),
+                strategy_name=strategy_name,
+                strategy_params=strategy_params,
+                bt_id=bt_id,
+                margin=mg,
+            )
+            engine.history_data = bars
 
-                with logger.contextualize(bt_id=f"|bt{bt_id}"):
-                    engine.run_backtesting()
+            with logger.contextualize(bt_id=f"|bt{bt_id}"):
+                engine.run_backtesting()
 
-                # ── 步骤 5: 解析 vnpy 输出 ─────────
-                daily_results = engine.calculate_result()
-                statistics = engine.calculate_statistics()
+            # ── 步骤 5: 解析 vnpy 输出 ─────────
+            daily_results = engine.calculate_result()
+            statistics = engine.calculate_statistics()
 
-                # ── 步骤 6: 解析与格式化交易记录 ────
-                formatted_trades = self._parse_trades(engine, symbol, cr, sl, cs)
+            # ── 步骤 6: 解析与格式化交易记录 ────
+            formatted_trades = self._parse_trades(engine, symbol, cr, sl, cs)
 
-                # ── 步骤 7: 从逐笔交易计算附加统计 ──
-                self._calculate_trade_stats(statistics, formatted_trades)
+            # ── 步骤 7: 从逐笔交易计算附加统计 ──
+            self._calculate_trade_stats(statistics, formatted_trades)
 
-                logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
+            logger.info(f"[{symbol}][{strategy_name}] 提取到 {len(formatted_trades)} 条交易记录")
 
-                results.append(
-                    {
-                        "bt_id": bt_id,
-                        "statistics": statistics,
-                        "daily_results": daily_results.reset_index().to_dict("records"),
-                        "trades": formatted_trades,
-                        "strategy_config": None,
-                        "strategy_version": strategy_version or "",
-                    }
-                )
-
-            except Exception as e:
-                logger.exception(
-                    f"回测执行异常 [{symbol}][{strategy_name}]: {e}",
-                )
-                results.append(
-                    {
-                        "bt_id": bt_id,
-                        "statistics": {},
-                        "daily_results": [],
-                        "trades": [],
-                        "error": str(e),
-                        "strategy_config": None,
-                        "strategy_version": strategy_version or "",
-                    }
-                )
+            results.append(
+                {
+                    "bt_id": bt_id,
+                    "statistics": statistics,
+                    "daily_results": daily_results.reset_index().to_dict("records"),
+                    "trades": formatted_trades,
+                    "strategy_config": None,
+                    "strategy_version": strategy_version or "",
+                }
+            )
 
         return results
 

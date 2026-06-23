@@ -46,32 +46,33 @@ class BacktestResultPersister:
         self._dm = dm
 
     def _persist_daily(self, backtest_id: int, daily: list[dict[str, object]]) -> None:
-        """写入每日资金曲线，失败仅打日志"""
+        """写入每日资金曲线
+
+        fail-fast（阶段 9）：写入失败直接上抛，让整个 run 终止。
+        """
         if not daily:
             return
-        try:
-            self._dm.insert_backtest_daily(backtest_id, daily)
-        except Exception:
-            logger.exception("每日资金曲线持久化失败 [bt={}]", backtest_id)
+        self._dm.insert_backtest_daily(backtest_id, daily)
 
     def _persist_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> None:
-        """写入交易明细，失败仅打日志"""
+        """写入交易明细
+
+        fail-fast（阶段 9）：写入失败直接上抛，让整个 run 终止。
+        """
         if not trades:
             return
-        try:
-            self._dm.insert_backtest_trades(backtest_id, trades)
-        except Exception:
-            logger.exception("交易记录持久化失败 [bt={}]", backtest_id)
+        self._dm.insert_backtest_trades(backtest_id, trades)
 
     def _validate_consistency(self, backtest_id: int) -> None:
-        """校验数据一致性，失败仅打日志"""
-        try:
-            errors = self._dm.validate_consistency(backtest_id)
-            if errors:
-                for err in errors:
-                    logger.warning("数据一致性警告: {}", err)
-        except Exception:
-            logger.exception("数据一致性校验失败 [bt={}]", backtest_id)
+        """校验数据一致性，发现不一致仅打 warning（非异常路径）
+
+        fail-fast（阶段 9）：校验过程本身若抛异常（如 DB 读取失败）直接上抛；
+        而"数据不一致"是业务告警，保留 warning 不中断。
+        """
+        errors = self._dm.validate_consistency(backtest_id)
+        if errors:
+            for err in errors:
+                logger.warning("数据一致性警告: {}", err)
 
     def persist_result(
         self,

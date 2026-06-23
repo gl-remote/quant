@@ -1445,39 +1445,63 @@ data/report_queries.py
 
 **验证**：ruff ✅ mypy ✅ pytest 431 passed ✅
 
-## 阶段 9：持久化幂等性和重跑策略
+## 阶段 9：回测失败 fail-fast 策略
 
 ### 目标
 
-明确失败恢复、重复构建、重复写入时的行为，避免 partial 数据和重复数据污染报告。
+明确"回测失败"时的行为：**一次失败即整体终止**。在当前阶段，回测属于纯计算、
+无外部数据输入、无实时消费者的离线任务——任何一次回测失败都说明存在严重问题，
+继续跑其余回测没有意义，应立即让进程非零退出，并保留失败记录便于定位。
 
-### 当前问题
+### 决策（2026-06-23）
 
-当前重跑策略不清晰：
+经讨论，本阶段从最初设想的"幂等性 / 重跑"方向收敛为 **fail-fast**：
 
-- 同一个 run 重复 build 是否覆盖 JSON？
-- 同一个 backtest\_id 重复插入 daily/trades 是否重复？
-- 中途失败后重跑，旧 partial 数据如何处理？
-- `run_studies` 是否重复？
-- `BacktestParam` 有更新时删旧参数，daily/trades 是否需要同类策略？
+- 不做重跑、不做幂等去重（失败后换个新 run 重跑即可，旧 partial 数据无需清理）。
+- 真异常（如数据缺失、引擎崩溃、持久化失败）一律向上抛，冒到顶层后非零退出。
+- "无有效交易 / 无结果"是回测正常跑完的**合法语义**，不视为失败、不崩
+  （objective 的 `calmars` 为空 → -999、`finish_no_result` / `finish_skipped` 保留不变）。
+- 崩溃前仍走 `_handle_vnpy_failure`：标记 `run=failed` + 落 run.log/logs.json，再 `raise`。
 
-### 计划改动
+### 修复的"吞错软着陆"点
 
-定义并实现幂等策略：
+此前有 4 处捕获异常后软着陆继续跑，掩盖了真实失败：
 
-- 新回测默认创建新 run，不复用旧 run。
-- report export 始终覆盖当前 run JSON。
-- `link_study` 使用 get-or-create。
-- 对同一 `backtest_id` 重写 params/daily/trades 前先清理旧数据，或明确禁止重写。
-- partial run 可通过 report rebuild 重新导出前端 JSON。
-- 对失败路径保留足够日志和状态。
+1. [`vnpy_backtest_engine._run_backtest`](file:///Users/gaolei/Documents/src/quant/backtest/vnpy_backtest_engine.py#L414)：
+   单回测异常被 catch 后塞 `error` 进结果继续 → 改为直接上抛。
+2. [`parallel._execute_trial`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L96)：
+   子进程 trial 异常被 catch 返回 `success=False` → 改为上抛，经
+   `future.result()` 在主进程重新抛出。
+3. [`persister`](file:///Users/gaolei/Documents/src/quant/backtest/persister.py#L48) 的
+   `_persist_daily` / `_persist_trades` / `_validate_consistency`：写入失败仅打日志 →
+   改为上抛（"数据不一致"业务告警仍保留 warning，不中断）。
+4. [`backtests_run._do_vnpy_search`](file:///Users/gaolei/Documents/src/quant/cli/workflows/backtests_run.py#L391)：
+   持久化整体失败被 catch 后 `all_ids=[]` 继续收尾 → 改为上抛。
+
+### 顺带修复（fail-fast 暴露的测试缺陷）
+
+`tests/backtest/test_parallel.py` 中 6 个并行测试此前用合成 symbol（`DCE.m2501`）+
+内存 1m 数据跑 `ma_strategy`（实际声明 5m/15m 周期需读磁盘），`FileNotFoundError`
+被软着陆吞掉、断言只校验结构，从未真正跑过回测。fail-fast 后这些测试如实暴露：
+
+- 3 个进程内测试：改用已有的 `_install_noop_strategy` 注入无数据需求的 noop 策略。
+- 3 个 `@slow` spawn 集成测试：monkeypatch 不跨进程，改用磁盘真实品种 + 真实
+  `sma_short`/`sma_long` 参数跑真实回测，本机无数据时 `pytest.skip`。
+- 顺带修 `test_empty_search_space` 的 pre-existing 测试隔离 bug（DB 未初始化）。
 
 ### 验收标准
 
-- 重复构建 report 不产生重复 DB 数据。
-- 同一 run 重复导出 JSON 结果稳定。
-- partial run 可以重建前端报告。
-- 静态验证和真实回测验证通过。
+- 任意一次回测真异常发生时，进程非零退出，且 DB 留有 `run=failed` 记录 + run.log。✅
+- "无有效交易 / 无结果"路径不崩，语义不变。✅
+- 静态验证（ruff + mypy）与测试通过。✅
+
+### 阶段 9 完成记录
+
+- **日期**：2026-06-23
+
+**关键变化**：见上"修复的吞错软着陆点"4 处 + "顺带修复"测试调整。
+
+**验证**：ruff ✅ mypy ✅ pytest 429 passed（3 slow 单独验证全部 passed，约 3m44s）✅
 
 ## 阶段 10：统一单标的 TqSdk 和批量 vn.py run 生命周期
 
@@ -1538,7 +1562,7 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 验证
 阶段 8：拆 report query 和 DataStore
 验证
-阶段 9：持久化幂等性和重跑策略
+阶段 9：回测失败 fail-fast 策略
 验证
 阶段 10：统一 TqSdk 生命周期
 验证
@@ -1562,7 +1586,7 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 可后置但不能遗漏：
 
 - 阶段 6：Optuna 边界独立封装到 backtest/report/data 各自业务域契约。
-- 阶段 9：幂等性和重跑策略。
+- 阶段 9：回测失败 fail-fast 策略。
 - 阶段 10：统一 TqSdk 生命周期。
 
 ## 待评估任务清单（重构完成后统一决策）

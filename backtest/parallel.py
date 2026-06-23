@@ -96,55 +96,44 @@ def _init_worker(
 def _execute_trial(params: dict[str, Any], trial_seed: int = 0) -> dict[str, Any]:
     """在子进程中执行单个 trial（模块顶层函数，spawn 兼容 pickle）
 
-    单个 trial 的异常被隔离在此函数内：捕获后返回 success=False 的最差分结果，
-    避免一个 trial 崩溃导致整批 future.result() 抛错、丢失已完成的其他 trial。
+    fail-fast（阶段 9）：单个 trial 的任何异常直接上抛，由 ProcessPoolExecutor
+    在主进程 future.result() 处重新抛出，一路冒到顶层 _handle_vnpy_failure
+    标记 run=failed 后非零退出。回测失败说明存在严重问题，整批应立即终止。
 
     Args:
         params: 当前 trial 的搜索参数（含分布采样值）
         trial_seed: trial 级别随机种子
 
     Returns:
-        dict: {search_params, value, engine_results, strategy_params, strategy_name, success[, error]}
+        dict: {search_params, value, engine_results, strategy_params, strategy_name, success}
     """
     ctx = _WORKER_CTX
 
     random.seed(trial_seed)
 
     merged_params = {**ctx["strategy_params"], **params}
-    try:
-        from .vnpy_backtest_engine import VnpyBacktestEngine
+    from .vnpy_backtest_engine import VnpyBacktestEngine
 
-        engine = VnpyBacktestEngine(ctx["backtest_config"])
-        pairs = [(sym, df, ctx["strategy_name"], merged_params) for sym, df in ctx["datasets"]]
-        engine_results = engine.run(pairs, batch_mode=True)
+    engine = VnpyBacktestEngine(ctx["backtest_config"])
+    pairs = [(sym, df, ctx["strategy_name"], merged_params) for sym, df in ctx["datasets"]]
+    engine_results = engine.run(pairs, batch_mode=True)
 
-        # Calmar 比率均值（与现有 OptunaOptimizer.objective 保持一致）
-        calmars = [
-            (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
-            for r in engine_results
-            if r.success and (r.max_ddpercent or 0) != 0
-        ]
-        score = float(sum(calmars) / len(calmars)) if calmars else -999.0
+    # Calmar 比率均值（与现有 OptunaOptimizer.objective 保持一致）
+    calmars = [
+        (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
+        for r in engine_results
+        if r.success and (r.max_ddpercent or 0) != 0
+    ]
+    score = float(sum(calmars) / len(calmars)) if calmars else -999.0
 
-        return {
-            "search_params": params,
-            "value": score,
-            "engine_results": engine_results,
-            "strategy_params": merged_params,
-            "strategy_name": ctx["strategy_name"],
-            "success": True,
-        }
-    except Exception as exc:
-        logger.error("[worker {}] trial 执行失败 params={}: {}", os.getpid(), params, exc)
-        return {
-            "search_params": params,
-            "value": -999.0,
-            "engine_results": [],
-            "strategy_params": merged_params,
-            "strategy_name": ctx["strategy_name"],
-            "success": False,
-            "error": str(exc),
-        }
+    return {
+        "search_params": params,
+        "value": score,
+        "engine_results": engine_results,
+        "strategy_params": merged_params,
+        "strategy_name": ctx["strategy_name"],
+        "success": True,
+    }
 
 
 def _build_fixed_distributions(

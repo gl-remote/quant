@@ -456,19 +456,17 @@ class BacktestRunWorkflow:
             random_seed=result.actual_seed,
         )
 
-        try:
-            search_persister = SearchResultPersister(self._dm)
-            all_ids = search_persister.persist_search_result(
-                result=result,
-                datasets=cast(list[tuple[str, Any, str]], datasets),
-                search_type=run_engine,
-                study_name=result.study_name,
-                git_hash=git_hash,
-                run_id=run_id,
-            )
-        except Exception:
-            logger.exception("参数搜索结果持久化失败，部分数据可能未入库")
-            all_ids = []
+        # fail-fast（阶段 9）：持久化失败直接上抛，由顶层 _handle_vnpy_failure
+        # 标记 run=failed + 落日志后非零退出，不再吞错继续收尾。
+        search_persister = SearchResultPersister(self._dm)
+        all_ids = search_persister.persist_search_result(
+            result=result,
+            datasets=cast(list[tuple[str, Any, str]], datasets),
+            search_type=run_engine,
+            study_name=result.study_name,
+            git_hash=git_hash,
+            run_id=run_id,
+        )
 
         print(f"\n============ {run_engine.upper()} 优化结果 ============")
         print(f"  最优得分:  {result.best_value:.4f}")

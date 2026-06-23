@@ -69,6 +69,29 @@ def make_basic_config(**overrides) -> BacktestConfig:
     return BacktestConfig(**kwargs)
 
 
+# ── 真实数据集加载（并行子进程测试用）──────────────────────
+# spawn 子进程内 monkeypatch 不生效，noop 策略注入无法跨进程，
+# 因此并行集成测试必须用磁盘上真实存在的品种 + 真实 ma_strategy 参数。
+# 本机无数据时自动跳过，保证 CI 可移植。
+
+_REAL_SYMBOL_CANDIDATES = ("DCE.m2601", "DCE.m2603", "DCE.m2605", "DCE.c2601")
+
+
+def load_real_dataset() -> tuple[str, pd.DataFrame]:
+    """加载一个磁盘上真实存在的品种 5m 数据，无数据时 pytest.skip"""
+    from data.manager import DataManager
+
+    dm = DataManager()
+    for symbol in _REAL_SYMBOL_CANDIDATES:
+        try:
+            results = dm.load_kline([symbol], interval="5m")
+        except FileNotFoundError:
+            continue
+        if results:
+            return symbol, results[0][1]
+    pytest.skip(f"本机缺少并行回测所需的真实 K 线数据（候选: {_REAL_SYMBOL_CANDIDATES}）")
+
+
 # ── 模拟策略（不声明任何数据需求，回测完全使用内存 df）──────
 
 
@@ -140,12 +163,16 @@ def _run_single_backtest(batch_mode: bool) -> tuple:
 class TestBatchMode:
     """batch_mode=True vs False 结果一致性"""
 
-    def test_batch_mode_creates_no_db_record(self) -> None:
-        """batch_mode=True 时跳过 _create_placeholder_record（不写 DB）"""
+    def test_batch_mode_creates_no_db_record(self, monkeypatch) -> None:
+        """batch_mode=True 时跳过 _create_placeholder_record（不写 DB）
+
+        注入 noop 策略避免回测访问磁盘 K 线（fail-fast 下数据缺失会直接抛错）。
+        """
         df = make_price_df()
         config = make_basic_config()
+        _install_noop_strategy(monkeypatch)
         engine = VnpyBacktestEngine(config)
-        pairs = [("DCE.m2501", df, "ma_strategy", {"fast": 5, "slow": 20})]
+        pairs = [("DCE.m2501", df, "noop_strategy", {})]
         results = engine.run(pairs, batch_mode=True)
 
         assert len(results) == 1
@@ -172,16 +199,20 @@ class TestBatchMode:
         assert results[0].success, f"回测未成功: {results[0].error_message}"
         assert results[0].total_trades >= 0
 
-    def test_batch_mode_with_multiple_symbols(self) -> None:
-        """batch_mode=True 下多品种回测正常"""
+    def test_batch_mode_with_multiple_symbols(self, monkeypatch) -> None:
+        """batch_mode=True 下多品种回测正常
+
+        注入 noop 策略避免回测访问磁盘 K 线（fail-fast 下数据缺失会直接抛错）。
+        """
         config = make_basic_config()
+        _install_noop_strategy(monkeypatch)
         engine = VnpyBacktestEngine(config)
 
         df1 = make_price_df("2024-01-01", n=240, seed=1)
         df2 = make_price_df("2024-06-01", n=240, seed=2)
         pairs = [
-            ("DCE.m2501", df1, "ma_strategy", {"fast": 5, "slow": 20}),
-            ("DCE.m2505", df2, "ma_strategy", {"fast": 10, "slow": 30}),
+            ("DCE.m2501", df1, "noop_strategy", {}),
+            ("DCE.m2505", df2, "noop_strategy", {}),
         ]
         results = engine.run(pairs, batch_mode=True)
 
@@ -198,21 +229,25 @@ class TestBatchMode:
 class TestExecuteTrial:
     """验证 _execute_trial 模块级函数的逻辑正确性"""
 
-    def test_execute_trial_direct_call(self) -> None:
-        """直接调用 _execute_trial（在同进程中），验证返回结构"""
+    def test_execute_trial_direct_call(self, monkeypatch) -> None:
+        """直接调用 _execute_trial（在同进程中），验证返回结构
+
+        注入 noop 策略避免回测访问磁盘 K 线（fail-fast 下数据缺失会直接抛错）。
+        """
         df = make_price_df()
         config = make_basic_config()
+        _install_noop_strategy(monkeypatch)
 
         # 手动设置 _WORKER_CTX（模拟 spawn 子进程的初始化）
         # 注意：这会修改全局变量，只能在单线程测试中运行
         import backtest.parallel as bp
 
         bp._WORKER_CTX["datasets"] = [("DCE.m2501", df)]
-        bp._WORKER_CTX["strategy_name"] = "ma_strategy"
-        bp._WORKER_CTX["strategy_params"] = {"fast": 5, "slow": 20}
+        bp._WORKER_CTX["strategy_name"] = "noop_strategy"
+        bp._WORKER_CTX["strategy_params"] = {}
         bp._WORKER_CTX["backtest_config"] = config
 
-        result = _execute_trial({"fast": 5, "slow": 20}, trial_seed=42)
+        result = _execute_trial({}, trial_seed=42)
 
         # 验证返回结构
         assert "search_params" in result
@@ -220,8 +255,8 @@ class TestExecuteTrial:
         assert "engine_results" in result
         assert "strategy_params" in result
         assert "strategy_name" in result
-        assert result["search_params"] == {"fast": 5, "slow": 20}
-        assert result["strategy_name"] == "ma_strategy"
+        assert result["strategy_name"] == "noop_strategy"
+        assert result["success"] is True
 
         # 清理
         bp._WORKER_CTX.clear()
@@ -238,14 +273,14 @@ class TestParallelBacktestOptimizer:
     """
 
     def _make_small_optimizer(self, search_type="grid") -> ParallelBacktestOptimizer:
-        df = make_price_df(n=240)
-        config = make_basic_config()
+        symbol, df = load_real_dataset()
+        config = make_basic_config(interval="5m")
         search_space = {
-            "fast": {"type": "int", "low": 5, "high": 10, "step": 5},  # 2 个值
-            "slow": {"type": "int", "low": 20, "high": 30, "step": 10},  # 2 个值
+            "sma_short": {"type": "int", "low": 5, "high": 10, "step": 5},  # 2 个值
+            "sma_long": {"type": "int", "low": 20, "high": 30, "step": 10},  # 2 个值
         }
         return ParallelBacktestOptimizer(
-            datasets=[("DCE.m2501", df)],
+            datasets=[(symbol, df)],
             strategy_name="ma_strategy",
             search_space=search_space,
             strategy_params={},
@@ -265,10 +300,10 @@ class TestParallelBacktestOptimizer:
 
         assert len(result.trial_data) > 0
         assert result.best_params is not None
-        assert "fast" in result.best_params
-        assert "slow" in result.best_params
-        assert result.best_params["fast"] in [5, 10]
-        assert result.best_params["slow"] in [20, 30]
+        assert "sma_short" in result.best_params
+        assert "sma_long" in result.best_params
+        assert result.best_params["sma_short"] in [5, 10]
+        assert result.best_params["sma_long"] in [20, 30]
         assert result.study is not None
         assert result.actual_seed == 42
 
@@ -286,15 +321,15 @@ class TestParallelBacktestOptimizer:
     @pytest.mark.slow
     def test_run_param_search_parallel_interface(self) -> None:
         """run_param_search_parallel 返回 SearchResult，与串行版本接口兼容"""
-        df = make_price_df(n=240)
-        config = make_basic_config()
+        symbol, df = load_real_dataset()
+        config = make_basic_config(interval="5m")
         search_space = {
-            "fast": {"type": "int", "low": 5, "high": 10, "step": 5},
-            "slow": {"type": "int", "low": 20, "high": 30, "step": 10},
+            "sma_short": {"type": "int", "low": 5, "high": 10, "step": 5},
+            "sma_long": {"type": "int", "low": 20, "high": 30, "step": 10},
         }
 
         result = run_param_search_parallel(
-            datasets=[("DCE.m2501", df)],
+            datasets=[(symbol, df)],
             strategy_name="ma_strategy",
             search_space=search_space,
             strategy_params={},
@@ -312,13 +347,18 @@ class TestParallelBacktestOptimizer:
 
     def test_empty_search_space(self) -> None:
         """空搜索空间直接返回，不启动子进程"""
+        from data.manager import DataManager
+
+        # optimize() 在空搜索空间早返回前会先解析 optuna storage url，
+        # 需要全局 DB 已初始化（实际运行时由 DataManager 完成）。
+        _ = DataManager().store
         df = make_price_df(n=240)
         config = make_basic_config()
         optimizer = ParallelBacktestOptimizer(
             datasets=[("DCE.m2501", df)],
             strategy_name="ma_strategy",
             search_space={},
-            strategy_params={"fast": 5, "slow": 20},
+            strategy_params={"sma_short": 5, "sma_long": 20},
             backtest_config=config,
             n_trials=10,
             search_type="grid",
