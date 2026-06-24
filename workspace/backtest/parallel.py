@@ -191,6 +191,7 @@ class ParallelBacktestOptimizer:
         run_id: int = 0,
         random_seed: int = 42,
         use_fixed_seed: bool = False,
+        early_stop_patience: int = 0,
     ) -> None:
         self._datasets = datasets
         self._strategy_name = strategy_name
@@ -203,6 +204,7 @@ class ParallelBacktestOptimizer:
         self._batch_size = batch_size or self._n_workers
         self._use_fixed_seed = use_fixed_seed
         self._run_id = run_id
+        self._early_stop_patience = early_stop_patience
 
         if use_fixed_seed:
             self._actual_seed = random_seed
@@ -374,9 +376,17 @@ class ParallelBacktestOptimizer:
         通过 fixed_distributions 向 TPESampler 注册搜索空间，
         确保 trial.params 包含真实采样值而非空 dict。
         结果实时追加到外部传入的 trial_data，确保中断时已完成结果不丢失。
+
+        早停（early_stop_patience > 0 时启用）：逐 trial 追踪历史最优得分，
+        连续 patience 个 trial 未刷新最优则停止开启新批次（当前批次仍跑完），
+        避免在已收敛的搜索空间上浪费算力。仅 bayesian 适用（grid 是穷举）。
         """
         remaining = n_trials
         trial_idx = 0
+        patience = self._early_stop_patience
+        best_so_far = float("-inf")
+        no_improve = 0
+        stopped_early = False
 
         with tqdm(total=n_trials, desc="Bayesian Search") as pbar:
             while remaining > 0:
@@ -396,8 +406,30 @@ class ParallelBacktestOptimizer:
                     trial_data.append(outcome)
                     pbar.update(1)
 
+                    # 早停计数：score 越大越优，连续未刷新最优则累加
+                    if patience > 0:
+                        if outcome["value"] > best_so_far:
+                            best_so_far = outcome["value"]
+                            no_improve = 0
+                        else:
+                            no_improve += 1
+
                 trial_idx += bs
                 remaining -= bs
+
+                if patience > 0 and no_improve >= patience:
+                    stopped_early = True
+                    logger.info(
+                        "早停触发：连续 {} 个 trial 未改善最优得分 {:.4f}，已完成 {} 个 trial",
+                        no_improve,
+                        best_so_far,
+                        trial_idx,
+                    )
+                    break
+
+        if stopped_early:
+            pbar_remaining = remaining
+            logger.debug("早停跳过剩余 {} 个 trial", pbar_remaining)
 
     @property
     def study_name(self) -> str:
@@ -418,6 +450,7 @@ def run_param_search_parallel(
     study_name: str = "",
     random_seed: int = 42,
     use_fixed_seed: bool = False,
+    early_stop_patience: int = 0,
 ) -> SearchResult:
     """执行并行参数搜索（Grid 全并行 / Bayesian 分批并行）
 
@@ -437,6 +470,7 @@ def run_param_search_parallel(
         study_name: 自定义 study 名称
         random_seed: 随机种子
         use_fixed_seed: 是否使用固定随机种子
+        early_stop_patience: 连续 N 次试验无改善则提前停止（仅并行 bayesian 生效；0=关闭）
 
     Returns:
         SearchResult
@@ -455,6 +489,7 @@ def run_param_search_parallel(
         study_name=study_name,
         random_seed=random_seed,
         use_fixed_seed=use_fixed_seed,
+        early_stop_patience=early_stop_patience,
     )
     from .optuna_study import optuna_result_to_search_result
 

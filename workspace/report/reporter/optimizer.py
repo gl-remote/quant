@@ -122,7 +122,7 @@ def _build_history(
         "tooltip": {"trigger": "axis"},
         "legend": {"data": ["目标值", "历史最优"], "right": 20, "top": 8, "itemWidth": 18, "itemHeight": 10},
         "grid": {"left": 60, "right": 30, "top": 36, "bottom": 40},
-        "xAxis": {"type": "value", "name": "试验序号", "nameLocation": "center", "nameGap": 25},
+        "xAxis": {"type": "value", "name": "试验序号", "nameLocation": "center", "nameGap": 25, "minInterval": 1},
         "yAxis": {"type": "value", "name": "目标值"},
         "series": [
             {

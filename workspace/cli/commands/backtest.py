@@ -99,6 +99,12 @@ def register(subparsers: Any) -> None:
         help="参数搜索引擎: grid=网格搜索, bayesian=贝叶斯优化 (默认读 TOML)",
     )
     p.add_argument("--trials", type=int, default=None, help="optimizer 最大试验次数（默认从配置文件读取）")
+    p.add_argument(
+        "--early-stop-patience",
+        type=int,
+        default=None,
+        help="连续 N 次试验无改善则提前停止（仅并行 bayesian 生效；默认读配置；0=关闭）",
+    )
     p.add_argument("--parallel", action="store_true", help="启用多进程并行回测（默认关闭，仅 --engine vnpy 生效）")
     p.add_argument("--workers", type=int, default=None, help="并行进程数（默认 os.cpu_count()，仅 --parallel 时生效）")
     p.add_argument("--profile", action="store_true", help="启用性能分析（仅串行模式，写 .prof 文件供 snakeviz 查看）")
@@ -166,6 +172,7 @@ def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
         end=args.end,
         optimizer=args.optimizer,
         trials=args.trials,
+        early_stop_patience=args.early_stop_patience,
         parallel=bool(args.parallel),
         workers=args.workers,
         profile=bool(args.profile),

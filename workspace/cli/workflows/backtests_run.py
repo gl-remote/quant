@@ -79,6 +79,7 @@ class VnpySearchRequest:
     profile: bool = False
     no_search: bool = False
     dump_indicators: bool = False
+    early_stop_patience: int | None = None
 
 
 @dataclass(frozen=True)
@@ -402,6 +403,9 @@ class BacktestRunWorkflow:
     ) -> None:
         optimizer_cfg = self._cm.get_optimizer_config()
         n_trials = req.trials if req.trials else optimizer_cfg.n_trials
+        early_stop_patience = (
+            req.early_stop_patience if req.early_stop_patience is not None else optimizer_cfg.early_stop_patience
+        )
         run_engine = req.optimizer or optimizer_cfg.engine or "grid"
 
         # 命令行 --no-search 覆盖配置 optimizer.enabled（单向：仅能关闭）
@@ -445,6 +449,7 @@ class BacktestRunWorkflow:
             capital=capital,
             contract_size=contract_size,
             optimizer_cfg=optimizer_cfg,
+            early_stop_patience=early_stop_patience,
         )
         if not result:
             finalizer.finish_no_result(run_id)
@@ -537,6 +542,7 @@ class BacktestRunWorkflow:
         capital: float,
         contract_size: int,
         optimizer_cfg: Any,
+        early_stop_patience: int = 0,
     ) -> SearchResult | None:
         """实际执行串行 / 并行搜索的分发
 
@@ -565,6 +571,7 @@ class BacktestRunWorkflow:
                 study_name=study_name,
                 random_seed=optimizer_cfg.random_seed,
                 use_fixed_seed=optimizer_cfg.use_fixed_seed,
+                early_stop_patience=early_stop_patience,
             )
 
         # 串行路径：直接调 optimizer.py 的 run_param_search

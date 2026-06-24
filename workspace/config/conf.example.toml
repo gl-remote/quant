@@ -58,6 +58,7 @@ debug = true                      # 是否启用调试模式
 enabled = true                    # 是否启用参数优化
 engine = "bayesian"                 # 优化引擎: "grid" 或 "bayesian"
 n_trials = 50                     # Optuna 最大试验次数
+early_stop_patience = 5           # 连续 N 次试验无改善则提前停止（仅并行 bayesian 生效；0=关闭）
 table_prefix = "optuna_"          # Optuna 表名前缀
 use_fixed_seed = false            # 是否使用固定随机种子（默认false，即随机）
 random_seed = 42                  # 固定随机种子值（仅在use_fixed_seed=true时有效）

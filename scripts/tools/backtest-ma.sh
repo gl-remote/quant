@@ -17,11 +17,15 @@ ROOT_DIR="$SCRIPT_DIR/../.."
 
 # 合约筛选正则（可用环境变量覆盖，其余参数有意写死）
 PATTERN="${PATTERN:-DCE\\.m.*}"
+TRIALS="${TRIALS:-100}"
+EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-5}"
 
 echo "=========================================="
 echo "MA 策略全链路测试（并行回测）"
 echo "时间:   $(date)"
 echo "合约:   ${PATTERN}"
+echo "试验数: ${TRIALS}"
+echo "早停:   ${EARLY_STOP_PATIENCE} (0=关闭)"
 echo "=========================================="
 
 # ── 步骤 1: 全量回测 + 贝叶斯搜索 ──
@@ -34,9 +38,10 @@ if "$ROOT_DIR/run.sh" backtest \
     --mode search \
     --optimizer bayesian \
     --parallel \
-    --trials 3 \
+    --trials "$TRIALS" \
+    --early-stop-patience "$EARLY_STOP_PATIENCE" \
     --capital 100000 \
-    --contract-size 10; then
+    --contract-size 10 "$@"; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"

@@ -155,6 +155,7 @@ format = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line
 enabled = true
 engine = "bayesian"                 # grid: 穷举搜索 | bayesian: 贝叶斯优化
 n_trials = 20                       # optuna 最大试验次数
+early_stop_patience = 0             # 连续 N 次试验无改善则提前停止（0=关闭，由脚本侧控制默认值）
 use_fixed_seed = false              # 是否使用固定随机种子（默认false，即随机）
 random_seed = 42                    # 固定随机种子值（仅在use_fixed_seed=true时有效）
 # 注意: 串行模式使用 n_jobs=1（vnpy 引擎非线程安全）。

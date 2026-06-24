@@ -95,6 +95,7 @@ class OptimizerConfig(BaseModel):
     enabled: bool = False
     engine: str = "grid"
     n_trials: int = 50
+    early_stop_patience: int = 0
     use_fixed_seed: bool = False
     random_seed: int = 42
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
