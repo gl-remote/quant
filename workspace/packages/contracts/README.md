@@ -19,7 +19,7 @@ JSON Schema（Draft 2020-12）描述 `output/` 下报告产物的字段结构：
 
 ## 角色定位
 
-- 本目录定位与 [directory-roadmap.md](../../../docs/designs/directory-roadmap.md) 中 `workspace/packages/contracts/` 一致：跨业务域、跨语言、跨运行单元。
+- 本目录定位与 [directory-roadmap.md](../../../docs/archive/directory-roadmap.md) 中 `workspace/packages/contracts/` 一致：跨业务域、跨语言、跨运行单元。
 - 当前 schemas 平铺存放，便于阶段 0.5 起步。后续业务域迁入 `workspace/` 后，再按消费场景（run / optimization / navigation）分子目录。
 - Python 侧的 schema 加载与校验工具放在 `workspace/packages/python-contracts/`（同根 workspace 子包）。
 
@@ -32,5 +32,5 @@ JSON Schema（Draft 2020-12）描述 `output/` 下报告产物的字段结构：
 
 ## 关联文档
 
-- [backtest-refactor-plan.md 阶段 0.5](../../../docs/designs/backtest-refactor-plan.md)
-- [directory-roadmap.md 原则 4 跨语言契约](../../../docs/designs/directory-roadmap.md)
+- [backtest-refactor-plan.md 阶段 0.5](../../../docs/archive/backtest-refactor-plan.md)
+- [directory-roadmap.md 原则 4 跨语言契约](../../../docs/archive/directory-roadmap.md)

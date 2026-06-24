@@ -20,13 +20,15 @@
 
 - [项目改进计划](roadmap/plan.md) — 活跃，总体路线图 + 待办 + 已知缺陷
 
-## Designs / 设计记录
+## Archive / 已归档设计记录
 
-- [目录结构长期规划](designs/directory-roadmap.md) — 已归档，阶段 0~3 落地，2026-06-24
-- [回测链路分阶段重构计划](designs/backtest-refactor-plan.md) — 阶段 0-9 已完成，2026-06-23
-- [并行回测设计与实现说明](designs/backtest-parallel.md) — 已实现，2026-06-19
-- [报告前端重构设计](designs/report-refactor.md) — 主体已实现，2026-05-27
-- [策略切面设计规格](designs/strategy-aspects.md) — 已实现，2026-06-16
-- [MA 策略盈利能力改造设计](designs/strategy-ma-profitability.md) — 已实现，2026-06-17
-- [策略运行时数据设计](designs/strategy-runtime-data.md) — 历史设计，已废弃
-- [策略核心架构重构设计 v0.3](designs/strategy-core-architecture-refactoring-v0.3.md) — 历史设计，已废弃
+> 以下为已归档的历史设计记录，仅供回溯演进过程；当前代码不保证与其完全一致。
+
+- [目录结构长期规划](archive/directory-roadmap.md) — 已归档，阶段 0~3 落地，2026-06-24
+- [回测链路分阶段重构计划](archive/backtest-refactor-plan.md) — 阶段 0-9 已完成，2026-06-23
+- [并行回测设计与实现说明](archive/backtest-parallel.md) — 已实现，2026-06-19
+- [报告前端重构设计](archive/report-refactor.md) — 主体已实现，2026-05-27
+- [策略切面设计规格](archive/strategy-aspects.md) — 已实现，2026-06-16
+- [MA 策略盈利能力改造设计](archive/strategy-ma-profitability.md) — 已实现，2026-06-17
+- [策略运行时数据设计](archive/strategy-runtime-data.md) — 历史设计，已废弃
+- [策略核心架构重构设计 v0.3](archive/strategy-core-architecture-refactoring-v0.3.md) — 历史设计，已废弃

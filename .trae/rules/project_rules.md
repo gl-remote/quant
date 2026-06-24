@@ -37,9 +37,9 @@ uv sync --all-groups             # 安装项目本体 + 所有 dependency-groups
 - **Style**: Imports (stdlib → third-party → internal), line ≤120, double quotes
 - **Deliverable**: Pass ruff + mypy, include tests
 
-## 设计文档归档规范（`docs/designs/`）
+## 设计文档归档规范（`docs/archive/`）
 
-已完成的设计规格、重构计划归档到 `docs/designs/`。必须遵守以下格式：
+已完成的设计规格、重构计划归档到 `docs/archive/`。该目录存放**已归档的历史设计记录**，仅供回溯演进过程，**当前代码不保证与其完全一致**。必须遵守以下格式：
 
 ### 1. 文件头 metadata
 
@@ -74,6 +74,6 @@ uv sync --all-groups             # 安装项目本体 + 所有 dependency-groups
 ### 3. 归档时机
 
 - 对应功能/重构已全部完成时即时归档
-- 从 `docs/roadmap/` 移至 `docs/designs/`
+- 从 `docs/roadmap/` 移至 `docs/archive/`
 - 移动前补全 metadata header（roadmap 阶段的文档可能没有）
 - 不修改正文内容（保留完整演进记录）
