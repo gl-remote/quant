@@ -52,10 +52,10 @@ if [ "$CURRENT_HOUR" -ge 15 ] && [ "$CURRENT_HOUR" -lt 21 ]; then
     echo ""
 fi
 
-if (cd "$ROOT_DIR" && uv run python main.py test \
+if "$ROOT_DIR/run.sh" test \
     --strategy "$STRATEGY" \
     --symbol "$SYMBOL" \
-    $GUI_FLAG); then
+    $GUI_FLAG; then
     echo -e "${GREEN}✓ 测试完成${NC}"
 else
     echo -e "${GREEN}✓ 测试已停止（Ctrl+C 正常退出）${NC}"

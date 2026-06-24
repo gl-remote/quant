@@ -64,13 +64,13 @@ echo "=========================================="
 echo ""
 echo "[步骤 1/2] 单次回测（--no-search --dump-indicators ${PROFILE_FLAG})..."
 
-if (cd "$ROOT_DIR" && uv run python main.py backtest \
+if "$ROOT_DIR/run.sh" backtest \
     --engine vnpy \
     --strategy "$STRATEGY" \
     --symbol "$SYMBOL" \
     --no-search \
     --dump-indicators \
-    $PROFILE_FLAG); then
+    $PROFILE_FLAG; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"
@@ -85,7 +85,7 @@ fi
 if [ "$BUILD_REPORT" -eq 1 ]; then
     echo ""
     echo "[步骤 2/2] 重建可视化报告..."
-    if (cd "$ROOT_DIR" && uv run python main.py report --build); then
+    if "$ROOT_DIR/run.sh" report --build; then
         echo -e "${GREEN}✓ 报告重建成功${NC}"
     else
         echo -e "${RED}✗ 报告重建失败 (exit=$?)${NC}"

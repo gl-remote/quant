@@ -15,24 +15,28 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/../.."
 
+# 合约筛选正则（可用环境变量覆盖，其余参数有意写死）
+PATTERN="${PATTERN:-DCE\\.m.*}"
+
 echo "=========================================="
 echo "MA 策略全链路测试（并行回测）"
-echo "时间: $(date)"
+echo "时间:   $(date)"
+echo "合约:   ${PATTERN}"
 echo "=========================================="
 
 # ── 步骤 1: 全量回测 + 贝叶斯搜索 ──
 echo ""
 echo "[步骤 1/2] 执行全量回测 + 贝叶斯搜索..."
 
-if (cd "$ROOT_DIR" && uv run python main.py backtest \
-    --pattern "DCE\\.m.*" \
+if "$ROOT_DIR/run.sh" backtest \
+    --pattern "$PATTERN" \
     --strategy ma \
     --mode search \
     --optimizer bayesian \
     --parallel \
     --trials 3 \
     --capital 100000 \
-    --contract-size 10); then
+    --contract-size 10; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"
