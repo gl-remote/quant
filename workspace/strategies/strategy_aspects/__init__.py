@@ -21,8 +21,12 @@
 from ..core.indicators import IndicatorSpec
 from .direction import (
     confirm_long_when,
+    confirm_long_when_compare,
     confirm_short_when,
+    confirm_short_when_compare,
+    trend_long_when,
     trend_long_when_compare,
+    trend_short_when,
     trend_short_when_compare,
 )
 
@@ -66,6 +70,10 @@ __all__ = [
     # 建议型方向 DSL
     "confirm_long_when",
     "confirm_short_when",
+    "trend_long_when",
+    "trend_short_when",
+    "confirm_long_when_compare",
+    "confirm_short_when_compare",
     "trend_long_when_compare",
     "trend_short_when_compare",
 ]
