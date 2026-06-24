@@ -102,7 +102,8 @@ class ProjectConfig(BaseModel):
             project_root: 项目根目录，None 则自动推断
         """
         if project_root is None:
-            project_root = Path(__file__).parent.parent
+            # config/manager.py → config/ → workspace/ → 项目根/
+            project_root = Path(__file__).resolve().parent.parent.parent
         if config_file is None:
             config_file = str(Path(__file__).parent / "conf.toml")
 

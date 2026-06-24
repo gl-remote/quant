@@ -1,7 +1,10 @@
 # 目录结构长期规划
 
-> 状态: 规划性文档  
-> 目的: 为未来目录结构调整提供判断依据，避免为了整理目录而过度嵌套或一次性大迁移。
+> 类型：Design / 已实现设计记录（目录演进规划）  
+> 状态：已归档 — 可执行的迁移路线（阶段 0~3 含收尾）已全部落地，目录现状与规划对齐；阶段 4 及长期项（`risk`/`monitor`/`trading` 域、`deploy/`、`packages/python-common`、`shared-config` 等）按真实需求触发，本文件停止主动推进  
+> 完成日期：2026-06-24  
+> Git 参考：`102e201 feat: workspace/ 整体收纳（roadmap 阶段 3）`及其后续收尾提交  
+> 目的: 为未来目录结构调整提供判断依据，避免为了整理目录而过度嵌套或一次性大迁移。后续如恢复演进，仍以本文「四、目录设计原则」为准绳。
 
 ---
 
@@ -76,6 +79,7 @@ quant/
     lint.sh
     build.sh
     dev.sh
+    tools/
 
   deploy/
     compose/
@@ -93,7 +97,6 @@ quant/
       shared-config/
 
     data/
-      tools/
       docs/
 
     strategy/
@@ -123,7 +126,6 @@ quant/
 
     tests/
     docs/
-    tools/
 ```
 
 这是方向，不是一次性迁移目标。不存在真实需求的目录不应提前创建。
@@ -342,9 +344,9 @@ scripts                                             ← 横切工程操作层（
 | `report/` | `workspace/report/` | Python 报告生成和 Web 报告展示共存于同一业务域 |
 | `tests/` | `workspace/tests/` | 横切验证层，保持顶层单一目录（不拆进各业务域），内部按域子目录与被测代码对齐，详见原则 8 |
 | `docs/` | `workspace/docs/` | 长期可迁移；当前先保留根目录 docs |
-| `tools/` | `workspace/tools/` | 业务辅助工具 |
+| `tools/` | `scripts/tools/` | 操作脚本层（拉数据/回测/清数据等），与 `scripts/test.sh` 同属工程操作层，不属于任何业务域 |
 | Dockerfile / Compose / K8s | `deploy/docker/`、`deploy/compose/`、`deploy/k8s/` | 按运行单元组织部署文件，不放入业务域目录 |
-| `plan.md` | `workspace/docs/project/plan.md` | 当前频繁使用，迁移优先级较低 |
+| `plan.md` | `workspace/docs/roadmap/plan.md` | 已迁入（2026-06-24）；作为活跃路线图保留在 `roadmap/`，与已归档设计记录分开 |
 
 ---
 
@@ -548,3 +550,55 @@ workspace/packages/
 - CI、pre-commit、scripts/test.sh：`report/web` → `workspace/report/web`
 
 **验证**：ruff + mypy（82 文件）+ pytest（431 passed）全部通过
+
+### 阶段 3（2026-06-24）
+
+> roadmap 原规划：测试、CI、路径配置稳定后，把业务目录整体迁入 `workspace/`，只做路径调整不做逻辑重构。
+
+**已完成**（commit `102e201 feat: workspace/ 整体收纳（roadmap 阶段 3）`）：
+
+- `git mv` 全部剩余业务目录到 `workspace/`：`data/ backtest/ strategies/ cli/ common/ config/ tests/ tools/ docs/`（保留完整 git 历史，`strategies/` 保持原名）
+- 主项目 `pyproject.toml`：
+  - 新增 `[tool.setuptools.package-dir]` 映射物理路径（`workspace/<domain>`）↔ 包名（`<domain>`）
+  - 更新 `testpaths`、`[tool.coverage]` omit/source、`[tool.ruff] per-file-ignores` 为 `workspace/` 前缀
+- `scripts/test.sh`：域→路径映射全量更新为 `workspace/`；contracts 域 conftest 冲突用独立子 shell 分流
+- `.pre-commit-config.yaml`：7 个域 hook 的 `files` 正则更新为 `^workspace/<domain>/`
+- `.github/workflows/ci.yml`：mypy + pytest 路径更新为 `workspace/`
+- `workspace/data/output_paths.py`：`_PROJECT_ROOT` 层级 `parent.parent` → `parent.parent.parent`（多一层 `workspace/`）
+
+### 阶段 3 复核与修复（2026-06-24）
+
+对阶段 3 提交做全面验证（ruff + mypy + pytest 全量 + 路径回归核查），发现并修复一处遗漏：
+
+- **修复 `workspace/config/manager.py`**：`project_root` 推断仍为 `Path(__file__).parent.parent`（迁移后只到 `workspace/`），与 `output_paths.py` 的层级修正不一致。导致 `conf.toml` 中相对数据路径（`base_dir`/`export_dir`/`db_path`）解析到 `workspace/.quant_shared_data/` 而非仓库根的真实数据目录。改为 `Path(__file__).resolve().parent.parent.parent`（到仓库根），并清理误生成的 `workspace/.quant_shared_data/`。
+- **同步 `README.md` 项目结构树**：补 `workspace/` 层级，移除已不存在的文件示例（`runners.py`/`builder.py`）。
+- **修复 mypy 漏配 `mypy_path`（迁移引入的配置回归）**：迁移后业务包物理位置在 `workspace/` 下，但 `[tool.mypy]` 未把 `workspace` 设为包搜索根。导致 mypy 跨包 import（如 `data` → `common`/`config`）解析不到类型、回退成 `Any`，在 `warn_return_any=true` 下触发 11 个 `no-any-return` **误报**（代码本身无缺陷，迁移前 0 错误）。在 `pyproject.toml` 加 `mypy_path = "workspace"` 后归零。
+
+**遗留（与本次迁移无关，未处理）**：`CONTRIBUTING.md` 内容整体陈旧（引用 flake8/pylint、不存在的文件、旧版本号、未带 `workspace/` 前缀的目录树），属独立的文档维护项。
+
+**验证**：ruff ✓ + ruff format ✓（129 文件）+ mypy（68 文件，0 错误）+ pytest（428 passed / 3 skipped + contracts 1 passed）全部通过
+
+### 阶段 3 收尾：业务域统一为主项目子包（2026-06-24）
+
+阶段 2 曾把 report 拆成独立 workspace member（`quantsmith-report`）作试点。阶段 3 把其余业务域整体迁入 `workspace/` 后，出现「两种包管理模式并存」：report 是独立 member，其余域是主项目 `quantsmith` 的子包。为消除认知负担、统一管理模式，本次收敛：
+
+- **打包配置去手写化**：根 `pyproject.toml` 的 `[tool.setuptools]` 手写 `package-dir` + `packages`（12 项）改为 `[tool.setuptools.packages.find]`（`where=["workspace"]` + `include`）。
+  - 顺带修复手写列表的缺陷：原列表漏了 `cli.commands`、`cli.workflows`、`data.datasource` 三个子包，打 wheel 分发时会丢失（editable 开发模式因 `.pth` 指向整个 `workspace/` 而未暴露）。
+- **report 并回主项目子包**：删除 `workspace/report/pyproject.toml`；根 `pyproject.toml` 的 `include` 加 `report*`，`[tool.uv.workspace] members` 移除 `workspace/report`，`dependencies` 移除 `quantsmith-report`，删除对应 `[tool.uv.sources]`。report 的依赖（optuna/loguru/pandas）主项目均已具备，无需新增。
+  - 自此**所有业务域（含 report）统一为主项目 `quantsmith` 的子包**，由 `packages.find` 自动发现，不再各自维护 pyproject。
+- **`packages/python-contracts` 保持独立 member**：它是 roadmap 定义的「跨业务域、跨语言复用的共享契约包」（原则 4 / packages 定位），用 `src/` 布局、有独立 conftest、主项目运行时不依赖它，本就是与业务域不同的另一类，故继续作为独立 workspace member。
+
+调整后 workspace 下仅剩一个 Python 项目级 `pyproject.toml`（`packages/python-contracts`），业务域零散 pyproject 全部消除。
+
+**验证**：`uv sync`（report 并入 quantsmith、`quantsmith-report` 卸载）+ ruff ✓ + mypy（主范围 68 文件 0 错误 / report 14 文件 0 错误）+ `uv build` wheel 含全部业务域子包（16 个 + report 5 个）+ report 单测 14 passed。（前端 `tsc` 因 node_modules 未安装报 vitest 类型缺失，属环境问题，与本次改动无关。）
+
+### 阶段 3 收尾：`tools/` 迁移到 `scripts/tools/`（2026-06-24）
+
+阶段 3 曾把 `tools/`（操作脚本：拉数据、清数据、跑回测/信号）收纳进 `workspace/`。复核后纠正分类：`tools/` 是**操作仓库用的脚本**，依赖方向是 tools → 业务域（tools import 业务代码，业务从不 import tools），与 `tests/`、`scripts/` 同属横切操作层，不属于任何业务域，不应放在按业务域组织的 `workspace/` 下。故迁到顶层 `scripts/tools/`：
+
+- **`git mv workspace/tools → scripts/tools`**：与 `scripts/test.sh`、`scripts/activate_env.sh` 同层，统一为「仓库操作脚本」目录。
+- **`fetch_data.py` 清理 sys.path hack**：删除 `PROJECT_ROOT = ...; sys.path.insert(...)`，因 editable 安装已把 `workspace/` 注入 `sys.path`，业务包可直接 import；docstring 用法路径改为 `uv run python scripts/tools/fetch_data.py`；连带删除根 `pyproject.toml` 中 `[tool.ruff.lint.per-file-ignores]` 对该文件的 `E402` 豁免（hack 删除后不再需要）。
+- **修复 `.sh` 脚本的仓库根定位**：迁移前 `ROOT_DIR="$SCRIPT_DIR/.."` 从 `workspace/tools/` 解析到 `workspace/`，**本就是错的**（`main.py`、`output/`、`.quant_shared_data/` 均在仓库根）；迁到 `scripts/tools/` 后改为 `$SCRIPT_DIR/../..` 正确定位仓库根。涉及 `backtest-debug.sh`、`backtest-ma.sh`、`clean_data.sh`、`test-signal.sh`、`fetch_data.sh` 共 5 个。
+- **文档同步**：`README.md` 结构树、`scripts/tools/README.md` 标题、本 roadmap 的长期结构图与映射表均更新。
+
+**验证**：`bash scripts/test.sh lint`（全量 ruff）✓ + 5 个 `.sh` `bash -n` 语法检查 ✓ + `ROOT_DIR` 全部 `../..` + `fetch_data.py` 的 `from config / from data` import 在 `uv run` 下可用 ✓。

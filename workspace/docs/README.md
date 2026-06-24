@@ -18,11 +18,12 @@
 
 ## Roadmap / 未来规划
 
-- [目录结构长期规划](roadmap/directory-roadmap.md)
-- [回测链路分阶段重构计划](roadmap/backtest-refactor-plan.md)
+- [项目改进计划](roadmap/plan.md) — 活跃，总体路线图 + 待办 + 已知缺陷
 
 ## Designs / 设计记录
 
+- [目录结构长期规划](designs/directory-roadmap.md) — 已归档，阶段 0~3 落地，2026-06-24
+- [回测链路分阶段重构计划](designs/backtest-refactor-plan.md) — 阶段 0-9 已完成，2026-06-23
 - [并行回测设计与实现说明](designs/backtest-parallel.md) — 已实现，2026-06-19
 - [报告前端重构设计](designs/report-refactor.md) — 主体已实现，2026-05-27
 - [策略切面设计规格](designs/strategy-aspects.md) — 已实现，2026-06-16

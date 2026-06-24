@@ -2,26 +2,17 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.package-dir]
-cli = "workspace/cli"
-common = "workspace/common"
-config = "workspace/config"
-data = "workspace/data"
-backtest = "workspace/backtest"
-strategies = "workspace/strategies"
-
-[tool.setuptools]
-packages = [
-    "cli", "common", "config", "data", "backtest",
-    "strategies", "strategies.strategy_aspects",
-    "strategies.strategy_aspects.direction",
-    "strategies.strategy_aspects.interceptors",
-    "strategies.core", "strategies.runtime", "strategies.bridges",
-    "strategies.utils",
-]
+[tool.setuptools.packages.find]
+# 业务包物理位置在 workspace/ 下，但需保持扁平包名（data 而非 workspace.data）。
+# where=["workspace"] 把 workspace 作为源码根自动发现并映射，无需手写 packages/package-dir。
+# include 限定只打包这几个业务域，排除 packages（跨语言共享契约，独立 member）、tests、tools、docs。
+where = ["workspace"]
+include = ["cli*", "common*", "config*", "data*", "backtest*", "strategies*", "report*"]
 
 [tool.uv.workspace]
-members = ["workspace/packages/python-contracts", "workspace/report"]
+# packages/python-contracts 是跨业务域、跨语言复用的共享契约包，保持独立 member。
+# 业务域（含 report）统一作为主项目 quantsmith 的子包，由 packages.find 发现，不再各自建 member。
+members = ["workspace/packages/python-contracts"]
 
 [project]
 name = "quantsmith"
@@ -53,11 +44,7 @@ dependencies = [
     "pyarrow>=14",
     "ta-lib>=0.5",
     "pandera>=0.18",
-    "quantsmith-report",  # workspace member: report 域
 ]
-
-[tool.uv.sources]
-quantsmith-report = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -109,14 +96,16 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 [tool.ruff.lint.per-file-ignores]
 # strategies/__init__.py 的 import 顺序不能改（避免循环导入）
 "workspace/strategies/__init__.py" = ["I001"]
-# 独立脚本需要 sys.path.insert
-"workspace/tools/fetch_data.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "double"
 
 [tool.mypy]
 python_version = "3.12"
+# 业务包物理位置在 workspace/ 下（common/data/config/... 映射为顶层包名），
+# 需把 workspace 设为包搜索根，否则跨包 import 解析不到类型、回退成 Any，
+# 触发大量 warn_return_any（no-any-return）误报。
+mypy_path = "workspace"
 explicit_package_bases = true
 ignore_missing_imports = true
 disallow_untyped_defs = true

@@ -32,7 +32,7 @@ YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-ROOT_DIR="$SCRIPT_DIR/.."
+ROOT_DIR="$SCRIPT_DIR/../.."
 
 # 默认参数（可用环境变量覆盖）
 STRATEGY="${STRATEGY:-ma}"

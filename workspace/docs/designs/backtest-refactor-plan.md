@@ -1510,7 +1510,7 @@ data/report_queries.py
 
 ## 阶段 10：统一单标的 TqSdk 和批量 vn.py run 生命周期
 
-> **已移出回测重构主线**（决策于 2026-06-23）：本阶段属于生命周期/基础设施统一，非当前核心任务；且 TqSdk 单标的现已写库（`backtests`/`backtest_trades`，`report --id N` 可查），不阻塞主线。已迁移至 [`plan.md` 后续周期第 7 项](file:///Users/gaolei/Documents/src/quant/plan.md)，待 bridge 数据缺口（账户净值序列、真实逐笔 pnl）补齐后再评估。以下内容保留作为后续实施参考。
+> **已移出回测重构主线**（决策于 2026-06-23）：本阶段属于生命周期/基础设施统一，非当前核心任务；且 TqSdk 单标的现已写库（`backtests`/`backtest_trades`，`report --id N` 可查），不阻塞主线。已迁移至 [`plan.md` 后续周期第 7 项](file:///Users/gaolei/Documents/src/quant/workspace/docs/roadmap/plan.md)，待 bridge 数据缺口（账户净值序列、真实逐笔 pnl）补齐后再评估。以下内容保留作为后续实施参考。
 
 ### 目标
 

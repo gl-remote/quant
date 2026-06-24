@@ -17,7 +17,6 @@ resolution-markers = [
 members = [
     "quantsmith",
     "quantsmith-contracts",
-    "quantsmith-report",
 ]
 
 [[package]]
@@ -2404,7 +2403,6 @@ dependencies = [
     { name = "peewee" },
     { name = "plotly" },
     { name = "pyarrow" },
-    { name = "quantsmith-report" },
     { name = "ta-lib" },
     { name = "tqsdk" },
     { name = "typing-extensions" },
@@ -2435,7 +2433,6 @@ requires-dist = [
     { name = "peewee", specifier = ">=3.15" },
     { name = "plotly", specifier = ">=5.0" },
     { name = "pyarrow", specifier = ">=14" },
-    { name = "quantsmith-report", editable = "workspace/report" },
     { name = "ta-lib", specifier = ">=0.5" },
     { name = "tqsdk", specifier = ">=3.0" },
     { name = "typing-extensions", specifier = ">=4.0" },
@@ -2464,25 +2461,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "jsonschema", specifier = ">=4.0" }]
-
-[[package]]
-name = "quantsmith-report"
-version = "0.1.0"
-source = { editable = "workspace/report" }
-dependencies = [
-    { name = "loguru" },
-    { name = "optuna" },
-    { name = "pandas" },
-    { name = "quantsmith" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "loguru", specifier = ">=0.7" },
-    { name = "optuna", specifier = ">=3.0" },
-    { name = "pandas", specifier = ">=2.0" },
-    { name = "quantsmith", editable = "." },
-]
 
 [[package]]
 name = "referencing"

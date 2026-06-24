@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-ROOT_DIR="$SCRIPT_DIR/.."
+ROOT_DIR="$SCRIPT_DIR/../.."
 DB="$ROOT_DIR/.quant_shared_data/quant_shared.db"
 OUT_DIR="$ROOT_DIR/output"
 

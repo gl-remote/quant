@@ -2,8 +2,8 @@
 """一键拉取近期适配数据 — 默认用 tqsdk 导出多品种 1m 分钟线
 
 用法:
-    python tools/fetch_data.py              # 默认品种 + tqsdk + 1m
-    python tools/fetch_data.py --source akshare  # 改用 akshare
+    uv run python scripts/tools/fetch_data.py              # 默认品种 + tqsdk + 1m
+    uv run python scripts/tools/fetch_data.py --source akshare  # 改用 akshare
 """
 
 from __future__ import annotations
@@ -12,14 +12,9 @@ import sys
 import time
 from pathlib import Path
 
-from loguru import logger
-
-# 确保项目根在 sys.path（独立脚本运行时需要）
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
-
 from config import ConfigManager
 from data import DataManager, export_csv
+from loguru import logger
 
 # ── 推荐品种：2026 年已到期合约为主，覆盖完整行情 ──
 #  原则：优先选 2026 已到期合约（01/03/05 月），数据完整，便于回测

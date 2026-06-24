@@ -15,6 +15,7 @@ from report.output_paths import logs_json_path, run_log_path, workers_dir
 
 if TYPE_CHECKING:
     from data.manager import DataManager
+    from loguru import Record
 
 
 class RunLogHelper:
@@ -44,10 +45,20 @@ class RunLogHelper:
             f"{{time:YYYY-MM-DD HH:mm:ss.SSS}} | [r{run_id}{{extra[bt_id]}}] "
             "{level: <8} | {name}:{function}:{line} | {message}"
         )
+
+        # vnpy 的 vnpy/trader/logger.py 在 import 时调用
+        # logger.configure(extra={"gateway_name": "Logger"})，会整体替换全局默认
+        # extra，把 setup_logging() 设置的 bt_id 默认值清掉。因此用 filter 在格式化
+        # 前为每条缺失 bt_id 的记录补默认值，避免格式串引用 {extra[bt_id]} 时 KeyError。
+        def _ensure_bt_id(record: Record) -> bool:
+            record["extra"].setdefault("bt_id", "")
+            return True
+
         self._sink_id = logger.add(
             str(log_path),
             level="DEBUG",
             format=fmt,
+            filter=_ensure_bt_id,
         )
 
     def detach(self) -> None:

@@ -906,8 +906,10 @@ def _override_blown_up_stats(
 
     # ── 计算衍生列 ──
     df["balance"] = df["net_pnl"].cumsum() + capital
-    ratio = df["balance"] / df["balance"].shift(1)
-    df["return"] = np.where(ratio > 0, np.log(ratio), 0.0)
+    # 爆仓场景下 balance 会穿越 0 变为负值，几何收益 log(balance_t / balance_{t-1})
+    # 在「负÷负=正」时会算出错误的正收益，导致巨亏账户得到正 Sharpe。
+    # 改用以初始资金为不变基数的算术日收益，符号始终正确。
+    df["return"] = df["net_pnl"] / capital
     df["highlevel"] = df["balance"].cummax()
     df["drawdown"] = df["balance"] - df["highlevel"]
     df["ddpercent"] = np.where(df["highlevel"] > 0, df["drawdown"] / df["highlevel"] * 100, 0.0)

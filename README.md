@@ -16,27 +16,30 @@
 
 ```
 quant/
-├── main.py                 # CLI 入口
-├── config/                 # TOML + Pydantic 配置管理
-│   ├── app_config.py
-│   ├── conf.toml           # 基础配置
-│   └── conf.local.toml     # 本地密钥覆盖
-├── strategies/             # 策略模块（框架无关）
-│   ├── core/               #   策略抽象 + 类型定义
-│   ├── bridges/            #   vnpy / 天勤 桥接
-│   └── ma_strategy.py      #   均线交叉策略
-├── backtest/               # 回测引擎、参数优化、Walk-Forward
-│   ├── vnpy_backtest_engine.py   # 批量回测引擎
-│   ├── optimizer.py              # Optuna 参数优化
-│   ├── walk_forward.py           # Walk-Forward 验证
-│   └── runners.py                # 回测编排
-├── data/                   # 数据管理（多数据源 + SQLite）
-├── report/                 # React SPA 报告系统
-│   ├── builder.py          #   报告构建编排
-│   └── web/                #   Vite + TypeScript 前端
-├── common/                 # 公共工具层
-├── cli/                    # 命令行接口
-└── tools/                  # 运维脚本
+├── main.py                     # CLI 入口
+├── scripts/                    # 仓库级脚本
+│   ├── test.sh                 #   统一验证（lint/type/unit）
+│   └── tools/                  #   操作脚本（拉数据/回测/清数据）
+└── workspace/                  # 项目主体（按业务域组织）
+    ├── config/                 # TOML + Pydantic 配置管理
+    │   ├── app_config.py
+    │   ├── conf.toml           # 基础配置
+    │   └── conf.local.toml     # 本地密钥覆盖
+    ├── strategies/             # 策略模块（框架无关）
+    │   ├── core/               #   策略抽象 + 类型定义
+    │   ├── bridges/            #   vnpy / 天勤 桥接
+    │   └── ma_strategy.py      #   均线交叉策略
+    ├── backtest/               # 回测引擎、参数优化、Walk-Forward
+    │   ├── vnpy_backtest_engine.py   # 批量回测引擎
+    │   ├── optimizer.py              # Optuna 参数优化
+    │   └── walk_forward.py           # Walk-Forward 验证
+    ├── data/                   # 数据管理（多数据源 + SQLite）
+    ├── report/                 # 报告系统（Python 包 + React SPA 前端 web/）
+    ├── common/                 # 公共工具层
+    ├── cli/                    # 命令行接口（commands/ + workflows/）
+    ├── packages/               # 跨域共享契约（contracts + python-contracts）
+    ├── tests/                  # 横切验证层（按域子目录对齐源码）
+    └── docs/                   # 项目文档
 ```
 
 ## 快速开始
@@ -78,7 +81,7 @@ python main.py backtest --pattern "DCE\.m" --strategy ma --mode walk-forward
 | `report` | 从数据库生成报告 | `python main.py report --id 42` |
 | `live` | 实盘/模拟交易 | `python main.py live --symbol DCE.m2509 --gui` |
 
-常见用法见 `tools/test-ma.sh`。
+常见用法见 `scripts/tools/backtest-ma.sh`。
 
 ### 快捷脚本
 

@@ -13,7 +13,7 @@ GREEN='\033[0;32m'
 NC='\033[0m' # No Color
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-ROOT_DIR="$SCRIPT_DIR/.."
+ROOT_DIR="$SCRIPT_DIR/../.."
 
 echo "=========================================="
 echo "MA 策略全链路测试（并行回测）"
