@@ -1,20 +1,8 @@
 """风控切面 — 建议型切面，触发时将 RiskReason 写入 ctx.aspects.risk
 
 与 direction 模块一致：切面只向 ctx.aspects 填信息，把决策权交给策略。
-它们同样以**类装饰器**形式声明在策略类上，按需自动把所需指标（如 ATR）
+它们同样以**类装饰器**形式声明在策略类上，AST 节点按需自动把所需指标（如 ATR）
 并入 data_requirements，无需在策略里手写。
-
-## 切面一览
-
-| 切面 | 形态 | 触发时机 | 写入位置 |
-|------|------|----------|----------|
-| ``with_take_profit`` | 装饰器工厂 | 有持仓 | ``risk.take_profit.exit`` |
-| ``with_stop_loss`` | 装饰器工厂 | 有持仓 | ``risk.stop_loss.exit`` |
-| ``with_take_profit_atr`` | 装饰器工厂 | 有持仓 | ``risk.take_profit.exit`` |
-| ``with_stop_loss_atr`` | 装饰器工厂 | 有持仓 | ``risk.stop_loss.exit`` |
-| ``with_trailing_take_profit`` | 装饰器工厂 | 有持仓 | ``risk.take_profit.exit`` |
-| ``with_cooldown_after_take_profit`` | 装饰器工厂 | 空仓 | ``risk.take_profit.entry_block`` |
-| ``with_cooldown_after_stop_loss`` | 装饰器工厂 | 空仓 | ``risk.stop_loss.entry_block`` |
 
 ## 使用示例
 
@@ -22,23 +10,21 @@
 写入 ``ctx.aspects``，随后策略原始 ``on_bar`` 执行，在内部自行消费这些建议：
 
     from strategies.strategy_aspects import (
-        with_take_profit, with_stop_loss,
-        with_take_profit_atr, with_stop_loss_atr,
-        with_trailing_take_profit,
-        with_cooldown_after_take_profit,
-        with_cooldown_after_stop_loss,
+        exit_take_profit, exit_stop_loss,
+        entry_block_take_profit, entry_block_stop_loss,
+        FixedRatioNode, AtrNode, TrailingNode, CooldownNode,
     )
 
     # ── 方向切面（外层）──
     @confirm_long_when(at(MACD, "1m"), ">", 0)
     # ── 风控切面（内层）──
-    @with_cooldown_after_take_profit(minutes=10)
-    @with_cooldown_after_stop_loss(minutes=30)
-    @with_trailing_take_profit("15m")
-    @with_take_profit_atr("15m")
-    @with_stop_loss_atr("15m")
-    @with_take_profit()
-    @with_stop_loss()
+    @entry_block_take_profit(CooldownNode("take_profit", minutes=10))
+    @entry_block_stop_loss(CooldownNode("stop_loss", minutes=10))
+    @exit_take_profit(TrailingNode("15m"))
+    @exit_take_profit(AtrNode("take_profit", "15m"))
+    @exit_stop_loss(AtrNode("stop_loss", "15m"))
+    @exit_take_profit(FixedRatioNode("take_profit"))
+    @exit_stop_loss(FixedRatioNode("stop_loss"))
     class MyStrategy(Strategy[MyParams]):
         def on_bar(self, state, ctx):
             # 策略自行消费方向建议与风控建议
@@ -66,20 +52,21 @@
 - 切面不再构造或返回 Signal，所有交易决策由策略 ``on_bar`` 完成。
 """
 
-from ._cooldown_after_stop_loss import with_cooldown_after_stop_loss
-from ._cooldown_after_take_profit import with_cooldown_after_take_profit
-from ._stop_loss import with_stop_loss
-from ._stop_loss_atr import with_stop_loss_atr
-from ._take_profit import with_take_profit
-from ._take_profit_atr import with_take_profit_atr
-from ._trailing_take_profit import with_trailing_take_profit
+from ._ast import AtrNode, CooldownNode, FixedRatioNode, TrailingNode
+from ._core import (
+    entry_block_stop_loss,
+    entry_block_take_profit,
+    exit_stop_loss,
+    exit_take_profit,
+)
 
 __all__ = [
-    "with_take_profit",
-    "with_stop_loss",
-    "with_take_profit_atr",
-    "with_stop_loss_atr",
-    "with_trailing_take_profit",
-    "with_cooldown_after_take_profit",
-    "with_cooldown_after_stop_loss",
+    "exit_take_profit",
+    "exit_stop_loss",
+    "entry_block_take_profit",
+    "entry_block_stop_loss",
+    "FixedRatioNode",
+    "AtrNode",
+    "TrailingNode",
+    "CooldownNode",
 ]

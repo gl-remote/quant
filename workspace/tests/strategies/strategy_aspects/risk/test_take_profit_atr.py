@@ -26,7 +26,7 @@ from strategies import (
     StrategyPosition,
 )
 from strategies.core.indicators import generate_indicator_column_name, sma_func
-from strategies.strategy_aspects import with_take_profit, with_take_profit_atr
+from strategies.strategy_aspects import AtrNode, FixedRatioNode, exit_take_profit
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
@@ -119,7 +119,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@with_take_profit_atr("15m")
+@exit_take_profit(AtrNode("15m"))
 class _ATRStrategy:
     """ATR 止盈测试策略"""
 
@@ -143,8 +143,8 @@ class _ATRStrategy:
         return _ON_BAR_RETURN
 
 
-class TestWithTakeProfitATR:
-    """测试 with_take_profit_atr 类装饰器"""
+class TestExitTakeProfitATR:
+    """测试 exit_take_profit_atr 类装饰器"""
 
     def setup_method(self):
         self.strat = _ATRStrategy()
@@ -261,8 +261,8 @@ class TestWithTakeProfitATR:
 # --------------------------
 
 
-@with_take_profit()
-@with_take_profit_atr("15m")
+@exit_take_profit(FixedRatioNode())
+@exit_take_profit(AtrNode("15m"))
 class _CombinedStrategy:
     """叠加固定比例 + ATR 止盈的测试策略"""
 

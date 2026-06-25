@@ -7,10 +7,10 @@
 避免在策略类中重复实现通用逻辑。
 
 使用方式:
-    from strategies.strategy_aspects import with_take_profit, with_stop_loss
+    from strategies.strategy_aspects import exit_take_profit, exit_stop_loss
 
-    @with_take_profit()
-    @with_stop_loss()
+    @exit_take_profit(FixedRatioNode("take_profit"))
+    @exit_stop_loss(FixedRatioNode("stop_loss"))
     class MyStrategy(Strategy[MyParams]):
         def on_bar(self, state, ctx):
             # 只写入场逻辑，横切面由切面自动处理
@@ -46,13 +46,14 @@ from .primitives import (
 
 # 风控切面
 from .risk import (
-    with_cooldown_after_stop_loss,
-    with_cooldown_after_take_profit,
-    with_stop_loss,
-    with_stop_loss_atr,
-    with_take_profit,
-    with_take_profit_atr,
-    with_trailing_take_profit,
+    AtrNode,
+    CooldownNode,
+    FixedRatioNode,
+    TrailingNode,
+    entry_block_stop_loss,
+    entry_block_take_profit,
+    exit_stop_loss,
+    exit_take_profit,
 )
 
 __all__ = [
@@ -71,13 +72,14 @@ __all__ = [
     "KDJ",
     "SMA",
     # 风控切面
-    "with_take_profit",
-    "with_stop_loss",
-    "with_take_profit_atr",
-    "with_stop_loss_atr",
-    "with_trailing_take_profit",
-    "with_cooldown_after_take_profit",
-    "with_cooldown_after_stop_loss",
+    "exit_take_profit",
+    "exit_stop_loss",
+    "entry_block_take_profit",
+    "entry_block_stop_loss",
+    "FixedRatioNode",
+    "AtrNode",
+    "TrailingNode",
+    "CooldownNode",
     # 建议型方向 DSL
     "confirm_long_when",
     "confirm_short_when",

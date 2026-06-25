@@ -1,19 +1,21 @@
-"""risk 切面共享工具 — 统一工厂 + ATR 注册
+"""risk 切面共享工具 — 统一工厂 + AST 节点集成
 
 提取所有 risk 切面公共的包装逻辑：
-- data_requirements 包装（主要是 ATR 指标自动注册）
-- on_bar 包装中的 diagnostics 写入
-- 通用谓词触发模式
+- data_requirements 包装（AST 节点自动注册额外指标需求）
+- on_bar 包装中的 diagnostics 写入 + AST 求值
 """
 
 from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from datetime import datetime
 from typing import Any, TypeVar
 
+from common.constants import SIGNAL_STOP_LOSS, SIGNAL_TAKE_PROFIT, SIGNAL_TRADE_COOLDOWN
+
 from strategies.strategy_aspects.primitives import RiskReason, RiskRole
+
+from ._ast import RiskNode
 
 T = TypeVar("T", bound=type)
 
@@ -49,49 +51,22 @@ def _wrap_data_requirements(cls: type, builder: Callable[[Any], Any]) -> None:
     cls.data_requirements = _dr_wrapper  # type: ignore[attr-defined]
 
 
-def _atr_data_requirements_builder(period: str) -> Callable[[Any], Any]:
-    """返回一个 builder，为 data_requirements 合并 ATR 指标需求。"""
-
-    def _build(config: Any) -> Any:
-        from ...core.indicators import IndicatorSpec, atr_func
-        from ...runtime.requirements import DataRequirements, PeriodRequirements
-
-        return DataRequirements(
-            periods={
-                period: PeriodRequirements(lookback_bars=config.atr_period + 1),
-            },
-            indicators={
-                period: [
-                    IndicatorSpec(
-                        name="atr",
-                        params={"period": config.atr_period},
-                        func=atr_func,
-                        window=config.atr_period,
-                    )
-                ],
-            },
-        )
-
-    return _build
-
-
 # ── on_bar 统一工厂 ─────────────────────────────────────────
 
 
 def _exit_aspect(
     role: RiskRole,
     reason_name: str,
-    trigger_fn: Callable[[Any, Any, Any], tuple[bool, dict[str, Any]] | None],
+    node: RiskNode,
 ) -> Callable[[T], T]:
-    """出场切面统一工厂 — 有持仓时触发条件判断，满足则写入对应 exit 桶。
-
-    :param role: ``"take_profit"`` 或 ``"stop_loss"``，决定写入哪个 RiskActionBucket。
-    :param reason_name: 触发时 RiskReason 的 name（如 ``SIGNAL_TAKE_PROFIT``）。
-    :param trigger_fn: 触发判断函数，签名为 ``(state, ctx, direction) -> (bool, detail) | None``。
-        返回 ``None`` 表示数据不足，不触发；返回 ``(True, detail)`` 时写入理由。
-    """
+    """出场切面统一工厂 — 有持仓时触发 AST 节点求值，满足则写入对应 exit 桶。"""
 
     def _decorator(cls: T) -> T:
+        # 注册 data_requirements（如果节点需要）
+        builder = node.data_requirements_builder()
+        if builder is not None:
+            _wrap_data_requirements(cls, builder)
+
         original_on_bar = cls.on_bar  # type: ignore[attr-defined]
 
         @functools.wraps(original_on_bar)
@@ -99,7 +74,9 @@ def _exit_aspect(
             direction = state.position.direction
 
             if direction:
-                result = trigger_fn(state, ctx, direction)
+                close = ctx.bar.close
+                _write_position_diagnostics(ctx, state, close)
+                result = node.evaluate(state, ctx, direction, role=role)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).exit.append(
                         RiskReason(
@@ -120,15 +97,9 @@ def _exit_aspect(
 def _entry_block_aspect(
     role: RiskRole,
     reason_name: str,
-    trigger_fn: Callable[[Any, Any], tuple[bool, dict[str, Any]] | None],
+    node: RiskNode,
 ) -> Callable[[T], T]:
-    """入场阻断切面统一工厂 — 空仓时触发条件判断，满足则写入对应 entry_block 桶。
-
-    :param role: ``"take_profit"`` 或 ``"stop_loss"``，决定写入哪个 RiskActionBucket。
-    :param reason_name: 触发时 RiskReason 的 name（如 ``SIGNAL_TRADE_COOLDOWN``）。
-    :param trigger_fn: 触发判断函数，签名为 ``(state, ctx) -> (bool, detail) | None``。
-        返回 ``None`` 表示数据不足，不触发；返回 ``(True, detail)`` 时写入理由。
-    """
+    """入场阻断切面统一工厂 — 空仓时触发 AST 节点求值，满足则写入对应 entry_block 桶。"""
 
     def _decorator(cls: T) -> T:
         original_on_bar = cls.on_bar  # type: ignore[attr-defined]
@@ -136,7 +107,7 @@ def _entry_block_aspect(
         @functools.wraps(original_on_bar)
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
             if not state.position.direction and state.fills:
-                result = trigger_fn(state, ctx)
+                result = node.evaluate(state, ctx, None, role=role)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).entry_block.append(
                         RiskReason(
@@ -154,11 +125,24 @@ def _entry_block_aspect(
     return _decorator
 
 
-# ── 共享工具 ────────────────────────────────────────────────
+# ── 公共切面函数 ────────────────────────────────────────────
 
 
-def _parse_fill_time(timestamp: str) -> datetime | None:
-    try:
-        return datetime.fromisoformat(timestamp)
-    except ValueError:
-        return None
+def exit_take_profit(node: RiskNode) -> Callable[[T], T]:
+    """止盈出场切面 — 有持仓时评估节点条件，触发则写入 ``risk.take_profit.exit``。"""
+    return _exit_aspect("take_profit", SIGNAL_TAKE_PROFIT, node)
+
+
+def exit_stop_loss(node: RiskNode) -> Callable[[T], T]:
+    """止损出场切面 — 有持仓时评估节点条件，触发则写入 ``risk.stop_loss.exit``。"""
+    return _exit_aspect("stop_loss", SIGNAL_STOP_LOSS, node)
+
+
+def entry_block_take_profit(node: RiskNode) -> Callable[[T], T]:
+    """止盈后入场阻断切面 — 空仓时评估节点条件，触发则写入 ``risk.take_profit.entry_block``。"""
+    return _entry_block_aspect("take_profit", SIGNAL_TRADE_COOLDOWN, node)
+
+
+def entry_block_stop_loss(node: RiskNode) -> Callable[[T], T]:
+    """止损后入场阻断切面 — 空仓时评估节点条件，触发则写入 ``risk.stop_loss.entry_block``。"""
+    return _entry_block_aspect("stop_loss", SIGNAL_TRADE_COOLDOWN, node)

@@ -7,7 +7,7 @@ from typing import Any
 from common.constants import SIGNAL_TAKE_PROFIT, SIGNAL_TRADE_COOLDOWN
 from strategies.core.state import State
 from strategies.core.types import Fill, Signal, StrategyPosition
-from strategies.strategy_aspects import with_cooldown_after_take_profit
+from strategies.strategy_aspects import CooldownNode, entry_block_take_profit
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 
@@ -30,7 +30,7 @@ class _MockCtx:
 _ON_BAR_RETURN = Signal(action="buy", reason="entry", volume=1)
 
 
-@with_cooldown_after_take_profit(minutes=10)
+@entry_block_take_profit(CooldownNode(minutes=10))
 class _CooldownStrategy:
     def on_bar(self, state: State[_Params], ctx: Any) -> Signal:
         return _ON_BAR_RETURN

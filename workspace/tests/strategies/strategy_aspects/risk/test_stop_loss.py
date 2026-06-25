@@ -19,7 +19,7 @@ from common.constants import (
 )
 from strategies.core.state import State
 from strategies.core.types import Signal, StrategyPosition
-from strategies.strategy_aspects import with_stop_loss
+from strategies.strategy_aspects import FixedRatioNode, exit_stop_loss
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
@@ -103,7 +103,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@with_stop_loss()
+@exit_stop_loss(FixedRatioNode())
 class _SimpleStrategy:
     """最简单的装饰器测试策略"""
 
@@ -113,8 +113,8 @@ class _SimpleStrategy:
         return _ON_BAR_RETURN
 
 
-class TestWithStopLoss:
-    """测试 with_stop_loss 类装饰器"""
+class TestExitStopLossWhen:
+    """测试 exit_stop_loss_when 类装饰器"""
 
     def setup_method(self):
         self.strat = _SimpleStrategy()

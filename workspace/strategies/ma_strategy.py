@@ -5,7 +5,7 @@ ctx.aspects 做出场/入场决策。
 
 架构:
 - 方向判断: confirm_long_when / confirm_short_when / trend_*_when_compare 装饰器
-- 风控建议: with_take_profit / with_stop_loss / with_take_profit_atr / with_stop_loss_atr / with_trailing_take_profit / with_cooldown_after_take_profit / with_cooldown_after_stop_loss
+- 风控建议: exit_take_profit_when / exit_stop_loss_when / exit_take_profit_atr / exit_stop_loss_atr / exit_take_profit_trailing / entry_block_take_profit_cooldown / entry_block_stop_loss_cooldown
 - 信号后处理: @_auto_finalize 装饰器（框架层，策略无感）
 """
 
@@ -39,18 +39,19 @@ from .strategy_aspects import (
     KDJ,
     MACD,
     SMA,
+    AtrNode,
+    CooldownNode,
+    FixedRatioNode,
+    TrailingNode,
     at,
     confirm_long_when,
     confirm_short_when,
+    entry_block_stop_loss,
+    entry_block_take_profit,
+    exit_stop_loss,
+    exit_take_profit,
     trend_long_when_compare,
     trend_short_when_compare,
-    with_cooldown_after_stop_loss,
-    with_cooldown_after_take_profit,
-    with_stop_loss,
-    with_stop_loss_atr,
-    with_take_profit,
-    with_take_profit_atr,
-    with_trailing_take_profit,
 )
 
 
@@ -129,13 +130,13 @@ class MACrossParams:
 @confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
 @trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "5m"))
 # ── 建议型风控切面声明 ──
-@with_cooldown_after_take_profit(minutes=10)
-@with_cooldown_after_stop_loss(minutes=10)
-@with_trailing_take_profit("15m")
-@with_take_profit_atr("15m")
-@with_stop_loss_atr("15m")
-@with_take_profit()
-@with_stop_loss()
+@entry_block_take_profit(CooldownNode(minutes=10))
+@entry_block_stop_loss(CooldownNode(minutes=10))
+@exit_take_profit(TrailingNode("15m"))
+@exit_take_profit(AtrNode("15m"))
+@exit_stop_loss(AtrNode("15m"))
+@exit_take_profit(FixedRatioNode())
+@exit_stop_loss(FixedRatioNode())
 class MaStrategyCore(Strategy[MACrossParams]):
     """均线交叉策略核心 — 消费方向与风控建议做决策
 
