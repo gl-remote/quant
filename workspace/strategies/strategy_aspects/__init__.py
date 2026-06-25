@@ -32,14 +32,6 @@ from .direction import (
 
 # 指标定义
 from .indicators import KDJ, MACD, SMA
-
-# 拦截型切面
-from .interceptors import (
-    with_atr_stop_take_profit,
-    with_stop_take_profit,
-    with_trade_cooldown,
-    with_trailing_stop,
-)
 from .primitives import (
     DirectionAdvice,
     DirectionReason,
@@ -47,6 +39,14 @@ from .primitives import (
     MetricRef,
     StrategyAspects,
     at,
+)
+
+# 风控切面
+from .risk import (
+    with_atr_stop_take_profit,
+    with_stop_take_profit,
+    with_trade_cooldown,
+    with_trailing_stop,
 )
 
 __all__ = [
