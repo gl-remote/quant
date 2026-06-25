@@ -446,11 +446,14 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
     }
 
     if expr.indicator_name == "atr":
-        # ATR 是列名而非 IndicatorSpec，直接读列
+        # ATR 列名由 generate_indicator_column_name 生成
+        from ..core.indicators import generate_indicator_column_name
+
         view = ctx.multi.get(expr.period)
         if view is None:
             return None
-        col = f"atr_{expr.period}"
+        atr_period = getattr(config, "atr_period", 14)
+        col = generate_indicator_column_name("atr", {"period": atr_period}, period=expr.period)
         return view.indicator(col, -1)  # type: ignore[no-any-return]
 
     indicator_factory = _indicator_map.get(expr.indicator_name)
@@ -499,11 +502,21 @@ def _call_builtin(name: str, ctx: Any, config: Any) -> float | None:
 
 
 def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
-    """自上次成交以来的冷却分钟数"""
+    """自上次匹配风控角色的成交以来的冷却分钟数。"""
     fills = ctx.state.fills if hasattr(ctx, "state") else []
     if not fills:
         return None
     last_fill = fills[-1]
+
+    # 角色过滤：只匹配当前风控角色对应的成交
+    risk_role = getattr(ctx, "risk_role", None)
+    if risk_role == "take_profit":
+        if "TAKE_PROFIT" not in last_fill.reason:
+            return None
+    elif risk_role == "stop_loss":
+        if "TAKE_PROFIT" in last_fill.reason:
+            return None
+
     now = ctx.bar.timestamp if hasattr(ctx.bar, "timestamp") else 0
     elapsed_minutes = (now - last_fill.timestamp) / 60_000  # type: ignore[operator]
     return elapsed_minutes  # type: ignore[no-any-return]
@@ -547,12 +560,13 @@ def _builtin_drawdown_pct(ctx: Any, config: Any) -> float | None:
 def _collect_metrics(expr: Expr) -> tuple[MetricRef, ...]:
     """递归收集表达式树中所有 MetricRef。"""
     if isinstance(expr, MetricRefExpr):
-        from .indicators import KDJ, MACD, SMA, IndicatorSpec
+        from .indicators import ATR, KDJ, MACD, SMA, IndicatorSpec
 
         _indicator_map: dict[str, Any] = {
             "macd": MACD,
             "kdj": KDJ,
             "sma": SMA,
+            "atr": ATR,
         }
         factory = _indicator_map.get(expr.indicator_name)
         if factory is None:

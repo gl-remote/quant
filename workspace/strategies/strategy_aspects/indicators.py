@@ -4,7 +4,7 @@
 供建议型切面 DSL 使用。
 """
 
-from ..core.indicators import IndicatorSpec, kdj_func, macd_func, sma_func
+from ..core.indicators import IndicatorSpec, atr_func, kdj_func, macd_func, sma_func
 
 MACD = IndicatorSpec(
     name="macd",
@@ -28,4 +28,14 @@ def SMA(period: int | str) -> IndicatorSpec:  # noqa: N802
         params={"period": period},
         window=period,
         func=sma_func,
+    )
+
+
+def ATR(period: int | str = 14) -> IndicatorSpec:  # noqa: N802
+    """ATR 指标工厂 — 支持模板值，如 ATR("{atr_period}")"""
+    return IndicatorSpec(
+        name="atr",
+        params={"period": period},
+        window=period,
+        func=atr_func,
     )

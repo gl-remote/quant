@@ -1,8 +1,8 @@
-"""risk 切面共享工具 — 统一工厂 + AST 节点集成
+"""risk 切面共享工具 — 统一工厂 + 字符串 DSL 接口
 
 提取所有 risk 切面公共的包装逻辑：
-- data_requirements 包装（AST 节点自动注册额外指标需求）
-- on_bar 包装中的 diagnostics 写入 + AST 求值
+- data_requirements 包装（谓词自动注册指标需求）
+- on_bar 包装中的 diagnostics 写入 + 谓词求值
 """
 
 from __future__ import annotations
@@ -15,7 +15,8 @@ from common.constants import SIGNAL_STOP_LOSS, SIGNAL_TAKE_PROFIT, SIGNAL_TRADE_
 
 from strategies.strategy_aspects.primitives import RiskReason, RiskRole
 
-from ._ast import RiskNode
+from .._parser import _ParsedPredicate, parse_expr
+from ..direction._core import _build_indicator_requirements
 
 T = TypeVar("T", bound=type)
 
@@ -34,8 +35,8 @@ def _write_position_diagnostics(ctx: Any, state: Any, close: float) -> None:
 # ── data_requirements 包装工具 ──────────────────────────────
 
 
-def _wrap_data_requirements(cls: type, builder: Callable[[Any], Any]) -> None:
-    """包装类的 data_requirements，在原始基础上合并 builder 产生的额外需求。"""
+def _wrap_data_requirements(cls: type, predicate: _ParsedPredicate) -> None:
+    """包装类的 data_requirements，在原始基础上合并谓词涉及的指标需求。"""
     original_dr = cls.data_requirements  # type: ignore[attr-defined]
 
     @functools.wraps(original_dr)
@@ -43,9 +44,8 @@ def _wrap_data_requirements(cls: type, builder: Callable[[Any], Any]) -> None:
         base = original_dr(self, config)
         if base is None:
             return base
-        extra = builder(config)
-        if extra is not None:
-            base.merge(extra)
+        for metric in predicate.metrics:
+            base.merge(_build_indicator_requirements(metric, config))
         return base
 
     cls.data_requirements = _dr_wrapper  # type: ignore[attr-defined]
@@ -57,15 +57,14 @@ def _wrap_data_requirements(cls: type, builder: Callable[[Any], Any]) -> None:
 def _exit_aspect(
     role: RiskRole,
     reason_name: str,
-    node: RiskNode,
+    predicate: _ParsedPredicate,
 ) -> Callable[[T], T]:
-    """出场切面统一工厂 — 有持仓时触发 AST 节点求值，满足则写入对应 exit 桶。"""
+    """出场切面统一工厂 — 有持仓时触发谓词求值，满足则写入对应 exit 桶。"""
 
     def _decorator(cls: T) -> T:
-        # 注册 data_requirements（如果节点需要）
-        builder = node.data_requirements_builder()
-        if builder is not None:
-            _wrap_data_requirements(cls, builder)
+        # 注册 data_requirements（如果谓词需要指标）
+        if predicate.metrics:
+            _wrap_data_requirements(cls, predicate)
 
         original_on_bar = cls.on_bar  # type: ignore[attr-defined]
 
@@ -76,7 +75,8 @@ def _exit_aspect(
             if direction:
                 close = ctx.bar.close
                 _write_position_diagnostics(ctx, state, close)
-                result = node.evaluate(state, ctx, direction, role=role)
+                ctx.risk_role = role
+                result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).exit.append(
                         RiskReason(
@@ -97,9 +97,9 @@ def _exit_aspect(
 def _entry_block_aspect(
     role: RiskRole,
     reason_name: str,
-    node: RiskNode,
+    predicate: _ParsedPredicate,
 ) -> Callable[[T], T]:
-    """入场阻断切面统一工厂 — 空仓时触发 AST 节点求值，满足则写入对应 entry_block 桶。"""
+    """入场阻断切面统一工厂 — 空仓时触发谓词求值，满足则写入对应 entry_block 桶。"""
 
     def _decorator(cls: T) -> T:
         original_on_bar = cls.on_bar  # type: ignore[attr-defined]
@@ -107,7 +107,8 @@ def _entry_block_aspect(
         @functools.wraps(original_on_bar)
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
             if not state.position.direction and state.fills:
-                result = node.evaluate(state, ctx, None, role=role)
+                ctx.risk_role = role
+                result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).entry_block.append(
                         RiskReason(
@@ -128,21 +129,33 @@ def _entry_block_aspect(
 # ── 公共切面函数 ────────────────────────────────────────────
 
 
-def exit_take_profit(node: RiskNode) -> Callable[[T], T]:
-    """止盈出场切面 — 有持仓时评估节点条件，触发则写入 ``risk.take_profit.exit``。"""
-    return _exit_aspect("take_profit", SIGNAL_TAKE_PROFIT, node)
+def exit_for_take_profit(expr: str) -> Callable[[T], T]:
+    """止盈出场切面 — 有持仓时评估表达式条件，触发则写入 ``risk.take_profit.exit``。
+
+    :param expr: DSL 表达式，如 ``"atr@15m * {atr_take_profit_multiplier} < profit_abs()"``。
+    """
+    return _exit_aspect("take_profit", SIGNAL_TAKE_PROFIT, parse_expr(expr))
 
 
-def exit_stop_loss(node: RiskNode) -> Callable[[T], T]:
-    """止损出场切面 — 有持仓时评估节点条件，触发则写入 ``risk.stop_loss.exit``。"""
-    return _exit_aspect("stop_loss", SIGNAL_STOP_LOSS, node)
+def exit_for_stop_loss(expr: str) -> Callable[[T], T]:
+    """止损出场切面 — 有持仓时评估表达式条件，触发则写入 ``risk.stop_loss.exit``。
+
+    :param expr: DSL 表达式，如 ``"profit_pct() >= {stop_loss_ratio}"``。
+    """
+    return _exit_aspect("stop_loss", SIGNAL_STOP_LOSS, parse_expr(expr))
 
 
-def entry_block_take_profit(node: RiskNode) -> Callable[[T], T]:
-    """止盈后入场阻断切面 — 空仓时评估节点条件，触发则写入 ``risk.take_profit.entry_block``。"""
-    return _entry_block_aspect("take_profit", SIGNAL_TRADE_COOLDOWN, node)
+def entry_block_after_take_profit(expr: str) -> Callable[[T], T]:
+    """止盈后入场阻断切面 — 空仓时评估表达式条件，触发则写入 ``risk.take_profit.entry_block``。
+
+    :param expr: DSL 表达式，如 ``"cooldown() < {cooldown_minutes}"``。
+    """
+    return _entry_block_aspect("take_profit", SIGNAL_TRADE_COOLDOWN, parse_expr(expr))
 
 
-def entry_block_stop_loss(node: RiskNode) -> Callable[[T], T]:
-    """止损后入场阻断切面 — 空仓时评估节点条件，触发则写入 ``risk.stop_loss.entry_block``。"""
-    return _entry_block_aspect("stop_loss", SIGNAL_TRADE_COOLDOWN, node)
+def entry_block_after_stop_loss(expr: str) -> Callable[[T], T]:
+    """止损后入场阻断切面 — 空仓时评估表达式条件，触发则写入 ``risk.stop_loss.entry_block``。
+
+    :param expr: DSL 表达式，如 ``"cooldown() < {cooldown_minutes}"``。
+    """
+    return _entry_block_aspect("stop_loss", SIGNAL_TRADE_COOLDOWN, parse_expr(expr))
