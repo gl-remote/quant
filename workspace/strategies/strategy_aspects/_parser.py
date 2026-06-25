@@ -33,6 +33,8 @@ TokenType = Literal[
     "RBRACE",
     "AT",
     "OP",
+    "MUL",
+    "DIV",
     "AND",
     "OR",
     "EOF",
@@ -56,6 +58,8 @@ _TOKEN_PATTERNS: list[tuple[str, TokenType]] = [
     (r"\band\b", "AND"),
     (r"\bor\b", "OR"),
     (r">=|<=|!=|==|>|<", "OP"),
+    (r"\*", "MUL"),
+    (r"/", "DIV"),
     (r"@", "AT"),
     (r"\(", "LPAREN"),
     (r"\)", "RPAREN"),
@@ -119,8 +123,17 @@ class MetricRefExpr:
 
 @dataclass(frozen=True)
 class CompareExpr:
-    left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr
+    left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
     op: str
+    right: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
+
+
+@dataclass(frozen=True)
+class ArithExpr:
+    """算术表达式，如 atr@15m * {multiplier}"""
+
+    op: Literal["*", "/"]
+    left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr
     right: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr
 
 
@@ -131,7 +144,7 @@ class BoolOpExpr:
     right: Expr
 
 
-Expr = NumberExpr | ConfigRefExpr | FuncCallExpr | MetricRefExpr | CompareExpr | BoolOpExpr
+Expr = NumberExpr | ConfigRefExpr | FuncCallExpr | MetricRefExpr | CompareExpr | ArithExpr | BoolOpExpr
 
 
 # ── Pratt Parser ───────────────────────────────────────────
@@ -143,6 +156,8 @@ _PRECEDENCE: dict[str, int] = {
     "or": 10,
     "&&": 20,
     "and": 20,
+    "*": 40,
+    "/": 40,
     ">": 30,
     "<": 30,
     ">=": 30,
@@ -228,6 +243,10 @@ class _PrattParser:
             else:
                 object.__setattr__(left, "period", period_token.value)
             return left
+
+        if token.type in ("MUL", "DIV"):
+            right = self.parse(_bp_of(token))
+            return ArithExpr(op=token.value, left=left, right=right)  # type: ignore[arg-type]
 
         if token.type == "OP":
             right = self.parse(_bp_of(token))
@@ -408,7 +427,7 @@ def _evaluate_compare(expr: CompareExpr, ctx: Any, config: Any) -> tuple[bool, d
 
 
 def _resolve_value(
-    expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr,
+    expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr,
     ctx: Any,
     config: Any,
 ) -> float | None:
@@ -424,6 +443,19 @@ def _resolve_value(
 
     if isinstance(expr, FuncCallExpr):
         return _call_builtin(expr.name, ctx, config)
+
+    if isinstance(expr, ArithExpr):
+        left_val = _resolve_value(expr.left, ctx, config)
+        right_val = _resolve_value(expr.right, ctx, config)
+        if left_val is None or right_val is None:
+            return None
+        if expr.op == "*":
+            return left_val * right_val
+        if expr.op == "/":
+            if right_val == 0:
+                return None
+            return left_val / right_val
+        return None
 
     return None
 
@@ -587,10 +619,12 @@ def _collect_metrics(expr: Expr) -> tuple[MetricRef, ...]:
 
 
 def _collect_value_metrics(
-    expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr,
+    expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr,
 ) -> tuple[MetricRef, ...]:
     if isinstance(expr, MetricRefExpr):
         return _collect_metrics(expr)
+    if isinstance(expr, ArithExpr):
+        return _collect_value_metrics(expr.left) + _collect_value_metrics(expr.right)
     return ()
 
 
@@ -610,6 +644,12 @@ def _default_name(expr: Expr) -> str:
         op_str = op_map.get(expr.op, expr.op)
         return f"{left_name}_{op_str}_{right_name}"
 
+    if isinstance(expr, ArithExpr):
+        left_name = _value_name(expr.left)
+        right_name = _value_name(expr.right)
+        op_str = "times" if expr.op == "*" else "div"
+        return f"{left_name}_{op_str}_{right_name}"
+
     if isinstance(expr, BoolOpExpr):
         left_name = _default_name(expr.left)
         right_name = _default_name(expr.right)
@@ -627,7 +667,7 @@ def _default_name(expr: Expr) -> str:
     return "unknown"
 
 
-def _value_name(expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr) -> str:
+def _value_name(expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr) -> str:
     if isinstance(expr, NumberExpr):
         return str(expr.value).replace(".", "_")
     if isinstance(expr, ConfigRefExpr):
@@ -636,8 +676,13 @@ def _value_name(expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr)
         return expr.name
     if isinstance(expr, MetricRefExpr):
         return _default_name(expr)
+    if isinstance(expr, ArithExpr):
+        left_name = _value_name(expr.left)
+        right_name = _value_name(expr.right)
+        op_str = "times" if expr.op == "*" else "div"
+        return f"{left_name}_{op_str}_{right_name}"
     return "unknown"
 
 
 def _is_named(expr: Expr) -> bool:
-    return isinstance(expr, (MetricRefExpr, FuncCallExpr, ConfigRefExpr, CompareExpr, BoolOpExpr))
+    return isinstance(expr, (MetricRefExpr, FuncCallExpr, ConfigRefExpr, CompareExpr, ArithExpr, BoolOpExpr))

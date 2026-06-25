@@ -36,22 +36,14 @@ from .core import (
 )
 from .runtime import BarContext
 from .strategy_aspects import (
-    KDJ,
-    MACD,
-    SMA,
-    AtrNode,
-    CooldownNode,
-    FixedRatioNode,
-    TrailingNode,
-    at,
-    confirm_long_when,
-    confirm_short_when,
-    entry_block_stop_loss,
-    entry_block_take_profit,
-    exit_stop_loss,
-    exit_take_profit,
-    trend_long_when_compare,
-    trend_short_when_compare,
+    confirm_long,
+    confirm_short,
+    entry_block_after_stop_loss,
+    entry_block_after_take_profit,
+    exit_for_stop_loss,
+    exit_for_take_profit,
+    trend_long,
+    trend_short,
 )
 
 
@@ -118,25 +110,28 @@ class MACrossParams:
 # 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
 # 随后策略原始 on_bar 消费这些建议做出决策。
 # ── 做多方向切面 ──
-@confirm_long_when(at(MACD, "1m"), ">", 0)
-@confirm_long_when(at(MACD, "5m"), ">", 0)
-@confirm_long_when(at(KDJ, "1m"), "<", "kdj_oversold")
-@confirm_long_when(at(KDJ, "5m"), "<", "kdj_oversold")
-@trend_long_when_compare(at(SMA("{sma_short}"), "5m"), ">", at(SMA("{sma_long}"), "5m"))
+@confirm_long("macd@1m > 0")
+@confirm_long("macd@5m > 0")
+@confirm_long("kdj@1m < {kdj_oversold}")
+@confirm_long("kdj@5m < {kdj_oversold}")
+@trend_long("sma({sma_short})@5m > sma({sma_long})@5m")
 # ── 做空方向切面 ──
-@confirm_short_when(at(MACD, "1m"), "<", 0)
-@confirm_short_when(at(MACD, "5m"), "<", 0)
-@confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
-@confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
-@trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "5m"))
-# ── 建议型风控切面声明 ──
-@entry_block_take_profit(CooldownNode(minutes=10))
-@entry_block_stop_loss(CooldownNode(minutes=10))
-@exit_take_profit(TrailingNode("15m"))
-@exit_take_profit(AtrNode("15m"))
-@exit_stop_loss(AtrNode("15m"))
-@exit_take_profit(FixedRatioNode())
-@exit_stop_loss(FixedRatioNode())
+@confirm_short("macd@1m < 0")
+@confirm_short("macd@5m < 0")
+@confirm_short("kdj@1m > {kdj_overbought}")
+@confirm_short("kdj@5m > {kdj_overbought}")
+@trend_short("sma({sma_short})@5m < sma({sma_long})@5m")
+# ── 风控切面 ──
+@entry_block_after_take_profit("cooldown() < 10")
+@entry_block_after_stop_loss("cooldown() < 10")
+@exit_for_take_profit(
+    "peak_profit() >= atr@15m * {trailing_activation_atr}"
+    " && drawdown_pct() >= {trailing_drawdown_ratio}"
+)
+@exit_for_take_profit("profit_abs() >= atr@15m * {atr_take_profit_multiplier}")
+@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+@exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
 class MaStrategyCore(Strategy[MACrossParams]):
     """均线交叉策略核心 — 消费方向与风控建议做决策
 
