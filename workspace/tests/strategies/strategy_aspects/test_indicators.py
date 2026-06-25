@@ -4,12 +4,10 @@
   - MACD: name、params、window
   - KDJ: name、params、window
   - SMA() 工厂函数: 不同参数生成不同 IndicatorSpec
-  - at() 函数与指标组合
 """
 
 from strategies.core.indicators import generate_indicator_column_name
 from strategies.strategy_aspects.indicators import KDJ, MACD, SMA
-from strategies.strategy_aspects.primitives import MetricRef, at
 
 # --------------------------
 # MACD 测试
@@ -94,41 +92,14 @@ class TestSMAFactory:
 
 
 # --------------------------
-# at() 与指标组合测试
+# IndicatorSpec 不可变测试
 # --------------------------
 
 
-class TestAtWithIndicators:
-    """测试 at() 函数与指标组合"""
+class TestIndicatorSpecFrozen:
+    """IndicatorSpec 是 frozen dataclass"""
 
-    def test_at_macd(self):
-        ref = at(MACD, "1m")
-        assert isinstance(ref, MetricRef)
-        assert ref.period == "1m"
-        assert ref.name == "macd_1m"
-
-    def test_at_kdj(self):
-        ref = at(KDJ, "5m")
-        assert isinstance(ref, MetricRef)
-        assert ref.period == "5m"
-        assert ref.name == "kdj_5m"
-
-    def test_at_sma(self):
-        ref = at(SMA(10), "5m")
-        assert isinstance(ref, MetricRef)
-        assert ref.period == "5m"
-        assert ref.name == "sma_5m"
-        assert generate_indicator_column_name(ref.indicator.name, ref.indicator.params) == "sma_10"
-
-    def test_at_sma_different_periods(self):
-        """同一指标在不同周期产生不同 MetricRef"""
-        ref_5m = at(SMA(10), "5m")
-        ref_15m = at(SMA(10), "15m")
-        assert ref_5m.name == "sma_5m"
-        assert ref_15m.name == "sma_15m"
-
-    def test_indicator_spec_is_frozen(self):
-        """IndicatorSpec 是 frozen dataclass"""
+    def test_macd_is_frozen(self):
         try:
             MACD.name = "other"  # type: ignore[misc]
             raise AssertionError("Should raise AttributeError")

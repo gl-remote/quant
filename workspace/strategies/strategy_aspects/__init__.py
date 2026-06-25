@@ -14,21 +14,15 @@
         ...
 """
 
-# 协议层：基础数据结构
 from ..core.indicators import IndicatorSpec
 from .direction import confirm_long, confirm_short, trend_long, trend_short
-
-# 指标定义
-from .indicators import KDJ, MACD, SMA
 from .primitives import (
     DirectionAdvice,
     DirectionReason,
     DirectionSideAdvice,
-    MetricRef,
     RiskAdvice,
     RiskReason,
     StrategyAspects,
-    at,
 )
 
 # 风控切面
@@ -48,12 +42,6 @@ __all__ = [
     "RiskAdvice",
     "StrategyAspects",
     "IndicatorSpec",
-    "MetricRef",
-    "at",
-    # 指标定义
-    "MACD",
-    "KDJ",
-    "SMA",
     # 建议型方向 DSL
     "confirm_long",
     "confirm_short",

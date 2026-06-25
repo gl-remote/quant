@@ -2,7 +2,7 @@
 
 覆盖:
   - DirectionReason: key 生成、frozen、detail
-  - MetricRef: name 格式、at 函数
+  - MetricRef: name 格式
   - DirectionSideAdvice: empty、reasons、keys
   - DirectionAdvice: default empty
   - BarContext 默认带有空 StrategyAspects
@@ -19,7 +19,6 @@ from strategies.strategy_aspects.primitives import (
     DirectionReason,
     DirectionSideAdvice,
     MetricRef,
-    at,
 )
 
 # --------------------------
@@ -67,12 +66,6 @@ class TestMetricRef:
         spec = IndicatorSpec(name="macd", params={"fast": 12}, window=35)
         ref = MetricRef(period="1m", indicator=spec)
         assert ref.name == "macd_1m"
-
-    def test_at_function(self):
-        spec = IndicatorSpec(name="sma", params={"period": 10}, window=10)
-        ref = at(spec, "5m")
-        assert ref.period == "5m"
-        assert ref.name == "sma_5m"
 
 
 # --------------------------

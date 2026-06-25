@@ -1,9 +1,4 @@
-"""DSL 基础结构和协议类型
-
-包含建议型切面 DSL 的核心数据结构：
-- DirectionReason / DirectionSideAdvice / DirectionAdvice / StrategyAspects
-- MetricRef / at()
-"""
+"""DSL 基础数据结构：方向/风控/切面建议的类型定义"""
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -12,6 +7,18 @@ from ..core.indicators import IndicatorSpec
 
 DirectionRole = Literal["trend", "confirm"]
 RiskRole = Literal["take_profit", "stop_loss"]
+
+
+@dataclass(frozen=True)
+class MetricRef:
+    """指标引用 — 某个周期上的某个指标（供内部 DSL 解析器使用）"""
+
+    period: str
+    indicator: IndicatorSpec
+
+    @property
+    def name(self) -> str:
+        return f"{self.indicator.name}_{self.period}"
 
 
 @dataclass(frozen=True)
@@ -129,20 +136,3 @@ class StrategyAspects:
     def flush_diagnostics(self) -> None:
         self.flush_direction_diagnostics()
         self.flush_risk_diagnostics()
-
-
-@dataclass(frozen=True)
-class MetricRef:
-    """指标引用 — 某个周期上的某个指标"""
-
-    period: str
-    indicator: IndicatorSpec
-
-    @property
-    def name(self) -> str:
-        return f"{self.indicator.name}_{self.period}"
-
-
-def at(indicator: IndicatorSpec, period: str) -> MetricRef:
-    """构造 MetricRef 的便捷函数"""
-    return MetricRef(period=period, indicator=indicator)
