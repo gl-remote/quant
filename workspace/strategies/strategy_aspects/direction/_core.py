@@ -18,10 +18,13 @@ from __future__ import annotations
 
 import functools
 import re
-from typing import Any, Literal, Protocol
+from collections.abc import Callable
+from typing import Any, Literal, Protocol, TypeVar
 
 from ...core.indicators import generate_indicator_column_name
 from ..primitives import DirectionReason, DirectionRole, MetricRef
+
+T = TypeVar("T", bound=type)
 
 _Direction = Literal["long", "short"]
 _Op = Literal[">", "<"]
@@ -185,7 +188,9 @@ class _ComparePredicate:
 # ── 统一装饰器工厂 ──────────────────────────────────────────
 
 
-def _direction_aspect(role: DirectionRole, direction: _Direction, predicate: _Predicate, tag: str | None) -> Any:
+def _direction_aspect(
+    role: DirectionRole, direction: _Direction, predicate: _Predicate, tag: str | None
+) -> Callable[[T], T]:
     """方向切面装饰器工厂 — role × direction × predicate 三轴的唯一实现。
 
     :param role: 理由角色，``"confirm"`` 或 ``"trend"``。决定理由追加到
@@ -218,7 +223,7 @@ def _direction_aspect(role: DirectionRole, direction: _Direction, predicate: _Pr
 
     reason_name = tag if tag is not None else predicate.default_name
 
-    def _decorator(cls: type) -> type:
+    def _decorator(cls: T) -> T:
         _register_direction_key(cls, direction, reason_name)
 
         # ── 包装 data_requirements：自动注册谓词涉及的指标需求 ──
@@ -256,41 +261,49 @@ def _direction_aspect(role: DirectionRole, direction: _Direction, predicate: _Pr
 # ── 对外接口：role × direction × predicate 共 8 个组合 ──────
 
 
-def confirm_long_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Any:
+def confirm_long_when(
+    metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None
+) -> Callable[[T], T]:
     """confirm 阈值确认切面 — 满足时向 ctx.aspects.direction.long.confirm 追加理由"""
     return _direction_aspect("confirm", "long", _ThresholdPredicate(metric, op, threshold), tag)
 
 
-def confirm_short_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Any:
+def confirm_short_when(
+    metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None
+) -> Callable[[T], T]:
     """confirm 阈值确认切面 — 满足时向 ctx.aspects.direction.short.confirm 追加理由"""
     return _direction_aspect("confirm", "short", _ThresholdPredicate(metric, op, threshold), tag)
 
 
-def trend_long_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Any:
+def trend_long_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Callable[[T], T]:
     """trend 阈值确认切面 — 满足时向 ctx.aspects.direction.long.trend 追加理由"""
     return _direction_aspect("trend", "long", _ThresholdPredicate(metric, op, threshold), tag)
 
 
-def trend_short_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Any:
+def trend_short_when(metric: MetricRef, op: _Op, threshold: float | str, *, tag: str | None = None) -> Callable[[T], T]:
     """trend 阈值确认切面 — 满足时向 ctx.aspects.direction.short.trend 追加理由"""
     return _direction_aspect("trend", "short", _ThresholdPredicate(metric, op, threshold), tag)
 
 
-def confirm_long_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Any:
+def confirm_long_when_compare(
+    left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None
+) -> Callable[[T], T]:
     """confirm 指标比较切面 — 满足时向 ctx.aspects.direction.long.confirm 追加理由"""
     return _direction_aspect("confirm", "long", _ComparePredicate(left, op, right), tag)
 
 
-def confirm_short_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Any:
+def confirm_short_when_compare(
+    left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None
+) -> Callable[[T], T]:
     """confirm 指标比较切面 — 满足时向 ctx.aspects.direction.short.confirm 追加理由"""
     return _direction_aspect("confirm", "short", _ComparePredicate(left, op, right), tag)
 
 
-def trend_long_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Any:
+def trend_long_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Callable[[T], T]:
     """trend 指标比较切面 — 满足时向 ctx.aspects.direction.long.trend 追加理由"""
     return _direction_aspect("trend", "long", _ComparePredicate(left, op, right), tag)
 
 
-def trend_short_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Any:
+def trend_short_when_compare(left: MetricRef, op: _Op, right: MetricRef, *, tag: str | None = None) -> Callable[[T], T]:
     """trend 指标比较切面 — 满足时向 ctx.aspects.direction.short.trend 追加理由"""
     return _direction_aspect("trend", "short", _ComparePredicate(left, op, right), tag)

@@ -7,9 +7,10 @@
 避免在策略类中重复实现通用逻辑。
 
 使用方式:
-    from strategies.strategy_aspects import with_stop_take_profit
+    from strategies.strategy_aspects import with_take_profit, with_stop_loss
 
-    @with_stop_take_profit
+    @with_take_profit()
+    @with_stop_loss()
     class MyStrategy(Strategy[MyParams]):
         def on_bar(self, state, ctx):
             # 只写入场逻辑，横切面由切面自动处理
@@ -37,16 +38,21 @@ from .primitives import (
     DirectionReason,
     DirectionSideAdvice,
     MetricRef,
+    RiskAdvice,
+    RiskReason,
     StrategyAspects,
     at,
 )
 
 # 风控切面
 from .risk import (
-    with_atr_stop_take_profit,
-    with_stop_take_profit,
-    with_trade_cooldown,
-    with_trailing_stop,
+    with_cooldown_after_stop_loss,
+    with_cooldown_after_take_profit,
+    with_stop_loss,
+    with_stop_loss_atr,
+    with_take_profit,
+    with_take_profit_atr,
+    with_trailing_take_profit,
 )
 
 __all__ = [
@@ -54,6 +60,8 @@ __all__ = [
     "DirectionReason",
     "DirectionSideAdvice",
     "DirectionAdvice",
+    "RiskReason",
+    "RiskAdvice",
     "StrategyAspects",
     "IndicatorSpec",
     "MetricRef",
@@ -62,11 +70,14 @@ __all__ = [
     "MACD",
     "KDJ",
     "SMA",
-    # 拦截型切面
-    "with_stop_take_profit",
-    "with_atr_stop_take_profit",
-    "with_trade_cooldown",
-    "with_trailing_stop",
+    # 风控切面
+    "with_take_profit",
+    "with_stop_loss",
+    "with_take_profit_atr",
+    "with_stop_loss_atr",
+    "with_trailing_take_profit",
+    "with_cooldown_after_take_profit",
+    "with_cooldown_after_stop_loss",
     # 建议型方向 DSL
     "confirm_long_when",
     "confirm_short_when",

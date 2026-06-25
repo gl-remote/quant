@@ -38,7 +38,7 @@ def _auto_finalize(
 
     不用子类做任何事，基类装饰器自动处理，完全无感知。
     处理所有策略共有的信号格式化逻辑：
-      1. 将方向建议展平写入 diagnostics
+      1. 将方向建议与风控建议展平写入 diagnostics
       2. 将 ctx.aspects.diagnostics 拷贝到 signal.diagnostics
       3. 有信号时将 reason 格式化为 JSON（含 diagnostics）
     """
@@ -47,7 +47,7 @@ def _auto_finalize(
     def wrapper(self: Strategy[T], state: State[T], ctx: BarContext) -> Signal:
         signal = on_bar(self, state, ctx)
         # 展平方向建议到 diagnostics
-        ctx.aspects.flush_direction_diagnostics()
+        ctx.aspects.flush_diagnostics()
         # 拷贝 diagnostics
         signal.diagnostics = ctx.aspects.diagnostics
         # 有信号时 reason 改为 JSON 格式

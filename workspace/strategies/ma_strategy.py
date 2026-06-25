@@ -1,11 +1,11 @@
 """均线交叉策略模块
 
-使用建议型切面 DSL 声明方向判断条件，拦截型切面处理出场逻辑，
-策略 on_bar 只做纯决策（方向建议子集判断 → 入场信号）。
+使用建议型切面 DSL 声明方向判断条件与风控建议，策略 on_bar 消费
+ctx.aspects 做出场/入场决策。
 
 架构:
 - 方向判断: confirm_long_when / confirm_short_when / trend_*_when_compare 装饰器
-- 出场逻辑: with_stop_take_profit / with_atr_stop_take_profit / with_trailing_stop
+- 风控建议: with_take_profit / with_stop_loss / with_take_profit_atr / with_stop_loss_atr / with_trailing_take_profit / with_cooldown_after_take_profit / with_cooldown_after_stop_loss
 - 信号后处理: @_auto_finalize 装饰器（框架层，策略无感）
 """
 
@@ -23,6 +23,7 @@ from common.constants import (
     STRATEGY_MA,
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
+    TRADE_DIRECTION_LONG,
 )
 from common.formulas import position_size
 
@@ -43,10 +44,13 @@ from .strategy_aspects import (
     confirm_short_when,
     trend_long_when_compare,
     trend_short_when_compare,
-    with_atr_stop_take_profit,
-    with_stop_take_profit,
-    with_trade_cooldown,
-    with_trailing_stop,
+    with_cooldown_after_stop_loss,
+    with_cooldown_after_take_profit,
+    with_stop_loss,
+    with_stop_loss_atr,
+    with_take_profit,
+    with_take_profit_atr,
+    with_trailing_take_profit,
 )
 
 
@@ -110,8 +114,8 @@ class MACrossParams:
 
 
 # ── 建议型方向切面声明 ──
-# 装饰器从下到上执行，建议型切面在外层先评估条件写入 ctx.aspects，
-# 拦截型切面在内层先执行（有持仓时提前返回出场信号）。
+# 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
+# 随后策略原始 on_bar 消费这些建议做出决策。
 # ── 做多方向切面 ──
 @confirm_long_when(at(MACD, "1m"), ">", 0)
 @confirm_long_when(at(MACD, "5m"), ">", 0)
@@ -124,20 +128,26 @@ class MACrossParams:
 @confirm_short_when(at(KDJ, "1m"), ">", "kdj_overbought")
 @confirm_short_when(at(KDJ, "5m"), ">", "kdj_overbought")
 @trend_short_when_compare(at(SMA("{sma_short}"), "5m"), "<", at(SMA("{sma_long}"), "5m"))
-# ── 拦截型切面声明 ──
-@with_trade_cooldown(minutes=10)
-@with_trailing_stop("15m")
-@with_atr_stop_take_profit("15m")
-@with_stop_take_profit
+# ── 建议型风控切面声明 ──
+@with_cooldown_after_take_profit(minutes=10)
+@with_cooldown_after_stop_loss(minutes=10)
+@with_trailing_take_profit("15m")
+@with_take_profit_atr("15m")
+@with_stop_loss_atr("15m")
+@with_take_profit()
+@with_stop_loss()
 class MaStrategyCore(Strategy[MACrossParams]):
-    """均线交叉策略核心 — 纯决策逻辑
+    """均线交叉策略核心 — 消费方向与风控建议做决策
 
-    方向判断由建议型切面装饰器声明，on_bar 只需检查所有声明的理由是否满足。
-    出场逻辑由拦截型切面自动处理，信号后处理由 @_auto_finalize 装饰器自动完成。
+    方向判断与风控建议均由切面装饰器声明并写入 ctx.aspects，
+    on_bar 负责消费这些建议完成出场/入场决策。
+    信号后处理由 @_auto_finalize 装饰器自动完成。
 
     决策规则:
-    - 所有 long reason key 都出现 → 买入
-    - 所有 short reason key 都出现 → 卖出
+    - 有持仓 + ctx.aspects.risk 非空 → 出场（取第一个 risk reason 作为 signal reason）
+    - 空仓 + ctx.aspects.risk 含 cooldown → 不入場
+    - 空仓 + ctx.aspects.risk 为空 + 所有 long reason key 都出现 → 买入
+    - 空仓 + ctx.aspects.risk 为空 + 所有 short reason key 都出现 → 卖出
     """
 
     name: str = STRATEGY_MA
@@ -156,13 +166,27 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
     @override
     def on_bar(self, state: State[MACrossParams], ctx: BarContext) -> Signal:
-        """空仓时检查方向建议是否全部满足，满足则入场"""
+        """消费方向建议与风控建议，做出场/入场决策"""
         config = state.strategy_config
         direction = state.position.direction
         signal = Signal()
 
-        # ── 空仓：做多或做空入场 ──
-        if not direction:
+        risk = ctx.aspects.risk
+        exit_reasons = risk.take_profit.exit + risk.stop_loss.exit
+
+        # ── 有持仓：exit 风控建议触发 → 出场 ──
+        if direction and exit_reasons:
+            first_exit = exit_reasons[0]
+            action = TRADE_ACTION_SELL if direction == TRADE_DIRECTION_LONG else TRADE_ACTION_BUY
+            signal = Signal(
+                action=action,
+                reason=first_exit.name,
+                volume=state.position.volume,
+            )
+            signal.diagnostics = first_exit.detail
+
+        # ── 空仓：无任何风控建议时按方向建议入场 ──
+        elif not direction and not risk.all_reasons:
             long_keys: set[str] = ctx.aspects.direction.long.keys
             short_keys: set[str] = ctx.aspects.direction.short.keys
             direction_keys: dict[str, set[str]] = type(self).__direction_keys__

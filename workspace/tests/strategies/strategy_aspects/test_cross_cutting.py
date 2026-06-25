@@ -1,23 +1,23 @@
 """装饰器交叉行为测试
 
-覆盖拦截器与建议型切面之间的交互场景：
-1. 拦截器触发时建议型切面被跳过
-2. 拦截器未触发时建议型切面正常执行
-3. 冷却期 + 止损叠加
-4. 方向建议 + 拦截器叠加 — diagnostics 完整性
-5. 多个拦截器优先级
+覆盖建议型切面之间的交互场景：
+1. risk 切面触发时 direction 切面仍正常执行
+2. risk 未触发时 direction 切面正常执行
+3. cooldown + 止损叠加
+4. 方向建议 + risk 切面叠加 — diagnostics 完整性
+5. 多个 risk 切面叠加
 6. 建议型切面之间不互相干扰
-7. data_requirements 合并 — 拦截器 + 建议型
+7. data_requirements 合并 — risk + 建议型
 
 装饰器执行顺序说明：
   Python 装饰器从下到上应用，从上到下执行。
-  拦截器放在最上层（先执行），建议型切面放在下层（后执行），
-  这样拦截器触发时提前返回，建议型切面不会被执行。
+  所有切面都是建议型，都会执行，不会短路。
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 
+from common.constants import SIGNAL_STOP_LOSS, SIGNAL_TAKE_PROFIT, SIGNAL_TRADE_COOLDOWN
 from strategies import Bar
 from strategies.core.state import State
 from strategies.core.types import Fill, StrategyPosition
@@ -27,9 +27,11 @@ from strategies.strategy_aspects import (
     at,
     confirm_long_when,
     trend_long_when_compare,
-    with_atr_stop_take_profit,
-    with_stop_take_profit,
-    with_trade_cooldown,
+    with_cooldown_after_stop_loss,
+    with_stop_loss,
+    with_stop_loss_atr,
+    with_take_profit,
+    with_take_profit_atr,
 )
 
 # --------------------------
@@ -118,21 +120,17 @@ def _make_state(
 
 
 # --------------------------
-# 测试 1: 拦截器触发时建议型切面被跳过
+# 测试 1: risk 切面触发时 direction 切面仍正常执行
 # --------------------------
 
 
-class TestInterceptorSkipsAdvisory:
-    """有持仓 + 止损触发 → 拦截器提前返回，建议型切面不执行
+class TestRiskExecutesWithDirection:
+    """risk 切面和 direction 切面都是建议型，都会执行"""
 
-    装饰器顺序：拦截器在上（外层先执行），建议型在下（内层后执行）。
-    拦截器触发时提前返回 Signal，内层建议型切面不会被执行。
-    """
+    def test_stop_loss_with_confirm(self):
+        """止损触发时 confirm 切面也执行"""
 
-    def test_stop_loss_skips_confirm(self):
-        """止损触发时 confirm 切面未执行"""
-
-        @with_stop_take_profit
+        @with_stop_loss()
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
@@ -142,22 +140,23 @@ class TestInterceptorSkipsAdvisory:
                 return None
 
         strat = _S()
-        # 多头持仓，入场价 100，当前价 96 → 跌幅 4% > 3% 止损
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=101.0, lowest_price=96.0)
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}}, close=96.0)
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=96.0)
 
         signal = strat.on_bar(state, ctx)
 
-        # 返回止损信号
-        assert signal is not None
-        assert signal.reason == "stop_loss"
-        # 建议型切面没执行，confirm 为空
-        assert len(ctx.aspects.direction.long.confirm) == 0
+        # on_bar 返回 None
+        assert signal is None
+        # risk 切面写入止损理由
+        assert len(ctx.aspects.risk.stop_loss.exit) == 1
+        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        # direction 切面也正常执行
+        assert len(ctx.aspects.direction.long.confirm) == 1
 
-    def test_take_profit_skips_confirm(self):
-        """止盈触发时 confirm 切面未执行"""
+    def test_take_profit_with_confirm(self):
+        """止盈触发时 confirm 切面也执行"""
 
-        @with_stop_take_profit
+        @with_take_profit()
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
@@ -167,29 +166,30 @@ class TestInterceptorSkipsAdvisory:
                 return None
 
         strat = _S()
-        # 多头持仓，入场价 100，当前价 106 → 涨幅 6% > 5% 止盈
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=106.0, lowest_price=99.0)
         ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=106.0)
 
         signal = strat.on_bar(state, ctx)
 
-        assert signal is not None
-        assert signal.reason == "take_profit"
-        assert len(ctx.aspects.direction.long.confirm) == 0
+        assert signal is None
+        assert len(ctx.aspects.risk.take_profit.exit) == 1
+        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        assert len(ctx.aspects.direction.long.confirm) == 1
 
 
 # --------------------------
-# 测试 2: 拦截器未触发时建议型切面正常执行
+# 测试 2: risk 未触发时 direction 切面正常执行
 # --------------------------
 
 
-class TestInterceptorPassesThrough:
-    """拦截器透传时建议型切面正常执行"""
+class TestRiskPassesThrough:
+    """risk 未触发时 direction 切面正常执行"""
 
     def test_no_position_confirm_executes(self):
-        """无持仓时拦截器透传，confirm 切面正常写入"""
+        """无持仓时 risk 不触发，confirm 切面正常写入"""
 
-        @with_stop_take_profit
+        @with_stop_loss()
+        @with_take_profit()
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
@@ -204,13 +204,15 @@ class TestInterceptorPassesThrough:
 
         strat.on_bar(state, ctx)
 
+        assert ctx.aspects.risk.all_reasons == []
         assert len(ctx.aspects.direction.long.confirm) == 1
         assert ctx.aspects.direction.long.confirm[0].name == "macd_1m"
 
     def test_position_no_trigger_confirm_executes(self):
         """有持仓但止损未触发时 confirm 切面正常写入"""
 
-        @with_stop_take_profit
+        @with_stop_loss()
+        @with_take_profit()
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
@@ -220,12 +222,12 @@ class TestInterceptorPassesThrough:
                 return None
 
         strat = _S()
-        # 多头持仓，入场价 100，当前价 99 → 跌幅 1% < 3% 止损，不触发
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=101.0, lowest_price=99.0)
         ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=99.0)
 
         strat.on_bar(state, ctx)
 
+        assert ctx.aspects.risk.all_reasons == []
         assert len(ctx.aspects.direction.long.confirm) == 1
 
 
@@ -234,17 +236,17 @@ class TestInterceptorPassesThrough:
 # --------------------------
 
 
-class TestCooldownPlusStopTake:
-    """with_trade_cooldown + with_stop_take_profit 交叉行为
+class TestCooldownPlusStopLoss:
+    """with_cooldown_after_stop_loss + with_stop_loss 交叉行为
 
-    冷却期在外层（先执行），止损在内层（后执行）。
+    两个切面都是建议型，都会执行。
     """
 
     def test_has_position_cooldown_passes_stop_checks(self):
-        """有持仓 + 冷却期内 → 冷却期透传（有持仓不拦截），止损正常检查"""
+        """有持仓 + 冷却期内 → cooldown 不写入，止损正常触发"""
 
-        @with_trade_cooldown(30)
-        @with_stop_take_profit
+        @with_cooldown_after_stop_loss(30)
+        @with_stop_loss()
         class _S:
             def data_requirements(self, config):
                 return None
@@ -253,7 +255,6 @@ class TestCooldownPlusStopTake:
                 return None
 
         strat = _S()
-        # 多头持仓 + 冷却期内（最近成交 10 分钟前）
         bar_dt = datetime(2024, 1, 1, 12, 10)
         fills = [Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="buy", price=100.0, volume=1)]
         state = _make_state(
@@ -264,20 +265,21 @@ class TestCooldownPlusStopTake:
             lowest_price=96.0,
             fills=fills,
         )
-        # 当前价 96 → 跌幅 4% > 3% 止损
         ctx = _make_ctx(close=96.0, bar_dt=bar_dt)
 
         signal = strat.on_bar(state, ctx)
 
-        # 冷却期有持仓时透传，止损正常触发
-        assert signal is not None
-        assert signal.reason == "stop_loss"
+        # 有持仓时 cooldown 不写入，但止损触发
+        assert len(ctx.aspects.risk.stop_loss.exit) == 1
+        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        # on_bar 返回 None
+        assert signal is None
 
     def test_no_position_cooldown_blocks_stop_not_checked(self):
-        """无持仓 + 冷却期内 → 冷却期拦截，止损不检查"""
+        """无持仓 + 冷却期内 → cooldown 写入 risk，止损不检查"""
 
-        @with_trade_cooldown(30)
-        @with_stop_take_profit
+        @with_cooldown_after_stop_loss(30)
+        @with_stop_loss()
         class _S:
             def data_requirements(self, config):
                 return None
@@ -286,7 +288,6 @@ class TestCooldownPlusStopTake:
                 return None
 
         strat = _S()
-        # 无持仓 + 冷却期内
         bar_dt = datetime(2024, 1, 1, 12, 10)
         fills = [Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="buy", price=100.0, volume=1)]
         state = _make_state(fills=fills)
@@ -294,23 +295,26 @@ class TestCooldownPlusStopTake:
 
         signal = strat.on_bar(state, ctx)
 
-        # 冷却期拦截
-        assert signal is not None
-        assert signal.reason == "trade_cooldown"
+        # cooldown 写入 stop_loss.entry_block（Fill 无 reason，默认非止盈）
+        assert len(ctx.aspects.risk.stop_loss.entry_block) == 1
+        assert ctx.aspects.risk.stop_loss.entry_block[0].name == SIGNAL_TRADE_COOLDOWN
+        # 无持仓不检查止损
+        assert "stop_loss" not in [r.name for r in ctx.aspects.risk.all_reasons]
+        assert signal is None
 
 
 # --------------------------
-# 测试 4: 方向建议 + 拦截器叠加 — diagnostics 完整性
+# 测试 4: 方向建议 + risk 切面叠加 — diagnostics 完整性
 # --------------------------
 
 
 class TestDiagnosticsCompleteness:
-    """止损触发时 diagnostics 只有止损信息，没有方向建议的 diagnostics"""
+    """risk 触发时 diagnostics 同时包含 direction 和 risk 信息"""
 
-    def test_stop_loss_diagnostics_no_direction(self):
-        """止损触发 → signal.diagnostics 有止损信息，但无方向建议 diagnostics"""
+    def test_stop_loss_diagnostics_with_direction(self):
+        """止损触发 → diagnostics 有止损信息，direction 切面 diagnostics 也在"""
 
-        @with_stop_take_profit
+        @with_stop_loss()
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
@@ -321,34 +325,33 @@ class TestDiagnosticsCompleteness:
 
         strat = _S()
         state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=101.0, lowest_price=96.0)
-        ctx = _make_ctx({"1m": {"macd_12_9_26": 0.5}}, close=96.0)
+        ctx = _make_ctx({"1m": {"1m_macd_12_9_26": 0.5}}, close=96.0)
 
-        signal = strat.on_bar(state, ctx)
+        strat.on_bar(state, ctx)
 
-        # 止损信号
-        assert signal.reason == "stop_loss"
+        # risk 触发
+        assert len(ctx.aspects.risk.stop_loss.exit) == 1
+        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
         # diagnostics 有止损信息
-        assert "entry_price" in signal.diagnostics
-        assert signal.diagnostics["entry_price"] == 100.0
-        assert "current_close" in signal.diagnostics
-        assert signal.diagnostics["current_close"] == 96.0
-        # 建议型切面没执行，ctx.aspects.diagnostics 没有 macd_1m
-        assert "macd_1m" not in ctx.aspects.diagnostics
+        assert "entry_price" in ctx.aspects.diagnostics
+        assert ctx.aspects.diagnostics["entry_price"] == 100.0
+        # direction 切面也执行了
+        assert len(ctx.aspects.direction.long.confirm) == 1
 
 
 # --------------------------
-# 测试 5: 多个拦截器优先级
+# 测试 5: 多个 risk 切面叠加
 # --------------------------
 
 
-class TestMultipleInterceptorPriority:
-    """with_stop_take_profit + with_atr_stop_take_profit — 外层装饰器先执行"""
+class TestMultipleRiskAdvisory:
+    """with_stop_loss + with_stop_loss_atr — 两个切面都执行"""
 
-    def test_fixed_stop_takes_priority(self):
-        """固定止损和 ATR 止损都触发时，外层（固定止损）先拦截"""
+    def test_fixed_stop_and_atr_stop_both_trigger(self):
+        """固定止损和 ATR 止损都触发时，两个切面都写入 risk"""
 
-        @with_stop_take_profit
-        @with_atr_stop_take_profit("15m")
+        @with_stop_loss()
+        @with_stop_loss_atr("15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -365,10 +368,38 @@ class TestMultipleInterceptorPriority:
 
         signal = strat.on_bar(state, ctx)
 
-        # with_stop_take_profit 是外层装饰器（先执行），固定止损先拦截
-        assert signal is not None
-        assert signal.reason == "stop_loss"
-        assert signal.diagnostics["entry_price"] == 100.0
+        assert signal is None
+        # 两个切面都写入了 risk
+        risk_names = [r.name for r in ctx.aspects.risk.all_reasons]
+        assert SIGNAL_STOP_LOSS in risk_names
+        # 固定止损先执行（外层装饰器），atr 后执行（内层装饰器）
+        # 两者都是 stop_loss，都写入 stop_loss.exit
+        assert len(ctx.aspects.risk.stop_loss.exit) == 2
+
+    def test_fixed_take_profit_only(self):
+        """只有固定止盈触发时，只有固定比例切面写入"""
+
+        @with_take_profit()
+        @with_take_profit_atr("15m")
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        strat = _S()
+        # 固定止盈触发(5%: close>105), ATR 止盈需要 106
+        state = _make_state(direction="long", entry_price=100.0, volume=1, highest_price=100.0, lowest_price=100.0)
+        ctx = _make_ctx({"15m": {"15m_atr_14": 2.0}}, close=105.5)
+
+        signal = strat.on_bar(state, ctx)
+
+        assert signal is None
+        risk_names = [r.name for r in ctx.aspects.risk.all_reasons]
+        assert SIGNAL_TAKE_PROFIT in risk_names
+        # ATR 止盈未触发
+        assert len(ctx.aspects.risk.take_profit.exit) == 1
 
 
 # --------------------------
@@ -438,19 +469,19 @@ class TestAdvisoryIsolation:
 
 
 # --------------------------
-# 测试 7: data_requirements 合并 — 拦截器 + 建议型
+# 测试 7: data_requirements 合并 — risk + 建议型
 # --------------------------
 
 
 class TestDataRequirementsCrossMerge:
-    """拦截器和建议型切面的 data_requirements 正确合并"""
+    """risk 和建议型切面的 data_requirements 正确合并"""
 
     def test_atr_stop_and_confirm_merge(self):
-        """with_atr_stop_take_profit + confirm_long_when → 同时有 ATR(15m) 和 MACD(1m)"""
+        """with_stop_loss_atr + confirm_long_when → 同时有 ATR(15m) 和 MACD(1m)"""
 
         from strategies import DataRequirements
 
-        @with_atr_stop_take_profit("15m")
+        @with_stop_loss_atr("15m")
         @confirm_long_when(at(MACD, "1m"), ">", 0)
         class _S:
             def data_requirements(self, config):
