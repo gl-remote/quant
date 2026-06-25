@@ -19,7 +19,7 @@ from common.constants import (
 )
 from strategies.core.state import State
 from strategies.core.types import Signal, StrategyPosition
-from strategies.strategy_aspects import FixedRatioNode, exit_take_profit
+from strategies.strategy_aspects import exit_for_take_profit
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
@@ -103,7 +103,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@exit_take_profit(FixedRatioNode())
+@exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
 class _SimpleStrategy:
     """最简单的装饰器测试策略"""
 
@@ -114,7 +114,7 @@ class _SimpleStrategy:
 
 
 class TestExitTakeProfitWhen:
-    """测试 exit_take_profit_when 类装饰器"""
+    """测试 exit_for_take_profit_when 类装饰器"""
 
     def setup_method(self):
         self.strat = _SimpleStrategy()

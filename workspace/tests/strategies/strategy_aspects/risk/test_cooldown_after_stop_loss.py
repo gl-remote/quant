@@ -7,7 +7,7 @@ from typing import Any
 from common.constants import SIGNAL_TRADE_COOLDOWN
 from strategies.core.state import State
 from strategies.core.types import Fill, Signal, StrategyPosition
-from strategies.strategy_aspects import CooldownNode, entry_block_stop_loss
+from strategies.strategy_aspects import entry_block_after_stop_loss
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 
@@ -30,7 +30,7 @@ class _MockCtx:
 _ON_BAR_RETURN = Signal(action="buy", reason="entry", volume=1)
 
 
-@entry_block_stop_loss(CooldownNode(minutes=10))
+@entry_block_after_stop_loss("cooldown() < 10")
 class _CooldownStrategy:
     def on_bar(self, state: State[_Params], ctx: Any) -> Signal:
         return _ON_BAR_RETURN
@@ -54,11 +54,7 @@ def _make_state(
             )
         )
 
-    position = (
-        StrategyPosition(direction="long", entry_price=100, volume=1)
-        if has_position
-        else StrategyPosition()
-    )
+    position = StrategyPosition(direction="long", entry_price=100, volume=1) if has_position else StrategyPosition()
 
     return State(
         symbol="TEST",
@@ -93,8 +89,9 @@ class TestWithCooldownAfterStopLoss:
         assert signal is _ON_BAR_RETURN
         assert len(ctx.aspects.risk.stop_loss.entry_block) == 1
         assert ctx.aspects.risk.stop_loss.entry_block[0].name == SIGNAL_TRADE_COOLDOWN
-        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["cooldown_minutes"] == 10.0
-        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["remaining_seconds"] == 300.0
+        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["left_value"] < 10.0
+        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["op"] == "<"
+        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["right_value"] == 10.0
 
     def test_passthrough_after_cooldown(self) -> None:
         fill_time = datetime(2024, 1, 1, 10, 0, 0)

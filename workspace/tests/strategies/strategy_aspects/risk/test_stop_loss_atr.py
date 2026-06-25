@@ -26,7 +26,7 @@ from strategies import (
     StrategyPosition,
 )
 from strategies.core.indicators import generate_indicator_column_name, sma_func
-from strategies.strategy_aspects import AtrNode, FixedRatioNode, exit_stop_loss
+from strategies.strategy_aspects import exit_for_stop_loss
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
@@ -119,7 +119,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@exit_stop_loss(AtrNode("15m"))
+@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
 class _ATRStrategy:
     """ATR 止损测试策略"""
 
@@ -144,7 +144,7 @@ class _ATRStrategy:
 
 
 class TestExitStopLossATR:
-    """测试 exit_stop_loss_atr 类装饰器"""
+    """测试 exit_for_stop_loss_atr 类装饰器"""
 
     def setup_method(self):
         self.strat = _ATRStrategy()
@@ -155,10 +155,7 @@ class TestExitStopLossATR:
         """data_requirements 自动注册 ATR 指标到 15m"""
         reqs = self.strat.data_requirements(_ATRParams())
         assert reqs is not None
-        has_atr = any(
-            ind.name == "atr" and ind.params.get("period") == 14
-            for ind in reqs.indicators.get("15m", [])
-        )
+        has_atr = any(ind.name == "atr" and ind.params.get("period") == 14 for ind in reqs.indicators.get("15m", []))
         assert has_atr, "15m 周期未自动注册 ATR 指标"
 
     def test_data_requirements_preserves_existing(self):
@@ -180,20 +177,15 @@ class TestExitStopLossATR:
 
     def test_long_atr_stop_loss_triggered(self):
         """多头 ATR 止损触发 (atr=2.0, multiplier=2.0, 损失线=96)"""
-        state = _make_state(
-            direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0
-        )
+        state = _make_state(direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0)
         ctx = _MockMultiCtx(close=95.0, atr_value=2.0)  # 100-2*2=96, 95<96
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
         assert len(ctx.aspects.risk.stop_loss.exit) == 1
         assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
-        assert ctx.aspects.risk.stop_loss.exit[0].detail["type"] == "atr"
 
     def test_long_atr_stop_loss_not_triggered(self):
-        state = _make_state(
-            direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0
-        )
+        state = _make_state(direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0)
         ctx = _MockMultiCtx(close=97.0, atr_value=2.0)  # 100-2*2=96, 97>96
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
@@ -203,9 +195,7 @@ class TestExitStopLossATR:
 
     def test_short_atr_stop_loss_triggered(self):
         """空头 ATR 止损触发 (atr=2.0, multiplier=2.0, 损失线=104)"""
-        state = _make_state(
-            direction=TRADE_DIRECTION_SHORT, entry_price=100.0, atr_stop_loss_multiplier=2.0
-        )
+        state = _make_state(direction=TRADE_DIRECTION_SHORT, entry_price=100.0, atr_stop_loss_multiplier=2.0)
         ctx = _MockMultiCtx(close=105.0, atr_value=2.0)  # 100+2*2=104, 105>104
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
@@ -213,9 +203,7 @@ class TestExitStopLossATR:
         assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
 
     def test_short_atr_stop_loss_not_triggered(self):
-        state = _make_state(
-            direction=TRADE_DIRECTION_SHORT, entry_price=100.0, atr_stop_loss_multiplier=2.0
-        )
+        state = _make_state(direction=TRADE_DIRECTION_SHORT, entry_price=100.0, atr_stop_loss_multiplier=2.0)
         ctx = _MockMultiCtx(close=103.0, atr_value=2.0)  # 100+2*2=104, 103<104
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
@@ -243,9 +231,7 @@ class TestExitStopLossATR:
 
     def test_atr_diagnostics(self):
         """ATR 止损触发时 diagnostics 字段齐全"""
-        state = _make_state(
-            direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0
-        )
+        state = _make_state(direction=TRADE_DIRECTION_LONG, entry_price=100.0, atr_stop_loss_multiplier=2.0)
         state.position.highest_price = 110.0
         state.position.lowest_price = 90.0
         ctx = _MockMultiCtx(close=95.0, atr_value=2.0)
@@ -261,8 +247,8 @@ class TestExitStopLossATR:
 # --------------------------
 
 
-@exit_stop_loss(FixedRatioNode())
-@exit_stop_loss(AtrNode("15m"))
+@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
 class _CombinedStrategy:
     """叠加固定比例 + ATR 止损的测试策略"""
 
@@ -274,9 +260,7 @@ class _CombinedStrategy:
                 "1m": PeriodRequirements(lookback_bars=60),
                 "15m": PeriodRequirements(lookback_bars=30),
             },
-            indicators={
-                "1m": [IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func)]
-            },
+            indicators={"1m": [IndicatorSpec(name="sma", params={"period": 5}, window=5, func=sma_func)]},
             events=None,
         )
 

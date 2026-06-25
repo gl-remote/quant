@@ -125,8 +125,7 @@ class MACrossParams:
 @entry_block_after_take_profit("cooldown() < 10")
 @entry_block_after_stop_loss("cooldown() < 10")
 @exit_for_take_profit(
-    "peak_profit() >= atr@15m * {trailing_activation_atr}"
-    " && drawdown_pct() >= {trailing_drawdown_ratio}"
+    "peak_profit() >= atr@15m * {trailing_activation_atr} && drawdown_pct() >= {trailing_drawdown_ratio}"
 )
 @exit_for_take_profit("profit_abs() >= atr@15m * {atr_take_profit_multiplier}")
 @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")

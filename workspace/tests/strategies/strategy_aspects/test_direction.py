@@ -1,10 +1,10 @@
 """DSL 装饰器单元测试
 
 覆盖:
-  - confirm_long_when: satisfied、not_satisfied、missing、tag、string_threshold、keys
-  - confirm_short_when: satisfied、keys
-  - trend_long_when_compare: satisfied、not_satisfied、left_missing、right_missing、tag、keys
-  - trend_short_when_compare: satisfied
+  - confirm_long: satisfied、not_satisfied、missing、tag、string_threshold、keys
+  - confirm_short: satisfied、keys
+  - trend_long: satisfied、not_satisfied、left_missing、right_missing、tag、keys
+  - trend_short: satisfied
   - 多装饰器叠加: keys_merged、all_reasons
   - data_requirements 自动合并: confirm_merges、trend_merges
   - diagnostics 自动写入
@@ -16,14 +16,10 @@ from datetime import datetime
 
 from strategies import Bar, State
 from strategies.strategy_aspects import (
-    KDJ,
-    MACD,
-    SMA,
-    at,
-    confirm_long_when,
-    confirm_short_when,
-    trend_long_when_compare,
-    trend_short_when_compare,
+    confirm_long,
+    confirm_short,
+    trend_long,
+    trend_short,
 )
 
 # --------------------------
@@ -92,12 +88,12 @@ def _make_state() -> State:
 
 
 class TestConfirmLongWhen:
-    """测试 confirm_long_when"""
+    """测试 confirm_long"""
 
     def test_satisfied_writes_confirm(self):
         """指标满足阈值时写入 long.confirm"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -112,14 +108,14 @@ class TestConfirmLongWhen:
         strat.on_bar(state, ctx)
 
         assert len(ctx.aspects.direction.long.confirm) == 1
-        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m"
+        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m_gt_0"
         assert ctx.aspects.direction.long.confirm[0].role == "confirm"
-        assert ctx.aspects.direction.long.confirm[0].detail["value"] == 0.5
+        assert ctx.aspects.direction.long.confirm[0].detail["left_value"] == 0.5
 
     def test_not_satisfied_no_reason(self):
         """指标不满足阈值时不写入 reason"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -137,7 +133,7 @@ class TestConfirmLongWhen:
     def test_missing_indicator_no_reason(self):
         """指标缺失时不写入 reason"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -155,7 +151,7 @@ class TestConfirmLongWhen:
     def test_missing_period_no_reason(self):
         """周期缺失时不写入 reason"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -173,7 +169,7 @@ class TestConfirmLongWhen:
     def test_custom_tag(self):
         """自定义 tag 作为 reason name"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0, tag="my_macd")
+        @confirm_long("macd@1m > 0", tag="my_macd")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -191,7 +187,7 @@ class TestConfirmLongWhen:
     def test_string_threshold_from_config(self):
         """字符串阈值从 strategy_config 取值"""
 
-        @confirm_long_when(at(KDJ, "1m"), "<", "kdj_oversold")
+        @confirm_long("kdj@1m < {kdj_oversold}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -205,13 +201,13 @@ class TestConfirmLongWhen:
         strat.on_bar(state, ctx)
 
         assert len(ctx.aspects.direction.long.confirm) == 1
-        assert ctx.aspects.direction.long.confirm[0].detail["threshold"] == 20.0
+        assert ctx.aspects.direction.long.confirm[0].detail["right_value"] == 20.0
 
     def test_direction_keys_registered(self):
         """__direction_keys__ 自动注册"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
-        @confirm_long_when(at(MACD, "5m"), ">", 0)
+        @confirm_long("macd@1m > 0")
+        @confirm_long("macd@5m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -219,17 +215,17 @@ class TestConfirmLongWhen:
             def on_bar(self, state, ctx):
                 return None
 
-        assert _S.__direction_keys__["long"] == {"macd_1m", "macd_5m"}
+        assert _S.__direction_keys__["long"] == {"macd_1m_gt_0", "macd_5m_gt_0"}
         assert _S.__direction_keys__["short"] == set()
 
 
 class TestConfirmShortWhen:
-    """测试 confirm_short_when"""
+    """测试 confirm_short"""
 
     def test_satisfied_writes_confirm(self):
         """指标满足阈值时写入 short.confirm"""
 
-        @confirm_short_when(at(MACD, "1m"), "<", 0)
+        @confirm_short("macd@1m < 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -243,12 +239,12 @@ class TestConfirmShortWhen:
         strat.on_bar(state, ctx)
 
         assert len(ctx.aspects.direction.short.confirm) == 1
-        assert ctx.aspects.direction.short.confirm[0].name == "macd_1m"
+        assert ctx.aspects.direction.short.confirm[0].name == "macd_1m_lt_0"
 
     def test_direction_keys_registered(self):
         """__direction_keys__ 注册到 short"""
 
-        @confirm_short_when(at(MACD, "1m"), "<", 0)
+        @confirm_short("macd@1m < 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -256,7 +252,7 @@ class TestConfirmShortWhen:
             def on_bar(self, state, ctx):
                 return None
 
-        assert _S.__direction_keys__["short"] == {"macd_1m"}
+        assert _S.__direction_keys__["short"] == {"macd_1m_lt_0"}
         assert _S.__direction_keys__["long"] == set()
 
 
@@ -266,12 +262,12 @@ class TestConfirmShortWhen:
 
 
 class TestTrendLongWhenCompare:
-    """测试 trend_long_when_compare"""
+    """测试 trend_long"""
 
     def test_satisfied_writes_trend(self):
         """比较条件满足时写入 long.trend"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -282,15 +278,15 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 100.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_sma_10.0": 100.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
         assert len(ctx.aspects.direction.long.trend) == 1
-        assert ctx.aspects.direction.long.trend[0].name == "sma_5m_vs_sma_15m"
+        assert ctx.aspects.direction.long.trend[0].name == "sma_10.0_5m_gt_sma_40.0_15m"
         assert ctx.aspects.direction.long.trend[0].role == "trend"
         assert ctx.aspects.direction.long.trend[0].detail["left_value"] == 100.0
         assert ctx.aspects.direction.long.trend[0].detail["right_value"] == 99.0
@@ -298,7 +294,7 @@ class TestTrendLongWhenCompare:
     def test_not_satisfied_no_reason(self):
         """比较条件不满足时不写入 reason"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -309,8 +305,8 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 99.0},
-                "15m": {"15m_sma_40": 100.0},
+                "5m": {"5m_sma_10.0": 99.0},
+                "15m": {"15m_sma_40.0": 100.0},
             }
         )
         state = _make_state()
@@ -321,7 +317,7 @@ class TestTrendLongWhenCompare:
     def test_left_missing_no_reason(self):
         """左侧指标缺失时不写入 reason"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -333,7 +329,7 @@ class TestTrendLongWhenCompare:
         ctx = _make_ctx(
             {
                 "5m": {},  # 缺失 sma_10
-                "15m": {"15m_sma_40": 99.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
@@ -344,7 +340,7 @@ class TestTrendLongWhenCompare:
     def test_right_missing_no_reason(self):
         """右侧指标缺失时不写入 reason"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -355,7 +351,7 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 100.0},
+                "5m": {"5m_sma_10.0": 100.0},
                 "15m": {},  # 缺失 sma_40
             }
         )
@@ -367,7 +363,7 @@ class TestTrendLongWhenCompare:
     def test_custom_tag(self):
         """自定义 tag 作为 reason name"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"), tag="ma_cross")
+        @trend_long("sma(10)@5m > sma(40)@15m", tag="ma_cross")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -378,8 +374,8 @@ class TestTrendLongWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 100.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_sma_10.0": 100.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
@@ -390,7 +386,7 @@ class TestTrendLongWhenCompare:
     def test_direction_keys_registered(self):
         """__direction_keys__ 自动注册"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -398,17 +394,17 @@ class TestTrendLongWhenCompare:
             def on_bar(self, state, ctx):
                 return None
 
-        assert _S.__direction_keys__["long"] == {"sma_5m_vs_sma_15m"}
+        assert _S.__direction_keys__["long"] == {"sma_10.0_5m_gt_sma_40.0_15m"}
         assert _S.__direction_keys__["short"] == set()
 
 
 class TestTrendShortWhenCompare:
-    """测试 trend_short_when_compare"""
+    """测试 trend_short"""
 
     def test_satisfied_writes_trend(self):
         """比较条件满足时写入 short.trend"""
 
-        @trend_short_when_compare(at(SMA(10), "5m"), "<", at(SMA(40), "15m"))
+        @trend_short("sma(10)@5m < sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -419,15 +415,15 @@ class TestTrendShortWhenCompare:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 99.0},
-                "15m": {"15m_sma_40": 100.0},
+                "5m": {"5m_sma_10.0": 99.0},
+                "15m": {"15m_sma_40.0": 100.0},
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
         assert len(ctx.aspects.direction.short.trend) == 1
-        assert ctx.aspects.direction.short.trend[0].name == "sma_5m_vs_sma_15m"
+        assert ctx.aspects.direction.short.trend[0].name == "sma_10.0_5m_lt_sma_40.0_15m"
 
 
 # --------------------------
@@ -441,12 +437,12 @@ class TestMultipleDecorators:
     def test_direction_keys_merged(self):
         """多个同方向装饰器的 key 自动合并"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
-        @confirm_long_when(at(MACD, "5m"), ">", 0)
-        @confirm_short_when(at(MACD, "1m"), "<", 0)
-        @confirm_short_when(at(MACD, "5m"), "<", 0)
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
-        @trend_short_when_compare(at(SMA(10), "5m"), "<", at(SMA(40), "15m"))
+        @confirm_long("macd@1m > 0")
+        @confirm_long("macd@5m > 0")
+        @confirm_short("macd@1m < 0")
+        @confirm_short("macd@5m < 0")
+        @trend_long("sma(10)@5m > sma(40)@15m")
+        @trend_short("sma(10)@5m < sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -454,15 +450,15 @@ class TestMultipleDecorators:
             def on_bar(self, state, ctx):
                 return None
 
-        assert _S.__direction_keys__["long"] == {"sma_5m_vs_sma_15m", "macd_1m", "macd_5m"}
-        assert _S.__direction_keys__["short"] == {"sma_5m_vs_sma_15m", "macd_1m", "macd_5m"}
+        assert _S.__direction_keys__["long"] == {"sma_10.0_5m_gt_sma_40.0_15m", "macd_1m_gt_0", "macd_5m_gt_0"}
+        assert _S.__direction_keys__["short"] == {"sma_10.0_5m_lt_sma_40.0_15m", "macd_1m_lt_0", "macd_5m_lt_0"}
 
     def test_all_reasons_written(self):
         """多个装饰器同时写入 aspects"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
-        @confirm_long_when(at(MACD, "5m"), ">", 0)
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @confirm_long("macd@1m > 0")
+        @confirm_long("macd@5m > 0")
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -474,17 +470,17 @@ class TestMultipleDecorators:
         ctx = _make_ctx(
             {
                 "1m": {"1m_macd_12_9_26": 0.5},
-                "5m": {"5m_macd_12_9_26": 0.3, "5m_sma_10": 100.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_macd_12_9_26": 0.3, "5m_sma_10.0": 100.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
         long_keys = ctx.aspects.direction.long.keys
-        assert "macd_1m" in long_keys
-        assert "macd_5m" in long_keys
-        assert "sma_5m_vs_sma_15m" in long_keys
+        assert "macd_1m_gt_0" in long_keys
+        assert "macd_5m_gt_0" in long_keys
+        assert "sma_10.0_5m_gt_sma_40.0_15m" in long_keys
 
         # 检查分桶
         assert len(ctx.aspects.direction.long.trend) == 1
@@ -504,7 +500,7 @@ class TestDataRequirementsMerge:
 
         from strategies import DataRequirements, PeriodRequirements
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(
@@ -528,7 +524,7 @@ class TestDataRequirementsMerge:
 
         from strategies import DataRequirements, PeriodRequirements
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(
@@ -561,7 +557,7 @@ class TestDiagnosticsAutoWrite:
     def test_confirm_writes_metric_value_to_diagnostics(self):
         """confirm 切面评估时自动将指标值写入 diagnostics[metric.name]"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -574,12 +570,12 @@ class TestDiagnosticsAutoWrite:
         state = _make_state()
         strat.on_bar(state, ctx)
 
-        assert ctx.aspects.diagnostics["macd_1m"] == 0.5
+        assert ctx.aspects.diagnostics["macd_1m_gt_0"] == 0.5
 
     def test_confirm_writes_metric_value_even_if_not_satisfied(self):
         """confirm 切面条件不满足时仍然写入 diagnostics"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -593,13 +589,13 @@ class TestDiagnosticsAutoWrite:
         strat.on_bar(state, ctx)
 
         # 条件不满足，但指标值仍写入 diagnostics
-        assert ctx.aspects.diagnostics["macd_1m"] == -0.5
+        assert ctx.aspects.diagnostics["macd_1m_gt_0"] == -0.5
         assert len(ctx.aspects.direction.long.confirm) == 0
 
     def test_confirm_no_diagnostics_when_period_missing(self):
         """confirm 切面周期缺失时不写入 diagnostics"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -612,12 +608,12 @@ class TestDiagnosticsAutoWrite:
         state = _make_state()
         strat.on_bar(state, ctx)
 
-        assert "macd_1m" not in ctx.aspects.diagnostics
+        assert "macd_1m_gt_0" not in ctx.aspects.diagnostics
 
     def test_trend_writes_left_right_to_diagnostics(self):
         """trend 切面评估时自动将左右指标值写入 diagnostics"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -628,20 +624,20 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 100.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_sma_10.0": 100.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
-        assert ctx.aspects.diagnostics["sma_5m"] == 100.0
-        assert ctx.aspects.diagnostics["sma_15m"] == 99.0
+        assert ctx.aspects.diagnostics["sma_10.0_5m_gt_sma_40.0_15m"] == 100.0
+        assert ctx.aspects.diagnostics["sma_40.0_15m"] == 99.0
 
     def test_trend_writes_diagnostics_even_if_not_satisfied(self):
         """trend 切面条件不满足时仍然写入左右指标值"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -652,21 +648,21 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 98.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_sma_10.0": 98.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
-        assert ctx.aspects.diagnostics["sma_5m"] == 98.0
-        assert ctx.aspects.diagnostics["sma_15m"] == 99.0
+        assert ctx.aspects.diagnostics["sma_10.0_5m_gt_sma_40.0_15m"] == 98.0
+        assert ctx.aspects.diagnostics["sma_40.0_15m"] == 99.0
         assert len(ctx.aspects.direction.long.trend) == 0
 
     def test_trend_no_diagnostics_when_one_side_missing(self):
         """trend 切面任一侧指标缺失时不写入 diagnostics"""
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -677,15 +673,15 @@ class TestDiagnosticsAutoWrite:
         strat = _S()
         ctx = _make_ctx(
             {
-                "5m": {"5m_sma_10": 100.0},
+                "5m": {"5m_sma_10.0": 100.0},
                 "15m": {},  # 缺失 sma_40
             }
         )
         state = _make_state()
         strat.on_bar(state, ctx)
 
-        assert "sma_5m" not in ctx.aspects.diagnostics
-        assert "sma_15m" not in ctx.aspects.diagnostics
+        assert "sma_10.0_5m_gt_sma_40.0_15m" not in ctx.aspects.diagnostics
+        assert "sma_40.0_15m" not in ctx.aspects.diagnostics
 
 
 # --------------------------
@@ -701,7 +697,7 @@ class TestPeriodsAutoRegistration:
 
         from strategies import DataRequirements
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(periods={}, indicators={})
@@ -721,7 +717,7 @@ class TestPeriodsAutoRegistration:
 
         from strategies import DataRequirements, PeriodRequirements
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(
@@ -743,7 +739,7 @@ class TestPeriodsAutoRegistration:
 
         from strategies import DataRequirements
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(periods={}, indicators={})
@@ -765,7 +761,7 @@ class TestPeriodsAutoRegistration:
 
         from strategies import DataRequirements, PeriodRequirements
 
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(

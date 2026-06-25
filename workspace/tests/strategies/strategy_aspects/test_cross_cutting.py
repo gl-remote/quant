@@ -22,17 +22,11 @@ from strategies import Bar
 from strategies.core.state import State
 from strategies.core.types import Fill, StrategyPosition
 from strategies.strategy_aspects import (
-    MACD,
-    SMA,
-    AtrNode,
-    CooldownNode,
-    FixedRatioNode,
-    at,
-    confirm_long_when,
-    entry_block_stop_loss,
-    exit_stop_loss,
-    exit_take_profit,
-    trend_long_when_compare,
+    confirm_long,
+    entry_block_after_stop_loss,
+    exit_for_stop_loss,
+    exit_for_take_profit,
+    trend_long,
 )
 
 # --------------------------
@@ -131,8 +125,8 @@ class TestRiskExecutesWithDirection:
     def test_stop_loss_with_confirm(self):
         """止损触发时 confirm 切面也执行"""
 
-        @exit_stop_loss(FixedRatioNode())
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -157,8 +151,8 @@ class TestRiskExecutesWithDirection:
     def test_take_profit_with_confirm(self):
         """止盈触发时 confirm 切面也执行"""
 
-        @exit_take_profit(FixedRatioNode())
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -189,9 +183,9 @@ class TestRiskPassesThrough:
     def test_no_position_confirm_executes(self):
         """无持仓时 risk 不触发，confirm 切面正常写入"""
 
-        @exit_stop_loss(FixedRatioNode())
-        @exit_take_profit(FixedRatioNode())
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -207,14 +201,14 @@ class TestRiskPassesThrough:
 
         assert ctx.aspects.risk.all_reasons == []
         assert len(ctx.aspects.direction.long.confirm) == 1
-        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m"
+        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m_gt_0"
 
     def test_position_no_trigger_confirm_executes(self):
         """有持仓但止损未触发时 confirm 切面正常写入"""
 
-        @exit_stop_loss(FixedRatioNode())
-        @exit_take_profit(FixedRatioNode())
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -238,7 +232,7 @@ class TestRiskPassesThrough:
 
 
 class TestCooldownPlusStopLoss:
-    """entry_block_stop_loss_cooldown + exit_stop_loss_when 交叉行为
+    """entry_block_after_stop_loss + exit_for_stop_loss 交叉行为
 
     两个切面都是建议型，都会执行。
     """
@@ -246,8 +240,8 @@ class TestCooldownPlusStopLoss:
     def test_has_position_cooldown_passes_stop_checks(self):
         """有持仓 + 冷却期内 → cooldown 不写入，止损正常触发"""
 
-        @entry_block_stop_loss(CooldownNode(minutes=30))
-        @exit_stop_loss(FixedRatioNode())
+        @entry_block_after_stop_loss("cooldown() < 30")
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -279,8 +273,8 @@ class TestCooldownPlusStopLoss:
     def test_no_position_cooldown_blocks_stop_not_checked(self):
         """无持仓 + 冷却期内 → cooldown 写入 risk，止损不检查"""
 
-        @entry_block_stop_loss(CooldownNode(minutes=30))
-        @exit_stop_loss(FixedRatioNode())
+        @entry_block_after_stop_loss("cooldown() < 30")
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -315,8 +309,8 @@ class TestDiagnosticsCompleteness:
     def test_stop_loss_diagnostics_with_direction(self):
         """止损触发 → diagnostics 有止损信息，direction 切面 diagnostics 也在"""
 
-        @exit_stop_loss(FixedRatioNode())
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -346,13 +340,13 @@ class TestDiagnosticsCompleteness:
 
 
 class TestMultipleRiskAdvisory:
-    """exit_stop_loss_when + exit_stop_loss_atr — 两个切面都执行"""
+    """多个 exit_for_stop_loss 叠加 — 两个切面都执行"""
 
     def test_fixed_stop_and_atr_stop_both_trigger(self):
         """固定止损和 ATR 止损都触发时，两个切面都写入 risk"""
 
-        @exit_stop_loss(FixedRatioNode())
-        @exit_stop_loss(AtrNode("15m"))
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -380,8 +374,8 @@ class TestMultipleRiskAdvisory:
     def test_fixed_take_profit_only(self):
         """只有固定止盈触发时，只有固定比例切面写入"""
 
-        @exit_take_profit(FixedRatioNode())
-        @exit_take_profit(AtrNode("15m"))
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        @exit_for_take_profit("profit_abs() >= atr@15m * {atr_take_profit_multiplier}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -414,8 +408,8 @@ class TestAdvisoryIsolation:
     def test_both_satisfied(self):
         """两个都满足 → long.trend 和 long.confirm 各有 1 条"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @confirm_long("macd@1m > 0")
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -427,8 +421,8 @@ class TestAdvisoryIsolation:
         ctx = _make_ctx(
             {
                 "1m": {"1m_macd_12_9_26": 0.5},
-                "5m": {"5m_sma_10": 100.0},
-                "15m": {"15m_sma_40": 99.0},
+                "5m": {"5m_sma_10.0": 100.0},
+                "15m": {"15m_sma_40.0": 99.0},
             }
         )
         state = _make_state()
@@ -437,14 +431,14 @@ class TestAdvisoryIsolation:
 
         assert len(ctx.aspects.direction.long.confirm) == 1
         assert len(ctx.aspects.direction.long.trend) == 1
-        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m"
-        assert ctx.aspects.direction.long.trend[0].name == "sma_5m_vs_sma_15m"
+        assert ctx.aspects.direction.long.confirm[0].name == "macd_1m_gt_0"
+        assert ctx.aspects.direction.long.trend[0].name == "sma_10.0_5m_gt_sma_40.0_15m"
 
     def test_only_confirm_satisfied(self):
         """只有 confirm 满足 → long.confirm 有 1 条，long.trend 为空"""
 
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
-        @trend_long_when_compare(at(SMA(10), "5m"), ">", at(SMA(40), "15m"))
+        @confirm_long("macd@1m > 0")
+        @trend_long("sma(10)@5m > sma(40)@15m")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -478,12 +472,12 @@ class TestDataRequirementsCrossMerge:
     """risk 和建议型切面的 data_requirements 正确合并"""
 
     def test_atr_stop_and_confirm_merge(self):
-        """exit_stop_loss_atr + confirm_long_when → 同时有 ATR(15m) 和 MACD(1m)"""
+        """exit_for_stop_loss_atr + confirm_long → 同时有 ATR(15m) 和 MACD(1m)"""
 
         from strategies import DataRequirements
 
-        @exit_stop_loss(AtrNode("15m"))
-        @confirm_long_when(at(MACD, "1m"), ">", 0)
+        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+        @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
                 return DataRequirements(periods={}, indicators={})

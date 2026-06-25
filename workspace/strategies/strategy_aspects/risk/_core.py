@@ -76,6 +76,7 @@ def _exit_aspect(
                 close = ctx.bar.close
                 _write_position_diagnostics(ctx, state, close)
                 ctx.risk_role = role
+                ctx.state = state
                 result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).exit.append(
@@ -108,6 +109,7 @@ def _entry_block_aspect(
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
             if not state.position.direction and state.fills:
                 ctx.risk_role = role
+                ctx.state = state
                 result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:
                     getattr(ctx.aspects.risk, role).entry_block.append(

@@ -19,7 +19,7 @@ from common.constants import (
 )
 from strategies.core.state import State
 from strategies.core.types import Signal, StrategyPosition
-from strategies.strategy_aspects import FixedRatioNode, exit_stop_loss
+from strategies.strategy_aspects import exit_for_stop_loss
 from strategies.strategy_aspects.primitives import StrategyAspects
 
 # --------------------------
@@ -103,7 +103,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@exit_stop_loss(FixedRatioNode())
+@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
 class _SimpleStrategy:
     """最简单的装饰器测试策略"""
 
@@ -114,7 +114,7 @@ class _SimpleStrategy:
 
 
 class TestExitStopLossWhen:
-    """测试 exit_stop_loss_when 类装饰器"""
+    """测试 exit_for_stop_loss_when 类装饰器"""
 
     def setup_method(self):
         self.strat = _SimpleStrategy()
@@ -143,7 +143,6 @@ class TestExitStopLossWhen:
         assert signal is _ON_BAR_RETURN
         assert len(ctx.aspects.risk.stop_loss.exit) == 1
         assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
-        assert ctx.aspects.risk.stop_loss.exit[0].detail["type"] == "fixed_ratio"
 
     def test_long_stop_loss_not_triggered(self):
         """多头持仓，价格未跌破止损线 → risk 为空"""

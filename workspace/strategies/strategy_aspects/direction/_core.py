@@ -155,6 +155,7 @@ def _direction_aspect(
 
         @functools.wraps(original_on_bar)
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
+            ctx.state = state
             result = predicate.evaluate(ctx, state.strategy_config)
             if result is not None and result[0]:
                 reason = DirectionReason(role=role, name=reason_name, detail=result[1])

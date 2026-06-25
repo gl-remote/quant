@@ -403,6 +403,12 @@ def _evaluate_compare(expr: CompareExpr, ctx: Any, config: Any) -> tuple[bool, d
     if left_val is None or right_val is None:
         return None
 
+    # 写入 diagnostics
+    if _is_named(expr.left):
+        ctx.aspects.diagnostics[_default_name(expr)] = left_val
+    if _is_named(expr.right):
+        ctx.aspects.diagnostics[_default_name(expr.right)] = right_val
+
     if expr.op == ">":
         satisfied = left_val > right_val
     elif expr.op == "<":
@@ -486,13 +492,20 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
             return None
         atr_period = getattr(config, "atr_period", 14)
         col = generate_indicator_column_name("atr", {"period": atr_period}, period=expr.period)
-        return view.indicator(col, -1)  # type: ignore[no-any-return]
+        value = view.indicator(col, -1)
+        if value == 0.0:
+            return None
+        return value  # type: ignore[no-any-return]
 
     indicator_factory = _indicator_map.get(expr.indicator_name)
     if indicator_factory is None:
         return None
 
-    if callable(indicator_factory):
+    from ..core.indicators import IndicatorSpec
+
+    if isinstance(indicator_factory, IndicatorSpec):
+        indicator = indicator_factory
+    elif callable(indicator_factory):
         if expr.params:
             resolved_params = []
             for p in expr.params:
@@ -543,14 +556,27 @@ def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
     # 角色过滤：只匹配当前风控角色对应的成交
     risk_role = getattr(ctx, "risk_role", None)
     if risk_role == "take_profit":
-        if "TAKE_PROFIT" not in last_fill.reason:
+        if "take_profit" not in last_fill.reason:
             return None
     elif risk_role == "stop_loss":
-        if "TAKE_PROFIT" in last_fill.reason:
+        if "take_profit" in last_fill.reason:
             return None
 
-    now = ctx.bar.timestamp if hasattr(ctx.bar, "timestamp") else 0
-    elapsed_minutes = (now - last_fill.timestamp) / 60_000  # type: ignore[operator]
+    # 计算 bar 时间与最近成交时间之间的分钟差
+    from datetime import datetime
+
+    bar_dt = getattr(ctx.bar, "datetime", None)
+    if bar_dt is None:
+        return None
+
+    bar_ts = datetime.fromtimestamp(bar_dt / 1000) if isinstance(bar_dt, (int, float)) else bar_dt
+
+    try:
+        fill_ts = datetime.fromisoformat(str(last_fill.timestamp))
+    except (ValueError, TypeError):
+        return None
+
+    elapsed_minutes = (bar_ts - fill_ts).total_seconds() / 60.0
     return elapsed_minutes  # type: ignore[no-any-return]
 
 
@@ -669,7 +695,10 @@ def _default_name(expr: Expr) -> str:
 
 def _value_name(expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr) -> str:
     if isinstance(expr, NumberExpr):
-        return str(expr.value).replace(".", "_")
+        v = expr.value
+        if v == int(v):
+            return str(int(v))
+        return str(v).replace(".", "_")
     if isinstance(expr, ConfigRefExpr):
         return expr.key
     if isinstance(expr, FuncCallExpr):
