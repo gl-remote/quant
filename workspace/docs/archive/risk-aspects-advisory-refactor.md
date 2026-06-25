@@ -3,10 +3,10 @@
 > 类型：Design / 已实现设计记录
 > 状态：已实现
 > 完成日期：2026-06-25
-> 关联代码：[strategy_aspects/risk](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/risk)、[strategy_aspects/direction](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/direction)、[primitives.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/primitives.py)
+> 关联代码：[strategy\_aspects/risk](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/risk)、[strategy\_aspects/direction](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/direction)、[primitives.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/primitives.py)
 > 关联缺陷：DEF-S05（信号优先级由 if/elif 顺序隐式定义）
 
----
+***
 
 ## 0. 交接摘要
 
@@ -15,7 +15,7 @@
 - 目标：把风控切面改造为**建议型**（信息填充），统一到 `ctx.aspects` 模型，**决策权交还策略**，与 `direction` DSL 的哲学对齐。
 - 消费语义与 `direction` 不同：`direction` 是 AND/子集（`required <= keys`），risk 是**策略完全自治**（框架不内置聚合语义）。
 
----
+***
 
 ## 1. 背景与动机
 
@@ -23,12 +23,12 @@
 
 `risk` 模块四个切面：
 
-| 切面 | 行为 | 触发 |
-|------|------|------|
-| `with_stop_take_profit` | 直接返回平仓 Signal | 有持仓 |
-| `with_atr_stop_take_profit` | 直接返回平仓 Signal | 有持仓 |
-| `with_trailing_stop` | 直接返回平仓 Signal | 有持仓 |
-| `with_trade_cooldown` | 直接返回空 Signal 阻断入场 | 空仓 |
+| 切面                          | 行为                | 触发  |
+| --------------------------- | ----------------- | --- |
+| `with_stop_take_profit`     | 直接返回平仓 Signal     | 有持仓 |
+| `with_atr_stop_take_profit` | 直接返回平仓 Signal     | 有持仓 |
+| `with_trailing_stop`        | 直接返回平仓 Signal     | 有持仓 |
+| `with_trade_cooldown`       | 直接返回空 Signal 阻断入场 | 空仓  |
 
 它们各自包装 `on_bar`，满足条件即短路返回，链式叠加时**最外层（声明最靠上）先触发者胜出**。
 
@@ -46,22 +46,22 @@
 
 策略在 `on_bar` 里同时看到方向建议与风控建议，**对入场/出场冲突、出场优先级拥有完全控制权**，而不再被装饰器顺序隐式绑定。
 
----
+***
 
 ## 2. 设计原则（与 direction 的异同）
 
-| 维度 | direction（参照） | risk（本设计） |
-|------|------------------|----------------|
-| 切面产物 | 方向理由写入 `ctx.aspects.direction` | 风控理由写入 `ctx.aspects.risk` |
-| 决策归属 | 策略 | 策略 |
-| 消费语义 | AND / 子集（`required <= keys`） | **策略完全自治** |
-| reason 载荷 | `name + detail`（诊断用） | `name + detail`（诊断用） |
-| 抽象形态 | 单工厂 × 正交三轴（8 全满） | **AST 节点 + 统一工厂** |
-| 安全级别 | 策略全责 | 策略全责 |
+| 维度        | direction（参照）                  | risk（本设计）                 |
+| --------- | ------------------------------ | ------------------------- |
+| 切面产物      | 方向理由写入 `ctx.aspects.direction` | 风控理由写入 `ctx.aspects.risk` |
+| 决策归属      | 策略                             | 策略                        |
+| 消费语义      | AND / 子集（`required <= keys`）   | **策略完全自治**                |
+| reason 载荷 | `name + detail`（诊断用）           | `name + detail`（诊断用）      |
+| 抽象形态      | 单工厂 × 正交三轴（8 全满）               | **AST 节点 + 统一工厂**         |
+| 安全级别      | 策略全责                           | 策略全责                      |
 
 **关键简化**：reason 载荷不引入 `severity`、`action`、`volume` 等决策权重字段——切面只提供**纯信息**，消费语义（包括优先级、聚合规则）**完全由策略自定义**。
 
----
+***
 
 ## 3. 目标数据结构
 
@@ -125,7 +125,7 @@ class StrategyAspects:
         }
 ```
 
----
+***
 
 ## 4. 消费侧设计
 
@@ -153,13 +153,14 @@ def on_bar(self, state, ctx):
 
 建议策略在返回前调用 `ctx.aspects.flush_diagnostics()`，将 risk 信息展平到 diagnostics 便于复盘。
 
----
+***
 
 ## 5. AST 节点设计
 
 ### 5.1 设计意图
 
 把风控条件从「7 个独立切面文件」收敛为「**4 个 AST 节点 + 1 个统一工厂**」，实现：
+
 - **触发逻辑内聚**：同一类条件（固定比例、ATR、回撤、时间）的逻辑集中在一处
 - **切面工厂统一**：`_core.py` 只负责「有持仓/空仓检查 → 调用节点 evaluate → 写入对应桶」
 - **未来 DSL 兼容**：新增 `role` 参数由装饰器工厂传入，节点本身不硬编码止盈/止损归属
@@ -176,12 +177,12 @@ class RiskNode(Protocol):
         return None
 ```
 
-| 节点 | 参数 | evaluate 行为 | data_requirements |
-|------|------|--------------|-------------------|
-| `FixedRatioNode(ratio=None)` | 自定义比例或读 config | 比较 `close` vs `entry_price * (1 ± ratio)` | 无 |
-| `AtrNode(period="15m")` | 指标周期 | 从 `ctx.multi[period]` 读 ATR，比较 `entry_price ± atr * multiplier` | 自动注册 ATR |
-| `TrailingNode(period="15m")` | 指标周期 | 先判断激活阈值（`atr * activation`），再判断回撤比例 | 自动注册 ATR |
-| `CooldownNode(minutes)` | 冷却分钟数 | 读 `state.fills[-1]` 时间，比较是否超期 | 无 |
+| 节点                           | 参数             | evaluate 行为                                                     | data\_requirements |
+| ---------------------------- | -------------- | --------------------------------------------------------------- | ------------------ |
+| `FixedRatioNode(ratio=None)` | 自定义比例或读 config | 比较 `close` vs `entry_price * (1 ± ratio)`                       | 无                  |
+| `AtrNode(period="15m")`      | 指标周期           | 从 `ctx.multi[period]` 读 ATR，比较 `entry_price ± atr * multiplier` | 自动注册 ATR           |
+| `TrailingNode(period="15m")` | 指标周期           | 先判断激活阈值（`atr * activation`），再判断回撤比例                             | 自动注册 ATR           |
+| `CooldownNode(minutes)`      | 冷却分钟数          | 读 `state.fills[-1]` 时间，比较是否超期                                   | 无                  |
 
 ### 5.3 使用界面
 
@@ -205,21 +206,21 @@ class MyStrategy(Strategy[MyParams]):
 
 **关键设计**：`role`（`"take_profit"` / `"stop_loss"`）由装饰器工厂 `_exit_aspect` / `_entry_block_aspect` 在调用 `evaluate(..., role=role)` 时传入，节点据此读取 config 中对应字段（`take_profit_ratio` vs `stop_loss_ratio` 等）。节点构造函数**不显式接收 role**，避免 `@exit_take_profit(FixedRatioNode("take_profit"))` 这类冗余。
 
----
+***
 
 ## 6. 切面产物明细
 
-| 切面 | 触发条件 | `RiskReason.name` | `detail` 字段 |
-|------|----------|-------------------|---------------|
-| `exit_take_profit(FixedRatioNode())` | 有持仓，固定比例止盈触发 | `SIGNAL_TAKE_PROFIT` | `type="fixed_ratio"`, `direction`, `entry_price`, `current_close`, `take_profit_ratio`, `highest_price`, `lowest_price` |
-| `exit_stop_loss(FixedRatioNode())` | 有持仓，固定比例止损触发 | `SIGNAL_STOP_LOSS` | `type="fixed_ratio"`, `direction`, `entry_price`, `current_close`, `stop_loss_ratio`, `highest_price`, `lowest_price` |
-| `exit_take_profit(AtrNode("15m"))` | 有持仓，ATR 倍数止盈触发 | `SIGNAL_TAKE_PROFIT` | `type="atr"`, `direction`, `entry_price`, `current_close`, `atr_value`, `atr_take_profit_multiplier` |
-| `exit_stop_loss(AtrNode("15m"))` | 有持仓，ATR 倍数止损触发 | `SIGNAL_STOP_LOSS` | `type="atr"`, `direction`, `entry_price`, `current_close`, `atr_value`, `atr_stop_loss_multiplier` |
-| `exit_take_profit(TrailingNode("15m"))` | 有持仓，回撤止盈激活且触发 | `SIGNAL_TAKE_PROFIT` | `type="trailing_stop"`, `direction`, `entry_price`, `current_close`, `peak_price`, `atr_value`, `trailing_activation_atr`, `trailing_drawdown_ratio` |
-| `entry_block_take_profit(CooldownNode(minutes=10))` | 空仓，止盈成交后冷却期未结束 | `SIGNAL_TRADE_COOLDOWN` | `cooldown_minutes`, `elapsed_seconds`, `remaining_seconds` |
-| `entry_block_stop_loss(CooldownNode(minutes=10))` | 空仓，止损成交后冷却期未结束 | `SIGNAL_TRADE_COOLDOWN` | `cooldown_minutes`, `elapsed_seconds`, `remaining_seconds` |
+| 切面                                                  | 触发条件           | `RiskReason.name`       | `detail` 字段                                                                                                                                          |
+| --------------------------------------------------- | -------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exit_take_profit(FixedRatioNode())`                | 有持仓，固定比例止盈触发   | `SIGNAL_TAKE_PROFIT`    | `type="fixed_ratio"`, `direction`, `entry_price`, `current_close`, `take_profit_ratio`, `highest_price`, `lowest_price`                              |
+| `exit_stop_loss(FixedRatioNode())`                  | 有持仓，固定比例止损触发   | `SIGNAL_STOP_LOSS`      | `type="fixed_ratio"`, `direction`, `entry_price`, `current_close`, `stop_loss_ratio`, `highest_price`, `lowest_price`                                |
+| `exit_take_profit(AtrNode("15m"))`                  | 有持仓，ATR 倍数止盈触发 | `SIGNAL_TAKE_PROFIT`    | `type="atr"`, `direction`, `entry_price`, `current_close`, `atr_value`, `atr_take_profit_multiplier`                                                 |
+| `exit_stop_loss(AtrNode("15m"))`                    | 有持仓，ATR 倍数止损触发 | `SIGNAL_STOP_LOSS`      | `type="atr"`, `direction`, `entry_price`, `current_close`, `atr_value`, `atr_stop_loss_multiplier`                                                   |
+| `exit_take_profit(TrailingNode("15m"))`             | 有持仓，回撤止盈激活且触发  | `SIGNAL_TAKE_PROFIT`    | `type="trailing_stop"`, `direction`, `entry_price`, `current_close`, `peak_price`, `atr_value`, `trailing_activation_atr`, `trailing_drawdown_ratio` |
+| `entry_block_take_profit(CooldownNode(minutes=10))` | 空仓，止盈成交后冷却期未结束 | `SIGNAL_TRADE_COOLDOWN` | `cooldown_minutes`, `elapsed_seconds`, `remaining_seconds`                                                                                           |
+| `entry_block_stop_loss(CooldownNode(minutes=10))`   | 空仓，止损成交后冷却期未结束 | `SIGNAL_TRADE_COOLDOWN` | `cooldown_minutes`, `elapsed_seconds`, `remaining_seconds`                                                                                           |
 
----
+***
 
 ## 7. 实施记录
 
@@ -238,10 +239,10 @@ class MyStrategy(Strategy[MyParams]):
 - `_trailing_stop.py` → `_trailing_take_profit.py`：写入 `risk.take_profit.exit`
 - `_trade_cooldown.py` → `_cooldown_after_take_profit.py` + `_cooldown_after_stop_loss.py`：写入 `entry_block`
 
-### 阶段 2：ma_strategy 接管 risk 决策
+### 阶段 2：ma\_strategy 接管 risk 决策
 
 - `on_bar` 新增出场逻辑：有持仓 + `ctx.aspects.risk` exit 非空 → 构造平仓 Signal
-- `on_bar` 新增入场阻断：空仓 + `ctx.aspects.risk` 含 entry_block → 不入场
+- `on_bar` 新增入场阻断：空仓 + `ctx.aspects.risk` 含 entry\_block → 不入场
 - 注释与文档字符串同步更新
 
 ### 阶段 3：命名风格对齐 direction
@@ -257,7 +258,7 @@ class MyStrategy(Strategy[MyParams]):
 - 删除 7 个旧切面文件
 - `role` 参数从节点构造函数移除，改由装饰器工厂在 `evaluate(..., role=role)` 时传入
 
----
+***
 
 ## 8. 未来扩展
 
@@ -273,6 +274,7 @@ class MyStrategy(Strategy[MyParams]):
 ```
 
 所需新增组件：
+
 - `ValueRef` 基类：`BarRef`、`PosRef`、`IndicatorRef`、`ConstRef`
 - `Expr` 类：`add`、`multiply` 等算术运算
 - `Predicate` 类：`gt`、`lt` 等比较运算
@@ -291,6 +293,7 @@ class MyStrategy(Strategy[MyParams]):
 ```
 
 此改动需要：
+
 1. `indicators.py` 新增 `ATR` 工厂
 2. `AtrNode` / `TrailingNode` 构造函数改为接收 `MetricRef`
 3. `evaluate` 和 `data_requirements_builder` 均从 `MetricRef` 提取信息
@@ -298,11 +301,12 @@ class MyStrategy(Strategy[MyParams]):
 ### 8.3 新增风控节点
 
 基于现有 `RiskNode` Protocol，可轻松新增节点类型而不改 `_core.py`：
+
 - `MaxDrawdownNode(max_pct)`：净值回撤节点
 - `TimeStopNode(max_bars)`：最大持仓时间节点
 - `VolumeSpikeNode(period, threshold)`：成交量异常节点
 
----
+***
 
 ## 9. 文件清单
 
@@ -321,3 +325,4 @@ strategies/strategy_aspects/risk/
 # ├── _take_profit_atr.py
 # └── _trailing_take_profit.py
 ```
+

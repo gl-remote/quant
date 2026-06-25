@@ -76,6 +76,7 @@ def _exit_aspect(
                 close = ctx.bar.close
                 _write_position_diagnostics(ctx, state, close)
                 ctx.risk_role = role
+                # ctx 不自带 state 引用，内置函数需要 ctx.state 访问持仓/成交数据
                 ctx.state = state
                 result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:
@@ -109,6 +110,7 @@ def _entry_block_aspect(
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
             if not state.position.direction and state.fills:
                 ctx.risk_role = role
+                # ctx 不自带 state 引用，内置函数需要 ctx.state 访问持仓/成交数据
                 ctx.state = state
                 result = predicate.evaluate(ctx, state.strategy_config)
                 if result is not None and result[0]:

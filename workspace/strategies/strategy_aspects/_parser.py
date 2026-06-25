@@ -123,6 +123,8 @@ class MetricRefExpr:
 
 @dataclass(frozen=True)
 class CompareExpr:
+    """比较表达式，如 ``macd@1m > 0``、``profit_pct() >= {stop_loss_ratio}``"""
+
     left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
     op: str
     right: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
@@ -139,6 +141,8 @@ class ArithExpr:
 
 @dataclass(frozen=True)
 class BoolOpExpr:
+    """布尔组合表达式，支持 ``&&``/``and`` 和 ``||``/``or``，优先级 ``&& > ||``"""
+
     op: Literal["and", "or"]
     left: Expr
     right: Expr
@@ -194,7 +198,12 @@ class _PrattParser:
         return self._advance()
 
     def parse(self, min_bp: int = 0) -> Expr:
-        """Pratt 主循环"""
+        """Pratt 主循环：先解析前缀表达式，然后反复消费高优先级的中缀运算符。
+
+        Pratt Parser 的核心思想是每个 token 关联 prefix 和 infix 处理函数，
+        运算符优先级由 binding power 表 (``_PRECEDENCE``) 声明式管理，
+        无需手写 EBNF 层级嵌套。
+        """
         token = self._advance()
         left = self._prefix(token)
         if left is None:
@@ -227,7 +236,7 @@ class _PrattParser:
         return None
 
     def _infix(self, left: Expr, token: Token) -> Expr:
-        """处理中缀表达式"""
+        """处理中缀运算符：``@`` 绑定周期，``*/`` 算术，``OP`` 比较，``AND/OR`` 布尔组合"""
         if token.type == "AT":
             period_token = self._expect("PERIOD_ID")
             if not isinstance(left, MetricRefExpr):
@@ -241,6 +250,7 @@ class _PrattParser:
                 else:
                     raise SyntaxError(f"位置 {token.pos}：'@' 左侧必须是指标名或函数调用")
             else:
+                # frozen dataclass，通过 object.__setattr__ 变通赋值
                 object.__setattr__(left, "period", period_token.value)
             return left
 
@@ -484,7 +494,8 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
     }
 
     if expr.indicator_name == "atr":
-        # ATR 列名由 generate_indicator_column_name 生成
+        # ATR 是特殊指标：ATR 工厂支持模板参数（如 {atr_period}），
+        # 且不存在固定的 IndicatorSpec 实例。列名由 generate_indicator_column_name 生成。
         from ..core.indicators import generate_indicator_column_name
 
         view = ctx.multi.get(expr.period)
@@ -503,6 +514,8 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
 
     from ..core.indicators import IndicatorSpec
 
+    # IndicatorSpec vs callable 分支：MACD/KDJ 是预置的 IndicatorSpec 实例（不可调用），
+    # SMA 是工厂函数（callable），两者在 _read_metric 中处理方式不同。
     if isinstance(indicator_factory, IndicatorSpec):
         indicator = indicator_factory
     elif callable(indicator_factory):
@@ -547,7 +560,14 @@ def _call_builtin(name: str, ctx: Any, config: Any) -> float | None:
 
 
 def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
-    """自上次匹配风控角色的成交以来的冷却分钟数。"""
+    """自上次匹配风控角色的成交以来的冷却分钟数。
+
+    角色过滤是一个关键设计决策：
+    - take_profit 后的冷却：只匹配 reason 包含 "take_profit" 的成交
+    - stop_loss 后的冷却：排除 reason 包含 "take_profit" 的成交（即只匹配止损成交）
+
+    注意 ``SIGNAL_TAKE_PROFIT = "take_profit"``（小写），角色名需与常量一致。
+    """
     fills = ctx.state.fills if hasattr(ctx, "state") else []
     if not fills:
         return None
@@ -565,6 +585,7 @@ def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
     # 计算 bar 时间与最近成交时间之间的分钟差
     from datetime import datetime
 
+    # Bar 对象使用 datetime 字段（而非 timestamp），兼容 int/float/datetime 三种格式
     bar_dt = getattr(ctx.bar, "datetime", None)
     if bar_dt is None:
         return None
@@ -696,6 +717,8 @@ def _default_name(expr: Expr) -> str:
 def _value_name(expr: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr) -> str:
     if isinstance(expr, NumberExpr):
         v = expr.value
+        # 整数浮点数（如 0.0 → "0"）不转为 "0_0"，
+        # 非整数（如 3.14 → "3_14"）转下划线形式
         if v == int(v):
             return str(int(v))
         return str(v).replace(".", "_")

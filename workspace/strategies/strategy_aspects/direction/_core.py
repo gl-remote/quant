@@ -28,8 +28,10 @@ _Op = Literal[">", "<"]
 def _resolve_template(value: Any, config: Any) -> Any:
     """解析模板值，支持完整模板和部分模板。
 
-    完整模板：'{sma_short}' -> config.sma_short（如 10）
-    部分模板：'sma_{sma_short}' -> 'sma_10'
+    完整模板：``'{sma_short}' -> config.sma_short``（如 10）
+    部分模板：``'sma_{sma_short}' -> 'sma_10'``（保留前缀，仅替换 ``{...}`` 部分）
+
+    非字符串原样返回。
     """
     if not isinstance(value, str):
         return value
@@ -155,6 +157,8 @@ def _direction_aspect(
 
         @functools.wraps(original_on_bar)
         def _on_bar_wrapper(self: Any, state: Any, ctx: Any) -> Any:
+            # ctx 不自带 state 引用，内置函数（如 cooldown()、profit_abs()）需要
+            # 通过 ctx.state 访问持仓/成交数据，在求值前显式注入。
             ctx.state = state
             result = predicate.evaluate(ctx, state.strategy_config)
             if result is not None and result[0]:
