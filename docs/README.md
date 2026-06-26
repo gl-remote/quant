@@ -19,6 +19,7 @@
 ## Roadmap / 未来规划
 
 - [项目改进计划](roadmap/plan.md) — 活跃，总体路线图 + 待办 + 已知缺陷
+- [ATR 策略稳健正期望 Roadmap](roadmap/strategy-atr-tuning.md) — 活跃，当前策略调优主线
 
 ## Archive / 已归档设计记录
 
@@ -29,6 +30,5 @@
 - [并行回测设计与实现说明](archive/backtest-parallel.md) — 已实现，2026-06-19
 - [报告前端重构设计](archive/report-refactor.md) — 主体已实现，2026-05-27
 - [策略切面设计规格](archive/strategy-aspects.md) — 已实现，2026-06-16
-- [MA 策略盈利能力改造设计](archive/strategy-ma-profitability.md) — 已实现，2026-06-17
 - [策略运行时数据设计](archive/strategy-runtime-data.md) — 历史设计，已废弃
 - [策略核心架构重构设计 v0.3](archive/strategy-core-architecture-refactoring-v0.3.md) — 历史设计，已废弃

@@ -60,9 +60,7 @@
 
 ### strategy/ — 策略设计
 
-| 文件 | 类型 | 状态 | 完成日期 | 说明 |
-|------|------|------|---------|------|
-| [strategy-ma-profitability.md](strategy/strategy-ma-profitability.md) | 已实现设计记录 | 已实现 | 2026-06-17 | MA 策略盈利改进 |
+暂无活跃条目。误归档的 MA 策略盈利改进文档已转为 ATR 策略稳健正期望 Roadmap，见 `../roadmap/strategy-atr-tuning.md`。
 
 ### infra/ — 基础设施
 
