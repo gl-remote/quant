@@ -20,7 +20,7 @@ from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 from common.tqsdk_imports import tqsdk
 from config import ConfigManager
 from data import DataManager
-from data.models import database, get_live_session_model, get_live_trade_model
+from data.models import RealtimeSession, RealtimeTrade, database
 from loguru import logger
 from strategies import Signal
 from strategies.bridges.tqsdk_bridge import TqsdkStrategyBridge
@@ -107,12 +107,10 @@ class TqsdkRealtimeWorkflow:
         bridge = TqsdkStrategyBridge(strategy=strategy, state=state)
         account_name = type(tq_account).__name__
 
-        # ── 数据库持久化（表前缀 = mode） ──
+        # ── 数据库持久化：环境隔离由独立 SQLite 文件承担，实时链路使用统一表名 ──
         _ = dm.store
-        session_model = get_live_session_model(f"{mode}_sessions")
-        trade_model = get_live_trade_model(f"{mode}_trades")
-        database.create_tables([session_model, trade_model], safe=True)  # type: ignore[arg-type]
-        session = session_model.create(
+        database.create_tables([RealtimeSession, RealtimeTrade], safe=True)
+        session = RealtimeSession.create(
             symbol=req.symbol,
             strategy="ma",
             mode=account_name,
@@ -133,7 +131,7 @@ class TqsdkRealtimeWorkflow:
                 f"price={price:.2f} vol={signal.volume} "
                 f"reason={signal.reason} | {diag}"
             )
-            trade_model.create(
+            RealtimeTrade.create(
                 session=session.id,
                 datetime=datetime.now(),
                 symbol=req.symbol,

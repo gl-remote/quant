@@ -10,9 +10,13 @@ from data.models import (
     DataSummary,
     ExportMetadata,
     OperationLog,
+    RealtimeSession,
+    RealtimeTrade,
     SymbolInfo,
     TradeRecord,
     close_database,
+    get_live_session_model,
+    get_live_trade_model,
     init_database,
 )
 
@@ -352,6 +356,16 @@ class TestOrmModels:
     def test_backtest_daily_table_name(self):
         assert BacktestDaily._meta.table_name == "backtest_daily"
 
+    def test_realtime_table_names(self):
+        assert RealtimeSession._meta.table_name == "realtime_sessions"
+        assert RealtimeTrade._meta.table_name == "realtime_trades"
+
+    def test_legacy_realtime_model_factories_return_unified_models(self):
+        assert get_live_session_model("test_sessions") is RealtimeSession
+        assert get_live_session_model("live_sessions") is RealtimeSession
+        assert get_live_trade_model("test_trades") is RealtimeTrade
+        assert get_live_trade_model("live_trades") is RealtimeTrade
+
     def test_backtest_trade_foreign_key(self):
         """BacktestTrade 有外键关联 Backtest"""
         fk_field = BacktestTrade.backtest
@@ -377,6 +391,19 @@ class TestDatabaseInit:
             assert "backtests" in tables
             assert "backtest_trades" in tables
             assert "backtest_daily" in tables
+        finally:
+            close_database()
+
+    def test_realtime_models_create_unified_tables(self, temp_db_path):
+        """实时链路在不同环境 DB 内使用统一 realtime 表名。"""
+        init_database(temp_db_path)
+        try:
+            RealtimeSession._meta.database.create_tables([RealtimeSession, RealtimeTrade], safe=True)
+            tables = RealtimeSession._meta.database.get_tables()
+            assert "realtime_sessions" in tables
+            assert "realtime_trades" in tables
+            assert "test_sessions" not in tables
+            assert "live_sessions" not in tables
         finally:
             close_database()
 
