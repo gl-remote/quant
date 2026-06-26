@@ -5,7 +5,7 @@
 > 创建日期：2026-06-26  
 > 开发分支：feature/atr-signal-density  
 > 开分支 hash：9c3a740  
-> 实现提交 hash：待提交  
+> 实现提交 hash：585a4b3  
 > 策略代码：[atr_strategy.py](../../workspace/strategies/atr_strategy.py)  
 > 框架问题：[framework-indicator-history-issues.md](./framework-indicator-history-issues.md)
 
