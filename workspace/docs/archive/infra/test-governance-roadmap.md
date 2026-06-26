@@ -1,8 +1,10 @@
 # 测试体系治理规划
 
-> 类型：Roadmap / 分阶段实施规划
-> 状态：核心治理阶段性完成（阶段 A-C 已完成，阶段 D/E 阶段性完成；阶段 F coverage 基线与 CI 收口待讨论）
-> 创建日期：2026-06-26
+> 类型：Design / 已实现设计记录  
+> 状态：核心治理阶段性完成（阶段 A-C 已完成，阶段 D/E 阶段性完成；阶段 F coverage 基线与 CI 收口另行讨论）  
+> 完成日期：2026-06-26  
+> Git 参考：`edd2f19 test: enforce domain coverage gates`  
+> 创建日期：2026-06-26  
 > 会话交接：本规划来自 2026-06-26 关于 `workspace/tests`、coverage、pre-commit、`scripts/test.sh` 的连续讨论；后续 AI Agent 应先阅读本文的「交接说明」和「隐藏规则」，再执行任何改动。
 
 ## 背景
