@@ -1,8 +1,9 @@
 # project_data 目录迁移计划
 
-> 类型：Roadmap / 迁移计划  
-> 状态：规划中  
-> 目标：将项目运行数据、报告产物、日志、缓存、测试产物统一收敛到显式可发现的 `project_data/` 目录，替代隐藏目录 `.quant_shared_data/` 与混杂的 `output/`。
+> 类型：Design / 已实现设计记录  
+> 状态：已实现  
+> 完成日期：2026-06-26  
+> Git 参考：`ad7ac28 refactor: migrate local artifacts to project_data`
 
 ## 背景
 
