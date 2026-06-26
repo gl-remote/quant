@@ -42,6 +42,26 @@ import optuna
 import pandas as pd
 from loguru import logger
 
+MIN_TRADES_PER_RESULT = 10
+LOW_ACTIVITY_SCORE = -999.0
+
+
+def calculate_optimization_score(engine_results: list[Any]) -> float:
+    """计算参数优化目标值，低交易活跃度结果直接惩罚。"""
+    successful_results = [r for r in engine_results if r.success]
+    if not successful_results:
+        return LOW_ACTIVITY_SCORE
+
+    if any((r.total_trades or 0) < MIN_TRADES_PER_RESULT for r in successful_results):
+        return LOW_ACTIVITY_SCORE
+
+    calmars = [
+        (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
+        for r in successful_results
+        if (r.max_ddpercent or 0) != 0
+    ]
+    return float(sum(calmars) / len(calmars)) if calmars else LOW_ACTIVITY_SCORE
+
 
 @dataclass
 class OptunaResult:
@@ -152,14 +172,7 @@ class OptunaOptimizer:
 
             pairs = [(sym, df, self._strategy_name, merged_params) for sym, df in self._datasets]
             engine_results = self._engine.run(pairs)
-
-            # Calmar 比率：年化收益 / 最大回撤百分比（风险调整后收益）
-            calmars = [
-                (r.annual_return or 0) / abs(r.max_ddpercent or 0.001)
-                for r in engine_results
-                if r.success and (r.max_ddpercent or 0) != 0
-            ]
-            score = float(sum(calmars) / len(calmars)) if calmars else -999.0
+            score = calculate_optimization_score(engine_results)
 
             trial_index.append(
                 {

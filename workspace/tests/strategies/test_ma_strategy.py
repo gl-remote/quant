@@ -182,6 +182,8 @@ class TestMACrossParams:
         assert cfg.atr_take_profit_multiplier == 3.0
         assert cfg.kdj_oversold == 30
         assert cfg.kdj_overbought == 70
+        assert cfg.signal_profile == "full"
+        assert cfg.exit_on_reverse_signal is False
 
     def test_custom_params(self):
         cfg = MACrossParams(
@@ -270,6 +272,99 @@ class TestMaStrategyEntry:
         assert signal.action == TRADE_ACTION_SELL
         assert "short" in signal.reason.lower() or "entry" in signal.reason.lower()
         assert signal.volume > 0
+
+    def test_sma_only_profile_allows_entry_without_confirm_keys(self):
+        strat = MaStrategyCore()
+        cfg = MACrossParams(signal_profile="sma_only")
+        ctx = _make_ctx(
+            close_prices=[100.0] * 30,
+            periods={"1m": 30, "5m": 10, "15m": 10},
+        )
+        trend_key = "sma_sma_short_5m_gt_sma_sma_long_5m"
+        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
+
+        state = State(
+            symbol="TEST",
+            period="1m",
+            strategy_config=cfg,
+            capital=100000.0,
+            contract_size=10,
+        )
+
+        signal = strat.on_bar(state, ctx)
+        assert signal.action == TRADE_ACTION_BUY
+
+    def test_full_profile_requires_confirm_keys(self):
+        strat = MaStrategyCore()
+        cfg = MACrossParams(signal_profile="full")
+        ctx = _make_ctx(
+            close_prices=[100.0] * 30,
+            periods={"1m": 30, "5m": 10, "15m": 10},
+        )
+        trend_key = "sma_sma_short_5m_gt_sma_sma_long_5m"
+        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
+
+        state = State(
+            symbol="TEST",
+            period="1m",
+            strategy_config=cfg,
+            capital=100000.0,
+            contract_size=10,
+        )
+
+        signal = strat.on_bar(state, ctx)
+        assert signal.action == ""
+
+    def test_reverse_short_signal_exits_long_position(self):
+        strat = MaStrategyCore()
+        cfg = MACrossParams(signal_profile="sma_only", exit_on_reverse_signal=True)
+        ctx = _make_ctx(
+            close_prices=[100.0] * 30,
+            periods={"1m": 30, "5m": 10, "15m": 10},
+            is_long=False,
+        )
+
+        state = State(
+            symbol="TEST",
+            period="1m",
+            strategy_config=cfg,
+            capital=100000.0,
+            contract_size=10,
+            position=StrategyPosition(
+                direction=TRADE_DIRECTION_LONG,
+                entry_price=100.0,
+                volume=10,
+            ),
+        )
+
+        signal = strat.on_bar(state, ctx)
+        assert signal.action == TRADE_ACTION_SELL
+        assert signal.reason == "reverse_short_exit"
+
+    def test_reverse_exit_disabled_keeps_position(self):
+        strat = MaStrategyCore()
+        cfg = MACrossParams(signal_profile="sma_only", exit_on_reverse_signal=False)
+        ctx = _make_ctx(
+            close_prices=[100.0] * 30,
+            periods={"1m": 30, "5m": 10, "15m": 10},
+            is_long=False,
+        )
+
+        state = State(
+            symbol="TEST",
+            period="1m",
+            strategy_config=cfg,
+            capital=100000.0,
+            contract_size=10,
+            position=StrategyPosition(
+                direction=TRADE_DIRECTION_LONG,
+                entry_price=100.0,
+                volume=10,
+            ),
+        )
+
+        signal = strat.on_bar(state, ctx)
+        assert signal.action == ""
 
     def test_no_entry_when_position_exists(self):
         strat = MaStrategyCore()

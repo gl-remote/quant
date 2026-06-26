@@ -105,6 +105,12 @@ class MACrossParams:
     kdj_overbought: int = DEFAULT_KDJ_OVERBOUGHT
     """KDJ 超买阈值，kdj > 此值视为超买（做空入场条件之一），默认 80"""
 
+    signal_profile: str = "full"
+    """信号消融组合：sma_only / sma_macd / sma_kdj / full"""
+
+    exit_on_reverse_signal: bool = False
+    """持仓时是否遇到反向方向信号即退出"""
+
 
 # ── 建议型方向切面声明 ──
 # 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
@@ -168,6 +174,10 @@ class MaStrategyCore(Strategy[MACrossParams]):
 
         risk = ctx.aspects.risk
         exit_reasons = risk.take_profit.exit + risk.stop_loss.exit
+        long_keys: set[str] = ctx.aspects.direction.long.keys
+        short_keys: set[str] = ctx.aspects.direction.short.keys
+        direction_keys: dict[str, set[str]] = type(self).__direction_keys__
+        required_direction_keys = self._required_direction_keys(direction_keys, config.signal_profile)
 
         # ── 有持仓：exit 风控建议触发 → 出场 ──
         if direction and exit_reasons:
@@ -180,19 +190,21 @@ class MaStrategyCore(Strategy[MACrossParams]):
             )
             signal.diagnostics = first_exit.detail
 
+        elif direction and config.exit_on_reverse_signal:
+            if direction == TRADE_DIRECTION_LONG and required_direction_keys["short"] <= short_keys:
+                signal = Signal(action=TRADE_ACTION_SELL, reason="reverse_short_exit", volume=state.position.volume)
+            elif direction != TRADE_DIRECTION_LONG and required_direction_keys["long"] <= long_keys:
+                signal = Signal(action=TRADE_ACTION_BUY, reason="reverse_long_exit", volume=state.position.volume)
+
         # ── 空仓：无任何风控建议时按方向建议入场 ──
         elif not direction and not risk.all_reasons:
-            long_keys: set[str] = ctx.aspects.direction.long.keys
-            short_keys: set[str] = ctx.aspects.direction.short.keys
-            direction_keys: dict[str, set[str]] = type(self).__direction_keys__
-
             vol = self.calc_position_size(
                 ctx.bar.close, state.capital, config.position_ratio, state.contract_size, state.margin
             )
 
-            if direction_keys["long"] <= long_keys:
+            if required_direction_keys["long"] <= long_keys:
                 signal = Signal(action=TRADE_ACTION_BUY, reason="long_entry", volume=vol)
-            elif direction_keys["short"] <= short_keys:
+            elif required_direction_keys["short"] <= short_keys:
                 signal = Signal(action=TRADE_ACTION_SELL, reason="short_entry", volume=vol)
 
         return signal
@@ -200,6 +212,20 @@ class MaStrategyCore(Strategy[MACrossParams]):
     @override
     def on_fill(self, fill: Fill) -> None:
         pass
+
+    @staticmethod
+    def _required_direction_keys(direction_keys: dict[str, set[str]], signal_profile: str) -> dict[str, set[str]]:
+        profiles = {
+            "sma_only": {"sma_"},
+            "sma_macd": {"sma_", "macd_"},
+            "sma_kdj": {"sma_", "kdj_"},
+            "full": {"sma_", "macd_", "kdj_"},
+        }
+        prefixes = profiles.get(signal_profile, profiles["full"])
+        return {
+            side: {key for key in keys if any(key.startswith(prefix) for prefix in prefixes)}
+            for side, keys in direction_keys.items()
+        }
 
     # ---- 仅保留仓位计算 ----
 

@@ -8,6 +8,7 @@ import dataclasses
 from typing import Any
 
 from loguru import logger
+from pydantic import BaseModel
 
 
 def apply_strategy_config(config: Any, config_manager: Any) -> None:
@@ -24,29 +25,37 @@ def apply_strategy_config(config: Any, config_manager: Any) -> None:
     try:
         valid_keys = {f.name for f in dataclasses.fields(config)}
     except TypeError:
-        for key, value in sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"}).items():
+        for key, value in _strategy_config_items(sc):
             if hasattr(config, key):
                 setattr(config, key, value)
         return
 
-    for key, value in sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"}).items():
+    for key, value in _strategy_config_items(sc):
         if key in valid_keys:
             setattr(config, key, value)
         else:
             logger.warning(f"忽略未识别的策略配置键: '{key}'，合法键: {sorted(valid_keys)}")
 
 
+def _strategy_config_items(sc: Any) -> list[tuple[str, Any]]:
+    if isinstance(sc, BaseModel):
+        return list(sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"}).items())
+    return [
+        (key, value)
+        for key, value in vars(sc).items()
+        if key not in {"name", "enabled", "kline_period", "search_space"}
+    ]
+
+
 def serialize_strategy_params(strategy_config: Any) -> dict[str, float]:
-    """将策略配置序列化为参数字典，用于写入 backtest_params 表
-
-    Args:
-        strategy_config: 策略配置 dataclass 实例
-
-    Returns:
-        参数字典 {'sma_short': 20, 'sma_long': 70}
-    """
+    """将策略配置序列化为数值参数字典，用于写入 backtest_params 表。"""
     try:
         valid_keys = {f.name for f in dataclasses.fields(strategy_config)}
-        return {k: float(getattr(strategy_config, k)) for k in valid_keys}
+        params: dict[str, float] = {}
+        for key in valid_keys:
+            value = getattr(strategy_config, key)
+            if isinstance(value, bool | int | float):
+                params[key] = float(value)
+        return params
     except Exception:
         return {}
