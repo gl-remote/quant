@@ -16,8 +16,9 @@ import pytest
 from backtest.parallel import ParallelBacktestOptimizer, _execute_trial, run_param_search_parallel
 from backtest.vnpy_backtest_engine import VnpyBacktestEngine
 from config.app_config import BacktestConfig
-from strategies import Signal, Strategy
 from strategies.runtime import DataRequirements, EventsRequirements
+
+from strategies import Signal, Strategy
 
 # ── 辅助函数 ─────────────────────────────────────────────
 
@@ -89,6 +90,12 @@ def load_real_dataset() -> tuple[str, pd.DataFrame]:
         if results:
             return symbol, results[0][1]
     pytest.skip(f"本机缺少并行回测所需的真实 K 线数据（候选: {_REAL_SYMBOL_CANDIDATES}）")
+
+
+@pytest.fixture
+def real_5m_dataset() -> tuple[str, pd.DataFrame]:
+    """提供本机真实 5m K 线数据，无数据时跳过 local_data 测试"""
+    return load_real_dataset()
 
 
 # ── 模拟策略（不声明任何数据需求，回测完全使用内存 df）──────
@@ -272,6 +279,7 @@ class TestExecuteTrial:
 # ── ParallelBacktestOptimizer 集成测试 ───────────────────
 
 
+@pytest.mark.integration
 class TestParallelBacktestOptimizer:
     """并行优化器集成测试
 
@@ -279,8 +287,12 @@ class TestParallelBacktestOptimizer:
     如果环境不支持（如 Windows 等），测试自动跳过。
     """
 
-    def _make_small_optimizer(self, search_type="grid") -> ParallelBacktestOptimizer:
-        symbol, df = load_real_dataset()
+    def _make_small_optimizer(
+        self,
+        real_5m_dataset: tuple[str, pd.DataFrame],
+        search_type="grid",
+    ) -> ParallelBacktestOptimizer:
+        symbol, df = real_5m_dataset
         config = make_basic_config(interval="5m")
         search_space = {
             "sma_short": {"type": "int", "low": 5, "high": 10, "step": 5},  # 2 个值
@@ -300,9 +312,10 @@ class TestParallelBacktestOptimizer:
         )
 
     @pytest.mark.slow
-    def test_grid_search_basic(self) -> None:
+    @pytest.mark.local_data
+    def test_grid_search_basic(self, real_5m_dataset: tuple[str, pd.DataFrame]) -> None:
         """Grid Search 返回正确结构，最优参数在搜索空间内"""
-        optimizer = self._make_small_optimizer(search_type="grid")
+        optimizer = self._make_small_optimizer(real_5m_dataset, search_type="grid")
         result = optimizer.optimize()
 
         assert len(result.trial_data) > 0
@@ -315,9 +328,10 @@ class TestParallelBacktestOptimizer:
         assert result.actual_seed == 42
 
     @pytest.mark.slow
-    def test_bayesian_search_basic(self) -> None:
+    @pytest.mark.local_data
+    def test_bayesian_search_basic(self, real_5m_dataset: tuple[str, pd.DataFrame]) -> None:
         """Bayesian Search 返回正确结构"""
-        optimizer = self._make_small_optimizer(search_type="bayesian")
+        optimizer = self._make_small_optimizer(real_5m_dataset, search_type="bayesian")
         result = optimizer.optimize()
 
         assert len(result.trial_data) > 0
@@ -326,9 +340,10 @@ class TestParallelBacktestOptimizer:
         assert result.actual_seed == 42
 
     @pytest.mark.slow
-    def test_run_param_search_parallel_interface(self) -> None:
+    @pytest.mark.local_data
+    def test_run_param_search_parallel_interface(self, real_5m_dataset: tuple[str, pd.DataFrame]) -> None:
         """run_param_search_parallel 返回 SearchResult，与串行版本接口兼容"""
-        symbol, df = load_real_dataset()
+        symbol, df = real_5m_dataset
         config = make_basic_config(interval="5m")
         search_space = {
             "sma_short": {"type": "int", "low": 5, "high": 10, "step": 5},

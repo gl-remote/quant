@@ -67,12 +67,14 @@ default = true
 
 [tool.pytest.ini_options]
 testpaths = ["workspace/tests", "workspace/packages/python-contracts/tests"]
-pythonpath = []
+pythonpath = ["workspace"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers -m 'not slow' --cov=. --cov-report=term-missing --cov-report=html:project_data/coverage --import-mode=importlib"
+addopts = "-v --tb=short --strict-markers -m 'not slow' --import-mode=importlib"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: tests crossing module boundaries",
+    "local_data: tests requiring local .quant_shared_data files",
     "core: tests for strategy core module",
     "config: tests for config manager",
     "loader: tests for data loader",
