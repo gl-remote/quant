@@ -5,7 +5,7 @@
 > 创建日期：2026-06-26  
 > 开发分支：feat/atr-strategy-tuning  
 > 开分支 hash：88d2563  
-> 实现提交 hash：待提交  
+> 实现提交 hash：c28d221  
 > 策略代码：[atr_strategy.py](../../workspace/strategies/atr_strategy.py)  
 > 目标：不追求单次回测暴利，优先获得较稳定、可迁移、长期正期望的 CTA 策略。
 
