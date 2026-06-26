@@ -104,8 +104,8 @@ main.py
 
 | 工作项 | 说明 | 状态 |
 |--------|------|------|
-| test 实时信号观察 | 连接实时行情，仅记录信号和模拟成交，不下单 | ✅ 基础链路已完成 |
-| paper trading | 长时间模拟盘运行，验证稳定性和信号质量 | ⬜ 待做 |
+| test 实时信号观察 | 连接实时行情，仅记录信号，不下单；不承担完整模拟交易语义 | ✅ 基础链路已完成 |
+| paper trading | 长时间模拟盘运行，验证稳定性和信号质量；需与 test 信号观察显式区分 | ⬜ 待做 |
 | 小仓位试运行 | 满足策略验收后，用最小仓位验证实盘链路 | ⬜ 待做 |
 | 运行监控 | 异常通知、断线重连、订单状态监控 | ⬜ 待做 |
 
@@ -239,6 +239,7 @@ class MACrossParams:
 | DEF-S05 | 🟡 | 信号优先级由 if/elif 顺序隐式定义 | `ma_strategy.py` | 🟡 待修复 |
 | DEF-07 | 🟡 | TqSdk 路径 `total_return` 存金额而非百分比、逐笔 `commission` 硬编码为 0 | `cli/workflows/backtests_run.py` (`_persist_tq_backtest_result`) | ⬜ 已记录，归入「四.7 统一 TqSdk 生命周期」一并处理 |
 | DEF-08 | 🟢 | 数据库旧回测数据未迁移 | — | ⬜ 需重新跑回测后自动修正 |
+| DEF-09 | 🟡 | test 与 paper trading 语义未显式建模：test 应只做信号观察，paper 应维护模拟订单/成交/持仓/账户状态 | `cli/commands/test.py`、`cli/commands/live.py`、`cli/workflows/realtime.py` | ⬜ 长期规划，归入「S2-D 上线前验证流程」 |
 
 ---
 
