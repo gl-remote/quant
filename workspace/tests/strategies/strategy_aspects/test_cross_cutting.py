@@ -24,6 +24,7 @@ from strategies.core.types import Fill, StrategyPosition
 from strategies.strategy_aspects import (
     confirm_long,
     entry_block_after_stop_loss,
+    entry_block_after_take_profit,
     exit_for_stop_loss,
     exit_for_take_profit,
     trend_long,
@@ -466,6 +467,149 @@ class TestAdvisoryIsolation:
 # --------------------------
 # 测试 7: data_requirements 合并 — risk + 建议型
 # --------------------------
+
+
+class TestRiskInvariants:
+    """策略风控核心不变量。"""
+
+    def test_exit_risk_never_triggers_without_position(self):
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        state = _make_state()
+        ctx = _make_ctx(close=1.0)
+
+        _S().on_bar(state, ctx)
+
+        assert ctx.aspects.risk.stop_loss.exit == []
+        assert ctx.aspects.risk.take_profit.exit == []
+        assert ctx.aspects.risk.all_reasons == []
+        assert "entry_price" not in ctx.aspects.diagnostics
+        assert "current_close" not in ctx.aspects.diagnostics
+
+    def test_entry_cooldown_never_blocks_open_position_exit(self):
+        @entry_block_after_stop_loss("cooldown() < 30")
+        @entry_block_after_take_profit("cooldown() < 30")
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        fills = [Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1)]
+        state = _make_state(
+            direction="long",
+            entry_price=100.0,
+            volume=1,
+            highest_price=101.0,
+            lowest_price=96.0,
+            fills=fills,
+        )
+        ctx = _make_ctx(close=96.0, bar_dt=datetime(2024, 1, 1, 12, 10))
+
+        _S().on_bar(state, ctx)
+
+        assert ctx.aspects.risk.stop_loss.entry_block == []
+        assert ctx.aspects.risk.take_profit.entry_block == []
+        assert len(ctx.aspects.risk.stop_loss.exit) == 1
+        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+
+    def test_multiple_risk_advisories_survive_flush_without_overwrite(self):
+        @entry_block_after_stop_loss("cooldown() < 30")
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        class _StopLossStrategy:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        @entry_block_after_take_profit("cooldown() < 30")
+        @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
+        class _TakeProfitStrategy:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        stop_fills = [
+            Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1, reason="stop_loss")
+        ]
+        take_fills = [
+            Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1, reason="take_profit")
+        ]
+        stop_state = _make_state(fills=stop_fills)
+        take_state = _make_state(fills=take_fills)
+        stop_ctx = _make_ctx(bar_dt=datetime(2024, 1, 1, 12, 10))
+        take_ctx = _make_ctx(bar_dt=datetime(2024, 1, 1, 12, 10))
+
+        _StopLossStrategy().on_bar(stop_state, stop_ctx)
+        _TakeProfitStrategy().on_bar(take_state, take_ctx)
+        stop_ctx.aspects.flush_risk_diagnostics()
+        take_ctx.aspects.flush_risk_diagnostics()
+
+        assert [r.name for r in stop_ctx.aspects.risk.stop_loss.entry_block] == [SIGNAL_TRADE_COOLDOWN]
+        assert [r.name for r in take_ctx.aspects.risk.take_profit.entry_block] == [SIGNAL_TRADE_COOLDOWN]
+        assert stop_ctx.aspects.diagnostics["risk_entry_block_stop_loss"] == [SIGNAL_TRADE_COOLDOWN]
+        assert stop_ctx.aspects.diagnostics["risk_entry_block_take_profit"] == []
+        assert take_ctx.aspects.diagnostics["risk_entry_block_stop_loss"] == []
+        assert take_ctx.aspects.diagnostics["risk_entry_block_take_profit"] == [SIGNAL_TRADE_COOLDOWN]
+
+    def test_fixed_ratio_long_short_stop_loss_boundaries_are_symmetric(self):
+        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        long_state = _make_state(direction="long", entry_price=100.0, volume=1)
+        short_state = _make_state(direction="short", entry_price=100.0, volume=1)
+        long_ctx = _make_ctx(close=97.0)
+        short_ctx = _make_ctx(close=103.0)
+
+        strat = _S()
+        strat.on_bar(long_state, long_ctx)
+        strat.on_bar(short_state, short_ctx)
+
+        assert [r.name for r in long_ctx.aspects.risk.stop_loss.exit] == [SIGNAL_STOP_LOSS]
+        assert [r.name for r in short_ctx.aspects.risk.stop_loss.exit] == [SIGNAL_STOP_LOSS]
+
+    def test_atr_none_and_zero_do_not_pollute_risk_diagnostics(self):
+        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+        class _S:
+            def data_requirements(self, config):
+                return None
+
+            def on_bar(self, state, ctx):
+                return None
+
+        state = _make_state(direction="long", entry_price=100.0, volume=1)
+        none_ctx = _make_ctx({"15m": {}}, close=50.0)
+        zero_ctx = _make_ctx({"15m": {"15m_atr_14": 0.0}}, close=50.0)
+
+        strat = _S()
+        strat.on_bar(state, none_ctx)
+        strat.on_bar(state, zero_ctx)
+        none_ctx.aspects.flush_risk_diagnostics()
+        zero_ctx.aspects.flush_risk_diagnostics()
+
+        assert none_ctx.aspects.risk.all_reasons == []
+        assert zero_ctx.aspects.risk.all_reasons == []
+        assert none_ctx.aspects.diagnostics["risk_exit_stop_loss"] == []
+        assert zero_ctx.aspects.diagnostics["risk_exit_stop_loss"] == []
+        assert none_ctx.aspects.diagnostics["risk_detail"] == {}
+        assert zero_ctx.aspects.diagnostics["risk_detail"] == {}
 
 
 class TestDataRequirementsCrossMerge:

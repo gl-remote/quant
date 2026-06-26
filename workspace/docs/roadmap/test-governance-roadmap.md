@@ -233,7 +233,7 @@ bash scripts/test.sh slow backtest
 
 ### 阶段 D：抽取测试 helpers
 
-状态：进行中（本会话已完成首轮低风险抽取：`backtest_records.py`、`configs.py`、`market_data.py`、`risk.py`，`conftest.py` 保留 fixture 暴露和 pytest 生命周期控制；固定止盈/止损和 cooldown 风控测试已小步迁移）。
+状态：阶段性完成（本会话已完成首轮低风险抽取：`backtest_records.py`、`configs.py`、`market_data.py`、`risk.py`，`conftest.py` 保留 fixture 暴露和 pytest 生命周期控制；固定止盈/止损和 cooldown 风控测试已小步迁移；DataFeed 局部构造 helper 已收敛在测试文件内，后续如继续增长再外提）。
 
 目标：降低测试重复，增强失败信息。
 
@@ -272,7 +272,7 @@ def assert_single_reason(reasons):
 
 ### 阶段 E：补核心不变量测试
 
-状态：进行中（已补充回测统计不变量；已从 `workspace/tests/strategies/runtime/test_data_feed.py` 启动 DataFeed 时间可见性不变量补充，覆盖重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离）。
+状态：阶段性完成（已补充回测统计不变量；已从 `workspace/tests/strategies/runtime/test_data_feed.py` 补充 DataFeed 时间可见性不变量，覆盖重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离；已在 `workspace/tests/strategies/strategy_aspects/test_cross_cutting.py` 补充策略风控边界不变量）。
 
 目标：覆盖量化系统最容易产生“看起来能跑但结果错误”的场景。
 
@@ -489,7 +489,7 @@ ci: add fast coverage reporting
 - `workspace/tests/helpers/` 已建立，并已首轮抽取回测记录、配置字典、行情数据和风控测试构造 helpers。
 - 回测统计不变量测试已启动，已补充全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景。
 - DataFeed 时间可见性不变量测试已启动，已补充重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离。
-- 策略风控核心不变量仍待系统补充
+- 策略风控核心不变量已补充无持仓 exit、持仓 cooldown、风险 diagnostics、long/short 对称、ATR None/0 等边界。
 
 ## 完成定义
 
