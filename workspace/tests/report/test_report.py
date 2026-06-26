@@ -11,7 +11,7 @@ from common.constants import STATUS_FAILED, STATUS_SUCCESS
 from common.types import BacktestResult
 from data import DataManager
 from data.store import DataStore
-from tests.conftest import insert_full_backtest
+from tests.helpers.backtest_records import insert_full_backtest
 
 # ═══════════════════════════════════════════════════════════
 # format_single_report

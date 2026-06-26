@@ -10,48 +10,21 @@
   - aspects.risk 被正确填充
 """
 
-from dataclasses import dataclass
-
 from common.constants import (
     SIGNAL_TAKE_PROFIT,
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
 )
-from strategies.core.state import State
-from strategies.core.types import Signal, StrategyPosition
+from strategies.core.types import Signal
 from strategies.strategy_aspects import exit_for_take_profit
-from strategies.strategy_aspects.primitives import StrategyAspects
+from tests.helpers.risk import (
+    MockCloseCtx,
+    assert_single_reason,
+    make_no_position_ratio_state,
+    make_ratio_risk_state,
+)
 
-# --------------------------
-# 辅助类型
-# --------------------------
-
-
-@dataclass
-class _SimpleParams:
-    """简化的策略配置，仅含止盈参数"""
-
-    take_profit_ratio: float = 0.05
-
-
-class _MockBar:
-    """模拟 Bar — 仅暴露装饰器需要的 .close"""
-
-    def __init__(self, close: float):
-        self.close = close
-
-
-class _MockCtx:
-    """模拟 BarContext — 仅暴露装饰器需要的 .bar 和 .aspects"""
-
-    def __init__(self, close: float):
-        self.bar = _MockBar(close)
-        self.aspects = StrategyAspects()
-
-
-# --------------------------
-# 辅助函数
-# --------------------------
+_MockCtx = MockCloseCtx
 
 
 def _make_state(
@@ -59,39 +32,17 @@ def _make_state(
     entry_price: float = 100.0,
     volume: int = 10,
     take_profit_ratio: float = 0.05,
-) -> State:
-    """创建测试用 State"""
-    return State(
-        symbol="TEST",
-        period="1m",
-        strategy_config=_SimpleParams(
-            take_profit_ratio=take_profit_ratio,
-        ),
-        capital=100000.0,
-        contract_size=10,
-        position=StrategyPosition(
-            direction=direction,
-            entry_price=entry_price,
-            volume=volume,
-            highest_price=entry_price,
-            lowest_price=entry_price,
-        ),
+):
+    return make_ratio_risk_state(
+        direction=direction,
+        entry_price=entry_price,
+        volume=volume,
+        take_profit_ratio=take_profit_ratio,
     )
 
 
-def _make_no_position_state(
-    take_profit_ratio: float = 0.05,
-) -> State:
-    """创建无持仓 State"""
-    return State(
-        symbol="TEST",
-        period="1m",
-        strategy_config=_SimpleParams(
-            take_profit_ratio=take_profit_ratio,
-        ),
-        capital=100000.0,
-        contract_size=10,
-    )
+def _make_no_position_state(take_profit_ratio: float = 0.05):
+    return make_no_position_ratio_state(take_profit_ratio=take_profit_ratio)
 
 
 _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
@@ -141,8 +92,8 @@ class TestExitTakeProfitWhen:
         ctx = _MockCtx(close=106.0)  # 涨 6% > 5% 止盈
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.take_profit.exit) == 1
-        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT
 
     def test_long_take_profit_not_triggered(self):
         """多头持仓，价格未涨过止盈线 → risk 为空"""
@@ -166,8 +117,8 @@ class TestExitTakeProfitWhen:
         ctx = _MockCtx(close=105.0)  # (105-100)/100 = 5% == 止盈线
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.take_profit.exit) == 1
-        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT
 
     # ── 空头止盈 ──
 
@@ -181,8 +132,8 @@ class TestExitTakeProfitWhen:
         ctx = _MockCtx(close=94.0)  # 跌 6% > 5% 止盈
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.take_profit.exit) == 1
-        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT
 
     def test_short_take_profit_not_triggered(self):
         """空头持仓，价格未跌破止盈线 → risk 为空"""
@@ -206,8 +157,8 @@ class TestExitTakeProfitWhen:
         ctx = _MockCtx(close=95.0)  # (100-95)/100 = 5% == 止盈线
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.take_profit.exit) == 1
-        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT
 
     # ── 零比例边界 ──
 
@@ -221,8 +172,8 @@ class TestExitTakeProfitWhen:
         ctx = _MockCtx(close=100.01)  # 微涨 0.01%，>=0% 触发
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.take_profit.exit) == 1
-        assert ctx.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT
 
     # ── diagnostics ──
 
@@ -267,5 +218,5 @@ class TestExitTakeProfitWhen:
         ctx2 = _MockCtx(close=106.0)
         signal = self.strat.on_bar(state, ctx2)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx2.aspects.risk.take_profit.exit) == 1
-        assert ctx2.aspects.risk.take_profit.exit[0].name == SIGNAL_TAKE_PROFIT
+        reason = assert_single_reason(ctx2.aspects.risk.take_profit.exit)
+        assert reason.name == SIGNAL_TAKE_PROFIT

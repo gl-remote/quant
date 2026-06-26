@@ -1,30 +1,16 @@
 """止损后交易冷却期切面测试（建议型）"""
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
 from common.constants import SIGNAL_TRADE_COOLDOWN
 from strategies.core.state import State
-from strategies.core.types import Fill, Signal, StrategyPosition
+from strategies.core.types import Fill, Signal
 from strategies.strategy_aspects import entry_block_after_stop_loss
-from strategies.strategy_aspects.primitives import StrategyAspects
+from tests.helpers.risk import EmptyRiskParams, MockDatetimeCtx, assert_single_reason, make_cooldown_state
 
-
-@dataclass
-class _Params:
-    pass
-
-
-class _MockBar:
-    def __init__(self, dt: datetime) -> None:
-        self.datetime = dt
-
-
-class _MockCtx:
-    def __init__(self, dt: datetime) -> None:
-        self.bar = _MockBar(dt)
-        self.aspects = StrategyAspects()
+_Params = EmptyRiskParams
+_MockCtx = MockDatetimeCtx
 
 
 _ON_BAR_RETURN = Signal(action="buy", reason="entry", volume=1)
@@ -41,28 +27,7 @@ def _make_state(
     has_position: bool = False,
     reason: str = "",
 ) -> State[_Params]:
-    fills = []
-    if fill_time is not None:
-        fills.append(
-            Fill(
-                timestamp=str(fill_time),
-                symbol="TEST",
-                action="buy",
-                price=100,
-                volume=1,
-                reason=reason,
-            )
-        )
-
-    position = StrategyPosition(direction="long", entry_price=100, volume=1) if has_position else StrategyPosition()
-
-    return State(
-        symbol="TEST",
-        period="1m",
-        strategy_config=_Params(),
-        fills=fills,
-        position=position,
-    )
+    return make_cooldown_state(fill_time=fill_time, has_position=has_position, reason=reason)
 
 
 class TestWithCooldownAfterStopLoss:
@@ -87,11 +52,11 @@ class TestWithCooldownAfterStopLoss:
         signal = self.strategy.on_bar(state, ctx)
 
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.entry_block) == 1
-        assert ctx.aspects.risk.stop_loss.entry_block[0].name == SIGNAL_TRADE_COOLDOWN
-        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["left_value"] < 10.0
-        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["op"] == "<"
-        assert ctx.aspects.risk.stop_loss.entry_block[0].detail["right_value"] == 10.0
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.entry_block)
+        assert reason.name == SIGNAL_TRADE_COOLDOWN
+        assert reason.detail["left_value"] < 10.0
+        assert reason.detail["op"] == "<"
+        assert reason.detail["right_value"] == 10.0
 
     def test_passthrough_after_cooldown(self) -> None:
         fill_time = datetime(2024, 1, 1, 10, 0, 0)

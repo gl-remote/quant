@@ -16,9 +16,8 @@ import pytest
 from backtest.parallel import ParallelBacktestOptimizer, _execute_trial, run_param_search_parallel
 from backtest.vnpy_backtest_engine import VnpyBacktestEngine
 from config.app_config import BacktestConfig
-from strategies.runtime import DataRequirements, EventsRequirements
-
 from strategies import Signal, Strategy
+from strategies.runtime import DataRequirements, EventsRequirements
 
 # ── 辅助函数 ─────────────────────────────────────────────
 

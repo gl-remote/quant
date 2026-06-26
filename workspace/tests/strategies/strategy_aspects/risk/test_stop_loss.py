@@ -10,48 +10,21 @@
   - aspects.risk 被正确填充
 """
 
-from dataclasses import dataclass
-
 from common.constants import (
     SIGNAL_STOP_LOSS,
     TRADE_DIRECTION_LONG,
     TRADE_DIRECTION_SHORT,
 )
-from strategies.core.state import State
-from strategies.core.types import Signal, StrategyPosition
+from strategies.core.types import Signal
 from strategies.strategy_aspects import exit_for_stop_loss
-from strategies.strategy_aspects.primitives import StrategyAspects
+from tests.helpers.risk import (
+    MockCloseCtx,
+    assert_single_reason,
+    make_no_position_ratio_state,
+    make_ratio_risk_state,
+)
 
-# --------------------------
-# 辅助类型
-# --------------------------
-
-
-@dataclass
-class _SimpleParams:
-    """简化的策略配置，仅含止损参数"""
-
-    stop_loss_ratio: float = 0.03
-
-
-class _MockBar:
-    """模拟 Bar — 仅暴露装饰器需要的 .close"""
-
-    def __init__(self, close: float):
-        self.close = close
-
-
-class _MockCtx:
-    """模拟 BarContext — 仅暴露装饰器需要的 .bar 和 .aspects"""
-
-    def __init__(self, close: float):
-        self.bar = _MockBar(close)
-        self.aspects = StrategyAspects()
-
-
-# --------------------------
-# 辅助函数
-# --------------------------
+_MockCtx = MockCloseCtx
 
 
 def _make_state(
@@ -59,39 +32,17 @@ def _make_state(
     entry_price: float = 100.0,
     volume: int = 10,
     stop_loss_ratio: float = 0.03,
-) -> State:
-    """创建测试用 State"""
-    return State(
-        symbol="TEST",
-        period="1m",
-        strategy_config=_SimpleParams(
-            stop_loss_ratio=stop_loss_ratio,
-        ),
-        capital=100000.0,
-        contract_size=10,
-        position=StrategyPosition(
-            direction=direction,
-            entry_price=entry_price,
-            volume=volume,
-            highest_price=entry_price,
-            lowest_price=entry_price,
-        ),
+):
+    return make_ratio_risk_state(
+        direction=direction,
+        entry_price=entry_price,
+        volume=volume,
+        stop_loss_ratio=stop_loss_ratio,
     )
 
 
-def _make_no_position_state(
-    stop_loss_ratio: float = 0.03,
-) -> State:
-    """创建无持仓 State"""
-    return State(
-        symbol="TEST",
-        period="1m",
-        strategy_config=_SimpleParams(
-            stop_loss_ratio=stop_loss_ratio,
-        ),
-        capital=100000.0,
-        contract_size=10,
-    )
+def _make_no_position_state(stop_loss_ratio: float = 0.03):
+    return make_no_position_ratio_state(stop_loss_ratio=stop_loss_ratio)
 
 
 _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
@@ -141,8 +92,8 @@ class TestExitStopLossWhen:
         ctx = _MockCtx(close=96.0)  # 跌 4% > 3% 止损
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.exit) == 1
-        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS
 
     def test_long_stop_loss_not_triggered(self):
         """多头持仓，价格未跌破止损线 → risk 为空"""
@@ -166,8 +117,8 @@ class TestExitStopLossWhen:
         ctx = _MockCtx(close=97.0)  # (100-97)/100 = 3% == 止损线
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.exit) == 1
-        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS
 
     # ── 空头止损 ──
 
@@ -181,8 +132,8 @@ class TestExitStopLossWhen:
         ctx = _MockCtx(close=104.0)  # 涨 4% > 3% 止损
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.exit) == 1
-        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS
 
     def test_short_stop_loss_not_triggered(self):
         """空头持仓，价格未涨过止损线 → risk 为空"""
@@ -206,8 +157,8 @@ class TestExitStopLossWhen:
         ctx = _MockCtx(close=103.0)  # (103-100)/100 = 3% == 止损线
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.exit) == 1
-        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS
 
     # ── 零比例边界 ──
 
@@ -221,8 +172,8 @@ class TestExitStopLossWhen:
         ctx = _MockCtx(close=99.99)  # 微跌 0.01%，>=0% 触发
         signal = self.strat.on_bar(state, ctx)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx.aspects.risk.stop_loss.exit) == 1
-        assert ctx.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS
 
     # ── diagnostics ──
 
@@ -267,5 +218,5 @@ class TestExitStopLossWhen:
         ctx2 = _MockCtx(close=96.0)
         signal = self.strat.on_bar(state, ctx2)
         assert signal is _ON_BAR_RETURN
-        assert len(ctx2.aspects.risk.stop_loss.exit) == 1
-        assert ctx2.aspects.risk.stop_loss.exit[0].name == SIGNAL_STOP_LOSS
+        reason = assert_single_reason(ctx2.aspects.risk.stop_loss.exit)
+        assert reason.name == SIGNAL_STOP_LOSS

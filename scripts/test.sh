@@ -13,10 +13,12 @@
 #   bash scripts/test.sh                  # 全量: lint + format + type + unit
 #   bash scripts/test.sh lint             # 全量仅 ruff lint
 #   bash scripts/test.sh type             # 全量仅 mypy
+#   bash scripts/test.sh coverage         # 全量 coverage 报告（不设 fail-under）
+#   bash scripts/test.sh integration      # 全量 integration 测试
 #   bash scripts/test.sh <stage> <domain> # 只验某业务域（增量）
 #       例: bash scripts/test.sh lint backtest   只 ruff check backtest/
 #           bash scripts/test.sh unit strategies 只 pytest tests/strategies/
-#   <stage>  = lint | format | type | unit | all（缺省 all）
+#   <stage>  = lint | format | type | unit | integration | slow | local-data | coverage | all（缺省 all）
 #   <domain> = common|config|data|backtest|strategies|report|cli|contracts|report-web
 #              （可选，缺省全量 Python；report-web 走前端工具链 eslint/tsc/vitest）
 #
@@ -45,98 +47,12 @@
 
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-NC='\033[0m'
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-ROOT_DIR="$SCRIPT_DIR/.."
-cd "$ROOT_DIR"
-
-WEB_DIR="workspace/report/web"
-
-# 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
-MYPY_TARGETS=(workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/)
-
-# 业务域 → 源码路径（lint/format/type 的目标）
-resolve_src() {
-    case "$1" in
-        common|config|data|backtest|strategies|cli) echo "workspace/$1/" ;;
-        report) echo "workspace/report/" ;;
-        contracts) echo "workspace/packages/python-contracts/src/" ;;
-        *) echo "" ;;
-    esac
-}
-
-# 业务域 → 测试路径（unit 的目标）
-resolve_test() {
-    case "$1" in
-        common|config|data|backtest|strategies|report|cli) echo "workspace/tests/$1/" ;;
-        contracts) echo "workspace/packages/python-contracts/tests/" ;;
-        *) echo "" ;;
-    esac
-}
-
-# 已被某个 pre-commit 域 hook 覆盖的路径前缀（与 .pre-commit-config.yaml 的 files 对应）。
-# 落在这些前缀外的改动 = 不会触发任何域 hook 的盲区。
-# 维护规则：在 .pre-commit-config.yaml 新增/调整域 hook 时，同步更新此清单。
-COVERED_PREFIXES=(
-    "workspace/common/" "workspace/config/" "workspace/data/" "workspace/backtest/"
-    "workspace/strategies/" "workspace/cli/" "workspace/report/"
-    "workspace/tests/"                                # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
-    "workspace/packages/python-contracts/"    # contracts 域
-)
-
-run_lint() {
-    echo "── [lint] ruff check $* ──"
-    ruff check "$@"
-}
-
-run_format() {
-    echo "── [format] ruff format --check $* ──"
-    ruff format --check "$@"
-}
-
-run_type() {
-    echo "── [type] mypy $* ──"
-    uv run python -m mypy --config-file pyproject.toml "$@"
-}
-
-run_unit() {
-    if [ "$#" -eq 0 ]; then
-        echo -e "${YELLOW}── [unit] 该域无测试目录，跳过 ──${NC}"
-        return 0
-    fi
-    echo "── [unit] pytest $* ──"
-    # 覆盖 pyproject 的 addopts（含 --cov=. 全量覆盖率），按域验证时不需要全量 coverage
-    #
-    # contracts 域的测试（workspace/packages/python-contracts/tests/）有独立的
-    # conftest.py，与主项目 workspace/tests/conftest.py 冲突（都解析为 tests.conftest），
-    # 需要从项目根之外分开跑。主项目全量时分别调两次 run_unit 来处理。
-    if [ "$*" = "workspace/packages/python-contracts/tests/" ]; then
-        (cd workspace/packages/python-contracts && uv run python -m pytest tests/ -q --tb=short -o "addopts=" -p no:cacheprovider)
-        return $?
-    fi
-    uv run python -m pytest "$@" -o addopts="" -p no:cacheprovider -q --tb=short
-}
-
-# ── 前端（report-web）工具链：stage 语义对齐 Python 侧 ──
-web_lint()   { echo "── [lint] eslint ──";  (cd "$WEB_DIR" && npm run --silent lint); }
-web_type()   { echo "── [type] tsc --noEmit ──"; (cd "$WEB_DIR" && npx --no-install tsc --noEmit); }
-web_unit()   { echo "── [unit] vitest run ──"; (cd "$WEB_DIR" && npx --no-install vitest run); }
-web_format() { echo -e "${YELLOW}── [format] 前端无独立 prettier 脚本，eslint 已含风格，跳过 ──${NC}"; }
-
-run_web_stage() {
-    case "$1" in
-        lint)   web_lint ;;
-        format) web_format ;;
-        type)   web_type ;;
-        unit)   web_unit ;;
-        all)    web_lint; web_type; web_unit ;;
-        *) echo -e "${RED}未知 stage: $1${NC}"; exit 1 ;;
-    esac
-}
+source "$SCRIPT_DIR/test/env.sh"
+source "$SCRIPT_DIR/test/domains.sh"
+source "$SCRIPT_DIR/test/python.sh"
+source "$SCRIPT_DIR/test/web.sh"
+source "$SCRIPT_DIR/test/precommit.sh"
 
 STAGE="${1:-all}"
 DOMAIN="${2:-}"
@@ -146,24 +62,22 @@ DOMAIN="${2:-}"
 # 只提示、不拦截（exit 0）：让 AI 在 commit 输出里看到盲区文件，自行决定是否通知用户。
 if [ "$STAGE" = "_uncovered" ]; then
     shift || true
-    uncovered=()
-    for f in "$@"; do
-        covered=0
-        for p in "${COVERED_PREFIXES[@]}"; do
-            case "$f" in "$p"*) covered=1; break ;; esac
-        done
-        [ "$covered" -eq 0 ] && uncovered+=("$f")
-    done
-    if [ "${#uncovered[@]}" -gt 0 ]; then
-        echo -e "${YELLOW}⚠ 以下改动文件不在任何 pre-commit 域 hook 覆盖范围内（未被验证）：${NC}"
-        for f in "${uncovered[@]}"; do echo "    $f"; done
-        echo -e "${YELLOW}  （AI：请判断是否需要提醒用户为这些文件补充测试覆盖或纳入某业务域。）${NC}"
-    fi
+    run_uncovered_notice "$@"
     exit 0
 fi
 
 # 前端域单独分流到前端工具链
 if [ "$DOMAIN" = "report-web" ]; then
+    if [ "$STAGE" = "coverage" ]; then
+        echo -e "${YELLOW}── [coverage] report-web 暂无独立 coverage 入口，跳过 ──${NC}"
+        echo -e "${GREEN}✓ 验证通过${NC}"
+        exit 0
+    fi
+    if [ "$STAGE" = "integration" ] || [ "$STAGE" = "slow" ] || [ "$STAGE" = "local-data" ]; then
+        echo -e "${YELLOW}── [$STAGE] report-web 暂无对应分层测试入口，跳过 ──${NC}"
+        echo -e "${GREEN}✓ 验证通过${NC}"
+        exit 0
+    fi
     run_web_stage "$STAGE"
     echo -e "${GREEN}✓ 验证通过${NC}"
     exit 0
@@ -196,6 +110,44 @@ case "$STAGE" in
     lint)   run_lint "${SRC_PATHS[@]}" ;;
     format) run_format "${SRC_PATHS[@]}" ;;
     type)   run_type "${TYPE_PATHS[@]}" ;;
+    coverage)
+        if [ -z "$DOMAIN" ]; then
+            run_coverage workspace/common workspace/tests/common/
+            run_coverage workspace/config workspace/tests/config/
+            run_coverage workspace/data workspace/tests/data/
+            run_coverage workspace/backtest workspace/tests/backtest/
+            run_coverage workspace/strategies workspace/tests/strategies/
+            run_coverage workspace/report workspace/tests/report/
+            run_coverage workspace/cli workspace/tests/cli/
+            run_coverage src workspace/packages/python-contracts/tests/
+        else
+            run_coverage "$SRC" "${TEST_PATHS[@]}"
+        fi
+        ;;
+    integration)
+        if [ -z "$DOMAIN" ]; then
+            run_integration workspace/tests/
+            run_integration workspace/packages/python-contracts/tests/
+        else
+            run_integration "${TEST_PATHS[@]}"
+        fi
+        ;;
+    slow)
+        if [ -z "$DOMAIN" ]; then
+            run_slow workspace/tests/
+            run_slow workspace/packages/python-contracts/tests/
+        else
+            run_slow "${TEST_PATHS[@]}"
+        fi
+        ;;
+    local-data)
+        if [ -z "$DOMAIN" ]; then
+            run_local_data workspace/tests/
+            run_local_data workspace/packages/python-contracts/tests/
+        else
+            run_local_data "${TEST_PATHS[@]}"
+        fi
+        ;;
     unit)
         if [ -z "$DOMAIN" ]; then
             run_unit workspace/tests/
@@ -215,11 +167,12 @@ case "$STAGE" in
             run_unit "${TEST_PATHS[@]}"
         fi
         ;;
-    *) echo -e "${RED}未知 stage: $STAGE (可选: lint/format/type/unit/all)${NC}"; exit 1 ;;
+    *) echo -e "${RED}未知 stage: $STAGE (可选: lint/format/type/unit/integration/slow/local-data/coverage/all)${NC}"; exit 1 ;;
 esac
 
 # report 域含前后端：Python 跑完后追加前端工具链（流程决策——改 report 前后端都验）
-if [ "$DOMAIN" = "report" ]; then
+# coverage 和分层测试属于 Python 专用入口，report web 后续独立治理，不复用前端验证 stage。
+if [ "$DOMAIN" = "report" ] && [ "$STAGE" != "coverage" ] && [ "$STAGE" != "integration" ] && [ "$STAGE" != "slow" ] && [ "$STAGE" != "local-data" ]; then
     echo "── report 前端 ──"
     run_web_stage "$STAGE"
 fi
