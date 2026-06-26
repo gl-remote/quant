@@ -3,7 +3,7 @@
 > 状态：进行中
 > 开发分支：experiment/ma-positive-expectancy
 > 开分支 hash：88d2563
-> 实现提交 hash：待提交
+> 实现提交 hash：1adf61a
 > 目标版本：0.5.0-dev
 > 最后更新：2026-06-26
 
