@@ -360,7 +360,44 @@ class DataManager:
                 if not Path(fp).exists():
                     raise FileNotFoundError(f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}")
                 return fp
+
+        repaired = self._repair_metadata_from_csv(symbol, interval, candidates)
+        if repaired is not None:
+            return repaired
+
         raise FileNotFoundError(f"ExportMetadata 中找不到 {symbol} (interval={interval}, candidates={candidates})")
+
+    def _repair_metadata_from_csv(self, symbol: str, interval: str, candidates: list[str]) -> str | None:
+        """从本地 CSV 反向补齐 ExportMetadata。"""
+        data_dir = Path(self._get_data_dir())
+        filename_template = self._get_filename_template()
+
+        for provider in candidates:
+            filepath = data_dir / filename_template.format(symbol=symbol, provider=provider, interval=interval)
+            if not filepath.exists():
+                continue
+
+            df = self._load_csv_with_validation(filepath)
+            if df is None or df.empty:
+                continue
+
+            min_dt = pd.to_datetime(df["datetime"].min())
+            max_dt = pd.to_datetime(df["datetime"].max())
+            self.store.upsert_metadata(
+                symbol=symbol,
+                provider=provider,
+                interval=interval,
+                filepath=str(filepath),
+                start_date=str(min_dt.date()),
+                end_date=str(max_dt.date()),
+                min_dt=str(min_dt.date()),
+                max_dt=str(max_dt.date()),
+                total_rows=len(df),
+            )
+            logger.info("已从 CSV 补齐 ExportMetadata: {} provider={} interval={}", symbol, provider, interval)
+            return str(filepath)
+
+        return None
 
     # ── 回测记录 ────────────────────────────────────────────
 
@@ -412,7 +449,7 @@ class DataManager:
         1. win_trades + loss_trades 是否等于 total_trades
         2. backtest_trades 表的实际记录数是否等于 total_trades
         3. 如果 total_trades > 0，win_trades/loss_trades 不能同时为 None
-        4. (2026-06-06新增) profit_days + loss_days ≈ total_days
+        4. profit_days + loss_days 不能超过 total_days
         5. (2026-06-06新增) total_commission ≈ sum(trade.commission)
 
         调试沉淀(2026-06-04):

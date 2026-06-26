@@ -1,9 +1,12 @@
 # ATR 策略稳健正期望 Roadmap
 
 > 类型：Roadmap / 待实现调优方案  
-> 状态：待调优  
+> 状态：P1 初版已实现，工具链已补齐，待扩大样本验证  
 > 创建日期：2026-06-26  
-> 策略代码：[atr_strategy.py](../../strategies/atr_strategy.py)  
+> 开发分支：feat/atr-strategy-tuning  
+> 开分支 hash：88d2563  
+> 实现提交 hash：待提交  
+> 策略代码：[atr_strategy.py](../../workspace/strategies/atr_strategy.py)  
 > 目标：不追求单次回测暴利，优先获得较稳定、可迁移、长期正期望的 CTA 策略。
 
 ## 0. 核心结论
@@ -197,6 +200,113 @@ adx_max = 35 ~ 45
 ---
 
 ## 4. 实施路线
+
+### 4.0 当前实测记录（2026-06-26）
+
+已用现有工具链执行两轮小样本验证，数据范围为本地 `DCE.m2601/m2603/m2605`，回测周期 `5m`，成本配置为手续费率 `0.0003`、滑点 `1 tick`。
+
+#### Baseline：当前 5-AND 结构
+
+命令：
+
+```bash
+./run.sh backtest --env backtest --pattern "DCE\\.m.*" --strategy atr --mode search --optimizer bayesian --trials 5 --early-stop-patience 0 --capital 100000 --contract-size 10 --no-search
+```
+
+结果：
+
+| 合约 | 交易数 | 总收益 | 最大回撤 | 备注 |
+|------|--------|--------|----------|------|
+| `DCE.m2601` | 1 | 12.52% | -0.36% | 样本不足 |
+| `DCE.m2603` | 1 | 7.62% | -2.25% | 样本不足 |
+| `DCE.m2605` | 1 | 13.89% | 0.00% | 样本不足 |
+
+结论：结果看起来为正，但每个合约只有 1 笔交易，不能作为策略有效性证据；只能说明当前 5-AND 入场过严，必须先提高样本量。
+
+#### P1 初版：15m 趋势 + 5m 回调/再启动
+
+已实现：
+
+```python
+@trend_long("sma({sma_short})@15m > sma({sma_long})@15m")
+@confirm_long("macd@5m > 0")
+@confirm_long("kdj@5m < {kdj_pullback_long}")
+
+@trend_short("sma({sma_short})@15m < sma({sma_long})@15m")
+@confirm_short("macd@5m < 0")
+@confirm_short("kdj@5m > {kdj_pullback_short}")
+```
+
+P1 初版默认参数：
+
+| 参数 | 当前值 |
+|------|--------|
+| `sma_short` | 20 |
+| `sma_long` | 60 |
+| `kdj_pullback_long` | 45 |
+| `kdj_pullback_short` | 55 |
+| `atr_stop_loss_multiplier` | 2.5 |
+| `atr_take_profit_multiplier` | 4.0 |
+| `trailing_activation_atr` | 2.0 |
+| `trailing_drawdown_ratio` | 0.3 |
+
+P1 初跑结果：
+
+| 合约 | 交易数 | 总收益 | 最大回撤 | 备注 |
+|------|--------|--------|----------|------|
+| `DCE.m2601` | 1 | 4.70% | -1.74% | 样本不足 |
+| `DCE.m2603` | 1 | 8.10% | 0.00% | 样本不足 |
+| `DCE.m2605` | 1 | -7.89% | -7.89% | 样本不足 |
+
+结论：P1 结构方向正确，但在当前本地豆粕短窗口上仍不足以形成统计样本。下一轮不应继续优化 ATR 参数，而应先解决样本量和工具链问题。
+
+#### 工具链修复与并行小样本验证
+
+已补齐：
+
+1. `run.sh` 运行时自动把 `workspace/` 加入 `PYTHONPATH`；
+2. `backtest-atr.sh` 默认传入 `--env backtest`；
+3. `DataManager` 在缺少 `ExportMetadata` 时，可从本地 CSV 自动反向补齐元数据；
+4. 并行优化 worker 初始化时继承数据环境，`DataFeed.create()` 可在子进程内正常使用 `DataManager()`。
+
+并行验证命令：
+
+```bash
+./run.sh backtest --env backtest --pattern "DCE\\.m.*" --strategy atr --mode search --optimizer bayesian --parallel --workers 2 --trials 3 --early-stop-patience 0 --capital 100000 --contract-size 10
+```
+
+结果：run `r6` 成功完成，`3 trials × 3 合约` 全部跑通，报告已生成；最佳参数为：
+
+| 参数 | 值 |
+|------|----|
+| `atr_stop_loss_multiplier` | 1.8 |
+| `atr_take_profit_multiplier` | 3.0 |
+| `trailing_activation_atr` | 2.1 |
+| `trailing_drawdown_ratio` | 0.35 |
+| `kdj_pullback_long` | 40 |
+| `kdj_pullback_short` | 60 |
+
+run `r6` 最佳 trial 对应结果：
+
+| 合约 | 交易数 | 总收益 | 最大回撤 | 备注 |
+|------|--------|--------|----------|------|
+| `DCE.m2601` | 1 | 4.70% | -1.74% | 样本不足 |
+| `DCE.m2603` | 1 | 8.10% | 0.00% | 样本不足 |
+| `DCE.m2605` | 1 | -4.39% | -4.39% | 样本不足 |
+
+结论：当前工具链已经能执行 ATR 并行参数搜索，但搜索结果仍不可用于策略判断。每个合约仍只有 1 笔交易，`3 trials` 仅用于验证流程可用，不用于选择生产参数。
+
+数据一致性修复（2026-06-26）：
+
+1. 逐笔 `commission` 已改为每条成交按 `price × volume × size × rate` 记录，不再只集中到平仓记录；
+2. `profit_days + loss_days` 校验已改为“不超过 total_days”，允许无交易日存在；
+3. 最小 ATR 并行回测 run `r3` 生成回测 ID `145/146/147` 后，`DataManager.validate_consistency()` 均返回空错误。
+
+下一轮优先级：
+
+1. 扩大验证样本到更多品种或更长历史窗口；
+2. 在交易数足够后，再进入参数搜索和 Walk-Forward；
+3. 暂不根据当前豆粕短样本调参或引入 DMI/ADX。
 
 ### P0 — 建立基线，不引入 DMI
 

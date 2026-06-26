@@ -566,6 +566,7 @@ class BacktestRunWorkflow:
                 search_space=search_space,
                 strategy_params=strategy_params,
                 backtest_config=bc,
+                data_env=self._cm.get_data_config().environment,
                 run_id=run_id,
                 n_trials=n_trials,
                 search_type=run_engine,

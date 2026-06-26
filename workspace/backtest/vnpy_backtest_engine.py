@@ -724,7 +724,7 @@ class VnpyBacktestEngine:
                 open_queue.append((direction, trade_price, trade_volume))
                 trade_pnls[i] = 0.0
                 trade_open_prices[i] = trade_price
-                trade_commissions[i] = 0.0
+                trade_commissions[i] = trade_price * trade_volume * size * rate
             else:
                 # 平仓
                 direction_val = getattr(trade, "direction", None)
@@ -740,11 +740,7 @@ class VnpyBacktestEngine:
 
                 remaining = trade_volume
                 gross_pnl = 0.0
-                total_commission = 0.0
                 matched_opens: list[tuple[float, float]] = []
-
-                # 平仓自身的手续费和滑点
-                total_commission += trade_price * trade_volume * size * rate
 
                 while remaining > 0 and open_queue:
                     open_dir, open_price, open_vol = open_queue[0]
@@ -760,7 +756,6 @@ class VnpyBacktestEngine:
                     else:
                         gross_pnl += -price_diff * matched_vol * size
 
-                    total_commission += open_price * matched_vol * size * rate
                     remaining -= matched_vol
                     if matched_vol >= open_vol:
                         open_queue.pop(0)
@@ -779,8 +774,8 @@ class VnpyBacktestEngine:
                         f"open_queue_empty={not bool(open_queue)}"
                     )
 
-                trade_pnls[i] = gross_pnl - total_commission
-                trade_commissions[i] = total_commission
+                trade_pnls[i] = gross_pnl
+                trade_commissions[i] = trade_price * trade_volume * size * rate
 
         # 步骤 3: 转换为标准字典格式
         formatted_trades: list[dict[str, Any]] = []

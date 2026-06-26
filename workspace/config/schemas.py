@@ -56,6 +56,8 @@ class StrategyItemConfig(BaseModel):
     atr_take_profit_multiplier: float = 3.0
     trailing_activation_atr: float = 1.0
     trailing_drawdown_ratio: float = 0.25
+    kdj_pullback_long: int = 45
+    kdj_pullback_short: int = 55
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     @field_validator("stop_loss_ratio", "take_profit_ratio", "position_ratio")

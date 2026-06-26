@@ -33,6 +33,7 @@ echo ""
 echo "[步骤 1/2] 执行全量回测 + 贝叶斯搜索..."
 
 if "$ROOT_DIR/run.sh" backtest \
+    --env backtest \
     --pattern "$PATTERN" \
     --strategy atr \
     --mode search \

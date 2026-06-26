@@ -1,8 +1,10 @@
 """测试 backtest/vnpy_backtest_engine.py — 爆仓统计重算"""
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
-from backtest.vnpy_backtest_engine import _override_blown_up_stats
+from backtest.vnpy_backtest_engine import VnpyBacktestEngine, _override_blown_up_stats
 
 
 def _make_daily(net_pnls: list[float]) -> pd.DataFrame:
@@ -17,6 +19,33 @@ def _make_daily(net_pnls: list[float]) -> pd.DataFrame:
             "trade_count": [10] * n,
         }
     )
+
+
+def test_parse_trades_records_commission_on_each_fill():
+    engine = SimpleNamespace(
+        trades={
+            "BACKTESTING.1": SimpleNamespace(
+                datetime=pd.Timestamp("2024-01-01 09:00").to_pydatetime(),
+                direction=SimpleNamespace(value="多"),
+                offset=SimpleNamespace(value="开"),
+                price=100.0,
+                volume=2.0,
+            ),
+            "BACKTESTING.2": SimpleNamespace(
+                datetime=pd.Timestamp("2024-01-01 10:00").to_pydatetime(),
+                direction=SimpleNamespace(value="空"),
+                offset=SimpleNamespace(value="平"),
+                price=110.0,
+                volume=2.0,
+            ),
+        }
+    )
+
+    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509", rate=0.001, size=10)
+
+    assert trades[0]["commission"] == pytest.approx(2.0)
+    assert trades[1]["commission"] == pytest.approx(2.2)
+    assert sum(t["commission"] for t in trades) == pytest.approx(4.2)
 
 
 def test_blown_up_balance_crosses_zero_yields_negative_sharpe():
