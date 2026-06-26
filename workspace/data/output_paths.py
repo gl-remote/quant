@@ -1,7 +1,7 @@
 """项目本地数据目录路径
 
 统一管理 ``project_data/`` 下的本地数据、报告、日志、缓存和诊断产物路径。
-业务代码不应直接拼接 ``project_data``、旧 ``output`` 或旧 ``.quant_shared_data`` 路径。
+业务代码应通过本模块获取本地数据路径。
 """
 
 from __future__ import annotations

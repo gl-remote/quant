@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/summary.schema.json",
   "title": "Symbol Summary List",
-  "description": "output/r{run_id}/data/summary.json: 当前 run 内每个 (id, symbol) 的概览。前端 r 详情页消费。",
+  "description": "project_data/reports/runs/r{run_id}/data/summary.json: 当前 run 内每个 (id, symbol) 的概览。前端 r 详情页消费。",
   "type": "array",
   "items": {
     "type": "object",

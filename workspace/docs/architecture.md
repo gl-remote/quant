@@ -109,20 +109,21 @@ build_all(db_path, output_dir, run_id)
 ### 输出结构
 
 ```
-output/
+project_data/reports/
 ├── index.html                      # 单页应用入口
 ├── data/
 │   └── nav.json                    # 全局导航数据
-├── rN/
-│   └── data/
-│       ├── run.json                # run 元信息
-│       ├── summary.json            # 品种汇总
-│       ├── backtests.json          # 回测列表
-│       ├── kline_*.json            # K线数据
-│       └── optuna.json             # 优化数据（如有）
+├── runs/
+│   └── rN/
+│       └── data/
+│           ├── run.json            # run 元信息
+│           ├── summary.json        # 品种汇总
+│           ├── backtests.json      # 回测列表
+│           ├── kline_*.json        # K线数据
+│           └── optuna.json         # 优化数据（如有）
 └── assets/
-    ├── index-[hash].js             # React bundle
-    └── vendor/plotly.min.js        # Plotly 库
+    ├── index.js                    # React bundle
+    └── index.css                   # 前端样式
 ```
 
 ### 数据预加载机制
@@ -145,11 +146,11 @@ window.__DATA__ = {
 
 ## K线缓存机制
 
-`report/kline_cache.py` 实现 K线数据的增量缓存：
+`report/cache/kline.py` 实现 K线数据的增量缓存：
 
 | 场景 | 行为 |
 |------|------|
-| 首次构建 | CSV → JSON，写入 `output/.kline_cache/{md5}.json` |
+| 首次构建 | CSV → JSON，写入 `project_data/cache/kline_json/{md5}.json` |
 | 二次构建同品种 | 缓存命中，O(1) 复制 |
 | CSV 文件更新 | 基于文件 mtime 自动失效 |
 

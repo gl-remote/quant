@@ -11,7 +11,7 @@
     ↓
 前端 React 组件
     ↓ (useFetchJson → window.__DATA__)
-JSON 数据文件 (output/r{runId}/data/*.json)
+JSON 数据文件 (project_data/reports/runs/r{runId}/data/*.json)
     ↓ (report.writer.json_writer)
 Python 数据处理
     ↓ (data.store.DataStore)

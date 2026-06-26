@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/run.schema.json",
   "title": "Run Metadata",
-  "description": "output/r{run_id}/data/run.json: 当前 run 的元数据。",
+  "description": "project_data/reports/runs/r{run_id}/data/run.json: 当前 run 的元数据。",
   "type": "object",
   "required": ["id", "strategy", "engine", "symbols", "status", "created_at"],
   "properties": {
