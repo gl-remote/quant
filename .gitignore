@@ -31,9 +31,20 @@ env/
 
 # IDE
 .idea/
+.vscode/
 *.swp
 *.swo
 *~
+
+# Local agent/tooling workspaces
+.codebuddy/
+.trae/
+.uploads/
+.pip/
+
+# Tool caches
+.mypy_cache/
+.ruff_cache/
 
 # OS
 .DS_Store
@@ -71,7 +82,10 @@ node_modules/
 # Testing
 .pytest_cache/
 .coverage
+
+# Report / workspace generated outputs
 project_data/
+workspace/output/
 
 # Distribution / packaging
 *.egg-info/
@@ -86,6 +100,3 @@ build/
 
 # Temporary commit message files
 .commit_msg_tmp
-
-# VS Code user settings
-.vscode/
