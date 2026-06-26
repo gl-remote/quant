@@ -67,6 +67,7 @@ def _init_worker(
     strategy_params: dict[str, Any],
     backtest_config: BacktestConfig,
     run_id: int,
+    data_env: str | None,
 ) -> None:
     """子进程初始化：每个 worker 启动时执行一次"""
     global _WORKER_CTX, _WORKER_LOGGER_ID
@@ -74,6 +75,13 @@ def _init_worker(
     _WORKER_CTX["strategy_name"] = strategy_name
     _WORKER_CTX["strategy_params"] = strategy_params
     _WORKER_CTX["backtest_config"] = backtest_config
+    _WORKER_CTX["data_env"] = data_env
+
+    if data_env:
+        from config import ConfigManager
+        from data import DataManager
+
+        DataManager(ConfigManager(env=data_env))
 
     # ── 子进程独立日志文件 ──────────────────────────
     from report.output_paths import workers_dir
@@ -183,6 +191,7 @@ class ParallelBacktestOptimizer:
         search_space: dict[str, dict[str, Any]],
         strategy_params: dict[str, Any] | None = None,
         backtest_config: BacktestConfig | None = None,
+        data_env: str | None = None,
         n_trials: int = 50,
         search_type: str = "bayesian",
         n_workers: int | None = None,
@@ -198,6 +207,7 @@ class ParallelBacktestOptimizer:
         self._search_space = search_space
         self._strategy_params = strategy_params or {}
         self._backtest_config = backtest_config
+        self._data_env = data_env
         self._n_trials = n_trials
         self._search_type = search_type
         self._n_workers = n_workers or os.cpu_count() or 4
@@ -284,6 +294,7 @@ class ParallelBacktestOptimizer:
                     self._strategy_params,
                     self._backtest_config,
                     self._run_id,
+                    self._data_env,
                 ),
             ),
         ) as pool:
@@ -442,6 +453,7 @@ def run_param_search_parallel(
     search_space: dict[str, dict[str, Any]],
     strategy_params: dict[str, Any],
     backtest_config: BacktestConfig,
+    data_env: str | None = None,
     run_id: int = 0,
     n_trials: int = 50,
     search_type: str = "bayesian",
@@ -462,6 +474,7 @@ def run_param_search_parallel(
         search_space: 搜索空间定义
         strategy_params: 策略默认参数
         backtest_config: 回测配置（通过 spawn pickle 传给子进程，无问题）
+        data_env: 数据环境名，用于初始化 worker 内 DataManager 环境
         run_id: 运行 ID，用于 worker 日志目录（r{run_id}/workers/）
         n_trials: 最大试验次数
         search_type: "grid" 或 "bayesian"
@@ -481,6 +494,7 @@ def run_param_search_parallel(
         search_space=search_space,
         strategy_params=strategy_params,
         backtest_config=backtest_config,
+        data_env=data_env,
         run_id=run_id,
         n_trials=n_trials,
         search_type=search_type,

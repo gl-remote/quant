@@ -100,27 +100,29 @@ class ATRCrossParams:
     """移动止盈回撤比例，激活后从最高价回落超过此比例触发止盈，默认 0.25 (25%)"""
 
     kdj_oversold: int = DEFAULT_KDJ_OVERSOLD
-    """KDJ 超卖阈值，kdj < 此值视为超卖（做多入场条件之一），默认 20"""
+    """KDJ 超卖阈值，保留用于兼容旧配置，默认 20"""
 
     kdj_overbought: int = DEFAULT_KDJ_OVERBOUGHT
-    """KDJ 超买阈值，kdj > 此值视为超买（做空入场条件之一），默认 80"""
+    """KDJ 超买阈值，保留用于兼容旧配置，默认 80"""
+
+    kdj_pullback_long: int = 45
+    """多头背景下的 KDJ 回调阈值，kdj < 此值视为回调过，默认 45"""
+
+    kdj_pullback_short: int = 55
+    """空头背景下的 KDJ 反弹阈值，kdj > 此值视为反弹过，默认 55"""
 
 
 # ── 建议型方向切面声明 ──
 # 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
 # 随后策略原始 on_bar 消费这些建议做出决策。
 # ── 做多方向切面 ──
-@confirm_long("macd@1m > 0")
 @confirm_long("macd@5m > 0")
-@confirm_long("kdj@1m < {kdj_oversold}")
-@confirm_long("kdj@5m < {kdj_oversold}")
-@trend_long("sma({sma_short})@5m > sma({sma_long})@5m")
+@confirm_long("kdj@5m < {kdj_pullback_long}")
+@trend_long("sma({sma_short})@15m > sma({sma_long})@15m")
 # ── 做空方向切面 ──
-@confirm_short("macd@1m < 0")
 @confirm_short("macd@5m < 0")
-@confirm_short("kdj@1m > {kdj_overbought}")
-@confirm_short("kdj@5m > {kdj_overbought}")
-@trend_short("sma({sma_short})@5m < sma({sma_long})@5m")
+@confirm_short("kdj@5m > {kdj_pullback_short}")
+@trend_short("sma({sma_short})@15m < sma({sma_long})@15m")
 # ── 风控切面 ──
 @entry_block_after_take_profit("cooldown() < 10")
 @entry_block_after_stop_loss("cooldown() < 10")

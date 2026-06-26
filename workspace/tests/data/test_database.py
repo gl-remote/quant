@@ -566,7 +566,7 @@ class TestBacktestConsistency:
 
     # 2026-06-06 新增: profit_days + loss_days 一致性校验
     def test_profit_loss_days_consistent(self):
-        """盈利天数+亏损天数≈总天数（允许±2天误差）"""
+        """盈利天数+亏损天数不超过总天数 → 通过"""
         errors = validate_backtest_consistency(
             total_trades=10,
             win_trades=5,
@@ -574,39 +574,25 @@ class TestBacktestConsistency:
             trade_count=10,
             backtest_id=1,
             total_days=200,
-            profit_days=100,
-            loss_days=99,
+            profit_days=2,
+            loss_days=1,
         )
-        # 100+99=199 vs 200，差1天，在±2范围内，应通过
         assert len(errors) == 0
 
     def test_profit_loss_days_mismatch(self):
-        """盈利天数+亏损天数与总天数差异超过2天"""
-        validate_backtest_consistency(
+        """盈利天数+亏损天数不能超过总天数"""
+        errors = validate_backtest_consistency(
             total_trades=10,
             win_trades=5,
             loss_trades=5,
             trade_count=10,
             backtest_id=1,
-            total_days=365,
-            profit_days=195,
-            loss_days=170,
+            total_days=20,
+            profit_days=15,
+            loss_days=10,
         )
-        # 195+170=365 vs 365... 实际上相等
-        # 换一个不匹配的例子
-        errors2 = validate_backtest_consistency(
-            total_trades=10,
-            win_trades=5,
-            loss_trades=5,
-            trade_count=10,
-            backtest_id=1,
-            total_days=365,
-            profit_days=195,
-            loss_days=50,
-        )
-        # 195+50=245 vs 365，差120天，应报错
-        assert len(errors2) >= 1
-        assert any("profit_days" in e for e in errors2)
+        assert len(errors) >= 1
+        assert any("profit_days" in e for e in errors)
 
     # 2026-06-06 新增: commission 一致性校验
     def test_commission_consistent(self):
