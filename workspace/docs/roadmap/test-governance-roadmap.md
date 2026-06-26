@@ -1,7 +1,7 @@
 # 测试体系治理规划
 
 > 类型：Roadmap / 待实施规划
-> 状态：部分实施（阶段 A-C 已完成，阶段 D 首轮 helpers 抽取已完成）
+> 状态：部分实施（阶段 A-C 已完成，阶段 D 首轮 helpers 抽取已完成，阶段 E 已启动回测统计不变量补充）
 > 创建日期：2026-06-26
 > 会话交接：本规划来自 2026-06-26 关于 `workspace/tests`、coverage、pre-commit、`scripts/test.sh` 的连续讨论；后续 AI Agent 应先阅读本文的「交接说明」和「隐藏规则」，再执行任何改动。
 
@@ -272,6 +272,8 @@ def assert_single_reason(reasons):
 
 ### 阶段 E：补核心不变量测试
 
+状态：进行中（本会话已从 `workspace/tests/backtest/test_vnpy_backtest_engine.py` 启动回测统计不变量补充，已覆盖全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景）。
+
 目标：覆盖量化系统最容易产生“看起来能跑但结果错误”的场景。
 
 优先方向：
@@ -485,7 +487,8 @@ ci: add fast coverage reporting
 - `unit` 已固定为 fast tests，默认排除 `slow`、`local_data`。
 - 已新增 `integration`、`slow`、`local-data` stage。
 - `workspace/tests/helpers/` 已建立，并已首轮抽取回测记录、配置字典、行情数据和风控测试构造 helpers。
-- 核心不变量测试仍待系统补充
+- 回测统计不变量测试已启动，已补充全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景。
+- DataFeed 时间可见性与策略风控核心不变量仍待系统补充
 
 ## 完成定义
 

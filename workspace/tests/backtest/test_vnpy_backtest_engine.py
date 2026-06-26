@@ -1,6 +1,7 @@
 """测试 backtest/vnpy_backtest_engine.py — 爆仓统计重算"""
 
 import pandas as pd
+import pytest
 from backtest.vnpy_backtest_engine import _override_blown_up_stats
 
 
@@ -48,3 +49,72 @@ def test_blown_up_partial_loss_keeps_positive_balance():
     assert stats["end_balance"] == 70_000.0
     assert stats["total_return"] < 0
     assert stats["loss_days"] == 4
+
+
+def test_all_profit_sequence_keeps_positive_signs_and_day_counts():
+    capital = 100_000.0
+    daily = _make_daily([10_000, 5_000, 8_000, 7_000])
+
+    stats: dict = {}
+    _override_blown_up_stats(stats, daily, capital)
+
+    assert stats["end_balance"] == 130_000.0
+    assert stats["total_return"] == pytest.approx(30.0)
+    assert stats["annual_return"] > 0
+    assert stats["profit_days"] == 4
+    assert stats["loss_days"] == 0
+    assert stats["max_drawdown"] == 0.0
+    assert stats["max_ddpercent"] == 0.0
+    assert stats["return_drawdown_ratio"] == 0.0
+
+
+def test_all_loss_sequence_keeps_negative_signs_and_day_counts():
+    capital = 100_000.0
+    daily = _make_daily([-10_000, -5_000, -8_000, -7_000])
+
+    stats: dict = {}
+    _override_blown_up_stats(stats, daily, capital)
+
+    assert stats["end_balance"] == 70_000.0
+    assert stats["total_return"] == pytest.approx(-30.0)
+    assert stats["annual_return"] < 0
+    assert stats["profit_days"] == 0
+    assert stats["loss_days"] == 4
+    assert stats["max_drawdown"] < 0
+    assert stats["max_ddpercent"] < 0
+    assert stats["return_drawdown_ratio"] < 0
+
+
+def test_cost_totals_are_reported_without_increasing_net_pnl():
+    capital = 100_000.0
+    low_cost = _make_daily([1_000, 1_000])
+    high_cost = _make_daily([900, 900])
+    high_cost["commission"] = [150.0, 150.0]
+    high_cost["slippage"] = [100.0, 100.0]
+
+    low_stats: dict = {}
+    high_stats: dict = {}
+    _override_blown_up_stats(low_stats, low_cost, capital)
+    _override_blown_up_stats(high_stats, high_cost, capital)
+
+    assert high_stats["total_commission"] > low_stats["total_commission"]
+    assert high_stats["total_slippage"] > low_stats["total_slippage"]
+    assert high_stats["total_net_pnl"] < low_stats["total_net_pnl"]
+    assert high_stats["end_balance"] < low_stats["end_balance"]
+    assert high_stats["total_return"] < low_stats["total_return"]
+
+
+def test_empty_daily_does_not_create_synthetic_positive_stats():
+    stats = {"end_balance": 0.0, "total_return": 0.0, "profit_days": 0}
+
+    _override_blown_up_stats(stats, pd.DataFrame(), 100_000.0)
+
+    assert stats == {"end_balance": 0.0, "total_return": 0.0, "profit_days": 0}
+
+
+def test_daily_missing_required_columns_does_not_create_synthetic_positive_stats():
+    stats = {"end_balance": 0.0, "total_return": 0.0, "profit_days": 0}
+
+    _override_blown_up_stats(stats, pd.DataFrame({"net_pnl": [1_000.0]}), 100_000.0)
+
+    assert stats == {"end_balance": 0.0, "total_return": 0.0, "profit_days": 0}
