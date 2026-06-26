@@ -78,9 +78,10 @@ _REAL_SYMBOL_CANDIDATES = ("DCE.m2601", "DCE.m2603", "DCE.m2605", "DCE.c2601")
 
 def load_real_dataset() -> tuple[str, pd.DataFrame]:
     """加载一个磁盘上真实存在的品种 5m 数据，无数据时 pytest.skip"""
+    from config import ConfigManager
     from data.manager import DataManager
 
-    dm = DataManager()
+    dm = DataManager(ConfigManager(env="backtest"))
     for symbol in _REAL_SYMBOL_CANDIDATES:
         try:
             results = dm.load_kline([symbol], interval="5m")

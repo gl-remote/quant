@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from cli.env import add_environment_arguments, build_data_context
 from cli.workflows.realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
 
 
@@ -28,19 +29,20 @@ def register(subparsers: Any) -> None:
     )
     p.add_argument("--symbol", default="DCE.m2509", help="品种代码")
     p.add_argument("--gui", action="store_true", help="启用图形界面")
-    p.add_argument("--config", default=None, help="配置文件路径")
     p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
+    add_environment_arguments(p)
 
 
 def cmd_live(args: argparse.Namespace) -> None:
     """live 命令：走 TargetPosTask 下单，账户类型读配置。"""
+    cm, dm = build_data_context(args, "live")
     req = TqsdkRealtimeRequest(
         strategy=args.strategy,
         symbol=args.symbol,
         gui=bool(args.gui),
-        config=args.config,
+        config=None,
     )
-    TqsdkRealtimeWorkflow().run(
+    TqsdkRealtimeWorkflow(cm=cm, dm=dm).run(
         req=req,
         mode="live",
         account_type=None,

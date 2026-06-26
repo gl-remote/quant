@@ -13,9 +13,10 @@ import argparse
 import sys
 from typing import Any
 
-from config import ConfigManager
-from data import DataManager, export_csv
+from data import export_csv
 from loguru import logger
+
+from cli.env import add_environment_arguments, build_data_context
 
 
 def register(subparsers: Any) -> None:
@@ -42,6 +43,7 @@ def register(subparsers: Any) -> None:
     )
     p.add_argument("--output", default=None, help="自定义输出路径（可选）")
     p.add_argument("--force", action="store_true", help="强制覆盖已有CSV和元数据")
+    add_environment_arguments(p)
 
 
 def cmd_export(args: argparse.Namespace) -> None:
@@ -65,8 +67,7 @@ def cmd_export(args: argparse.Namespace) -> None:
     output: str | None = args.output  # pyright: ignore[reportAny]
     force: bool = args.force  # pyright: ignore[reportAny]
 
-    cm = ConfigManager()
-    dm = DataManager(cm)
+    cm, dm = build_data_context(args, "export")
 
     date_hint = f"{start or 'auto'} ~ {end or 'auto'}"
     logger.info(f"数据导出: {symbol} {date_hint} [source={source or 'default'}, interval={interval}]")

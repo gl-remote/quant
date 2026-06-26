@@ -26,10 +26,13 @@ from .manager import (
     ProjectConfig,
 )
 from .schemas import (
+    CLI_DATA_ENVIRONMENTS,
+    VALID_DATA_ENVIRONMENTS,
     AccountInfo,
     AppConfig,
     BacktestConfig,
     DataConfig,
+    DataEnvironment,
     EnvironmentConfig,
     LoggingConfig,
     StrategyItemConfig,
@@ -45,6 +48,9 @@ __all__ = [
     "AppConfig",
     "BacktestConfig",
     "DataConfig",
+    "DataEnvironment",
+    "VALID_DATA_ENVIRONMENTS",
+    "CLI_DATA_ENVIRONMENTS",
     "EnvironmentConfig",
     "LoggingConfig",
     "StrategyItemConfig",

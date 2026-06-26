@@ -24,6 +24,7 @@ from typing import Any
 
 from loguru import logger
 
+from cli.env import add_environment_arguments, build_data_context
 from cli.workflows.backtests_run import (
     BacktestRunWorkflow,
     TqsdkRequest,
@@ -118,13 +119,15 @@ def register(subparsers: Any) -> None:
         action="store_true",
         help="把指标列回写到基础周期 DataFrame 供 debug 查看（仅单次回测生效，有性能开销）",
     )
+    add_environment_arguments(p)
 
 
 def cmd_backtest(args: argparse.Namespace) -> None:
     """执行统一回测命令：根据 `--engine` + `--mode` 路由到对应的 workflow 入口"""
     _validate_cross_field(args)
 
-    workflow = BacktestRunWorkflow()
+    cm, dm = build_data_context(args, "backtest")
+    workflow = BacktestRunWorkflow(cm=cm, dm=dm)
     if args.engine == "vnpy":
         if args.mode == "walk-forward":
             workflow.run_vnpy_walk_forward(_build_walk_forward_request(args))

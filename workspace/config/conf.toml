@@ -147,7 +147,6 @@ provider = "tqsdk"                          # export 默认数据源
 cache_enabled = false                        # 是否启用缓存
 base_dir = "project_data"                     # 项目本地数据根目录
 export_dir = "project_data/market_data/csv"    # CSV 导出目录
-db_path = "project_data/database/quant_shared.db"  # 数据库路径
 filename_template = "{symbol}.{provider}.{interval}.csv"  # 文件名模板：标的名.数据源.周期.csv
 
 # ============================================================

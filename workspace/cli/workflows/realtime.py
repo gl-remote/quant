@@ -49,6 +49,10 @@ class TqsdkRealtimeWorkflow:
       - live: account_type=None, require_account=True, trade=True
     """
 
+    def __init__(self, cm: ConfigManager | None = None, dm: DataManager | None = None) -> None:
+        self._cm = cm
+        self._dm = dm
+
     def run(
         self,
         req: TqsdkRealtimeRequest,
@@ -66,12 +70,12 @@ class TqsdkRealtimeWorkflow:
             require_account: True 时若未配置账户则退出
             trade: True 走 TargetPosTask 下单；False 只回调打印信号
         """
-        cm = ConfigManager(req.config)
-        dm = DataManager(cm)
+        cm = self._cm or ConfigManager(config_file=req.config, env=mode)
+        dm = self._dm or DataManager(cm)
 
         account = cm.get_account_info()
         if require_account and account is None:
-            logger.error("请先在 config/conf.local.toml 中配置天勤账号信息")
+            logger.error("请先在环境 local 配置中配置天勤账号信息")
             dm.store.log(mode, "配置缺失", symbol=req.symbol, status="ERROR")
             return
 

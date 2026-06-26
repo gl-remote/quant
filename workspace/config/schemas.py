@@ -16,7 +16,7 @@
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from common.constants import (
     DEFAULT_COMMISSION_RATE,
@@ -150,12 +150,20 @@ class BacktestConfig(BaseModel):
 # ============================================================
 
 
+DataEnvironment = Literal["backtest", "test", "live", "unit_test"]
+VALID_DATA_ENVIRONMENTS: set[str] = {"backtest", "test", "live", "unit_test"}
+CLI_DATA_ENVIRONMENTS: set[str] = {"backtest", "test", "live"}
+
+
 class DataConfig(BaseModel):
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
     provider: str = "tqsdk"
     cache_enabled: bool = False
+    environment: DataEnvironment
     base_dir: str = ""
     export_dir: str = ""
-    db_path: str = ""
+    database_path: str
     filename_template: str = "{symbol}.{provider}.{interval}.csv"
 
 

@@ -32,8 +32,9 @@ def make_base_config_dict() -> dict:
             },
         ],
         "data": {
+            "environment": "unit_test",
             "base_dir": "project_data",
-            "db_path": "project_data/database/quant_shared.db",
+            "database_path": "project_data/database/unit_test/quant.db",
             "export_dir": "project_data/market_data/csv",
             "filename_template": "{symbol}.{provider}.{interval}.csv",
         },

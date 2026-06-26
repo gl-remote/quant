@@ -6,8 +6,8 @@ ConfigManager: 轻量门面，委托 ProjectConfig.instance()，向后兼容
 用法:
     from config.manager import ProjectConfig, ConfigManager
 
-    cfg = ProjectConfig.instance()              # 单例
-    cm = ConfigManager()                        # 轻量 wrapper
+    cfg = ProjectConfig.instance(env="backtest")     # 单例
+    cm = ConfigManager(env="backtest")             # 轻量 wrapper
     bc = cm.get_backtest_config()               # → BacktestConfig
 """
 
@@ -28,6 +28,7 @@ from pydantic import (
 )
 
 from .schemas import (
+    VALID_DATA_ENVIRONMENTS,
     AccountInfo,
     AppConfig,
     BacktestConfig,
@@ -60,7 +61,7 @@ class ProjectConfig(BaseModel):
     app: AppConfig = Field(default_factory=AppConfig)
     environment: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     strategies: list[StrategyItemConfig] = Field(default_factory=list)
-    data: DataConfig = Field(default_factory=DataConfig)
+    data: DataConfig
     backtest: BacktestConfig = Field(default_factory=BacktestConfig)
     optimizer: OptimizerConfig = Field(default_factory=OptimizerConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
@@ -70,15 +71,16 @@ class ProjectConfig(BaseModel):
     # ── 单例 ──────────────────────────────────────────────
 
     @classmethod
-    def instance(cls, config_file: str | None = None) -> ProjectConfig:
+    def instance(cls, env: str | None = None, config_file: str | None = None) -> ProjectConfig:
         """获取全局单例（首次调用时自动加载 TOML）
 
         Args:
-            config_file: 可选 TOML 路径，传入时（重新）加载
+            env: 标准数据环境名。
+            config_file: 可选环境覆盖 TOML 路径，传入时（重新）加载。
         """
         global _project_config_instance
-        if _project_config_instance is None or config_file is not None:
-            _project_config_instance = cls.load(config_file)
+        if _project_config_instance is None or env is not None or config_file is not None:
+            _project_config_instance = cls.load(env=env, config_file=config_file)
         return _project_config_instance
 
     @classmethod
@@ -92,44 +94,64 @@ class ProjectConfig(BaseModel):
     @classmethod
     def load(
         cls,
+        env: str | None = None,
         config_file: str | None = None,
         project_root: Path | None = None,
     ) -> ProjectConfig:
         """从 TOML 加载配置，解析路径和环境变量
 
         Args:
-            config_file: TOML 配置文件路径，None 则使用默认 conf.toml
-            project_root: 项目根目录，None 则自动推断
+            env: 标准数据环境名，加载 conf.toml + conf.<env>.toml + conf.<env>.local.toml。
+            config_file: 显式环境覆盖文件，加载 conf.toml 后 deep merge 该文件。
+            project_root: 项目根目录，None 则自动推断。
         """
         if project_root is None:
             # config/manager.py → config/ → workspace/ → 项目根/
             project_root = Path(__file__).resolve().parent.parent.parent
-        if config_file is None:
-            config_file = str(Path(__file__).parent / "conf.toml")
 
-        raw = cls._parse_toml(config_file, Path(__file__).parent)
+        config_dir = Path(__file__).parent
+        raw = cls._parse_toml(env=env, config_file=config_file, config_dir=config_dir)
         cls._resolve_data_paths(raw, project_root)
         cls._resolve_backtest_paths(raw, project_root)
         raw = cls._resolve_account(raw)
         raw.setdefault("app", {})
         raw.setdefault("environment", {})
         raw.setdefault("strategies", [])
-        return cls(**raw)
+        cfg = cls(**raw)
+        cls._validate_resolved_environment(cfg, env)
+        return cfg
 
     @classmethod
-    def _parse_toml(cls, config_file: str, config_dir: Path) -> dict[str, Any]:
-        """读取基础配置 + local 覆盖，返回合并后的字典"""
-        base_path = Path(config_file)
-        config: dict[str, Any] = {}
-        if base_path.exists():
-            with open(base_path, "rb") as f:
-                config = tomllib.load(f)
+    def _parse_toml(
+        cls,
+        env: str | None,
+        config_file: str | None,
+        config_dir: Path,
+    ) -> dict[str, Any]:
+        """读取基础配置 + 环境覆盖，返回合并后的字典。"""
+        config = cls._read_toml_if_exists(config_dir / "conf.toml")
 
-        local_path = config_dir / "conf.local.toml"
-        if local_path.exists():
-            with open(local_path, "rb") as f:
-                cls._deep_merge(config, tomllib.load(f))
+        if config_file is not None:
+            cls._deep_merge(config, cls._read_toml_if_exists(Path(config_file)))
+        elif env is not None:
+            cls._validate_env_name(env)
+            cls._deep_merge(config, cls._read_toml_if_exists(config_dir / f"conf.{env}.toml"))
+            cls._deep_merge(config, cls._read_toml_if_exists(config_dir / f"conf.{env}.local.toml"))
+
         return config
+
+    @staticmethod
+    def _read_toml_if_exists(path: Path) -> dict[str, Any]:
+        if not path.exists():
+            return {}
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+
+    @staticmethod
+    def _validate_env_name(env: str) -> None:
+        if env not in VALID_DATA_ENVIRONMENTS:
+            allowed = ", ".join(sorted(VALID_DATA_ENVIRONMENTS))
+            raise ValueError(f"非法 data environment: {env!r}，允许值: {allowed}")
 
     @staticmethod
     def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> None:
@@ -142,7 +164,7 @@ class ProjectConfig(BaseModel):
     @staticmethod
     def _resolve_data_paths(raw: dict[str, Any], root: Path) -> None:
         dc = raw.setdefault("data", {})
-        for key in ("base_dir", "export_dir", "db_path"):
+        for key in ("base_dir", "export_dir", "database_path"):
             val = dc.get(key, "")
             if val and not Path(val).is_absolute():
                 dc[key] = str(root / val)
@@ -153,6 +175,14 @@ class ProjectConfig(BaseModel):
         data_dir = bc.get("data_dir", "")
         if data_dir and not Path(data_dir).is_absolute():
             bc["data_dir"] = str(root / data_dir)
+
+    @staticmethod
+    def _validate_resolved_environment(cfg: ProjectConfig, requested_env: str | None) -> None:
+        data_env = cfg.data.environment
+        if requested_env is not None and data_env != requested_env:
+            raise ValueError(f"配置环境不匹配: --env={requested_env!r}, data.environment={data_env!r}")
+        if not cfg.data.database_path:
+            raise ValueError("data.database_path 不能为空")
 
     @staticmethod
     def _resolve_account(raw: dict[str, Any]) -> dict[str, Any]:
@@ -226,11 +256,11 @@ class ConfigManager:
     """配置访问入口 — 委托 ProjectConfig 单例，向后兼容
 
     所有方法返回 Pydantic 模型，消除裸露 dict。
-    统一入口: `cm = ConfigManager()` 等价于 `cfg = ProjectConfig.instance()`
-    ConfigManager 本身不维护状态，每次实例化创建轻量 wrapper 指向同一 ProjectConfig 单例。
+    统一入口: `cm = ConfigManager(env="backtest")` 等价于 `cfg = ProjectConfig.instance(env="backtest")`
+    ConfigManager 本身不维护独立配置状态，仅持有 ProjectConfig 单例引用。
 
     用法:
-        cm = ConfigManager()
+        cm = ConfigManager(env="backtest")
         bc = cm.get_backtest_config()          # → BacktestConfig
         tc = cm.get_trading_config()            # → StrategyItemConfig
         ai = cm.get_account_info()              # → AccountInfo | None
@@ -238,8 +268,8 @@ class ConfigManager:
 
     _config: ProjectConfig
 
-    def __init__(self, config_file: str | None = None) -> None:
-        self._config = ProjectConfig.instance(config_file)
+    def __init__(self, env: str | None = None, config_file: str | None = None) -> None:
+        self._config = ProjectConfig.instance(env=env, config_file=config_file)
 
     # ── 策略配置 ──────────────────────────────────────────
 

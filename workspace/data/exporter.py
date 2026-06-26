@@ -184,9 +184,9 @@ def export_csv(
         source: 数据源名称，None 时从配置读取
     """
     if config_manager is None:
-        from config import ConfigManager
-
-        config_manager = ConfigManager()
+        config_manager = DataManager._current_config
+        if config_manager is None:
+            raise RuntimeError("export_csv requires an initialized data environment")
 
     if dm is None:
         dm = DataManager(config_manager)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from cli.env import add_environment_arguments, build_data_context
 from cli.workflows.realtime import TqsdkRealtimeRequest, TqsdkRealtimeWorkflow
 
 
@@ -25,17 +26,19 @@ def register(subparsers: Any) -> None:
     p.add_argument("--strategy", required=True, help="策略名称 (e.g. ma/ma_strategy/ma_strategy.py)")
     p.add_argument("--symbol", required=True, help="合约代码 (e.g. SHFE.rb2509)")
     p.add_argument("--gui", action="store_true", help="启用浏览器可视化 (默认关闭)")
+    add_environment_arguments(p)
 
 
 def cmd_test(args: argparse.Namespace) -> None:
     """test 命令：本地模拟，只验证信号链路，不下单。"""
+    cm, dm = build_data_context(args, "test")
     req = TqsdkRealtimeRequest(
         strategy=args.strategy,
         symbol=args.symbol,
         gui=bool(args.gui),
         config=None,
     )
-    TqsdkRealtimeWorkflow().run(
+    TqsdkRealtimeWorkflow(cm=cm, dm=dm).run(
         req=req,
         mode="test",
         account_type="tqsim",

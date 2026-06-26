@@ -9,6 +9,7 @@
 
 from common.constants import STATUS_FAILED, STATUS_SUCCESS
 from common.types import BacktestResult
+from config import ConfigManager
 from data import DataManager
 from data.store import DataStore
 from tests.helpers.backtest_records import insert_full_backtest
@@ -22,7 +23,7 @@ class TestFormatSingleReport:
     def test_success_report_contains_key_metrics(self, temp_db_path):
         from report import format_single_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._init_store = lambda: None
         dm._store = DataStore(temp_db_path)
         bt_id = insert_full_backtest(dm._store)
@@ -55,7 +56,7 @@ class TestFormatSingleReport:
     def test_failed_report_shows_error(self, temp_db_path):
         from report import format_single_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         result = BacktestResult(
             symbol="DCE.bad",
@@ -72,7 +73,7 @@ class TestFormatSingleReport:
     def test_nonexistent_id(self, temp_db_path):
         from report import format_single_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         text = format_single_report(dm, 99999)
         assert "错误" in text or "未找到" in text
@@ -81,7 +82,7 @@ class TestFormatSingleReport:
     def test_no_daily_no_crash(self, temp_db_path):
         from report import format_single_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         result = BacktestResult(
             symbol="DCE.m2509",
@@ -110,7 +111,7 @@ class TestFormatSummaryReport:
     def test_list_success_records(self, temp_db_path):
         from report import format_summary_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         insert_full_backtest(dm._store, symbol="DCE.m2509")
         insert_full_backtest(dm._store, symbol="DCE.rb2410")
@@ -128,7 +129,7 @@ class TestFormatSummaryReport:
     def test_empty_list(self, temp_db_path):
         from report import format_summary_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         text = format_summary_report(dm)
         assert "未找到" in text
@@ -137,7 +138,7 @@ class TestFormatSummaryReport:
     def test_filter_by_symbol(self, temp_db_path):
         from report import format_summary_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         insert_full_backtest(dm._store, symbol="DCE.m2509")
         insert_full_backtest(dm._store, symbol="DCE.rb2410")
@@ -150,7 +151,7 @@ class TestFormatSummaryReport:
     def test_filter_by_strategy(self, temp_db_path):
         from report import format_summary_report
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
         dm._store = DataStore(temp_db_path)
         insert_full_backtest(dm._store, symbol="DCE.m2509", strategy="ma")
         insert_full_backtest(dm._store, symbol="DCE.rb2410", strategy="bband")

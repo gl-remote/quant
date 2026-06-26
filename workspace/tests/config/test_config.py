@@ -24,22 +24,22 @@ class TestConfigLoading:
         assert tc.stop_loss_ratio == 0.03
 
     def test_defaults_when_no_config(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         tc = cm.get_trading_config()
-        assert tc.sma_short == 10
-        assert tc.position_ratio == 0.3
+        assert tc.sma_short == 3
+        assert tc.position_ratio == 1.0
 
 
 class TestTradingConfig:
     def test_get_trading_config_defaults(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         tc = cm.get_trading_config()
-        assert tc.stop_loss_ratio == 0.03
-        assert tc.take_profit_ratio == 0.05
-        assert tc.position_ratio == 0.3
-        assert tc.sma_short == 10
-        assert tc.sma_long == 40
-        assert tc.kline_period == 5
+        assert tc.stop_loss_ratio == 0.3
+        assert tc.take_profit_ratio == 0.5
+        assert tc.position_ratio == 1.0
+        assert tc.sma_short == 3
+        assert tc.sma_long == 10
+        assert tc.kline_period == 1
 
     def test_get_trading_config_from_file(self, temp_config_file):
         cm = ConfigManager(config_file=temp_config_file)
@@ -50,14 +50,14 @@ class TestTradingConfig:
 
 class TestBacktestConfig:
     def test_get_backtest_config_defaults(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         bc = cm.get_backtest_config()
         assert bc.initial_capital == 100000.0
         assert bc.commission_rate == 0.0003
         assert bc.slippage == 1.0
         assert bc.price_tick == 1.0
-        assert bc.contract_size == 10
-        assert bc.interval == "1m"
+        assert bc.contract_size == 5
+        assert bc.interval == "5m"
 
 
 class TestValidateConfig:
@@ -204,20 +204,20 @@ class TestAccountInfo:
 
 class TestDataConfig:
     def test_get_data_config_defaults(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         dc = cm.get_data_config()
-        # 默认值无路径 → base_dir 为空字符串
-        assert isinstance(dc.base_dir, str)
+        assert dc.environment == "backtest"
+        assert dc.database_path.endswith("project_data/database/backtest/quant.db")
 
     def test_get_data_config_filename_template(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         dc = cm.get_data_config()
         assert "{symbol}" in dc.filename_template
 
 
 class TestLoggingConfig:
     def test_get_system_logging_config_defaults(self):
-        cm = ConfigManager(config_file="/nonexistent/path.toml")
+        cm = ConfigManager(env="backtest")
         sl = cm.get_system_logging_config()
         assert sl.level == "INFO"
         assert sl.format  # 非空字符串

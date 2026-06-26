@@ -13,11 +13,11 @@ import argparse
 import sys
 from typing import Any
 
-from config import ConfigManager
 from data import DataManager
 from data.output_paths import reports_root
 from loguru import logger
 
+from cli.env import add_environment_arguments, build_data_context
 from cli.workflows.report import (
     ReportBuildRequest,
     ReportDeleteRequest,
@@ -56,6 +56,7 @@ def register(subparsers: Any) -> None:
     p.add_argument("--symbol", default=None, help="按品种代码过滤")
     p.add_argument("--strategy", default=None, help="按策略名称过滤")
     p.add_argument("--limit", type=int, default=20, help="列表最大条数 (默认 20)")
+    add_environment_arguments(p)
 
 
 def cmd_report(args: argparse.Namespace) -> None:
@@ -71,13 +72,12 @@ def cmd_report(args: argparse.Namespace) -> None:
             strategy: 按策略过滤 (list 模式)
             limit:    最大条数 (list 模式)
     """
-    if args.build:
-        _cmd_build(args.run_id)
-        return
-
-    cm = ConfigManager()
-    dm = DataManager(cm)
+    cm, dm = build_data_context(args, "report", create_database=False)
     workflow = ReportWorkflow(dm)
+
+    if args.build:
+        _cmd_build(dm, args.run_id)
+        return
 
     try:
         if args.clean_id is not None:
@@ -108,14 +108,13 @@ def _cmd_show(workflow: ReportWorkflow, backtest_id: int) -> None:
     print(f"\n💡 可视化报告: uv run python main.py report --build  (或打开 {reports_root() / 'index.html'})")
 
 
-def _cmd_build(run_id: int | None = None) -> None:
+def _cmd_build(dm: DataManager, run_id: int | None = None) -> None:
     """重建可视化 HTML 报告
 
     Args:
+        dm: 当前 resolved env 的 DataManager。
         run_id: 指定重建某个 run（None 则重建所有）
     """
-    cm = ConfigManager()
-    dm = DataManager(cm)
     workflow = ReportWorkflow(dm)
 
     if run_id is not None:

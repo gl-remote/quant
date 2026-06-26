@@ -18,6 +18,7 @@ from common.schemas import (
     validate_backtest_consistency,
 )
 from common.types import BacktestResult
+from config import ConfigManager
 from data import DataManager
 from data.store import DataStore
 from tests.helpers.backtest_records import insert_full_backtest
@@ -388,7 +389,8 @@ class TestDeleteBacktest:
 
 class TestDataManager:
     def test_get_symbol_info_not_found(self, temp_db_path):
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
+        dm._store = DataStore(temp_db_path)
         info = dm.get_symbol_info("NONEXISTENT")
         assert info.available is False
         dm.close()
@@ -642,7 +644,8 @@ class TestBacktestConsistency:
         bt_id = insert_full_backtest(store)
         store.close()
 
-        dm = DataManager()
+        dm = DataManager(ConfigManager(env="backtest"))
+        dm._store = DataStore(temp_db_path)
         errors = dm.validate_consistency(bt_id)
         # insert_full_backtest 插入 3 条交易，但 VNPTY_STATS 中 total_trades=80
         # 所以会报不一致

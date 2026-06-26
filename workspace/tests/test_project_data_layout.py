@@ -13,7 +13,9 @@ import pandas as pd
 def test_project_data_path_layout() -> None:
     from data.output_paths import (
         coverage_dir,
+        database_environment_dir,
         database_path,
+        database_root,
         datafeed_cache_dir,
         kline_json_cache_dir,
         market_csv_dir,
@@ -27,7 +29,12 @@ def test_project_data_path_layout() -> None:
     root = project_data_root()
     assert root.name == "project_data"
     assert market_csv_dir() == root / "market_data" / "csv"
-    assert database_path() == root / "database" / "quant_shared.db"
+    assert database_root() == root / "database"
+    assert database_environment_dir("backtest") == root / "database" / "backtest"
+    assert database_path("backtest") == root / "database" / "backtest" / "quant.db"
+    assert database_path("test") == root / "database" / "test" / "quant.db"
+    assert database_path("live") == root / "database" / "live" / "quant.db"
+    assert database_path("backtest") != root / "database" / "quant_shared.db"
     assert reports_root() == root / "reports"
     assert nav_json_path() == root / "reports" / "data" / "nav.json"
     assert run_data_dir(7) == root / "reports" / "runs" / "r7" / "data"
@@ -46,10 +53,11 @@ def test_default_config_uses_project_data() -> None:
     from data.output_paths import database_path, market_csv_dir, project_data_root
 
     ProjectConfig.reset()
-    cfg = ProjectConfig.load()
+    cfg = ProjectConfig.load(env="backtest")
     assert Path(cfg.data.base_dir) == project_data_root()
     assert Path(cfg.data.export_dir) == market_csv_dir()
-    assert Path(cfg.data.db_path) == database_path()
+    assert cfg.data.environment == "backtest"
+    assert Path(cfg.data.database_path) == database_path("backtest")
 
 
 def test_entry_html_keeps_frontend_data_keys(tmp_path: Path) -> None:
@@ -67,6 +75,7 @@ def test_entry_html_keeps_frontend_data_keys(tmp_path: Path) -> None:
 
 
 def test_data_manager_load_kline_uses_export_metadata(tmp_path: Path) -> None:
+    from config import ConfigManager
     from data.manager import DataManager
 
     csv_path = tmp_path / "DCE.m2601.tqsdk.5m.csv"
@@ -83,7 +92,7 @@ def test_data_manager_load_kline_uses_export_metadata(tmp_path: Path) -> None:
         ]
     ).to_csv(csv_path, index=False)
 
-    dm = DataManager()
+    dm = DataManager(ConfigManager(env="backtest"))
     dm._store = SimpleNamespace(get_metadata=lambda symbol, provider, interval: {"filepath": str(csv_path)})
     dm._get_default_interval = lambda: "5m"  # type: ignore[method-assign]
     dm._get_default_provider = lambda: "tqsdk"  # type: ignore[method-assign]

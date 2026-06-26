@@ -46,41 +46,42 @@ def _get_attr(obj: object, key: str, default: object = None) -> object:
 
 
 class DataManager:
-    _instance: DataManager | None = None
-    _initialized: bool = False
+    _current_config: ConfigManager | None = None
 
-    def __new__(cls, config_manager: ConfigManager | None = None) -> DataManager:
-        """单例模式，保证全局只有一个实例"""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            # 初始化只执行一次
-            cls._instance._initialized = False
-        return cls._instance
-
-    def __init__(self, config_manager: ConfigManager | None = None):
+    def __init__(self, config_manager: ConfigManager | None = None, *, create_database: bool = True):
         """
         Args:
             config_manager: ConfigManager实例（可选）
+            create_database: 是否允许初始化不存在的数据库。
         """
-        # 只在第一次初始化时执行
-        if self._initialized:
-            return
+        if config_manager is None:
+            if self.__class__._current_config is None:
+                raise RuntimeError("DataManager requires an initialized data environment")
+            config_manager = self.__class__._current_config
+        else:
+            if self.__class__._current_config is None:
+                self.__class__._current_config = config_manager
+            elif (
+                self.__class__._current_config.get_data_config().environment
+                != config_manager.get_data_config().environment
+            ):
+                current = self.__class__._current_config.get_data_config().environment
+                target = config_manager.get_data_config().environment
+                raise RuntimeError(f"DataManager environment already initialized: current={current}, target={target}")
 
-        self._config: ConfigManager | None = config_manager
+        self._config: ConfigManager = config_manager
+        self._create_database = create_database
         self._store: DataStore | None = None
         self._data_cache: dict[str, KlineDataFrame] = {}
-        self._default_config: ConfigManager | None = None
-        self._initialized = True
 
     def _get_config(self) -> ConfigManager:
-        """获取配置管理器（延迟初始化默认配置）"""
-        if self._config:
-            return self._config
-        if self._default_config is None:
-            from config import ConfigManager
+        """获取配置管理器。"""
+        return self._config
 
-            self._default_config = ConfigManager()
-        return self._default_config
+    @classmethod
+    def reset_environment(cls) -> None:
+        """清空进程级数据环境（仅供测试使用）。"""
+        cls._current_config = None
 
     def _get_data_dir(self) -> str:
         """获取数据目录"""
@@ -101,10 +102,8 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            from data.output_paths import database_path
-
-            db_path = self._get_config().get_data_config().db_path or str(database_path())
-            self._store = DataStore(db_path)
+            db_path = self._get_config().get_data_config().database_path
+            self._store = DataStore(db_path, create=self._create_database)
 
     @property
     def store(self) -> DataStore:
@@ -527,6 +526,7 @@ class DataManager:
         """关闭数据库连接"""
         if self._store:
             self._store.close()
+            self._store = None
             logger.info("数据库连接已关闭")
 
     def __enter__(self) -> DataManager:

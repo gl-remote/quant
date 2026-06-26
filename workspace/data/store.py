@@ -48,6 +48,7 @@ from .models import (
     RunStudy,
     SchemaInfo,
     TradeRecord,
+    bind_database,
     database,
 )
 
@@ -80,10 +81,12 @@ def _normalize_max_dd(raw_value: float | None) -> float:
 class DataStore:
     """数据存储层 - 管理数据库连接和 CRUD 操作"""
 
-    def __init__(self, db_path: str) -> None:
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.db_path: str = db_path
-        database.init(
+    def __init__(self, db_path: str, *, create: bool = True) -> None:
+        if create:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        elif not Path(db_path).exists():
+            raise FileNotFoundError(f"database does not exist: {db_path}")
+        self.db_path = bind_database(
             db_path,
             pragmas={
                 "journal_mode": "wal",
@@ -91,7 +94,8 @@ class DataStore:
             },
         )
         self._insert_count: int = 0
-        self._init_tables()
+        if create:
+            self._init_tables()
 
     def _init_tables(self) -> None:
         """初始化数据库表 + 执行版本化迁移"""

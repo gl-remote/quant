@@ -149,7 +149,9 @@ def get_optuna_url() -> str:
         sqlite:/// 格式的 URL
     """
     db_path = database.database
-    abs_path = os.path.abspath(db_path)
+    if not db_path:
+        raise RuntimeError("Optuna storage requires an initialized data environment")
+    abs_path = os.path.abspath(str(db_path))
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     return f"sqlite:///{abs_path}"
 

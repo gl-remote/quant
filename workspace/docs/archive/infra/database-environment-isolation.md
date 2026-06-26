@@ -1,8 +1,9 @@
 # 数据库环境隔离设计
 
-> 类型：Design / 待实现设计方案  
-> 状态：待实现  
-> 创建日期：2026-06-26  
+> 类型：Design / 已实现设计记录  
+> 状态：已实现  
+> 完成日期：2026-06-26  
+> Git 参考：`待提交 database environment isolation implementation`  
 > 范围：第一阶段仅做环境级 SQLite 物理隔离，不做领域拆表；不隔离 report/log/cache 等文件产物
 
 ## 背景

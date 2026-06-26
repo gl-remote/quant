@@ -6,6 +6,8 @@
 3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
+from pathlib import Path
+
 # 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
 # 注：此 import 作为 re-export 供上层模块使用
 from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -166,6 +168,32 @@ class DataLoadResult(BaseModel):
 # ==============================================================================
 
 database = SqliteDatabase(None)
+
+
+def _normalize_db_path(db_path: str) -> str:
+    return str(Path(db_path).expanduser().resolve())
+
+
+def current_database_path() -> str | None:
+    db_path = database.database
+    return _normalize_db_path(str(db_path)) if db_path else None
+
+
+def reset_database_binding() -> None:
+    if not database.is_closed():
+        _ = database.close()
+    database.init(None)  # pyright: ignore[reportUnknownMemberType]
+
+
+def bind_database(db_path: str, *, pragmas: dict[str, object] | None = None) -> str:
+    expected_path = _normalize_db_path(db_path)
+    current_path = current_database_path()
+    if current_path is None:
+        database.init(expected_path, pragmas=pragmas)  # pyright: ignore[reportUnknownMemberType]
+        return expected_path
+    if current_path == expected_path:
+        return expected_path
+    raise RuntimeError(f"peewee database already bound: current={current_path}, target={expected_path}")
 
 
 class OrmBaseModel(Model):
@@ -508,7 +536,7 @@ def init_database(db_path: str) -> None:
 
     迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
     """
-    database.init(db_path)  # pyright: ignore[reportUnknownMemberType]
+    bind_database(db_path)
     database.create_tables(
         [
             Run,
@@ -529,6 +557,5 @@ def init_database(db_path: str) -> None:
 
 
 def close_database() -> None:
-    """关闭数据库连接"""
-    if not database.is_closed():
-        _ = database.close()
+    """关闭数据库连接并重置绑定"""
+    reset_database_binding()

@@ -126,9 +126,9 @@ class BacktestRunWorkflow:
     workflow 自持 `RunLogHelper` / `RunFinalizer`，CLI 不再手动管理日志。
     """
 
-    def __init__(self) -> None:
-        self._cm = ConfigManager()
-        self._dm = DataManager(self._cm)
+    def __init__(self, cm: ConfigManager | None = None, dm: DataManager | None = None) -> None:
+        self._cm = cm or ConfigManager(env="backtest")
+        self._dm = dm or DataManager(self._cm)
 
     # ── vnpy 参数搜索 ──────────────────────────────────
 

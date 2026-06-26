@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from config.schemas import DataEnvironment
+
 # 从本文件位置推算项目根（workspace/data/output_paths.py → data/ → workspace/ → 项目根/）
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -32,14 +34,24 @@ def market_csv_dir() -> Path:
     return market_data_dir() / "csv"
 
 
-def database_dir() -> Path:
-    """返回 SQLite 数据库目录。"""
+def database_root() -> Path:
+    """返回 SQLite 数据库根目录。"""
     return project_data_root() / "database"
 
 
-def database_path() -> Path:
-    """返回项目主 SQLite 数据库路径。"""
-    return database_dir() / "quant_shared.db"
+def database_dir() -> Path:
+    """返回 SQLite 数据库根目录。"""
+    return database_root()
+
+
+def database_environment_dir(env: DataEnvironment) -> Path:
+    """返回指定数据环境的 SQLite 数据库目录。"""
+    return database_root() / env
+
+
+def database_path(env: DataEnvironment) -> Path:
+    """返回指定数据环境的 SQLite 数据库路径。"""
+    return database_environment_dir(env) / "quant.db"
 
 
 def reports_root() -> Path:

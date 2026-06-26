@@ -11,14 +11,16 @@ CLI 主入口模块
 
 import argparse
 import sys
+from collections.abc import Callable
+from typing import cast
 
 from common.log_config import setup_logging
-from config import ConfigManager
+from config import ProjectConfig
 from loguru import logger
 
-# 配置日志（必须在导入其他模块之前）
-cm = ConfigManager()
-log_cfg = cm.get_system_logging_config()
+ProjectConfig.reset()
+log_cfg = ProjectConfig.load(env="backtest").system.logging
+ProjectConfig.reset()
 setup_logging(level=log_cfg.level, log_format=log_cfg.format)
 
 from cli.commands import backtest as backtest_cmd  # noqa: E402
@@ -60,7 +62,7 @@ def main() -> None:
     }
 
     try:
-        handler = command_handlers.get(args.command)
+        handler = cast(Callable[[argparse.Namespace], None] | None, command_handlers.get(args.command))
         if handler:
             handler(args)
         else:
