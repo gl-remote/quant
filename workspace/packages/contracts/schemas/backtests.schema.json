@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/backtests.schema.json",
   "title": "Backtest Records",
-  "description": "output/r{run_id}/data/backtests.json: 每条 backtest 记录（含参数与逐日序列）。前端 r 详情页消费。",
+  "description": "project_data/reports/runs/r{run_id}/data/backtests.json: 每条 backtest 记录（含参数与逐日序列）。前端 r 详情页消费。",
   "type": "array",
   "items": {
     "type": "object",

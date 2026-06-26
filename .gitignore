@@ -83,7 +83,6 @@ build/
 
 # MCP related directories
 .memory/
-.quant_shared_data
 
 # Temporary commit message files
 .commit_msg_tmp

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/optuna.schema.json",
   "title": "Optuna Optimization Result",
-  "description": "output/r{run_id}/data/optuna.json: 单个 run 的参数搜索结果。前端 Optuna 图表消费。",
+  "description": "project_data/reports/runs/r{run_id}/data/optuna.json: 单个 run 的参数搜索结果。前端 Optuna 图表消费。",
   "type": "object",
   "required": ["study_name", "trial_count", "best_value", "best_params", "optimization_history"],
   "properties": {

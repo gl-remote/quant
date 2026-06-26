@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/trades.schema.json",
   "title": "Trade Records by Symbol",
-  "description": "output/r{run_id}/data/trades.json: 按 symbol 分组的成交记录。",
+  "description": "project_data/reports/runs/r{run_id}/data/trades.json: 按 symbol 分组的成交记录。",
   "type": "object",
   "patternProperties": {
     "^.+$": {

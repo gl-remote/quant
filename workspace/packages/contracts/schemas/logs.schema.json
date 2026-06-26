@@ -2,6 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantsmith.dev/contracts/logs.schema.json",
   "title": "Run Execution Logs",
-  "description": "output/r{run_id}/data/logs.json: 当前 run 的执行日志文本。",
+  "description": "project_data/reports/runs/r{run_id}/data/logs.json: 当前 run 的执行日志文本。",
   "type": "string"
 }
