@@ -10,6 +10,7 @@ ctx.aspects 做出场/入场决策。
 """
 
 from dataclasses import dataclass
+from math import isnan
 from typing import ClassVar, override
 
 from common.constants import (
@@ -34,10 +35,9 @@ from .core import (
     State,
     Strategy,
 )
-from .runtime import BarContext
+from .core.indicators import generate_indicator_column_name
+from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
 from .strategy_aspects import (
-    confirm_long,
-    confirm_short,
     entry_block_after_stop_loss,
     entry_block_after_take_profit,
     exit_for_stop_loss,
@@ -45,6 +45,7 @@ from .strategy_aspects import (
     trend_long,
     trend_short,
 )
+from .strategy_aspects.indicators import KDJ
 
 
 @dataclass
@@ -111,17 +112,22 @@ class ATRCrossParams:
     kdj_pullback_short: int = 55
     """空头背景下的 KDJ 反弹阈值，kdj > 此值视为反弹过，默认 55"""
 
+    kdj_signal_long: int = 50
+    """多头回调后 KDJ 重新转强阈值，默认 50"""
+
+    kdj_signal_short: int = 50
+    """空头反弹后 KDJ 重新转弱阈值，默认 50"""
+
+    time_stop_bars: int = 48
+    """入场后最长持仓 5m K 线数量，默认 48 根约 1 个交易日"""
+
 
 # ── 建议型方向切面声明 ──
 # 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
 # 随后策略原始 on_bar 消费这些建议做出决策。
 # ── 做多方向切面 ──
-@confirm_long("macd@5m > 0")
-@confirm_long("kdj@5m < {kdj_pullback_long}")
 @trend_long("sma({sma_short})@15m > sma({sma_long})@15m")
 # ── 做空方向切面 ──
-@confirm_short("macd@5m < 0")
-@confirm_short("kdj@5m > {kdj_pullback_short}")
 @trend_short("sma({sma_short})@15m < sma({sma_long})@15m")
 # ── 风控切面 ──
 @entry_block_after_take_profit("cooldown() < 10")
@@ -162,6 +168,20 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
     # ---- Strategy 接口 ----
 
     @override
+    def data_requirements(self, config: ATRCrossParams) -> DataRequirements | None:
+        reqs = super().data_requirements(config)
+        if reqs is None:
+            return None
+        reqs.merge(
+            DataRequirements(
+                periods={"5m": PeriodRequirements(lookback_bars=20)},
+                indicators={"5m": [KDJ]},
+                events=EventsRequirements.no_events(),
+            )
+        )
+        return reqs
+
+    @override
     def on_bar(self, state: State[ATRCrossParams], ctx: BarContext) -> Signal:
         """消费方向建议与风控建议，做出场/入场决策"""
         config = state.strategy_config
@@ -170,6 +190,7 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
 
         risk = ctx.aspects.risk
         exit_reasons = risk.take_profit.exit + risk.stop_loss.exit
+        self._update_kdj_history(state, ctx)
 
         # ── 有持仓：exit 风控建议触发 → 出场 ──
         if direction and exit_reasons:
@@ -181,6 +202,9 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
                 volume=state.position.volume,
             )
             signal.diagnostics = first_exit.detail
+        elif direction and self._holding_bars(state) >= config.time_stop_bars:
+            action = TRADE_ACTION_SELL if direction == TRADE_DIRECTION_LONG else TRADE_ACTION_BUY
+            signal = Signal(action=action, reason="time_stop", volume=state.position.volume)
 
         # ── 空仓：无任何风控建议时按方向建议入场 ──
         elif not direction and not risk.all_reasons:
@@ -192,12 +216,75 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
                 ctx.bar.close, state.capital, config.position_ratio, state.contract_size, state.margin
             )
 
-            if direction_keys["long"] <= long_keys:
+            if direction_keys["long"] <= long_keys and self._has_long_pullback(ctx, config, state):
                 signal = Signal(action=TRADE_ACTION_BUY, reason="long_entry", volume=vol)
-            elif direction_keys["short"] <= short_keys:
+            elif direction_keys["short"] <= short_keys and self._has_short_pullback(ctx, config, state):
                 signal = Signal(action=TRADE_ACTION_SELL, reason="short_entry", volume=vol)
 
+        self._update_holding_bars(state, signal)
         return signal
+
+    def _has_long_pullback(
+        self, ctx: BarContext, config: ATRCrossParams, state: State[ATRCrossParams] | None = None
+    ) -> bool:
+        values = self._recent_kdj_values(ctx, 2, state)
+        if len(values) < 2:
+            return False
+        return values[-1] > config.kdj_signal_long
+
+    def _has_short_pullback(
+        self, ctx: BarContext, config: ATRCrossParams, state: State[ATRCrossParams] | None = None
+    ) -> bool:
+        values = self._recent_kdj_values(ctx, 2, state)
+        if len(values) < 2:
+            return False
+        return values[-1] < config.kdj_signal_short
+
+    @staticmethod
+    def _update_kdj_history(state: State[ATRCrossParams], ctx: BarContext) -> None:
+        view = ctx.multi.get("5m")
+        if view is None:
+            return
+        col = generate_indicator_column_name(KDJ.name, KDJ.params, period="5m")
+        latest = view.indicator(col, -1)
+        if latest is None or isnan(latest):
+            return
+        history = state.extra.setdefault(f"atr_{col}_history", [])
+        history.append(latest)
+        del history[:-2]
+
+    @staticmethod
+    def _recent_kdj_values(
+        ctx: BarContext, lookback_bars: int, state: State[ATRCrossParams] | None = None
+    ) -> list[float]:
+        view = ctx.multi.get("5m")
+        if view is None:
+            return []
+        col = generate_indicator_column_name(KDJ.name, KDJ.params, period="5m")
+        history_key = f"atr_{col}_history"
+        if state is None:
+            values: list[float] = []
+            max_bars = min(lookback_bars, view.length)
+            for i in range(max_bars, 0, -1):
+                value = view.indicator(col, -i)
+                if value is not None and not isnan(value):
+                    values.append(value)
+            return values
+
+        history = state.extra.setdefault(history_key, [])
+        return list(history)
+
+    @staticmethod
+    def _holding_bars(state: State[ATRCrossParams]) -> int:
+        value = state.extra.get("atr_holding_bars", 0)
+        return int(value) if isinstance(value, int | float) else 0
+
+    @staticmethod
+    def _update_holding_bars(state: State[ATRCrossParams], signal: Signal) -> None:
+        if state.position.direction:
+            state.extra["atr_holding_bars"] = ATRStrategyCore._holding_bars(state) + 1
+        if signal.action:
+            state.extra["atr_holding_bars"] = 0
 
     @override
     def on_fill(self, fill: Fill) -> None:

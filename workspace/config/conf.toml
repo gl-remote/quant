@@ -90,6 +90,9 @@ kdj_oversold = 30             # 兼容旧参数
 kdj_overbought = 70           # 兼容旧参数
 kdj_pullback_long = 45        # 多头背景下等待 5m KDJ 回调
 kdj_pullback_short = 55       # 空头背景下等待 5m KDJ 反弹
+kdj_signal_long = 50          # 多头回调后重新转强阈值
+kdj_signal_short = 50         # 空头反弹后重新转弱阈值
+time_stop_bars = 48           # 最长持仓 5m K 线数量，约 1 个交易日
 trailing_activation_atr = 2.0
 trailing_drawdown_ratio = 0.3
 
