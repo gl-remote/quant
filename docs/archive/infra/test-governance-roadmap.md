@@ -64,7 +64,7 @@ uv run pytest workspace/tests --collect-only -q
 .trae/rules/project_rules.md
 .pre-commit-config.yaml
 scripts/test.sh
-workspace/docs/roadmap/test-governance-roadmap.md
+docs/archive/infra/test-governance-roadmap.md
 pyproject.toml
 workspace/tests/conftest.py
 workspace/tests/backtest/test_parallel.py

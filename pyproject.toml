@@ -140,7 +140,7 @@ source = ["."]
 omit = [
     "workspace/tests/*",
     ".plan/*",
-    "workspace/docs/*",
+    "docs/*",
     "*/__pycache__/*",
     ".vscode/*",
     "main.py",

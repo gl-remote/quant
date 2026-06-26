@@ -343,10 +343,10 @@ scripts                                             ← 横切工程操作层（
 | `cli/` | `workspace/cli/` | 命令行入口、命令分发和命令级 workflows |
 | `report/` | `workspace/report/` | Python 报告生成和 Web 报告展示共存于同一业务域 |
 | `tests/` | `workspace/tests/` | 横切验证层，保持顶层单一目录（不拆进各业务域），内部按域子目录与被测代码对齐，详见原则 8 |
-| `docs/` | `workspace/docs/` | 长期可迁移；当前先保留根目录 docs |
+| `docs/` | `docs/` | 已迁回仓库根目录（2026-06-26），不再放入 `workspace/` |
 | `tools/` | `scripts/tools/` | 操作脚本层（拉数据/回测/清数据等），与 `scripts/test.sh` 同属工程操作层，不属于任何业务域 |
 | Dockerfile / Compose / K8s | `deploy/docker/`、`deploy/compose/`、`deploy/k8s/` | 按运行单元组织部署文件，不放入业务域目录 |
-| `plan.md` | `workspace/docs/roadmap/plan.md` | 已迁入（2026-06-24）；作为活跃路线图保留在 `roadmap/`，与已归档设计记录分开 |
+| `plan.md` | `docs/roadmap/plan.md` | 活跃路线图保留在 `roadmap/`，与已归档设计记录分开 |
 
 ---
 

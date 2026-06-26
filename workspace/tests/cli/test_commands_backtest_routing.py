@@ -28,6 +28,8 @@ def _make_args(**overrides):
         "profile": False,
         "no_search": False,
         "dump_indicators": False,
+        "env": "backtest",
+        "config": None,
     }
     defaults.update(overrides)
     return argparse.Namespace(**defaults)
@@ -149,6 +151,9 @@ def test_cmd_backtest_routes_vnpy_search(monkeypatch: pytest.MonkeyPatch) -> Non
     calls: list[tuple[str, Any]] = []
 
     class _Workflow:
+        def __init__(self, **_: Any) -> None:
+            pass
+
         def run_vnpy_search(self, req) -> None:
             calls.append(("search", req))
 
@@ -176,6 +181,9 @@ def test_cmd_backtest_routes_vnpy_walk_forward(monkeypatch: pytest.MonkeyPatch) 
     calls: list[tuple[str, Any]] = []
 
     class _Workflow:
+        def __init__(self, **_: Any) -> None:
+            pass
+
         def run_vnpy_search(self, req) -> None:
             calls.append(("search", req))
 
@@ -202,6 +210,9 @@ def test_cmd_backtest_routes_tqsdk(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, Any]] = []
 
     class _Workflow:
+        def __init__(self, **_: Any) -> None:
+            pass
+
         def run_vnpy_search(self, req) -> None:
             calls.append(("search", req))
 

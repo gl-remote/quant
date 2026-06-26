@@ -388,4 +388,3 @@ class TestParallelBacktestOptimizer:
         assert result.best_params == {}
         assert result.best_value == 0.0
         assert result.trial_data == []
-

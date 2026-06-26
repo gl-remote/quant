@@ -361,7 +361,7 @@ coverage_dir()
 - [x] 清理 `.gitignore` 中 `.quant_shared_data` 与 `output/` 的旧规则。
 - [x] 确认仓库根只保留 `project_data/` 作为本地数据根。
 - [x] 阶段检查：阶段 10 的旧目录删除、兼容逻辑清理、文档更新与回归测试转正已逐项确认。
-- [ ] 完成后将本 roadmap 按归档规范移动到 `workspace/docs/archive/`。本项待提交后补充 Git 参考并归档。
+- [ ] 完成后将本 roadmap 按归档规范移动到 `docs/archive/`。本项待提交后补充 Git 参考并归档。
 
 ## 风险与回滚
 
