@@ -388,18 +388,3 @@ class TestParallelBacktestOptimizer:
         assert result.best_value == 0.0
         assert result.trial_data == []
 
-
-# ── CLI 参数解析测试 ────────────────────────────────────
-
-
-class TestCliIntegration:
-    """验证 CLI --parallel / --workers 参数被正确传递"""
-
-    def test_parallel_args_defined(self) -> None:
-        """--parallel 和 --workers 应在 argparse 中定义"""
-        # 直接检查参数定义（不实际解析）
-        # 在 cli/main.py 中验证这两行存在
-        from cli.main import main
-
-        # 只验证导入无异常即可
-        assert main is not None

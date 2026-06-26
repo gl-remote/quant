@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Any
 
 import pytest
 
@@ -113,3 +114,110 @@ def test_validate_warns_gui_under_vnpy(caplog):
 
     # vnpy 引擎 + --gui 应当 warn 但不抛错
     _validate_cross_field(_make_args(engine="vnpy", gui=True))
+
+
+def test_register_defines_parallel_arguments() -> None:
+    from cli.commands.backtest import register
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    register(subparsers)
+
+    args = parser.parse_args(["backtest", "--strategy", "ma", "--parallel", "--workers", "4"])
+
+    assert args.command == "backtest"
+    assert args.engine == "vnpy"
+    assert args.mode == "search"
+    assert args.parallel is True
+    assert args.workers == 4
+
+
+def test_register_rejects_unknown_engine() -> None:
+    from cli.commands.backtest import register
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    register(subparsers)
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["backtest", "--strategy", "ma", "--engine", "unknown"])
+
+
+def test_cmd_backtest_routes_vnpy_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cli.commands import backtest
+
+    calls: list[tuple[str, Any]] = []
+
+    class _Workflow:
+        def run_vnpy_search(self, req) -> None:
+            calls.append(("search", req))
+
+        def run_vnpy_walk_forward(self, req) -> None:
+            calls.append(("walk_forward", req))
+
+        def run_tqsdk(self, req) -> None:
+            calls.append(("tqsdk", req))
+
+    monkeypatch.setattr(backtest, "BacktestRunWorkflow", _Workflow)
+
+    backtest.cmd_backtest(_make_args(symbol="DCE.m2509", parallel=True, workers=2))
+
+    assert len(calls) == 1
+    route, req = calls[0]
+    assert route == "search"
+    assert req.symbol == "DCE.m2509"
+    assert req.parallel is True
+    assert req.workers == 2
+
+
+def test_cmd_backtest_routes_vnpy_walk_forward(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cli.commands import backtest
+
+    calls: list[tuple[str, Any]] = []
+
+    class _Workflow:
+        def run_vnpy_search(self, req) -> None:
+            calls.append(("search", req))
+
+        def run_vnpy_walk_forward(self, req) -> None:
+            calls.append(("walk_forward", req))
+
+        def run_tqsdk(self, req) -> None:
+            calls.append(("tqsdk", req))
+
+    monkeypatch.setattr(backtest, "BacktestRunWorkflow", _Workflow)
+
+    backtest.cmd_backtest(_make_args(mode="walk-forward", symbol="DCE.m2509"))
+
+    assert len(calls) == 1
+    route, req = calls[0]
+    assert route == "walk_forward"
+    assert req.symbol == "DCE.m2509"
+    assert not hasattr(req, "parallel")
+
+
+def test_cmd_backtest_routes_tqsdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cli.commands import backtest
+
+    calls: list[tuple[str, Any]] = []
+
+    class _Workflow:
+        def run_vnpy_search(self, req) -> None:
+            calls.append(("search", req))
+
+        def run_vnpy_walk_forward(self, req) -> None:
+            calls.append(("walk_forward", req))
+
+        def run_tqsdk(self, req) -> None:
+            calls.append(("tqsdk", req))
+
+    monkeypatch.setattr(backtest, "BacktestRunWorkflow", _Workflow)
+
+    args = _make_args(engine="tqsdk", symbol="DCE.m2509", start="2025-01-01", end="2025-06-30", gui=True)
+    backtest.cmd_backtest(args)
+
+    assert len(calls) == 1
+    route, req = calls[0]
+    assert route == "tqsdk"
+    assert req.symbol == "DCE.m2509"
+    assert req.gui is True

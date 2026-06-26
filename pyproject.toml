@@ -70,7 +70,7 @@ testpaths = ["workspace/tests", "workspace/packages/python-contracts/tests"]
 pythonpath = ["workspace"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers -m 'not slow' --import-mode=importlib"
+addopts = "-v --tb=short --strict-markers -m 'not slow and not local_data' --import-mode=importlib"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: tests crossing module boundaries",
