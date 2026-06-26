@@ -106,7 +106,9 @@ def make_datafeed_requirements(
     indicators: dict[str, list[IndicatorSpec]] | None = None,
 ) -> DataRequirements:
     return DataRequirements(
-        periods={period: PeriodRequirements(lookback_bars=lookback) for period, lookback in (periods or {"1m": 10}).items()},
+        periods={
+            period: PeriodRequirements(lookback_bars=lookback) for period, lookback in (periods or {"1m": 10}).items()
+        },
         indicators=indicators or {},
         events=EventsRequirements.no_events(),
     )

@@ -3,6 +3,22 @@
 # 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
 MYPY_TARGETS=(workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/)
 
+# 业务域 coverage 阈值。按域设置，不使用全仓库总阈值。
+# 阈值先按当前基线下沿设置，确保今天不会因既有覆盖率阻塞；后续再逐步提高。
+resolve_coverage_min() {
+    case "$1" in
+        common) echo "60" ;;
+        config) echo "90" ;;
+        data) echo "50" ;;
+        backtest) echo "50" ;;
+        strategies) echo "75" ;;
+        report) echo "25" ;;
+        cli) echo "30" ;;
+        contracts) echo "60" ;;
+        *) echo "" ;;
+    esac
+}
+
 # 业务域 → 源码路径（lint/format/type 的目标）
 resolve_src() {
     case "$1" in
@@ -22,9 +38,9 @@ resolve_test() {
     esac
 }
 
-# 已被某个 pre-commit 域 hook 覆盖的路径前缀（与 .pre-commit-config.yaml 的 files 对应）。
-# 落在这些前缀外的改动 = 不会触发任何域 hook 的盲区。
-# 维护规则：在 .pre-commit-config.yaml 新增/调整域 hook 时，同步更新此清单。
+# 已被某个 pre-commit 测试 hook 覆盖的路径前缀（与 .pre-commit-config.yaml 的 files 对应）。
+# 落在这些前缀外的改动 = 不会触发任何测试 hook 的盲区。
+# 维护规则：在 .pre-commit-config.yaml 新增/调整测试 hook 时，同步更新此清单。
 COVERED_PREFIXES=(
     "workspace/common/" "workspace/config/" "workspace/data/" "workspace/backtest/"
     "workspace/strategies/" "workspace/cli/" "workspace/report/"

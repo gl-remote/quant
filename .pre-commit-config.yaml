@@ -7,6 +7,7 @@
 #   → 该脚本读取本文件 → 按定义顺序执行各检查项
 #   → 全部通过才允许提交
 #
+# 兜底盲区提示只关注未纳入任何业务域 hook 的路径；tests/<domain>/ 已随对应域 hook 覆盖。
 # ──────────────────────────────────────────────────────────────────────────
 # 【模式：按业务域增量，统一调用 scripts/test.sh】
 #
@@ -15,13 +16,17 @@
 #   - scripts/test.sh = 内容层：跑什么检查、什么口径、域→路径映射的单一事实来源
 #
 # 每个业务域一个 hook：改到 <domain>/ 时触发 `scripts/test.sh all <domain>`，
-# 一次跑完该域的 lint + format + type + unit，只验该域、不碰其他域。
+# 一次跑完该域的 lint + format + type + unit + coverage fail-under，只验该域、不碰其他域。
+#   - coverage 阈值按业务域设置，不设置全仓库整体阈值。
 #   - pass_filenames: false —— 不把改动文件追加到 entry，避免污染 <domain> 参数；
 #     files 正则只用于「是否触发」判断，实际范围由 scripts/test.sh 的域映射决定。
 #   - always_run 一律为 false（默认）—— 没改到的域不跑。
 #
 # 全量回归（跨域影响、common 波及面）靠显式 `bash scripts/test.sh` 或 CI 兜底。
 # 「某域测试覆盖不全」是 tests 自身的完备性问题，与本触发流程正交。
+# 阶段 F 起，commit 对被触发业务域执行 coverage fail-under 并阻塞失败。
+# tests 根级、helpers、conftest 等共享测试改动必须触发全量测试，确保所有测试文件
+# 都有机会在 commit 时触发。
 #
 # ⚠️ 改动本文件或 scripts/test.sh 的验证分工前，先读 scripts/test.sh 顶部的
 #    「设计 / 给 AI 的提醒」，与用户对齐后再动。
@@ -43,59 +48,66 @@ repos:
         name: verify common (scripts/test.sh all common)
         entry: bash scripts/test.sh all common
         language: system
-        files: ^workspace/common/
+        files: ^(workspace/common/|workspace/tests/common/)
         pass_filenames: false
 
       - id: verify-config
         name: verify config (scripts/test.sh all config)
         entry: bash scripts/test.sh all config
         language: system
-        files: ^workspace/config/
+        files: ^(workspace/config/|workspace/tests/config/)
         pass_filenames: false
 
       - id: verify-data
         name: verify data (scripts/test.sh all data)
         entry: bash scripts/test.sh all data
         language: system
-        files: ^workspace/data/
+        files: ^(workspace/data/|workspace/tests/data/)
         pass_filenames: false
 
       - id: verify-backtest
         name: verify backtest (scripts/test.sh all backtest)
         entry: bash scripts/test.sh all backtest
         language: system
-        files: ^workspace/backtest/
+        files: ^(workspace/backtest/|workspace/tests/backtest/)
         pass_filenames: false
 
       - id: verify-strategies
         name: verify strategies (scripts/test.sh all strategies)
         entry: bash scripts/test.sh all strategies
         language: system
-        files: ^workspace/strategies/
+        files: ^(workspace/strategies/|workspace/tests/strategies/)
         pass_filenames: false
 
       - id: verify-report
         name: verify report py+web (scripts/test.sh all report)
         entry: bash scripts/test.sh all report
         language: system
-        files: ^workspace/report/
+        files: ^(workspace/report/|workspace/tests/report/)
         pass_filenames: false
 
       - id: verify-cli
         name: verify cli (scripts/test.sh all cli)
         entry: bash scripts/test.sh all cli
         language: system
-        files: ^workspace/cli/
+        files: ^(workspace/cli/|workspace/tests/cli/)
         pass_filenames: false
 
       - id: verify-contracts
         name: verify contracts (scripts/test.sh all contracts)
         entry: bash scripts/test.sh all contracts
         language: system
-        files: ^workspace/packages/python-contracts/
+        files: ^(workspace/packages/python-contracts/|workspace/tests/contracts/)
         pass_filenames: false
 
-      # 兜底：检测落在所有域 hook 之外的改动文件（如 main.py / pyproject.toml /
+      - id: verify-tests-shared
+        name: verify shared tests (scripts/test.sh)
+        entry: bash scripts/test.sh
+        language: system
+        files: ^workspace/tests/(__init__\.py|conftest\.py|README\.md|helpers/.*|test_[^/]+\.py)$
+        pass_filenames: false
+
+      # 兜底：检测落在所有测试 hook 之外的改动文件（如 main.py / pyproject.toml /
       # scripts/ / 根级新文件）。always_run + 不设 files = 每次 commit 都跑、收到全部
       # 改动文件；脚本只提示不拦截（exit 0）。目的是让盲区文件在 commit 输出里可见，
       # AI 据此判断是否提醒用户，避免「长期无人注意的未覆盖文件」。

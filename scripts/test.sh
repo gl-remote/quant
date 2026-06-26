@@ -10,10 +10,10 @@
 #   - format 用 `--check`，只报告不重写。
 #
 # 用法:
-#   bash scripts/test.sh                  # 全量: lint + format + type + unit
+#   bash scripts/test.sh                  # 全量: lint + format + type + unit + coverage fail-under
 #   bash scripts/test.sh lint             # 全量仅 ruff lint
 #   bash scripts/test.sh type             # 全量仅 mypy
-#   bash scripts/test.sh coverage         # 全量 coverage 报告（不设 fail-under）
+#   bash scripts/test.sh coverage         # 全量 coverage（按业务域 fail-under，不设置全仓库总阈值）
 #   bash scripts/test.sh integration      # 全量 integration 测试
 #   bash scripts/test.sh <stage> <domain> # 只验某业务域（增量）
 #       例: bash scripts/test.sh lint backtest   只 ruff check backtest/
@@ -29,7 +29,9 @@
 #   - scripts/test.sh = 验证「内容层」：跑什么检查、什么口径、域→路径映射的单一事实来源
 #   - .pre-commit-config.yaml = 验证「触发层」：何时跑、对哪些文件跑（git 集成，files 正则）
 # pre-commit 已按业务域切分：改 <domain>/ 只触发该域的 lint/format/type/unit，
-# 全量回归靠显式 `bash scripts/test.sh` 或 CI 兜底。
+# 全量回归靠显式 `bash scripts/test.sh` 或 CI 兜底。自阶段 F 起，`all <domain>`
+# 也会运行该业务域 coverage fail-under，commit 会按业务域覆盖率阻塞，但不设置
+# 全仓库整体 coverage 阈值。
 #
 # 多工具链：report 域含 Python(workspace/report/) + 前端(workspace/report/web/) 两种形态，验证体系不同：
 #   - report      → 先 ruff+mypy+pytest（Python），再追加 eslint+tsc+vitest（前端）。
@@ -92,6 +94,7 @@ if [ -n "$DOMAIN" ]; then
         exit 1
     fi
     TST="$(resolve_test "$DOMAIN")"
+    COVERAGE_MIN="$(resolve_coverage_min "$DOMAIN")"
     SRC_PATHS=("$SRC")
     TYPE_PATHS=("$SRC")
     # 测试目录可能尚未建立，不存在则 unit 跳过
@@ -112,16 +115,16 @@ case "$STAGE" in
     type)   run_type "${TYPE_PATHS[@]}" ;;
     coverage)
         if [ -z "$DOMAIN" ]; then
-            run_coverage workspace/common workspace/tests/common/
-            run_coverage workspace/config workspace/tests/config/
-            run_coverage workspace/data workspace/tests/data/
-            run_coverage workspace/backtest workspace/tests/backtest/
-            run_coverage workspace/strategies workspace/tests/strategies/
-            run_coverage workspace/report workspace/tests/report/
-            run_coverage workspace/cli workspace/tests/cli/
-            run_coverage src workspace/packages/python-contracts/tests/
+            run_coverage workspace/common "$(resolve_coverage_min common)" workspace/tests/common/
+            run_coverage workspace/config "$(resolve_coverage_min config)" workspace/tests/config/
+            run_coverage workspace/data "$(resolve_coverage_min data)" workspace/tests/data/
+            run_coverage workspace/backtest "$(resolve_coverage_min backtest)" workspace/tests/backtest/
+            run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
+            run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
+            run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/
+            run_coverage src "$(resolve_coverage_min contracts)" workspace/packages/python-contracts/tests/
         else
-            run_coverage "$SRC" "${TEST_PATHS[@]}"
+            run_coverage "$SRC" "$COVERAGE_MIN" "${TEST_PATHS[@]}"
         fi
         ;;
     integration)
@@ -163,8 +166,17 @@ case "$STAGE" in
         if [ -z "$DOMAIN" ]; then
             run_unit workspace/tests/
             run_unit workspace/packages/python-contracts/tests/
+            run_coverage workspace/common "$(resolve_coverage_min common)" workspace/tests/common/
+            run_coverage workspace/config "$(resolve_coverage_min config)" workspace/tests/config/
+            run_coverage workspace/data "$(resolve_coverage_min data)" workspace/tests/data/
+            run_coverage workspace/backtest "$(resolve_coverage_min backtest)" workspace/tests/backtest/
+            run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
+            run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
+            run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/
+            run_coverage src "$(resolve_coverage_min contracts)" workspace/packages/python-contracts/tests/
         else
             run_unit "${TEST_PATHS[@]}"
+            run_coverage "$SRC" "$COVERAGE_MIN" "${TEST_PATHS[@]}"
         fi
         ;;
     *) echo -e "${RED}未知 stage: $STAGE (可选: lint/format/type/unit/integration/slow/local-data/coverage/all)${NC}"; exit 1 ;;

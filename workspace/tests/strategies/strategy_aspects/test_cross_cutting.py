@@ -542,10 +542,19 @@ class TestRiskInvariants:
                 return None
 
         stop_fills = [
-            Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1, reason="stop_loss")
+            Fill(
+                timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1, reason="stop_loss"
+            )
         ]
         take_fills = [
-            Fill(timestamp="2024-01-01T12:00:00", symbol="TEST", action="sell", price=100.0, volume=1, reason="take_profit")
+            Fill(
+                timestamp="2024-01-01T12:00:00",
+                symbol="TEST",
+                action="sell",
+                price=100.0,
+                volume=1,
+                reason="take_profit",
+            )
         ]
         stop_state = _make_state(fills=stop_fills)
         take_state = _make_state(fills=take_fills)

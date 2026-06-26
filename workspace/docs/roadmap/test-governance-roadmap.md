@@ -1,7 +1,7 @@
 # 测试体系治理规划
 
-> 类型：Roadmap / 待实施规划
-> 状态：部分实施（阶段 A-C 已完成，阶段 D 首轮 helpers 抽取已完成，阶段 E 已启动回测统计不变量补充）
+> 类型：Roadmap / 分阶段实施规划
+> 状态：核心治理阶段性完成（阶段 A-C 已完成，阶段 D/E 阶段性完成；阶段 F coverage 基线与 CI 收口待讨论）
 > 创建日期：2026-06-26
 > 会话交接：本规划来自 2026-06-26 关于 `workspace/tests`、coverage、pre-commit、`scripts/test.sh` 的连续讨论；后续 AI Agent 应先阅读本文的「交接说明」和「隐藏规则」，再执行任何改动。
 
@@ -9,11 +9,15 @@
 
 当前测试体系已经具备较好的基础：
 
-- `workspace/tests` 按业务域组织，当前可收集约 448 个 Python 测试。
-- 策略切面测试较细，`strategies/strategy_aspects` 已覆盖大量边界条件。
+- `workspace/tests` 按业务域组织，当前 fast suite 可收集 405/408 个测试，3 个 `slow` / `local_data` 测试默认排除。
+- 策略切面测试较细，`strategies/strategy_aspects` 已覆盖大量边界条件，并已补充跨切面风控不变量。
 - `.pre-commit-config.yaml` 已按业务域增量触发验证。
 - `scripts/test.sh` 是验证内容层的单一入口，pre-commit 只负责触发层。
-- 本次会话已完成一轮低风险修整，并提交为 `70d2485 test: improve pytest isolation and runtime test assertions`。
+- 近期测试治理已分阶段提交为：
+  - `182fb06 test: add verification stages and shared helpers`
+  - `d5f7f9b test: add backtest statistics invariants`
+  - `8cae76d test: add datafeed visibility invariants`
+  - `fda3349 test: add risk aspect invariants`
 
 已完成的修整包括：
 
@@ -83,7 +87,7 @@ git log --oneline -5
 - 所有 Python 命令必须以 `uv run` 开头，例如 `uv run pytest ...`、`uv run python -m mypy ...`。
 - 不要直接调用裸 `python`、`pytest`、`pip`。
 - `ruff` 可直接运行，也可用 `uv run ruff ...`。
-- 不要把 coverage 重新放回 `pyproject.toml` 的 pytest 全局 `addopts`。
+- coverage 不得回到 pytest 默认 `addopts`；提交门禁通过 `scripts/test.sh all <domain>` 按业务域执行 `fail-under`。
 - 不要把 coverage 直接塞进 `.pre-commit-config.yaml` 的域 hook。
 - `.pre-commit-config.yaml` 是触发层，`scripts/test.sh` 是内容层。改验证分工前必须先阅读两个文件顶部说明。
 - 保留 `bash scripts/test.sh ...` 作为外部稳定入口，pre-commit 不应因为脚本拆分而修改 entry。
@@ -340,9 +344,29 @@ def build_deterministic_feed(requirements: DataRequirements, bars: list[Bar]) ->
 
 ### 阶段 F：coverage 基线和阈值
 
+状态：待讨论后实施（coverage stage 已建立，当前仍只报告、不设 fail-under；下一步应先确定 coverage 的使用目的和阈值策略）。
+
 目标：先建立可读报告，再逐步设置阈值。
 
-不建议一开始设置全仓库 `--cov-fail-under=80`。
+不建议设置全仓库 `--cov-fail-under=80`；当前策略是只设置业务域阈值。
+
+当前业务域 coverage 基线与提交阻塞阈值：
+
+| Domain       | 当前基线           | fail-under | 说明                                           |
+| ------------ | -------------- | ---------- | -------------------------------------------- |
+| `common`     | 89 passed，63%  | 60         | 纯函数较多，后续可作为优先提高对象。                       |
+| `config`     | 20 passed，92%  | 90         | 配置 schema/manager 覆盖较高，可保持较高阈值。             |
+| `data`       | 72 passed，54%  | 50         | 数据域先放宽，避免 datasource / 外部桥接路径今天阻塞。         |
+| `backtest`   | 26 passed，53%  | 50         | 已补统计不变量；外部引擎/桥接路径不应硬追高。                 |
+| `strategies` | 171 passed，77% | 75         | 已覆盖 DataFeed、strategy_aspects、MA 策略等核心路径。 |
+| `report`     | 14 passed，29%  | 25         | Python report 当前偏低，web 由前端工具链兜底。            |
+| `cli`        | 7 passed，31%   | 30         | CLI 入口当前覆盖偏低，先以不下降为主。                    |
+| `contracts`  | 1 passed，65%   | 60         | 合同包独立 pytest cwd，保持独立 coverage 口径。          |
+
+非 Python / 特殊域：
+
+- `report-web`：暂不接入 Python coverage，仍由 eslint / tsc / vitest / build 兜底。
+- 全域 `coverage`：依次执行各业务域 coverage 阈值检查，但不计算、不阻塞全仓库整体百分比。
 
 建议先按模块观察：
 
@@ -357,7 +381,15 @@ def build_deterministic_feed(requirements: DataRequirements, bars: list[Bar]) ->
 
 阈值策略：
 
-- 初期只报告。
+- 使用业务域阈值，不设置全仓库整体 coverage 阈值。
+- `all <domain>` 代表 lint + format + type + unit + coverage fail-under。
+- pre-commit 触发对应业务域的 `all <domain>`，覆盖率不足会阻塞提交。
+- 阈值先按当前基线下沿设置，确保既有代码今天不会因为历史覆盖率阻塞；明天起新增改动需要维持或提高对应业务域覆盖率。
+- 后续按 domain 逐步提高阈值，不强求所有域相同。
+
+原则：
+
+- 覆盖率用于防止核心域继续下滑，不用于追求全仓库漂亮数字。
 - 观察稳定后按 domain 设置低阈值。
 - 不同 domain 阈值不同，不强求全仓库一个数字。
 - 对 vnpy / tqsdk 外部桥接层不要硬追高 coverage。
@@ -368,10 +400,11 @@ def build_deterministic_feed(requirements: DataRequirements, bars: list[Bar]) ->
 
 原则：
 
-- pre-commit 保持快，只跑被改业务域的 `all <domain>`。
-- `all <domain>` 当前代表 lint + format + type + unit。
-- 不在 pre-commit 中跑 coverage。
+- pre-commit 仍按业务域增量触发，只跑被改业务域的 `all <domain>`。
+- `all <domain>` 当前代表 lint + format + type + unit + coverage fail-under。
+- 不在 pre-commit 中设置全仓库整体 coverage 阈值。
 - 不在 pre-commit 中默认跑 `slow` 或 `local_data`。
+- `tests/<domain>/` 改动也触发对应业务域 hook，避免只改测试时绕过 coverage 门禁。
 - 根级文件仍由 `_uncovered` 提示，不直接阻塞。
 
 如果未来要增强根级文件处理，建议先只增强提示文案，例如当 `pyproject.toml` 或 `scripts/test.sh` 改动时提示运行：
@@ -478,27 +511,29 @@ ci: add fast coverage reporting
 
 截至本次文档同步时：
 
-- 最新相关提交：`70d2485 test: improve pytest isolation and runtime test assertions`
-- 全测试收集：448 tests collected
+- 最新相关提交：`fda3349 test: add risk aspect invariants`
+- 全测试收集：405/408 tests collected，3 个 `slow` / `local_data` 测试默认排除
 - 默认 pytest 已不含 coverage
 - 已注册 markers：`slow`、`integration`、`local_data` 等
 - `scripts/test.sh` 已保留兼容入口，内部拆分为 `scripts/test/` 子脚本。
-- coverage stage 已建立，初期只报告、不设 fail-under。
+- coverage stage 已建立，并按业务域设置 fail-under；全域 coverage 只串行业务域阈值，不设置全仓库整体阈值。
 - `unit` 已固定为 fast tests，默认排除 `slow`、`local_data`。
 - 已新增 `integration`、`slow`、`local-data` stage。
 - `workspace/tests/helpers/` 已建立，并已首轮抽取回测记录、配置字典、行情数据和风控测试构造 helpers。
-- 回测统计不变量测试已启动，已补充全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景。
-- DataFeed 时间可见性不变量测试已启动，已补充重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离。
+- 回测统计不变量已补充全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景。
+- DataFeed 时间可见性不变量已补充重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离。
 - 策略风控核心不变量已补充无持仓 exit、持仓 cooldown、风险 diagnostics、long/short 对称、ATR None/0 等边界。
+- 当前业务域 fail-under：common 60、config 90、data 50、backtest 50、strategies 75、report 25、cli 30、contracts 60。
+- pre-commit 的业务域 hook 已包含对应 `tests/<domain>/` 路径，测试改动也会触发该域门禁。
 
 ## 完成定义
 
 本规划完成时应满足：
 
 - `scripts/test.sh` 已保留兼容入口，内部拆分为 `env.sh`、`domains.sh`、`python.sh`、`web.sh`、`precommit.sh`。
-- pre-commit 不需要修改 entry，仍按业务域增量触发。
+- pre-commit 仍按业务域增量触发，并通过 `all <domain>` 执行该域 coverage fail-under。
 - coverage 有专用入口，不污染默认 pytest。
 - `slow` / `local_data` 与 fast suite 已通过 `unit`、`slow`、`local-data` stage 隔离。
-- 核心量化不变量测试覆盖回测统计、DataFeed 时间可见性、策略风控边界。
+- 核心量化不变量测试已阶段性覆盖回测统计、DataFeed 时间可见性、策略风控边界。
 - `conftest.py` 不再继续膨胀，常用测试构造迁移到 helpers。
 - CI 与本地命令口径一致，coverage 报告可解释。

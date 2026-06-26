@@ -27,7 +27,14 @@ run_unit() {
     # conftest.py，与主项目 workspace/tests/conftest.py 冲突（都解析为 tests.conftest），
     # 需要从项目根之外分开跑。主项目全量时分别调两次 run_unit 来处理。
     if [ "$*" = "workspace/packages/python-contracts/tests/" ]; then
-        (cd workspace/packages/python-contracts && uv run python -m pytest tests/ -m "not slow and not local_data" -q --tb=short -o "addopts=" -p no:cacheprovider)
+        (cd workspace/packages/python-contracts && PYTHONPATH=src uv run python -m pytest tests/ -m "not slow and not local_data" -q --tb=short -o "addopts=" -p no:cacheprovider --import-mode=importlib)
+        return $?
+    fi
+    if [ "$#" -eq 2 ] && [ "$1" = "workspace/tests/" ] && [ "$2" = "workspace/packages/python-contracts/tests/" ]; then
+        uv run python -m pytest workspace/tests/ -m "not slow and not local_data" -o addopts="" -p no:cacheprovider -q --tb=short
+        local main_status=$?
+        [ "$main_status" -ne 0 ] && return "$main_status"
+        (cd workspace/packages/python-contracts && PYTHONPATH=src uv run python -m pytest tests/ -m "not slow and not local_data" -q --tb=short -o "addopts=" -p no:cacheprovider --import-mode=importlib)
         return $?
     fi
     uv run python -m pytest "$@" -m "not slow and not local_data" -o addopts="" -p no:cacheprovider -q --tb=short
@@ -44,7 +51,7 @@ run_marked_tests() {
     local status
     set +e
     if [ "$*" = "workspace/packages/python-contracts/tests/" ]; then
-        (cd workspace/packages/python-contracts && uv run python -m pytest tests/ -m "$marker" -q --tb=short -o "addopts=" -p no:cacheprovider)
+        (cd workspace/packages/python-contracts && PYTHONPATH=src uv run python -m pytest tests/ -m "$marker" -q --tb=short -o "addopts=" -p no:cacheprovider --import-mode=importlib)
         status=$?
     else
         uv run python -m pytest "$@" -m "$marker" -o addopts="" -p no:cacheprovider -q --tb=short
@@ -72,26 +79,29 @@ run_local_data() {
 
 run_coverage() {
     local src="$1"
-    shift
+    local fail_under="$2"
+    shift 2
     if [ "$#" -eq 0 ]; then
         echo -e "${YELLOW}── [coverage] 该域无测试目录，跳过 ──${NC}"
         return 0
     fi
-    echo "── [coverage] pytest $* --cov=$src ──"
+    echo "── [coverage] pytest $* --cov=$src --cov-fail-under=$fail_under ──"
     if [ "$*" = "workspace/packages/python-contracts/tests/" ]; then
         (
             cd workspace/packages/python-contracts
-            uv run python -m pytest tests/ \
+            PYTHONPATH=src uv run python -m pytest tests/ \
                 -m "not slow and not local_data" \
                 --cov=src \
+                --cov-fail-under="$fail_under" \
                 --cov-report=term-missing:skip-covered \
-                -q --tb=short -o "addopts=" -p no:cacheprovider
+                -q --tb=short -o "addopts=" -p no:cacheprovider --import-mode=importlib
         )
         return $?
     fi
     uv run python -m pytest "$@" \
         -m "not slow and not local_data" \
         --cov="$src" \
+        --cov-fail-under="$fail_under" \
         --cov-report=term-missing:skip-covered \
         -q --tb=short -o addopts="" -p no:cacheprovider
 }
