@@ -90,7 +90,7 @@ class VnpyBacktestEngine:
         backtest_id: int | None,
         strategy_name: str,
         strategy_version: str | None,
-        strategy_params: dict[str, float] | None,
+        strategy_params: dict[str, Any] | None,
         error: str | None,
         data_start: str,
         data_end: str,

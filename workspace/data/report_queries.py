@@ -166,7 +166,12 @@ def get_backtests_for_run(store: DataStore, run_id: int) -> list[dict[str, objec
         bt_id = _i(bt["id"])
 
         params = list(
-            BacktestParam.select(BacktestParam.param_name, BacktestParam.param_value)
+            BacktestParam.select(
+                BacktestParam.param_name,
+                BacktestParam.param_value,
+                BacktestParam.param_type,
+                BacktestParam.param_text,
+            )
             .where(BacktestParam.backtest == bt_id)
             .order_by(BacktestParam.param_name)
             .dicts()
@@ -208,7 +213,14 @@ def get_backtests_for_run(store: DataStore, run_id: int) -> list[dict[str, objec
                 "kline_interval": bt["kline_interval"],
                 "strategy_version": bt["strategy_version"],
                 "git_hash": bt["git_hash"],
-                "params": [{"name": p["param_name"], "value": p["param_value"]} for p in params],
+                "params": [
+                    {
+                        "name": p["param_name"],
+                        "value": p["param_value"] if p["param_value"] is not None else p["param_text"],
+                        "type": p["param_type"],
+                    }
+                    for p in params
+                ],
                 "daily": daily,
             }
         )

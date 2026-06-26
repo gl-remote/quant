@@ -91,9 +91,7 @@ class BacktestResultPersister:
         - 失败的只写主记录，成功的全量写入（daily/trades/校验）
         """
         if strategy_params is not None:
-            result.strategy_params = {
-                key: value for key, value in strategy_params.items() if isinstance(value, bool | int | float)
-            }
+            result.strategy_params = strategy_params
         if git_hash is not None:
             result.git_hash = git_hash
         result.status = STATUS_SUCCESS if result.success else STATUS_FAILED

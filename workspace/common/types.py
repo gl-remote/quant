@@ -135,7 +135,7 @@ class BacktestResult:
     # ── 原始数据 ──────────────────────────────────────
     engine_config: dict[str, object] = field(default_factory=dict)  # JSON 元数据
     data_src: str | None = None  # 数据源路径
-    strategy_params: dict[str, float] | None = None  # 策略参数
+    strategy_params: dict[str, object] | None = None  # 策略参数
     fills: list[dict[str, object]] = field(default_factory=list)  # 逐笔交易记录
     daily_results: list[dict] = field(default_factory=list)  # 每日资金曲线
     # ── 链路信息 ──────────────────────────────────────

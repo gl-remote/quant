@@ -78,6 +78,19 @@ def _normalize_max_dd(raw_value: float | None) -> float:
     return float(raw_value)
 
 
+def _param_record_fields(value: Any) -> dict[str, Any]:
+    """构造 backtest_params 写入字段，兼容非数值策略参数。"""
+    param_type = "bool" if isinstance(value, bool) else type(value).__name__
+    fields: dict[str, Any] = {
+        "param_value": None,
+        "param_type": param_type,
+        "param_text": json.dumps(value, ensure_ascii=False),
+    }
+    if isinstance(value, bool | int | float):
+        fields["param_value"] = float(value)
+    return fields
+
+
 class DataStore:
     """数据存储层 - 管理数据库连接和 CRUD 操作"""
 
@@ -317,7 +330,7 @@ class DataStore:
             if result.backtest_id:
                 BacktestParam.delete().where(BacktestParam.backtest == bt).execute()
             for name, value in params.items():
-                BacktestParam.create(backtest=bt, param_name=name, param_value=float(value))
+                BacktestParam.create(backtest=bt, param_name=name, **_param_record_fields(value))
         return int(bt.id)
 
     def _build_backtest_fields(

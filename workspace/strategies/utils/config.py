@@ -47,15 +47,10 @@ def _strategy_config_items(sc: Any) -> list[tuple[str, Any]]:
     ]
 
 
-def serialize_strategy_params(strategy_config: Any) -> dict[str, float]:
-    """将策略配置序列化为数值参数字典，用于写入 backtest_params 表。"""
+def serialize_strategy_params(strategy_config: Any) -> dict[str, Any]:
+    """将策略配置序列化为参数字典，用于回测记录复现。"""
     try:
         valid_keys = {f.name for f in dataclasses.fields(strategy_config)}
-        params: dict[str, float] = {}
-        for key in valid_keys:
-            value = getattr(strategy_config, key)
-            if isinstance(value, bool | int | float):
-                params[key] = float(value)
-        return params
+        return {key: getattr(strategy_config, key) for key in valid_keys}
     except Exception:
         return {}

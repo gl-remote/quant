@@ -74,6 +74,64 @@ ATR 本轮发现 `KDJ.window` 不足以支持 TA-Lib `STOCH` 稳定输出。
 - 参数化指标越复杂，越容易出现预热不足；
 - 策略作者只能靠经验手动放大 `lookback_bars`。
 
+### 2.3 历史指标的 NaN / warmup 返回语义不明确
+
+即使后续提供 `indicator_history()`，也必须明确 warmup 不足和历史值不可用时的返回语义。
+
+当前风险：
+
+1. `indicator(name, -2)` 可能返回 `None`、`NaN` 或不可区分的无效值；
+2. 策略无法统一判断“连续 N 根满足条件”；
+3. 不同策略会各自实现 `None/NaN` 过滤逻辑，导致行为不一致；
+4. 指标刚完成 warmup 时，可用历史数量可能少于策略请求数量，但框架没有统一表达。
+
+待修复点：
+
+- 明确历史指标序列是否保留 `NaN`；
+- 明确可用历史数量不足 `bars` 时返回短序列、补 `None/NaN`，还是抛出明确异常；
+- 提供 `dropna` / `valid_only` 之类的语义，或在 API 文档中明确策略层必须自行处理；
+- 连续确认、回调后再启动、趋势持续判断等场景必须能可靠区分“条件不满足”和“数据尚不可用”。
+
+### 2.4 最新指标与历史指标读取路径不一致
+
+当前 `indicator(name, -1)` 和 `indicator(name, -2)` 的读取路径可能不同：
+
+- 最新值更多依赖 `_indicator_cache`；
+- 历史值更多依赖 `_base_df_ref` 或 `_df_ref`；
+- 动态计算出的最新指标是否写回历史序列依赖上下文构造和 persist 行为。
+
+这会导致：
+
+1. 最新值可读，但上一根不可读；
+2. 最新值和历史序列不连续；
+3. `indicator(name, -1)` 与未来的 `indicator_history(name, 1)` 语义不一致；
+4. 策略无法用同一套 API 判断最近 N 根状态。
+
+待修复点：
+
+- 最新指标和历史指标应来自同一条“当前可见时间序列”；
+- forming bar 与完整历史 bar 的边界必须明确；
+- 指标动态计算结果应可靠进入该可见序列，或 API 明确区分 cache 最新值与历史完整值；
+- `indicator(name, -1)`、`indicator(name, -2)`、`indicator_history(name, 2)` 的结果应可互相校验。
+
+### 2.5 指标计算预热长度不能只依赖业务 window
+
+当前 `window` 同时承担业务参数窗口和计算预热长度，语义过载。
+
+问题表现：
+
+1. `window=9` 对策略含义是 9 周期 KDJ，但 TA-Lib `STOCH` 可能需要更多历史才能稳定输出；
+2. MACD、ATR、KDJ 等指标的真实 warmup 需求不同；
+3. `DataRequirements` 看似满足，但运行时仍得到长期 `NaN`；
+4. 策略作者不得不手动把 `lookback_bars` 放大到经验值。
+
+待修复点：
+
+- 指标声明需要显式或自动推导 `warmup_bars`；
+- `DataRequirements` 合并时应使用 `max(window, warmup_bars, requested_history)`；
+- `DataFeed` 构造上下文时应保证 warmup 足够；
+- 策略层不应负责猜测 TA-Lib 或其他指标实现的预热长度。
+
 ## 3. 临时绕法
 
 ATR 本轮采用策略层临时方案：
@@ -92,8 +150,8 @@ ATR 本轮采用策略层临时方案：
 新增或修复以下能力之一：
 
 ```python
-view.indicator_history(name: str, bars: int) -> list[float]
-view.indicator_series(name: str, bars: int | None = None) -> pd.Series
+view.indicator_history(name: str, bars: int, *, dropna: bool = False) -> list[float | None]
+view.indicator_series(name: str, bars: int | None = None, *, dropna: bool = False) -> pd.Series
 ```
 
 要求：
@@ -102,6 +160,9 @@ view.indicator_series(name: str, bars: int | None = None) -> pd.Series
 - 不读取未来数据；
 - 对形成中 bar 的指标值有明确语义；
 - 对历史完整 bar 和最新 bar 的读取路径一致；
+- 明确 warmup 不足、历史值不可用、`NaN` 是否保留的行为；
+- 明确可用历史数量不足 `bars` 时返回短序列、补 `None`，还是显式失败；
+- 如提供 `dropna=True`，必须说明返回长度可能小于请求长度；
 - 不要求策略层自己缓存指标历史。
 
 ### P2：区分 indicator window 与 warmup bars
@@ -119,8 +180,9 @@ IndicatorSpec(
 
 要求：
 
-- `DataRequirements` 合并时使用 `warmup_bars` 保障计算；
+- `DataRequirements` 合并时使用 `max(window, warmup_bars, requested_history)` 保障计算；
 - 策略逻辑仍可使用 `window` 表示业务参数；
+- `warmup_bars` 可以由指标实现提供默认值，也可以由策略需求显式覆盖；
 - KDJ/STOCH、MACD、ATR、SMA 等指标分别补齐合理 warmup。
 
 ### P3：补回归测试

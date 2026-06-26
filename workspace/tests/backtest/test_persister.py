@@ -52,13 +52,13 @@ def test_backtest_result_persister_writes_success_details_and_metadata() -> None
         result,
         run_id=7,
         data_src="memory://DCE.m2601",
-        strategy_params={"sma_short": 5},
+        strategy_params={"sma_short": 5, "signal_profile": "sma_only"},
         git_hash="abc1234",
     )
 
     assert backtest_id == 1
     assert result.status == "success"
-    assert result.strategy_params == {"sma_short": 5}
+    assert result.strategy_params == {"sma_short": 5, "signal_profile": "sma_only"}
     assert result.git_hash == "abc1234"
     assert dm.backtests == [{"result": result, "run_id": 7, "data_src": "memory://DCE.m2601"}]
     assert dm.daily == [(1, result.daily_results)]

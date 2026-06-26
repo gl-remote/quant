@@ -325,6 +325,29 @@ class TestInsertAndQuery:
         assert results[0].symbol == "DCE.good"
         store.close()
 
+    def test_insert_backtest_persists_non_numeric_strategy_params(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        result = BacktestResult(
+            symbol="DCE.m2509",
+            strategy="ma",
+            status="success",
+            strategy_params={"sma_short": 5, "signal_profile": "sma_only", "enabled": True},
+        )
+
+        bt_id = store.insert_backtest_detailed(result)
+
+        from data.models import BacktestParam
+
+        params = {row.param_name: row for row in BacktestParam.select().where(BacktestParam.backtest == bt_id)}
+        assert params["sma_short"].param_value == 5.0
+        assert params["sma_short"].param_type == "int"
+        assert params["signal_profile"].param_value is None
+        assert params["signal_profile"].param_type == "str"
+        assert params["signal_profile"].param_text == '"sma_only"'
+        assert params["enabled"].param_value == 1.0
+        assert params["enabled"].param_type == "bool"
+        store.close()
+
 
 # ═══════════════════════════════════════════════════════════
 # DataStore 删除 & 级联

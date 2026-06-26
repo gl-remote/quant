@@ -344,7 +344,9 @@ class BacktestParam(OrmBaseModel):
 
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="params", on_delete="CASCADE")
     param_name: CharField = CharField()
-    param_value: FloatField = FloatField()
+    param_value: FloatField = FloatField(null=True)
+    param_type: CharField = CharField(default="float")
+    param_text: TextField = TextField(null=True)
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = "backtest_params"

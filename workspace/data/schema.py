@@ -27,7 +27,7 @@ from .models import (
 
 # ── 当前代码期望的 schema 版本 ────────────────────────────────
 # 任何新的 ALTER TABLE 都要让这个数 +1，并在 MIGRATIONS 中追加一条
-CURRENT_SCHEMA_VERSION: int = 2
+CURRENT_SCHEMA_VERSION: int = 3
 
 # ── 迁移清单（按版本号升序排列） ────────────────────────────
 # 约定：version 从 1 开始单调递增；每条 migration.up 只执行一个结构变更
@@ -41,6 +41,11 @@ MIGRATIONS: list[dict] = [
         "version": 2,
         "description": "补齐 runs / backtest_trades / backtests / backtest_daily 的历史字段",
         "up": lambda: _migration_2_add_historical_columns(),
+    },
+    {
+        "version": 3,
+        "description": "扩展 backtest_params 支持非数值策略参数",
+        "up": lambda: _migration_3_extend_backtest_params(),
     },
 ]
 
@@ -187,6 +192,19 @@ def _migration_2_add_historical_columns() -> None:
     for col_name, col_type in bd_new_cols:
         if col_name not in bd_cols:
             database.execute_sql(f"ALTER TABLE backtest_daily ADD COLUMN {col_name} {col_type}")
+
+
+def _migration_3_extend_backtest_params() -> None:
+    """扩展 backtest_params，使其可保存非数值策略参数原始值。"""
+    cols = _table_columns("backtest_params")
+    if "param_type" not in cols:
+        database.execute_sql("ALTER TABLE backtest_params ADD COLUMN param_type VARCHAR(255) DEFAULT 'float'")
+    if "param_text" not in cols:
+        database.execute_sql("ALTER TABLE backtest_params ADD COLUMN param_text TEXT")
+    if "param_value" in cols:
+        database.execute_sql(
+            "UPDATE backtest_params SET param_text = CAST(param_value AS TEXT) WHERE param_text IS NULL"
+        )
 
 
 # ── 公开 API ─────────────────────────────────────────────
