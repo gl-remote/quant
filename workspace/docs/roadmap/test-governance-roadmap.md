@@ -272,7 +272,7 @@ def assert_single_reason(reasons):
 
 ### 阶段 E：补核心不变量测试
 
-状态：进行中（本会话已从 `workspace/tests/backtest/test_vnpy_backtest_engine.py` 启动回测统计不变量补充，已覆盖全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景）。
+状态：进行中（已补充回测统计不变量；已从 `workspace/tests/strategies/runtime/test_data_feed.py` 启动 DataFeed 时间可见性不变量补充，覆盖重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离）。
 
 目标：覆盖量化系统最容易产生“看起来能跑但结果错误”的场景。
 
@@ -488,7 +488,8 @@ ci: add fast coverage reporting
 - 已新增 `integration`、`slow`、`local-data` stage。
 - `workspace/tests/helpers/` 已建立，并已首轮抽取回测记录、配置字典、行情数据和风控测试构造 helpers。
 - 回测统计不变量测试已启动，已补充全盈利、全亏损、成本增加、空 daily、缺列 daily 等场景。
-- DataFeed 时间可见性与策略风控核心不变量仍待系统补充
+- DataFeed 时间可见性不变量测试已启动，已补充重复查询、查询顺序、lookback 单调性、高周期 forming 不偷看未来、指标确定性和 cache 隔离。
+- 策略风控核心不变量仍待系统补充
 
 ## 完成定义
 

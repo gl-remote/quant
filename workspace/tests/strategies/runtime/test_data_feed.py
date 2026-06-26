@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 
 import numpy as np
+import pandas as pd
 from strategies.core.indicators import IndicatorSpec, ema_func, sma_func
 from strategies.core.types import Bar
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
@@ -48,6 +49,156 @@ def generate_test_bars(num_bars: int = 100) -> list[Bar]:
         )
 
     return bars
+
+
+def bars_to_df(bars: list[Bar]) -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "datetime": pd.Timestamp(bar.datetime),
+                "open": bar.open,
+                "high": bar.high,
+                "low": bar.low,
+                "close": bar.close,
+                "volume": bar.volume,
+            }
+            for bar in bars
+        ]
+    ).set_index("datetime")
+
+
+def build_deterministic_feed(
+    requirements: DataRequirements,
+    bars: list[Bar],
+    symbol: str = "TEST_FEED",
+) -> DataFeed:
+    feed = DataFeed(symbol, requirements=requirements)
+    feed.feed_history_df(bars_to_df(bars))
+    return feed
+
+
+def view_signature(view: PeriodDataView) -> tuple[tuple[datetime, float, float, float, float, float], ...]:
+    rows = []
+    for idx in range(view.length):
+        bar = view.get_bar(idx)
+        assert bar is not None
+        rows.append((bar.datetime, bar.open, bar.high, bar.low, bar.close, bar.volume))
+    return tuple(rows)
+
+
+def make_linear_bars(symbol: str, start: datetime, count: int, step_minutes: int = 1) -> list[Bar]:
+    return [
+        Bar(
+            symbol=symbol,
+            datetime=start + timedelta(minutes=step_minutes * i),
+            open=100.0 + i,
+            high=101.0 + i,
+            low=99.0 + i,
+            close=100.5 + i,
+            volume=1000.0 + i,
+        )
+        for i in range(count)
+    ]
+
+
+def make_datafeed_requirements(
+    periods: dict[str, int] | None = None,
+    indicators: dict[str, list[IndicatorSpec]] | None = None,
+) -> DataRequirements:
+    return DataRequirements(
+        periods={period: PeriodRequirements(lookback_bars=lookback) for period, lookback in (periods or {"1m": 10}).items()},
+        indicators=indicators or {},
+        events=EventsRequirements.no_events(),
+    )
+
+
+def test_base_period_repeated_query_is_deterministic():
+    reqs = make_datafeed_requirements({"1m": 5})
+    bars = make_linear_bars("TEST_DETERMINISTIC", datetime(2024, 1, 1, 9, 0), 12)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_DETERMINISTIC")
+    current_time = bars[8].datetime
+
+    first = feed.get_data("1m", current_time, lookback_bars=5)
+    second = feed.get_data("1m", current_time, lookback_bars=5)
+
+    assert first is not None
+    assert second is not None
+    assert view_signature(second) == view_signature(first)
+    assert view_signature(second)[-1][0] == current_time
+
+
+def test_base_period_query_order_does_not_change_past_view():
+    reqs = make_datafeed_requirements({"1m": 5})
+    bars = make_linear_bars("TEST_ORDER", datetime(2024, 1, 1, 9, 0), 12)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_ORDER")
+    early_time = bars[5].datetime
+    later_time = bars[10].datetime
+
+    direct_early = view_signature(feed.get_data("1m", early_time, lookback_bars=5))  # type: ignore[arg-type]
+    _ = feed.get_data("1m", later_time, lookback_bars=5)
+    early_after_later = view_signature(feed.get_data("1m", early_time, lookback_bars=5))  # type: ignore[arg-type]
+
+    assert early_after_later == direct_early
+    assert early_after_later[-1][0] == early_time
+
+
+def test_base_period_lookback_window_is_monotonic():
+    reqs = make_datafeed_requirements({"1m": 10})
+    bars = make_linear_bars("TEST_LOOKBACK", datetime(2024, 1, 1, 9, 0), 12)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_LOOKBACK")
+    current_time = bars[9].datetime
+
+    short = view_signature(feed.get_data("1m", current_time, lookback_bars=3))  # type: ignore[arg-type]
+    long = view_signature(feed.get_data("1m", current_time, lookback_bars=7))  # type: ignore[arg-type]
+
+    assert long[-len(short) :] == short
+
+
+def test_high_period_forming_bar_never_uses_future_base_bars():
+    reqs = make_datafeed_requirements({"5m": 5, "15m": 3})
+    bars = make_linear_bars("TEST_NO_FUTURE", datetime(2024, 1, 1, 10, 0), 5, step_minutes=5)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_NO_FUTURE")
+
+    view = feed.get_data("15m", bars[1].datetime, lookback_bars=3)
+
+    assert view is not None
+    assert view.length == 1
+    forming = view.get_bar(-1)
+    assert forming is not None
+    assert forming.datetime == bars[0].datetime
+    assert forming.open == bars[0].open
+    assert forming.high == max(b.high for b in bars[:2])
+    assert forming.low == min(b.low for b in bars[:2])
+    assert forming.close == bars[1].close
+    assert forming.volume == sum(b.volume for b in bars[:2])
+    assert forming.close != bars[2].close
+
+
+def test_build_context_repeated_query_preserves_indicator_values():
+    reqs = make_datafeed_requirements(
+        {"1m": 8},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_CTX_REPEAT", datetime(2024, 1, 1, 9, 0), 12)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_CTX_REPEAT")
+
+    first = feed.build_context(reqs, bars[9])
+    second = feed.build_context(reqs, bars[9])
+
+    assert view_signature(second.multi["1m"]) == view_signature(first.multi["1m"])
+    assert second.multi["1m"].indicator("1m_sma_3", -1) == first.multi["1m"].indicator("1m_sma_3", -1)
+
+
+def test_data_feed_cache_is_explicitly_isolated():
+    clear_cache()
+    feed = DataFeed("TEST_CACHE_ISOLATED")
+
+    set_cached_feed("TEST_CACHE_ISOLATED", feed, "2024-01-01", "2024-01-31")
+    assert get_cached_feed("TEST_CACHE_ISOLATED", "2024-01-01", "2024-01-31") is feed
+
+    clear_cache()
+
+    assert get_cached_feed("TEST_CACHE_ISOLATED", "2024-01-01", "2024-01-31") is None
 
 
 def make_view(
