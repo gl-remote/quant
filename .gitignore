@@ -84,6 +84,8 @@ node_modules/
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
+.coverage *
 
 # Report / workspace generated outputs
 project_data/
