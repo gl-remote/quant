@@ -10,35 +10,37 @@
 
 ```bash
 cd /Users/REDACTED_API_KEY/Documents/src/quant
-pip install -e .
+uv sync --all-groups
 
 # 前端依赖（报告模块）
-cd report/web && npm install
+cd workspace/report/web && npm install
 ```
 
 ### 2. 配置账户
 
 ```bash
-cp config/conf.example.toml config/conf.local.toml
+cp workspace/config/conf.example.toml workspace/config/conf.local.toml
 # 编辑 conf.local.toml 填入 API 密钥
 ```
 
 ### 3. 导出数据
 
 ```bash
-python main.py export --symbol DCE.m2509 --start 2024-01-01 --end 2024-12-31
+uv run python main.py export --symbol DCE.m2509 --start 2024-01-01 --end 2024-12-31
 ```
+
+默认 CSV 写入 `project_data/market_data/csv/`。
 
 ### 4. 运行回测
 
 ```bash
-python main.py backtest --symbol DCE.m2509 --strategy ma
+uv run python main.py backtest --symbol DCE.m2509 --strategy ma
 ```
 
 ### 5. 查看报告
 
 ```bash
-open output/index.html
+open project_data/reports/index.html
 ```
 
 ---
@@ -48,29 +50,29 @@ open output/index.html
 ### 单品种回测
 
 ```bash
-python main.py backtest --symbol DCE.m2509 --strategy ma --start 2024-01-01 --end 2024-12-31 --gui
+uv run python main.py backtest --symbol DCE.m2509 --strategy ma --start 2024-01-01 --end 2024-12-31 --gui
 ```
 
 ### 批量回测
 
 ```bash
-python main.py backtest --pattern "DCE\.m" --strategy ma
+uv run python main.py backtest --pattern "DCE\.m" --strategy ma
 ```
 
 ### 参数优化
 
 ```bash
 # 网格搜索
-python main.py backtest --symbol DCE.m2509 --optimizer grid --mode search
+uv run python main.py backtest --symbol DCE.m2509 --optimizer grid --mode search
 
 # 贝叶斯优化
-python main.py backtest --symbol DCE.m2509 --optimizer bayesian --mode search
+uv run python main.py backtest --symbol DCE.m2509 --optimizer bayesian --mode search
 ```
 
 ### Walk-Forward 验证
 
 ```bash
-python main.py backtest --symbol DCE.m2509 --mode walk-forward
+uv run python main.py backtest --symbol DCE.m2509 --mode walk-forward
 ```
 
 ---
@@ -80,14 +82,16 @@ python main.py backtest --symbol DCE.m2509 --mode walk-forward
 ### 查看回测列表
 
 ```bash
-python main.py report
+uv run python main.py report
 ```
 
 ### 查看详细报告
 
 ```bash
-open output/index.html
+open project_data/reports/index.html
 ```
+
+报告 JSON 位于 `project_data/reports/runs/rN/data/`，全局导航位于 `project_data/reports/data/nav.json`。
 
 ---
 
@@ -116,29 +120,29 @@ open output/index.html
 
 | 指标 | 说明 | 来源 |
 |------|------|------|
-| `total_return` | 总收益率（%） | [vnpy] |
-| `end_balance` | 最终权益余额 | [vnpy] |
-| `sharpe_ratio` | 夏普比率 | [vnpy] |
-| `max_drawdown` / `max_ddpercent` | 最大回撤（金额 / 百分比） | [vnpy] |
-| `annual_return` | 年化收益率（%） | [vnpy] |
-| `ewm_sharpe` | EWM 指数加权夏普比率 | [vnpy] |
+| `total_return` | 总收益率（%） | vn.py |
+| `end_balance` | 最终权益余额 | vn.py |
+| `sharpe_ratio` | 夏普比率 | vn.py |
+| `max_drawdown` / `max_ddpercent` | 最大回撤（金额 / 百分比） | vn.py |
+| `annual_return` | 年化收益率（%） | vn.py |
+| `ewm_sharpe` | EWM 指数加权夏普比率 | vn.py |
 
 ### 盈亏汇总
 
 | 指标 | 说明 | 来源 |
 |------|------|------|
-| `total_net_pnl` | 总净盈亏（扣完手续费和滑点后） | [vnpy] |
-| `total_commission` | 总手续费 | [vnpy] |
-| `total_slippage` | 总滑点成本 | [vnpy] |
-| `total_turnover` | 总成交金额 | [vnpy] |
+| `total_net_pnl` | 总净盈亏（扣完手续费和滑点后） | vn.py |
+| `total_commission` | 总手续费 | vn.py |
+| `total_slippage` | 总滑点成本 | vn.py |
+| `total_turnover` | 总成交金额 | vn.py |
 
 ### 交易级别统计
 
 | 指标 | 说明 | 统计口径 |
 |------|------|----------|
 | `win_rate` | 胜率 | 仅统计 pnl != 0 的平仓交易（排除开仓和持平） |
-| `win_trades` / `loss_trades` | 盈利/亏损笔数 | 同上，pnl > 0 为盈利，pnl < 0 为亏损 |
-| `avg_win` / `avg_loss` | 平均盈利/亏损金额 | 基于上述盈亏交易计算 |
+| `win_trades` / `loss_trades` | 盈利/亏损笔数 | pnl > 0 为盈利，pnl < 0 为亏损 |
+| `avg_win` / `avg_loss` | 平均盈利/亏损金额 | 基于盈亏交易计算 |
 | `win_loss_ratio` | 盈亏比 | avg_win / avg_loss |
 | `max_consecutive_win/loss` | 最大连续盈利/亏损次数 | 基于平仓时间顺序 |
 
@@ -146,7 +150,7 @@ open output/index.html
 
 | 指标 | 说明 | 来源 |
 |------|------|------|
-| `profit_days` / `loss_days` | 盈利/亏损交易日数 | [vnpy] |
+| `profit_days` / `loss_days` | 盈利/亏损交易日数 | vn.py |
 
 ---
 

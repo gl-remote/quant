@@ -23,10 +23,11 @@
 
 | 分类 | 技术 |
 |------|------|
-| 后端 | Python 3.10+、vn.py、TqSdk |
+| 后端 | Python 3.12、vn.py、TqSdk |
 | 前端 | React 18、TypeScript、Vite、Plotly |
 | 数据库 | SQLite + peewee ORM |
 | 配置 | Pydantic、TOML |
+| 环境 | uv |
 
 ---
 
@@ -36,10 +37,10 @@
 
 ```bash
 cd /Users/REDACTED_API_KEY/Documents/src/quant
-pip install -e .
+uv sync --all-groups
 
 # 前端依赖（报告模块）
-cd report/web
+cd workspace/report/web
 npm install
 ```
 
@@ -48,43 +49,48 @@ npm install
 复制配置模板并填写天勤 API 密钥：
 
 ```bash
-cp config/conf.example.toml config/conf.local.toml
+cp workspace/config/conf.example.toml workspace/config/conf.local.toml
 # 编辑 conf.local.toml，填入 tqsdk 的 api_key 和 api_secret
 ```
 
 ### 运行回测
 
 **单品种回测（带 GUI）**：
+
 ```bash
-python main.py backtest --symbol DCE.m2509 --strategy ma --start 2024-01-01 --end 2024-12-31 --gui
+uv run python main.py backtest --symbol DCE.m2509 --strategy ma --start 2024-01-01 --end 2024-12-31 --gui
 ```
 
 **批量回测**：
+
 ```bash
-python main.py backtest --pattern "DCE\.m" --strategy ma
+uv run python main.py backtest --pattern "DCE\.m" --strategy ma
 ```
 
 **查看报告**：
+
 ```bash
-open output/index.html
+open project_data/reports/index.html
 ```
 
 ---
 
 ## 项目结构
 
-```
+```text
 quant/
 ├── main.py                    # 命令行入口
-├── cli/                       # 命令行子包
-├── strategies/                # 策略子系统
-├── backtest/                  # 回测与优化引擎（含参数优化）
-├── data/                      # 数据管理
-├── report/                    # 报告生成
-│   └── web/                   # React 前端工程
-├── common/                    # 通用工具
-├── config/                    # 配置管理
-└── docs/                      # 项目文档
+├── workspace/
+│   ├── cli/                   # 命令行子包
+│   ├── strategies/            # 策略子系统
+│   ├── backtest/              # 回测与优化引擎
+│   ├── data/                  # 数据管理
+│   ├── report/                # 报告生成
+│   │   └── web/               # React 前端工程
+│   ├── common/                # 通用工具
+│   ├── config/                # 配置管理
+│   └── docs/                  # 项目文档
+└── project_data/              # 本地数据、报告、日志、缓存与诊断产物
 ```
 
 ---
@@ -93,11 +99,11 @@ quant/
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `export` | 导出 K 线数据 | `python main.py export --symbol DCE.m2509` |
-| `test` | 策略逻辑测试 | `python main.py test --strategy ma` |
-| `backtest` | 统一回测 | `python main.py backtest --symbol DCE.m2509` |
-| `report` | 查看回测报告 | `python main.py report --id 42` |
-| `live` | 实盘交易 | `python main.py live --symbol DCE.m2509` |
+| `export` | 导出 K 线数据 | `uv run python main.py export --symbol DCE.m2509` |
+| `test` | 策略逻辑测试 | `uv run python main.py test --strategy ma` |
+| `backtest` | 统一回测 | `uv run python main.py backtest --symbol DCE.m2509` |
+| `report` | 查看回测报告 | `uv run python main.py report --id 42` |
+| `live` | 实盘交易 | `uv run python main.py live --symbol DCE.m2509` |
 
 ---
 

@@ -15,7 +15,7 @@ from typing import Any
 
 from config import ConfigManager
 from data import DataManager
-from data.output_paths import output_root
+from data.output_paths import reports_root
 from loguru import logger
 
 from cli.workflows.report import (
@@ -39,13 +39,13 @@ def register(subparsers: Any) -> None:
         description="""回测数据管理：列表、详情查看、数据清理、报告重建
 
 用法:
-  python main.py report                   列出最近 20 条回测
-  python main.py report --id 42           查看指定回测详情
-  python main.py report --clean 42        删除指定回测及关联数据
-  python main.py report --build           重建所有运行的可视化报告
-  python main.py report --build --run 1   重建指定运行的可视化报告
-  python main.py report --symbol DCE.m2509  按品种过滤列表
-  python main.py report --strategy ma      按策略名称过滤列表
+  uv run python main.py report                   列出最近 20 条回测
+  uv run python main.py report --id 42           查看指定回测详情
+  uv run python main.py report --clean 42        删除指定回测及关联数据
+  uv run python main.py report --build           重建所有运行的可视化报告
+  uv run python main.py report --build --run 1   重建指定运行的可视化报告
+  uv run python main.py report --symbol DCE.m2509  按品种过滤列表
+  uv run python main.py report --strategy ma      按策略名称过滤列表
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -105,7 +105,7 @@ def _cmd_show(workflow: ReportWorkflow, backtest_id: int) -> None:
     report = workflow.get_detail(ReportDetailRequest(backtest_id=backtest_id))
     print(report)
 
-    print("\n💡 可视化报告: python main.py report --build  (或打开 output/index.html)")
+    print(f"\n💡 可视化报告: uv run python main.py report --build  (或打开 {reports_root() / 'index.html'})")
 
 
 def _cmd_build(run_id: int | None = None) -> None:
@@ -121,9 +121,9 @@ def _cmd_build(run_id: int | None = None) -> None:
     if run_id is not None:
         # 重建指定 run
         print(f"重建运行 r{run_id} 的可视化报告...")
-        workflow.build(ReportBuildRequest(run_id=run_id, incremental=False, output_dir=str(output_root())))
+        workflow.build(ReportBuildRequest(run_id=run_id, incremental=False, output_dir=str(reports_root())))
     else:
-        # 重建所有 run（从数据库查询，不依赖 output 目录）
+        # 重建所有 run（从数据库查询，不依赖报告目录）
         print("重建所有运行的可视化报告...")
         runs = dm.get_all_runs()
         if not runs:
@@ -133,7 +133,7 @@ def _cmd_build(run_id: int | None = None) -> None:
         for r in runs:
             rid = int(str(r["id"]))
             print(f"  → 重建 r{rid}...")
-            workflow.build(ReportBuildRequest(run_id=rid, incremental=False, output_dir=str(output_root())))
+            workflow.build(ReportBuildRequest(run_id=rid, incremental=False, output_dir=str(reports_root())))
         dm.close()
     print("完成。")
 

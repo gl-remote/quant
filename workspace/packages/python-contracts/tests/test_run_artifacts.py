@@ -1,6 +1,6 @@
 """Contract tests: validate real run artifacts against JSON schemas.
 
-These tests read the latest ``output/r{N}/data/*.json`` files and check them
+These tests read the latest ``project_data/reports/runs/r{N}/data/*.json`` files and check them
 against the schemas defined in ``workspace/packages/contracts/schemas/``.
 
 If no run directory exists (e.g. first-time clone), tests are skipped.
@@ -18,7 +18,7 @@ def test_latest_run_artifacts_conform_to_schemas(
 ) -> None:
     """All 7 artifacts of the latest run + nav.json pass schema validation."""
     if latest_run_dir is None:
-        pytest.skip("No output/r{N}/ directory found — run `bash tools/backtest-ma.sh` first")
+        pytest.skip("No project_data/reports/runs/r{N}/ directory found — run `make backtest-ma` first")
 
     issues = validate_run_artifacts(str(latest_run_dir), nav_path=str(nav_path) if nav_path else None)
     if issues:

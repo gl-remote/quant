@@ -14,7 +14,7 @@
 #                         （运行时默认不回写，有性能开销，仅 debug 时开）。
 #   3. --profile (可选)   用 cProfile 采样写出 .prof 文件，供 snakeviz 查看热点。
 #   4. report --build     回测后重建可视化 HTML 报告（K 线 + 指标叠加图 + 资金曲线），
-#                         打开 output/index.html 即可肉眼检查信号/指标。
+#                         打开 project_data/reports/index.html 即可肉眼检查信号/指标。
 #
 # 用法:
 #   bash backtest-debug.sh                       # 默认合约 + 默认策略
@@ -78,7 +78,7 @@ else
 fi
 
 if [ -n "$PROFILE_FLAG" ]; then
-    echo -e "${YELLOW}提示: 性能分析结果见 output/profiles/*.prof，查看: snakeviz <文件>${NC}"
+    echo -e "${YELLOW}提示: 性能分析结果见 project_data/profiles/*.prof，查看: snakeviz <文件>${NC}"
 fi
 
 # ── 步骤 2: 重建可视化报告 ──
@@ -99,5 +99,5 @@ fi
 echo ""
 echo "=========================================="
 echo -e "${GREEN}DEBUG 回测完成!${NC}"
-echo "报告: output/index.html"
+echo "报告: project_data/reports/index.html"
 echo "=========================================="

@@ -1,26 +1,26 @@
 #!/bin/bash
-# 清理回测/Optuna数据 — 不动 CSV / metadata
-# 用法: ./clean_data.sh
+# 分层清理 project_data — 默认保留行情 CSV / 数据库 metadata
+# 用法: ./clean_data.sh [backtests|reports|cache|logs|runtime]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/../.."
-DB="$ROOT_DIR/.quant_shared_data/quant_shared.db"
-OUT_DIR="$ROOT_DIR/output"
+PROJECT_DATA="$ROOT_DIR/project_data"
+DB="$PROJECT_DATA/database/quant_shared.db"
+TARGET="${1:-backtests}"
 
-echo "=========================================="
-echo "  清理回测 / Optuna 数据"
-echo "  CSV / metadata → 保留"
-echo "=========================================="
-
-# ── 1. 数据库 ──
-if [ -f "$DB" ]; then
+clean_backtests() {
     echo ""
-    echo "[1/2] 清理数据库..."
+    echo "[clean-backtests] 清理数据库回测 / Optuna 数据..."
+    if [ ! -f "$DB" ]; then
+        echo "  数据库不存在: $DB"
+        return
+    fi
 
     uv run python -c "
 import sqlite3, os
+
 db = '$DB'
 if not os.path.exists(db):
     exit()
@@ -65,23 +65,49 @@ conn.commit()
 conn.close()
 print('  数据库已清理')
 "
-fi
+}
 
-# ── 2. output ──
-echo ""
-echo "[2/2] 清理 output..."
-if [ -d "$OUT_DIR" ]; then
-    # 完全内联版本：所有资源（JS/CSS/JSON）都已打包到 index.html
-    # assets/ 目录仅在构建时需要，生成 index.html 后可安全删除
-    find "$OUT_DIR" -mindepth 1 -not -name index.html -not -path "$OUT_DIR/assets" -not -path "$OUT_DIR/assets/*" -exec rm -rf {} + 2>/dev/null || true
-    # 删除子目录中的 index.html (但保留 assets 内的)
-    find "$OUT_DIR" -mindepth 2 -not -path "$OUT_DIR/assets/*" -name 'index.html' -exec rm -f {} + 2>/dev/null || true
-    # 清理 assets/ 目录（index.html 已包含所有资源，无需外部引用）
-    rm -rf "$OUT_DIR/assets" 2>/dev/null || true
-    echo "  已清理 (仅保留 output/index.html)"
-fi
+clean_dir() {
+    local label="$1"
+    local dir="$2"
+    echo ""
+    echo "[$label] 清理 $dir"
+    if [ -d "$dir" ]; then
+        rm -rf "$dir"
+        echo "  已删除"
+    else
+        echo "  不存在，跳过"
+    fi
+}
+
+case "$TARGET" in
+    backtests)
+        clean_backtests
+        ;;
+    reports)
+        clean_dir "clean-reports" "$PROJECT_DATA/reports"
+        ;;
+    cache)
+        clean_dir "clean-cache" "$PROJECT_DATA/cache"
+        ;;
+    logs)
+        clean_dir "clean-logs" "$PROJECT_DATA/logs"
+        ;;
+    runtime)
+        clean_dir "clean-reports" "$PROJECT_DATA/reports"
+        clean_dir "clean-cache" "$PROJECT_DATA/cache"
+        clean_dir "clean-profiles" "$PROJECT_DATA/profiles"
+        clean_dir "clean-coverage" "$PROJECT_DATA/coverage"
+        ;;
+    *)
+        echo "未知清理目标: $TARGET" >&2
+        echo "可选: backtests | reports | cache | logs | runtime" >&2
+        exit 1
+        ;;
+esac
 
 echo ""
 echo "=========================================="
-echo "  清理完成 (CSV / metadata 已保留)"
+echo "  清理完成: $TARGET"
+echo "  已保留: project_data/market_data 与 project_data/database/export_metadata"
 echo "=========================================="

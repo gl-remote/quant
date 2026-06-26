@@ -4,18 +4,18 @@
 
 ## 当前内容
 
-JSON Schema（Draft 2020-12）描述 `output/` 下报告产物的字段结构：
+JSON Schema（Draft 2020-12）描述 `project_data/reports/` 下报告产物的字段结构：
 
 | Schema | 描述目标 | 生产者 | 主要消费者 |
 |---|---|---|---|
-| `run.schema.json` | `output/r{run_id}/data/run.json` | `report.builder` | 前端 r 列表页、Python 测试 |
-| `summary.schema.json` | `output/r{run_id}/data/summary.json` | 同上 | 前端 r 详情页（symbol 概览表） |
-| `backtests.schema.json` | `output/r{run_id}/data/backtests.json` | 同上 | 前端 r 详情页（参数 + daily 序列） |
-| `equity.schema.json` | `output/r{run_id}/data/equity.json` | 同上 | 前端净值曲线 |
-| `trades.schema.json` | `output/r{run_id}/data/trades.json` | 同上 | 前端成交记录表 |
-| `optuna.schema.json` | `output/r{run_id}/data/optuna.json` | 同上 | 前端 Optuna 图表 |
-| `logs.schema.json` | `output/r{run_id}/data/logs.json` | 同上 | 前端运行日志面板 |
-| `nav.schema.json` | `output/data/nav.json` | 同上 | 前端 r 列表页（跨 run 汇总） |
+| `run.schema.json` | `project_data/reports/runs/r{run_id}/data/run.json` | `report.builder` | 前端 r 列表页、Python 测试 |
+| `summary.schema.json` | `project_data/reports/runs/r{run_id}/data/summary.json` | 同上 | 前端 r 详情页（symbol 概览表） |
+| `backtests.schema.json` | `project_data/reports/runs/r{run_id}/data/backtests.json` | 同上 | 前端 r 详情页（参数 + daily 序列） |
+| `equity.schema.json` | `project_data/reports/runs/r{run_id}/data/equity.json` | 同上 | 前端净值曲线 |
+| `trades.schema.json` | `project_data/reports/runs/r{run_id}/data/trades.json` | 同上 | 前端成交记录表 |
+| `optuna.schema.json` | `project_data/reports/runs/r{run_id}/data/optuna.json` | 同上 | 前端 Optuna 图表 |
+| `logs.schema.json` | `project_data/reports/runs/r{run_id}/data/logs.json` | 同上 | 前端运行日志面板 |
+| `nav.schema.json` | `project_data/reports/data/nav.json` | 同上 | 前端 r 列表页（跨 run 汇总） |
 
 ## 角色定位
 

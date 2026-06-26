@@ -546,7 +546,7 @@ class DataFeed:
         :param requirements: 数据需求
         """
         from data.manager import DataManager
-        from data.output_paths import output_root
+        from data.output_paths import datafeed_cache_dir
 
         from .cache import get_cached_feed, get_cached_feed_by_symbol, set_cached_feed
 
@@ -588,7 +588,7 @@ class DataFeed:
                 return cached
 
         # 3. 尝试磁盘序列化缓存
-        feeds_dir = str(output_root() / "feeds" / symbol)
+        feeds_dir = str(datafeed_cache_dir() / symbol)
         feed = _try_load_from_disk(feeds_dir, requirements, src_date_range)
 
         # 4. 构造/初始化缓存目录

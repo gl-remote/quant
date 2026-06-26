@@ -39,7 +39,7 @@ def run_data_exports(
     - 自定义类型（equity/kline/trades/nav）: 有特殊的增量检查逻辑
     """
     dm = dm or DataManager()
-    cache = BuildCache(output_dir) if incremental else None
+    cache = BuildCache() if incremental else None
 
     # 任务描述符: (类型名, 指纹收集函数, 全量导出函数)
     export_tasks: list[tuple[str, Callable[[DataManager, int], object], Callable[..., object]]] = [

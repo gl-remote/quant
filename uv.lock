@@ -2417,6 +2417,7 @@ dev = [
     { name = "pandas-stubs" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "quantsmith-contracts" },
     { name = "ruff" },
     { name = "tomli-w" },
 ]
@@ -2447,6 +2448,7 @@ dev = [
     { name = "pandas-stubs", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=7.4" },
     { name = "pytest-cov", specifier = ">=4.1" },
+    { name = "quantsmith-contracts", editable = "workspace/packages/python-contracts" },
     { name = "ruff", specifier = ">=0.6" },
     { name = "tomli-w", specifier = ">=1.0" },
 ]

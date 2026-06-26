@@ -34,7 +34,7 @@ class RunLogHelper:
         self._sink_id: int | None = None
 
     def attach(self, run_id: int) -> None:
-        """开启 file sink：DEBUG 级别全量写入 output/r{run_id}/data/run.log
+        """开启 file sink：DEBUG 级别全量写入 project_data/logs/runs/r{run_id}/run.log
 
         保留 stderr 输出不变。
         """
@@ -118,7 +118,7 @@ class RunFinalizer:
             ReportBuildRequest(
                 run_id=run_id,
                 incremental=True,
-                output_dir=str(_output_root()),
+                output_dir=str(_reports_root()),
                 before_entry_html=lambda: self._export_logs(run_id),
             )
         )
@@ -147,11 +147,11 @@ class RunFinalizer:
         self._dm.store.finish_run(run_id, "failed")
         self._helper.detach()
         self._helper.export_json(run_id)
-        write_entry_html(str(_output_root()))
+        write_entry_html(str(_reports_root()))
 
 
-def _output_root() -> Path:
+def _reports_root() -> Path:
     """延迟导入避免循环依赖"""
-    from data.output_paths import output_root as _or
+    from data.output_paths import reports_root
 
-    return _or()
+    return reports_root()

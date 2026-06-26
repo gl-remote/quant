@@ -6,7 +6,7 @@
 - K线转换缓存（复用 KlineCache）
 
 目录结构：
-    output/.build_cache/
+    project_data/cache/report_build/
     ├── fingerprints/         # 数据指纹
     │   ├── run_{run_id}.json
     │   ├── summary_{run_id}.json
@@ -25,7 +25,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from data.output_paths import output_root
+from data.output_paths import report_build_cache_dir
 from loguru import logger
 
 
@@ -35,10 +35,8 @@ class BuildCache:
     FINGERPRINT_DIR = "fingerprints"
     FRONTEND_HASH_FILE = "frontend_hash"
 
-    def __init__(self, output_dir: str = ""):
-        root = Path(output_dir) if output_dir else output_root()
-        self._output_dir = root
-        self._cache_dir = root / ".build_cache"
+    def __init__(self, cache_dir: str = ""):
+        self._cache_dir = Path(cache_dir) if cache_dir else report_build_cache_dir()
         self._fingerprint_dir = self._cache_dir / self.FINGERPRINT_DIR
         self._ensure_cache_dirs()
 

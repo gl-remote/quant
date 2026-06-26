@@ -55,7 +55,11 @@ dev = [
     "tomli-w>=1.0",
     "ruff>=0.6",
     "jsonschema>=4.0",
+    "quantsmith-contracts",
 ]
+
+[tool.uv.sources]
+quantsmith-contracts = { workspace = true }
 
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
@@ -66,7 +70,7 @@ testpaths = ["workspace/tests", "workspace/packages/python-contracts/tests"]
 pythonpath = []
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers -m 'not slow' --cov=. --cov-report=term-missing --cov-report=html:output/coverage --import-mode=importlib"
+addopts = "-v --tb=short --strict-markers -m 'not slow' --cov=. --cov-report=term-missing --cov-report=html:project_data/coverage --import-mode=importlib"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "core: tests for strategy core module",

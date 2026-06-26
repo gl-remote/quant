@@ -84,7 +84,7 @@ class DataManager:
 
     def _get_data_dir(self) -> str:
         """获取数据目录"""
-        return ".quant_shared_data/csv"
+        return self._get_config().get_data_config().export_dir
 
     def _get_filename_template(self) -> str:
         """获取文件名模板配置"""
@@ -101,7 +101,9 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().db_path or ".quant_shared_data/quant_shared.db"
+            from data.output_paths import database_path
+
+            db_path = self._get_config().get_data_config().db_path or str(database_path())
             self._store = DataStore(db_path)
 
     @property

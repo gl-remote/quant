@@ -16,7 +16,6 @@ from typing import Any
 
 import pandas as pd
 from data import DataManager
-from data.output_paths import output_root
 from loguru import logger
 
 from report.cache import KlineCache
@@ -86,7 +85,7 @@ def export_kline_json(run_id: int, dm: DataManager | None = None) -> bool:
         True if any kline data was written, False if all hit cache
     """
     dm = _get_dm(dm)
-    cache = KlineCache(str(output_root()))
+    cache = KlineCache()
     summary = dm.get_run_summary(run_id)
     has_changes = False
 

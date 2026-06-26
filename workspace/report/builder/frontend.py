@@ -1,6 +1,6 @@
 """前端构建
 
-检查 React 源码 hash，必要时触发 npm run build，产出到 output/assets/。
+检查 React 源码 hash，必要时触发 npm run build，产出到 report assets 目录。
 
 本模块不感知数据内容，只负责前端 bundle 的构建与清理。
 """
@@ -25,7 +25,7 @@ def build_frontend(output_dir: str) -> None:
         logger.info("前端工程未初始化，跳过构建")
         return
 
-    cache = BuildCache(output_dir)
+    cache = BuildCache()
 
     if not cache.needs_frontend_rebuild(web_dir):
         logger.info("前端源码未变更，跳过构建")

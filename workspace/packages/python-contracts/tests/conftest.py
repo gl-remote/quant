@@ -16,12 +16,12 @@ def repo_root() -> Path:
 
 @pytest.fixture(scope="session")
 def latest_run_dir(repo_root: Path) -> Path | None:
-    """Return the latest ``output/r{N}`` directory, or None if none exists."""
-    output_dir = repo_root / "output"
-    if not output_dir.is_dir():
+    """Return the latest ``project_data/reports/runs/r{N}`` directory, or None if none exists."""
+    runs_dir = repo_root / "project_data" / "reports" / "runs"
+    if not runs_dir.is_dir():
         return None
     run_dirs: list[tuple[int, Path]] = []
-    for child in output_dir.iterdir():
+    for child in runs_dir.iterdir():
         if child.is_dir() and child.name.startswith("r") and child.name[1:].isdigit():
             run_dirs.append((int(child.name[1:]), child))
     if not run_dirs:
@@ -33,5 +33,5 @@ def latest_run_dir(repo_root: Path) -> Path | None:
 @pytest.fixture(scope="session")
 def nav_path(repo_root: Path) -> Path | None:
     """Return the nav.json path, or None if missing."""
-    p = repo_root / "output" / "data" / "nav.json"
+    p = repo_root / "project_data" / "reports" / "data" / "nav.json"
     return p if p.is_file() else None

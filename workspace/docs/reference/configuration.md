@@ -45,9 +45,12 @@ val_ratio = 0.2
 test_ratio = 0.2
 
 [data]
-data_dir = ".quant_shared_data"
-csv_dir = "csv"
-db_file = "quant_shared.db"
+provider = "tqsdk"
+cache_enabled = false
+base_dir = "project_data"
+export_dir = "project_data/market_data/csv"
+db_path = "project_data/database/quant_shared.db"
+filename_template = "{symbol}.{provider}.{interval}.csv"
 
 [optimizer]
 enabled = true

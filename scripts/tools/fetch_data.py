@@ -62,6 +62,7 @@ def fetch_all(
 
     print(f"\n{'=' * 65}")
     print(f"  一键拉取数据  |  数据源: {source}  |  周期: {interval}")
+    print(f"  CSV 目录: {dc.export_dir}")
     print(f"{'=' * 65}\n")
 
     for i, (symbol, start, end, desc) in enumerate(TARGET_SYMBOLS, 1):

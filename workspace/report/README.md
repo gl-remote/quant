@@ -117,12 +117,12 @@ build_all(output_dir, run_id)
 │   └── 无条件导出全部 7 种数据类型 + 重建前端
 │
 ├── build_frontend()         ← cd web && npm run build
-│   └── 输出 output/assets/index.js
+│   └── 输出 project_data/reports/assets/index.js
 │
 └── write_entry_html()       ← 仅数据变更时执行
-    └── 读取所有 output/r*/data/*.json + index.js
+    └── 读取所有 project_data/reports/runs/r*/data/*.json + index.js
         → 注入为 window.__DATA__ + <script src="...">
-        → 写入 output/index.html
+        → 写入 project_data/reports/index.html
 ```
 
 ---
@@ -160,7 +160,7 @@ build_all(output_dir, run_id)
 
 ### 6.3 缓存失效
 
-以下情况需手动清除缓存（`rm -rf output/.build_cache output/.kline_cache`）：
+以下情况需手动清除缓存（`make clean-cache`）：
 - 修改了 `build_kline_dict` 或任何 JSON 导出逻辑
 - 前端构建工具链升级
 - 缓存与实际数据不一致时

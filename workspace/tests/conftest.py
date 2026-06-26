@@ -197,9 +197,9 @@ def base_config_dict():
             },
         ],
         "data": {
-            "base_dir": ".quant_shared_data",
-            "db_path": ".quant_shared_data/quant_shared.db",
-            "export_dir": ".quant_shared_data/csv",
+            "base_dir": "project_data",
+            "db_path": "project_data/database/quant_shared.db",
+            "export_dir": "project_data/market_data/csv",
             "filename_template": "{symbol}.{provider}.{interval}.csv",
         },
         "backtest": {

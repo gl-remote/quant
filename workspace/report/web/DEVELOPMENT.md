@@ -78,13 +78,13 @@ web/
 ## 三、数据流
 
 ```
-Python build_all()
+Python report build
   │
-  ├── export_*_json()         生成各 JSON 文件到 output/r{id}/data/
+  ├── export_*_json()         生成各 JSON 文件到 project_data/reports/runs/r{id}/data/
   │
-  ├── build_frontend()        cd web && npm run build → output/assets/index.js
+  ├── build_frontend()        cd web && npm run build → project_data/reports/assets/index.js
   │
-  └── write_entry_html()      读取 index.js + 所有 JSON → 注入到 output/index.html
+  └── write_entry_html()      读取 index.js + 所有 JSON → 注入到 project_data/reports/index.html
                                 ┌─────────────────────────────────┐
                                 │ <script>window.__DATA__ = {     │
                                 │   "data/nav.json": {...},       │
@@ -220,8 +220,8 @@ plan.md                       ← 项目路线图 + 已知缺陷
 ### 8.6 修改前端后必做
 
 ```bash
-cd report/web && npm run build    # 确保无 TS 错误 + 打包成功
-cd ../.. && python3 -c "from report.builder import build_all; build_all('output', 1)"  # 全链路验证
+cd workspace/report/web && npm run build    # 确保无 TS 错误 + 打包成功
+cd ../../.. && uv run python main.py report --build  # 全链路验证
 ```
 
-打开 `output/index.html` 验证功能正常。
+打开 `project_data/reports/index.html` 验证功能正常。

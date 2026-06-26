@@ -3,7 +3,10 @@
 Usage::
 
     from quantsmith_contracts.validate import validate_run_artifacts
-    issues = validate_run_artifacts("output/r1/data", nav_path="output/data/nav.json")
+    issues = validate_run_artifacts(
+        "project_data/reports/runs/r1",
+        nav_path="project_data/reports/data/nav.json",
+    )
     for issue in issues:
         print(issue)
 
@@ -42,8 +45,8 @@ def validate_run_artifacts(
     ``nav_path`` for the global navigation index.
 
     Args:
-        run_dir:  Path to ``output/r{run_id}``.
-        nav_path: Path to ``output/data/nav.json`` (optional).
+        run_dir:  Path to ``project_data/reports/runs/r{run_id}``.
+        nav_path: Path to ``project_data/reports/data/nav.json`` (optional).
 
     Returns:
         List of human-readable issue descriptions. Empty list means all OK.

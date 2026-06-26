@@ -37,7 +37,7 @@ class ReportBuildRequest:
     Attributes:
         run_id: 目标运行 ID
         incremental: 是否启用基于数据指纹的增量导出（手动重建用 False，run 收尾用 True）
-        output_dir: 输出目录，None 时取 output_root()
+        output_dir: 输出目录，None 时取默认报告目录。
         before_entry_html: frontend 之后、entry_html 之前执行的回调（如导出 logs.json）
     """
 
@@ -93,7 +93,7 @@ class ReportWorkflow:
         """
         from report.builder import build_frontend, run_data_exports, write_entry_html
 
-        output_dir = request.output_dir or str(_output_root())
+        output_dir = request.output_dir or str(_reports_root())
         start_time = time.time()
         success_count = 0
         failed_tasks: list[tuple[str, str]] = []
@@ -168,8 +168,8 @@ class ReportWorkflow:
         return self._dm.delete_backtest(request.backtest_id)
 
 
-def _output_root() -> str:
+def _reports_root() -> str:
     """延迟导入避免循环依赖"""
-    from data.output_paths import output_root
+    from data.output_paths import reports_root
 
-    return str(output_root())
+    return str(reports_root())

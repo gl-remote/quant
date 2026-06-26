@@ -9,5 +9,8 @@ Examples::
     from quantsmith_contracts.validate import validate_run_artifacts
 
     schema = load_schema("run")
-    validate_run_artifacts(run_dir="output/r1/data", nav_path="output/data/nav.json")
+    validate_run_artifacts(
+        run_dir="project_data/reports/runs/r1",
+        nav_path="project_data/reports/data/nav.json",
+    )
 """

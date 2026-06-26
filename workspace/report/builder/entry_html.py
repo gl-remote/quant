@@ -1,6 +1,6 @@
 """入口 HTML 打包
 
-将前端 bundle（JS/CSS）与所有 JSON 数据文件内联到单个 output/index.html，
+将前端 bundle（JS/CSS）与所有 JSON 数据文件内联到单个 project_data/reports/index.html，
 避免 file:// 协议下的 CORS 问题，支持离线浏览。
 
 本模块只读文件系统快照，不生成任何数据；调用方须保证调用前所有 JSON 已就绪。
@@ -16,7 +16,7 @@ from loguru import logger
 
 
 def write_entry_html(output_dir: str) -> None:
-    """生成 output/index.html 单入口文件
+    """生成 project_data/reports/index.html 单入口文件
 
     完全内联版本：将所有资源（JS、CSS、JSON 数据）打包到单个 HTML 文件，
     避免 file:// 协议下的 CORS 问题。
@@ -90,7 +90,7 @@ def _build_preload_script(output_dir: str) -> str:
     _collect_json(root / "data", "data", data_map)
 
     # 收集每个运行的数据
-    for run_dir in sorted(root.glob("r*/data")):
+    for run_dir in sorted((root / "runs").glob("r*/data")):
         prefix = run_dir.parent.name + "/data"
         _collect_json(run_dir, prefix, data_map)
 

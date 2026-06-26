@@ -12,7 +12,7 @@ import json
 import os
 from pathlib import Path
 
-from data.output_paths import output_root
+from data.output_paths import kline_json_cache_dir
 from loguru import logger
 
 
@@ -20,7 +20,7 @@ class KlineCache:
     """K 线数据转换缓存
 
     用法:
-        cache = KlineCache(str(output_root()))
+        cache = KlineCache()
         data = cache.get("DCE.m2601", "/path/to/data.csv", "1m")
         if data is None:
             data = build_kline_dict(...)
@@ -28,9 +28,8 @@ class KlineCache:
         cache.copy_to("DCE.m2601", "/path/to/data.csv", "1m", dest_path)
     """
 
-    def __init__(self, output_dir: str = ""):
-        root = Path(output_dir) if output_dir else output_root()
-        self._cache_dir = root / ".kline_cache"
+    def __init__(self, cache_dir: str = ""):
+        self._cache_dir = Path(cache_dir) if cache_dir else kline_json_cache_dir()
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
     # 缓存版本号：数据结构变更时递增

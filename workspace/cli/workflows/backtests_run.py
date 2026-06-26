@@ -504,7 +504,9 @@ class BacktestRunWorkflow:
         DataFeed.dump_indicators_default = req.dump_indicators
         pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
         if req.profile:
-            profile_path = Path(f"output/profiles/backtest_{req.strategy}_{datetime.now():%Y%m%d_%H%M%S}.prof")
+            from data.output_paths import profiles_dir
+
+            profile_path = profiles_dir() / f"backtest_{req.strategy}_{datetime.now():%Y%m%d_%H%M%S}.prof"
             profile_path.parent.mkdir(parents=True, exist_ok=True)
             profiler = cProfile.Profile()
             engine_results = profiler.runcall(cast(Any, engine.run), cast(Any, pairs))

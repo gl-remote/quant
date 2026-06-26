@@ -51,5 +51,5 @@ fi
 echo ""
 echo "=========================================="
 echo -e "${GREEN}测试完成!${NC}"
-echo "报告: output/index.html"
+echo "报告: project_data/reports/index.html"
 echo "=========================================="
