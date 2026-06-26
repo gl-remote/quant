@@ -144,7 +144,7 @@ def exit_for_take_profit(expr: str) -> Callable[[T], T]:
 def exit_for_stop_loss(expr: str) -> Callable[[T], T]:
     """止损出场切面 — 有持仓时评估表达式条件，触发则写入 ``risk.stop_loss.exit``。
 
-    :param expr: DSL 表达式，如 ``"profit_pct() >= {stop_loss_ratio}"``。
+    :param expr: DSL 表达式，如 ``"loss_pct() >= {stop_loss_ratio}"``。
     """
     return _exit_aspect("stop_loss", SIGNAL_STOP_LOSS, parse_expr(expr))
 

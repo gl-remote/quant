@@ -182,8 +182,15 @@ class TestMACrossParams:
         assert cfg.atr_take_profit_multiplier == 3.0
         assert cfg.kdj_oversold == 30
         assert cfg.kdj_overbought == 70
-        assert cfg.signal_profile == "full"
-        assert cfg.exit_on_reverse_signal is False
+        assert cfg.signal_profile == "trend_macd"
+        assert cfg.exit_on_reverse_signal is True
+        assert cfg.kdj_pullback_long == 45
+        assert cfg.kdj_pullback_short == 55
+        assert cfg.reverse_confirm_bars == 0
+        assert cfg.min_hold_bars == 0
+        assert cfg.max_hold_bars == 0
+        assert cfg.entry_cooldown_bars == 0
+        assert cfg.trend_gap_atr == 0.0
 
     def test_custom_params(self):
         cfg = MACrossParams(
@@ -273,14 +280,14 @@ class TestMaStrategyEntry:
         assert "short" in signal.reason.lower() or "entry" in signal.reason.lower()
         assert signal.volume > 0
 
-    def test_sma_only_profile_allows_entry_without_confirm_keys(self):
+    def test_trend_only_profile_allows_entry_without_confirm_keys(self):
         strat = MaStrategyCore()
         cfg = MACrossParams(signal_profile="sma_only")
         ctx = _make_ctx(
             close_prices=[100.0] * 30,
             periods={"1m": 30, "5m": 10, "15m": 10},
         )
-        trend_key = "sma_sma_short_5m_gt_sma_sma_long_5m"
+        trend_key = "sma_sma_short_15m_gt_sma_sma_long_15m"
         ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
 
         state = State(
@@ -301,7 +308,7 @@ class TestMaStrategyEntry:
             close_prices=[100.0] * 30,
             periods={"1m": 30, "5m": 10, "15m": 10},
         )
-        trend_key = "sma_sma_short_5m_gt_sma_sma_long_5m"
+        trend_key = "sma_sma_short_15m_gt_sma_sma_long_15m"
         ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
 
         state = State(

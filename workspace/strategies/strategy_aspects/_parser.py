@@ -123,7 +123,7 @@ class MetricRefExpr:
 
 @dataclass(frozen=True)
 class CompareExpr:
-    """比较表达式，如 ``macd@1m > 0``、``profit_pct() >= {stop_loss_ratio}``"""
+    """比较表达式，如 ``macd@1m > 0``、``loss_pct() >= {stop_loss_ratio}``"""
 
     left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
     op: str
@@ -540,7 +540,7 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
 
 
 def _call_builtin(name: str, ctx: Any, config: Any) -> float | None:
-    """调用内置函数（profit_abs, cooldown 等）；数据不足时返回 None。"""
+    """调用内置函数（profit_abs, loss_abs, cooldown 等）；数据不足时返回 None。"""
     # 这些函数需要 state 中的持仓/成交数据，仅在风控场景下有效
     # 方向切面在空仓时调用会返回 None（由空安全机制静默跳过）
     try:
@@ -550,6 +550,10 @@ def _call_builtin(name: str, ctx: Any, config: Any) -> float | None:
             return _builtin_profit_abs(ctx, config)
         if name == "profit_pct":
             return _builtin_profit_pct(ctx, config)
+        if name == "loss_abs":
+            return _builtin_loss_abs(ctx, config)
+        if name == "loss_pct":
+            return _builtin_loss_pct(ctx, config)
         if name == "peak_profit":
             return _builtin_peak_profit(ctx, config)
         if name == "drawdown_pct":
@@ -602,19 +606,41 @@ def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
 
 
 def _builtin_profit_abs(ctx: Any, config: Any) -> float | None:
-    """绝对盈亏 |close - entry_price|"""
+    """浮盈点数；没有浮盈时返回 0。"""
     pos = ctx.state.position if hasattr(ctx, "state") else None
     if pos is None or not pos.direction:
         return None
-    return abs(ctx.bar.close - pos.entry_price)  # type: ignore[no-any-return]
+    if pos.direction == "long":
+        return max(ctx.bar.close - pos.entry_price, 0.0)  # type: ignore[no-any-return]
+    return max(pos.entry_price - ctx.bar.close, 0.0)  # type: ignore[no-any-return]
 
 
 def _builtin_profit_pct(ctx: Any, config: Any) -> float | None:
-    """盈亏比例 |close - entry_price| / entry_price"""
+    """浮盈比例；没有浮盈时返回 0。"""
+    profit_abs = _builtin_profit_abs(ctx, config)
     pos = ctx.state.position if hasattr(ctx, "state") else None
-    if pos is None or not pos.direction or pos.entry_price == 0:
+    if profit_abs is None or pos is None or pos.entry_price == 0:
         return None
-    return abs(ctx.bar.close - pos.entry_price) / pos.entry_price  # type: ignore[no-any-return]
+    return profit_abs / pos.entry_price  # type: ignore[no-any-return]
+
+
+def _builtin_loss_abs(ctx: Any, config: Any) -> float | None:
+    """浮亏点数；没有浮亏时返回 0。"""
+    pos = ctx.state.position if hasattr(ctx, "state") else None
+    if pos is None or not pos.direction:
+        return None
+    if pos.direction == "long":
+        return max(pos.entry_price - ctx.bar.close, 0.0)  # type: ignore[no-any-return]
+    return max(ctx.bar.close - pos.entry_price, 0.0)  # type: ignore[no-any-return]
+
+
+def _builtin_loss_pct(ctx: Any, config: Any) -> float | None:
+    """浮亏比例；没有浮亏时返回 0。"""
+    loss_abs = _builtin_loss_abs(ctx, config)
+    pos = ctx.state.position if hasattr(ctx, "state") else None
+    if loss_abs is None or pos is None or pos.entry_price == 0:
+        return None
+    return loss_abs / pos.entry_price  # type: ignore[no-any-return]
 
 
 def _builtin_peak_profit(ctx: Any, config: Any) -> float | None:

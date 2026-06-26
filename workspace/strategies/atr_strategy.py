@@ -130,9 +130,9 @@ class ATRCrossParams:
     "peak_profit() >= atr@15m * {trailing_activation_atr} && drawdown_pct() >= {trailing_drawdown_ratio}"
 )
 @exit_for_take_profit("profit_abs() >= atr@15m * {atr_take_profit_multiplier}")
-@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+@exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
 @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
-@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+@exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
 class ATRStrategyCore(Strategy[ATRCrossParams]):
     """ATR 策略核心 — 消费方向与风控建议做决策
 

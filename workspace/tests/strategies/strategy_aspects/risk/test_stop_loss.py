@@ -54,7 +54,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+@exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
 class _SimpleStrategy:
     """最简单的装饰器测试策略"""
 

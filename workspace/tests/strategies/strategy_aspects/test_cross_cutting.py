@@ -126,7 +126,7 @@ class TestRiskExecutesWithDirection:
     def test_stop_loss_with_confirm(self):
         """止损触发时 confirm 切面也执行"""
 
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
@@ -184,7 +184,7 @@ class TestRiskPassesThrough:
     def test_no_position_confirm_executes(self):
         """无持仓时 risk 不触发，confirm 切面正常写入"""
 
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
         @confirm_long("macd@1m > 0")
         class _S:
@@ -207,7 +207,7 @@ class TestRiskPassesThrough:
     def test_position_no_trigger_confirm_executes(self):
         """有持仓但止损未触发时 confirm 切面正常写入"""
 
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
         @confirm_long("macd@1m > 0")
         class _S:
@@ -242,7 +242,7 @@ class TestCooldownPlusStopLoss:
         """有持仓 + 冷却期内 → cooldown 不写入，止损正常触发"""
 
         @entry_block_after_stop_loss("cooldown() < 30")
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -275,7 +275,7 @@ class TestCooldownPlusStopLoss:
         """无持仓 + 冷却期内 → cooldown 写入 risk，止损不检查"""
 
         @entry_block_after_stop_loss("cooldown() < 30")
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -310,7 +310,7 @@ class TestDiagnosticsCompleteness:
     def test_stop_loss_diagnostics_with_direction(self):
         """止损触发 → diagnostics 有止损信息，direction 切面 diagnostics 也在"""
 
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
@@ -346,8 +346,8 @@ class TestMultipleRiskAdvisory:
     def test_fixed_stop_and_atr_stop_both_trigger(self):
         """固定止损和 ATR 止损都触发时，两个切面都写入 risk"""
 
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
-        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -473,7 +473,7 @@ class TestRiskInvariants:
     """策略风控核心不变量。"""
 
     def test_exit_risk_never_triggers_without_position(self):
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
         class _S:
             def data_requirements(self, config):
@@ -496,7 +496,7 @@ class TestRiskInvariants:
     def test_entry_cooldown_never_blocks_open_position_exit(self):
         @entry_block_after_stop_loss("cooldown() < 30")
         @entry_block_after_take_profit("cooldown() < 30")
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -524,7 +524,7 @@ class TestRiskInvariants:
 
     def test_multiple_risk_advisories_survive_flush_without_overwrite(self):
         @entry_block_after_stop_loss("cooldown() < 30")
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         class _StopLossStrategy:
             def data_requirements(self, config):
                 return None
@@ -574,7 +574,7 @@ class TestRiskInvariants:
         assert take_ctx.aspects.diagnostics["risk_entry_block_take_profit"] == [SIGNAL_TRADE_COOLDOWN]
 
     def test_fixed_ratio_long_short_stop_loss_boundaries_are_symmetric(self):
-        @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+        @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -595,7 +595,7 @@ class TestRiskInvariants:
         assert [r.name for r in short_ctx.aspects.risk.stop_loss.exit] == [SIGNAL_STOP_LOSS]
 
     def test_atr_none_and_zero_do_not_pollute_risk_diagnostics(self):
-        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+        @exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
         class _S:
             def data_requirements(self, config):
                 return None
@@ -629,7 +629,7 @@ class TestDataRequirementsCrossMerge:
 
         from strategies import DataRequirements
 
-        @exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+        @exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
         @confirm_long("macd@1m > 0")
         class _S:
             def data_requirements(self, config):
