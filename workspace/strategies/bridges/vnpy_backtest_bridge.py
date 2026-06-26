@@ -293,7 +293,7 @@ class VnpyBacktestBridge(CtaTemplate):
 
         if signal.action == TRADE_ACTION_SELL:
             if self.pos > 0:
-                self._execute_trade(signal, price, bar_time, is_sell=True)
+                self._execute_trade(signal, price, bar_time)
                 return True
             if self.pos == 0:
                 self._execute_trade(signal, price, bar_time, is_short=True)
@@ -434,7 +434,6 @@ class VnpyBacktestBridge(CtaTemplate):
         is_buy: bool = False,
         is_short: bool = False,
         is_cover: bool = False,
-        is_sell: bool = False,
     ) -> None:
         """执行交易委托 — 统一入口
 
@@ -444,7 +443,6 @@ class VnpyBacktestBridge(CtaTemplate):
         :param is_buy: 做多开仓
         :param is_short: 做空开仓
         :param is_cover: 做空平仓
-        :param is_sell: 做多平仓
         """
         self._last_signal_reason = signal.reason  # 暂存给 on_trade 使用
 

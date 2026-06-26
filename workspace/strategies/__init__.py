@@ -236,6 +236,7 @@ from .runtime import (
 )
 
 # 具体策略实现
+from .atr_strategy import ATRCrossParams, ATRStrategyCore
 from .ma_strategy import MaStrategyCore, MACrossParams
 
 # 工具函数（来自 utils）
@@ -306,6 +307,8 @@ __all__ = [
     # 策略实现
     "MaStrategyCore",
     "MACrossParams",
+    "ATRStrategyCore",
+    "ATRCrossParams",
     # 工具函数
     "load_strategy",
     "get_strategy_class_name",

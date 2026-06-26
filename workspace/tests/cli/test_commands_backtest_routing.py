@@ -23,6 +23,7 @@ def _make_args(**overrides):
         "trials": None,
         "parallel": False,
         "workers": None,
+        "early_stop_patience": 0,
         "profile": False,
         "no_search": False,
         "dump_indicators": False,

@@ -503,7 +503,7 @@ class VnpyBacktestEngine:
             statistics = engine.calculate_statistics()
 
             # ── 步骤 6: 解析与格式化交易记录 ────
-            formatted_trades = self._parse_trades(engine, symbol, cr, sl, cs)
+            formatted_trades = self._parse_trades(engine, symbol, cr, cs)
 
             # ── 步骤 7: 从逐笔交易计算附加统计 ──
             self._calculate_trade_stats(statistics, formatted_trades)
@@ -663,7 +663,6 @@ class VnpyBacktestEngine:
         engine: Any,
         symbol: str,
         rate: float,
-        slip: float,
         size: float,
     ) -> list[dict[str, Any]]:
         """从 vnpy engine 中提取交易记录并格式化
@@ -681,7 +680,6 @@ class VnpyBacktestEngine:
             engine: vnpy BacktestingEngine 实例
             symbol: 品种代码（注入到每条记录）
             rate: 费率（用于计算手续费）
-            slip: 滑点（价格单位）
             size: 合约乘数
 
         Returns:

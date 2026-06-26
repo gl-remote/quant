@@ -22,7 +22,8 @@ from config import ConfigManager
 from data import DataManager
 from data.models import database, get_live_session_model, get_live_trade_model
 from loguru import logger
-from strategies import Signal, TqsdkStrategyBridge
+from strategies import Signal
+from strategies.bridges.tqsdk_bridge import TqsdkStrategyBridge
 from strategies.ma_strategy import MACrossParams
 from strategies.utils import apply_strategy_config, get_strategy_class_name, load_strategy
 

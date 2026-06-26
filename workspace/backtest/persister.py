@@ -147,7 +147,7 @@ class SearchResultPersister:
             "type": "vnpy",
             "optimizer": search_type,
             "study_name": study_name,
-            "study_db": self._dm.store.db_path,  # noqa: phase-6-only
+            "study_db": self._dm.store.db_path,
         }
         all_ids: list[int] = []
         for i, trial in enumerate(result.trial_data):

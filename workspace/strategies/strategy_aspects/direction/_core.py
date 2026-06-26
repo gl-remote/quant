@@ -47,13 +47,6 @@ def _resolve_template(value: Any, config: Any) -> Any:
     return value
 
 
-def _resolve_threshold(threshold: float | str, config: Any) -> float:
-    """解析阈值：字符串从 config 取值，数值直接返回"""
-    if isinstance(threshold, str):
-        return float(getattr(config, threshold))
-    return float(threshold)
-
-
 def _build_indicator_requirements(metric: MetricRef, config: Any) -> Any:
     """从 MetricRef 构建 DataRequirements，解析模板值"""
     from ...core.indicators import IndicatorSpec

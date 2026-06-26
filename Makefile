@@ -8,6 +8,7 @@
 #   make                 # 显示帮助
 #   make backtest        # 先 clean 再跑 MA 全链路回测
 #   make backtest-ma     # 只跑 MA 全链路回测
+#   make backtest-atr    # 只跑 ATR 全链路回测
 #   make backtest-ma PATTERN='SHFE\.rb.*'   # 临时换合约筛选正则
 #   make backtest-quick  # 轻量回测（trials=3，不 clean），适合快速验证
 #   make debug           # 单次 DEBUG 回测
@@ -32,7 +33,7 @@ PATTERN ?= DCE\.m.*
 TRIALS ?= 30
 
 .DEFAULT_GOAL := help
-.PHONY: help backtest backtest-ma backtest-quick debug report clean fetch signal
+.PHONY: help backtest backtest-ma backtest-atr backtest-quick debug report clean fetch signal
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -43,6 +44,9 @@ clean: ## 清理回测 / Optuna 数据（保留 CSV / metadata）
 
 backtest-ma: ## MA 策略全链路回测（含贝叶斯搜索）
 	bash scripts/tools/backtest-ma.sh $(ARGS)
+
+backtest-atr: ## ATR 策略全链路回测（含贝叶斯搜索）
+	bash scripts/tools/backtest-atr.sh $(ARGS)
 
 backtest: clean backtest-ma ## 先清理再跑 MA 全链路回测
 

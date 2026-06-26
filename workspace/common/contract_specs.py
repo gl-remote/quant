@@ -21,9 +21,6 @@ from dataclasses import dataclass
 
 # 常见期货公司加收标准（元/手，单边）
 BROKER_ADDON_DFCF = 1.3  # 东方财富: 玉米开平共5元→单边2.5, 交易所1.2, 加收=2.5-1.2=1.3
-BROKER_ADDON_MEDIUM = 0.5  # 中等加收
-BROKER_ADDON_HIGH = 1.0  # 较高加收（默认开户）
-BROKER_ADDON_EXCHANGE = 0.0  # 仅交易所标准
 
 
 @dataclass

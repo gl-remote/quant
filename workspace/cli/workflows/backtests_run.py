@@ -229,7 +229,7 @@ class BacktestRunWorkflow:
         阶段 10 将统一接入 RunLogHelper / RunFinalizer / 前端 JSON。
         """
         from common.tqsdk_imports import tqsdk
-        from strategies import TqsdkStrategyBridge
+        from strategies.bridges.tqsdk_bridge import TqsdkStrategyBridge
 
         bc = self._cm.get_backtest_config()
         strategy_params = self._strategy_params(req.strategy)

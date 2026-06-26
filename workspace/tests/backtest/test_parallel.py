@@ -22,7 +22,7 @@ from strategies.runtime import DataRequirements, EventsRequirements
 # ── 辅助函数 ─────────────────────────────────────────────
 
 
-def make_price_df(start: str = "2024-01-01", n: int = 480, seed: int = 42) -> pd.DataFrame:
+def make_price_df(start: str = "2024-01-01", n: int = 120, seed: int = 42) -> pd.DataFrame:
     """生成单品种单周期的模拟 K 线数据（1m 级别）
 
     Args:
@@ -169,11 +169,20 @@ class TestBatchMode:
         df = make_price_df()
         config = make_basic_config()
         _install_noop_strategy(monkeypatch)
+        create_called = False
+
+        def _fake_create_placeholder_record(*args, **kwargs):
+            nonlocal create_called
+            create_called = True
+            return object()
+
+        monkeypatch.setattr(VnpyBacktestEngine, "_create_placeholder_record", _fake_create_placeholder_record)
         engine = VnpyBacktestEngine(config)
         pairs = [("DCE.m2501", df, "noop_strategy", {})]
         results = engine.run(pairs, batch_mode=True)
 
         assert len(results) == 1
+        assert create_called is False
         # batch_mode 下 backtest_id 应为 None（占位的 -1 在 _create_backtest_result 中被忽略）
         assert results[0].backtest_id is None or results[0].backtest_id == -1
 
@@ -206,8 +215,8 @@ class TestBatchMode:
         _install_noop_strategy(monkeypatch)
         engine = VnpyBacktestEngine(config)
 
-        df1 = make_price_df("2024-01-01", n=240, seed=1)
-        df2 = make_price_df("2024-06-01", n=240, seed=2)
+        df1 = make_price_df("2024-01-01", seed=1)
+        df2 = make_price_df("2024-06-01", seed=2)
         pairs = [
             ("DCE.m2501", df1, "noop_strategy", {}),
             ("DCE.m2505", df2, "noop_strategy", {}),
@@ -343,14 +352,10 @@ class TestParallelBacktestOptimizer:
         assert result.study_name
         assert result.actual_seed == 42
 
-    def test_empty_search_space(self) -> None:
-        """空搜索空间直接返回，不启动子进程"""
-        from data.manager import DataManager
-
-        # optimize() 在空搜索空间早返回前会先解析 optuna storage url，
-        # 需要全局 DB 已初始化（实际运行时由 DataManager 完成）。
-        _ = DataManager().store
-        df = make_price_df(n=240)
+    def test_empty_search_space(self, monkeypatch) -> None:
+        """空搜索空间直接返回，不启动子进程，也不初始化真实数据库"""
+        monkeypatch.setattr("data.optuna_query.get_optuna_url", lambda: None)
+        df = make_price_df()
         config = make_basic_config()
         optimizer = ParallelBacktestOptimizer(
             datasets=[("DCE.m2501", df)],
