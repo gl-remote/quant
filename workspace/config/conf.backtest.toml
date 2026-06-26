@@ -1,6 +1,10 @@
 [app]
 mode = "backtest"
 
+[environment]
+name = "backtest"
+debug = true
+
 [data]
 environment = "backtest"
 database_path = "project_data/database/backtest/quant.db"

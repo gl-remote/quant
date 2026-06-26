@@ -158,6 +158,28 @@ class TestAccountInfo:
         assert result["account"]["api_key"] == "real_key_123"
         assert result["account"]["api_secret"] == "real_secret_456"
 
+    def test_account_fields_from_config(self, base_config_dict, monkeypatch):
+        monkeypatch.delenv("TQSDK_API_KEY", raising=False)
+        monkeypatch.delenv("TQSDK_API_SECRET", raising=False)
+        base_config_dict["third_party"] = {
+            "services": [
+                {
+                    "name": "tqsdk",
+                    "api_key": "real_key_123",
+                    "api_secret": "real_secret_456",
+                    "account_type": "tqaccount",
+                    "broker_id": "BROKER",
+                    "broker_user": "USER",
+                    "broker_password": "PASS",
+                }
+            ]
+        }
+        result = ProjectConfig._resolve_account(base_config_dict)
+        assert result["account"]["account_type"] == "tqaccount"
+        assert result["account"]["broker_id"] == "BROKER"
+        assert result["account"]["broker_user"] == "USER"
+        assert result["account"]["broker_password"] == "PASS"
+
     def test_env_var_priority_over_config(self, monkeypatch, base_config_dict):
         monkeypatch.setenv("TQSDK_API_KEY", "env_key_abc")
         monkeypatch.setenv("TQSDK_API_SECRET", "env_secret_xyz")
@@ -167,12 +189,14 @@ class TestAccountInfo:
                     "name": "tqsdk",
                     "api_key": "config_key_123",
                     "api_secret": "config_secret_456",
+                    "account_type": "tqaccount",
                 }
             ]
         }
         result = ProjectConfig._resolve_account(base_config_dict)
         assert result["account"]["api_key"] == "env_key_abc"
         assert result["account"]["api_secret"] == "env_secret_xyz"
+        assert result["account"]["account_type"] == "tqaccount"
 
     def test_env_var_only_without_third_party(self, monkeypatch):
         monkeypatch.setenv("TQSDK_API_KEY", "pure_env_key")

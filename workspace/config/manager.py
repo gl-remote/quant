@@ -199,24 +199,36 @@ class ProjectConfig(BaseModel):
         """
         ak = os.environ.get("TQSDK_API_KEY", "")
         sk = os.environ.get("TQSDK_API_SECRET", "")
-        if ak and sk:
-            raw["account"] = {"api_key": ak, "api_secret": sk}
-            return raw
-
         services = raw.get("third_party", {}).get("services", [])
+        account_payload: dict[str, str] = {}
+        placeholders = {
+            "PLACEHOLDER_API_KEY",
+            "PLACEHOLDER_API_SECRET",
+            "YOUR_TQ_API_KEY",
+            "YOUR_TQ_API_SECRET",
+            "your_api_key_here",
+            "your_api_secret_here",
+        }
         for svc in services:
-            if svc.get("name") == "tqsdk":
-                ak = svc.get("api_key", "")
-                sk = svc.get("api_secret", "")
-                placeholders = {
-                    "PLACEHOLDER_API_KEY",
-                    "PLACEHOLDER_API_SECRET",
-                    "your_api_key_here",
-                    "your_api_secret_here",
-                }
-                if ak and ak not in placeholders and sk and sk not in placeholders:
-                    raw["account"] = {"api_key": ak, "api_secret": sk}
-                break
+            if svc.get("name") != "tqsdk":
+                continue
+            for key in ("account_type", "broker_id", "broker_user", "broker_password"):
+                value = svc.get(key, "")
+                if value:
+                    account_payload[key] = value
+            svc_ak = svc.get("api_key", "")
+            svc_sk = svc.get("api_secret", "")
+            if svc_ak and svc_ak not in placeholders and svc_sk and svc_sk not in placeholders:
+                account_payload["api_key"] = svc_ak
+                account_payload["api_secret"] = svc_sk
+            break
+
+        if ak and sk:
+            account_payload["api_key"] = ak
+            account_payload["api_secret"] = sk
+
+        if account_payload.get("api_key") and account_payload.get("api_secret"):
+            raw["account"] = account_payload
         return raw
 
     # ── 查询方法 ──────────────────────────────────────────

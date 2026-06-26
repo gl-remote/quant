@@ -1,6 +1,10 @@
 [app]
 mode = "live"
 
+[environment]
+name = "live"
+debug = false
+
 [data]
 environment = "live"
 database_path = "project_data/database/live/quant.db"

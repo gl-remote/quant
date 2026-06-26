@@ -1,34 +1,50 @@
-# 策略工具箱 - 配置模板
+# 策略工具箱 - 本机环境覆盖模板
 # 使用方法：
-# 1. 复制此文件为 config/conf.local.toml
-# 2. 填写真实的配置信息
-# 3. 不要将此文件提交到git
+# 1. 复制此文件为对应环境的 local 配置，例如：
+#      workspace/config/conf.backtest.local.toml
+#      workspace/config/conf.test.local.toml
+#      workspace/config/conf.live.local.toml
+# 2. 填写真实的本机配置或密钥。
+# 3. conf.*.local.toml 已被 .gitignore 忽略，不要提交。
 #
-# API 凭证有三种设置方式（优先级从高到低）：
-#   方式 A (推荐): 环境变量  export TQSDK_API_KEY="xxx"
-#   方式 B: 填写下方 api_key/api_secret
-#   方式 C: 运行 TqSdk 时会自动使用 guest 账号（部分功能受限）
-#   详见项目根目录下的 .env.example
-
-# ============================================================
-# 第三方服务配置
-# ============================================================
-[[third_party.services]]
-name = "tqsdk"                  # 天勤量化
-provider = "tianqin"
-api_key = "YOUR_TQ_API_KEY"      # 替换为你的API Key
-api_secret = "YOUR_TQ_API_SECRET" # 替换为你的API Secret
-enabled = true
+# 加载顺序：
+#   conf.toml -> conf.<env>.toml -> conf.<env>.local.toml
+#
+# API 凭证优先级：
+#   方式 A: 环境变量 TQSDK_API_KEY / TQSDK_API_SECRET
+#   方式 B: 当前环境的 conf.<env>.local.toml
+#   方式 C: conf.toml 中的占位配置不会生成账户信息
 
 # ============================================================
 # 本地环境配置
 # ============================================================
 [environment]
-name = "local"                    # local/development/production
-debug = true                      # 是否启用调试模式
+name = "local"
+debug = true
 
 # ============================================================
-# 可选：自定义策略参数 (conf.local.toml 中覆盖)
+# 天勤账号配置
+# ============================================================
+[[third_party.services]]
+name = "tqsdk"
+provider = "tianqin"
+api_key = "YOUR_TQ_API_KEY"
+api_secret = "YOUR_TQ_API_SECRET"
+account_type = "tqsim"          # tqsim / tqkq / tqaccount
+broker_id = ""                  # account_type=tqaccount 时必填
+broker_user = ""
+broker_password = ""
+enabled = true
+
+# ============================================================
+# 可选：只在当前本机环境覆盖参数优化配置
+# ============================================================
+# [optimizer]
+# n_trials = 50
+# early_stop_patience = 5
+
+# ============================================================
+# 可选：只在当前本机环境覆盖策略参数
 # ============================================================
 # [[strategies]]
 # name = "ma"
@@ -37,45 +53,3 @@ debug = true                      # 是否启用调试模式
 # stop_loss_ratio = 0.03
 # take_profit_ratio = 0.05
 # position_ratio = 0.1
-# atr_period = 14
-# atr_stop_loss_multiplier = 2.0
-# atr_take_profit_multiplier = 3.0
-
-# ============================================================
-# 可选：第三方服务配置
-# ============================================================
-# [[third_party.services]]
-# name = "binance"
-# provider = "binance"
-# enabled = false
-# api_key = ""
-# api_secret = ""
-
-# ============================================================
-# 可选：参数优化配置
-# ============================================================
-[optimizer]
-enabled = true                    # 是否启用参数优化
-engine = "bayesian"                 # 优化引擎: "grid" 或 "bayesian"
-n_trials = 50                     # Optuna 最大试验次数
-early_stop_patience = 5           # 连续 N 次试验无改善则提前停止（仅并行 bayesian 生效；0=关闭）
-table_prefix = "optuna_"          # Optuna 表名前缀
-use_fixed_seed = false            # 是否使用固定随机种子（默认false，即随机）
-random_seed = 42                  # 固定随机种子值（仅在use_fixed_seed=true时有效）
-
-# 全局搜索空间（适用于所有策略）
-# [optimizer.search_space]
-# sma_short = { type = "int", low = 5, high = 30, step = 5 }
-# sma_long = { type = "int", low = 30, high = 200, step = 10 }
-
-# 策略专属搜索空间（优先于全局搜索空间）
-[optimizer.strategy_spaces.ma]
-atr_stop_loss_multiplier = { type = "float", low = 1.0, high = 3.0, step = 0.5 }
-atr_take_profit_multiplier = { type = "float", low = 2.0, high = 5.0, step = 0.5 }
-trailing_activation_atr = { type = "float", low = 0.5, high = 3.0, step = 0.5 }
-trailing_drawdown_ratio = { type = "float", low = 0.05, high = 0.50, step = 0.05 }
-
-# [optimizer.strategy_spaces.rsi]
-# rsi_period = { type = "int", low = 6, high = 20 }
-# overbought = { type = "int", low = 60, high = 90 }
-# oversold = { type = "int", low = 10, high = 40 }

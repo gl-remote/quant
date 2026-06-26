@@ -1,6 +1,10 @@
 [app]
 mode = "test"
 
+[environment]
+name = "test"
+debug = true
+
 [data]
 environment = "test"
 database_path = "project_data/database/test/quant.db"
