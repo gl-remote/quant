@@ -48,7 +48,7 @@ class TestKDJ:
         assert KDJ.params == {"n": 9, "k_period": 3, "d_period": 3}
 
     def test_window(self):
-        assert KDJ.window == 9
+        assert KDJ.window == 20
 
 
 # --------------------------

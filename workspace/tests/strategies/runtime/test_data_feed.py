@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
-from strategies.core.indicators import IndicatorSpec, ema_func, sma_func
+from strategies.core.indicators import IndicatorSpec, ema_func, kdj_func, sma_func
 from strategies.core.types import Bar
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
 from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
@@ -830,6 +830,74 @@ def test_feed_bar_with_indicator_recalc():
     assert view_5m.length >= 3, f"16 根 bar 后 5m view 应有 >= 3 根 bar, 实际 {view_5m.length}"
     sma_val = view_5m.indicator("5m_sma_3", -1)
     assert sma_val is not None
+
+
+def test_indicator_history_uses_view_cache_without_dump_indicators():
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_IND_HISTORY", datetime(2024, 1, 1, 9, 0), 10)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_IND_HISTORY")
+
+    ctx1 = feed.build_context(reqs, bars[7])
+    ctx2 = feed.build_context(reqs, bars[8])
+    view = ctx2.multi["1m"]
+
+    latest = view.indicator("1m_sma_3", -1)
+    previous = view.indicator("1m_sma_3", -2)
+    history = view.indicator_history("1m_sma_3", 2)
+
+    assert latest is not None and not np.isnan(latest)
+    assert previous is not None and not np.isnan(previous)
+    assert history == [previous, latest]
+    assert previous == ctx1.multi["1m"].indicator("1m_sma_3", -1)
+    assert "1m_sma_3" not in feed.get_period("1m").data.columns  # type: ignore[union-attr]
+
+
+def test_indicator_window_expands_view_for_kdj():
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={
+            "1m": [
+                IndicatorSpec(
+                    name="kdj",
+                    params={"n": 9, "k_period": 3, "d_period": 3},
+                    window=20,
+                    func=kdj_func,
+                )
+            ]
+        },
+    )
+    bars = make_linear_bars("TEST_KDJ_WARMUP", datetime(2024, 1, 1, 9, 0), 25)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_KDJ_WARMUP")
+
+    ctx = feed.build_context(reqs, bars[-1])
+    view = ctx.multi["1m"]
+
+    assert view.length == 21
+    latest = view.indicator("1m_kdj_3_3_9", -1)
+    assert latest is not None and not np.isnan(latest)
+
+
+def test_high_period_indicator_history_uses_forming_bar_without_future_data():
+    reqs = make_datafeed_requirements(
+        {"5m": 5, "15m": 2},
+        indicators={"15m": [IndicatorSpec(name="sma", params={"period": 2}, window=2, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_HIGH_IND_HISTORY", datetime(2024, 1, 1, 10, 0), 5, step_minutes=5)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_HIGH_IND_HISTORY")
+
+    ctx = feed.build_context(reqs, bars[4])
+    view = ctx.multi["15m"]
+
+    assert view.length == 2
+    latest = view.indicator("15m_sma_2", -1)
+    history = view.indicator_history("15m_sma_2", 2)
+    expected = (bars[2].close + bars[4].close) / 2
+
+    assert latest == expected
+    assert history[-1] == expected
 
 
 def test_data_feed_create_factory():

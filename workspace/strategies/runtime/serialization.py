@@ -123,7 +123,13 @@ def load_feed(feeds_dir: str) -> "DataFeed":
     for pn, ind_list in meta.get("indicators", {}).items():
         for ind in ind_list:
             feed.register_indicator(
-                pn, IndicatorSpec(name=ind["name"], params=ind["params"], window=ind.get("window", 250), func=None)
+                pn,
+                IndicatorSpec(
+                    name=ind["name"],
+                    params=ind["params"],
+                    window=ind.get("window", 250),
+                    func=None,
+                ),
             )
 
     # events

@@ -395,6 +395,7 @@ class PeriodDataView:
         self._period = period
         self._forming_bar = forming_bar
         self._indicator_cache: dict[str, float] = {}
+        self._indicator_series_cache: dict[str, pd.Series] = {}
         self._base_df_ref = base_df_ref
 
     @property
@@ -470,19 +471,27 @@ class PeriodDataView:
         :param idx: 索引位置，支持负索引（相对于视图）
         :return: 指标值，索引越界或指标不存在返回None
         """
-        # 仅在 idx=-1（最近值）时优先从缓存取，避免缓存值与请求索引不一致
-        if idx == -1 and name in self._indicator_cache:
-            return self._indicator_cache[name]
-
         pos_idx = self._resolve_idx(idx)
         if pos_idx is None:
             return None
+
+        cached_series = self._indicator_series_cache.get(name)
+        if cached_series is not None:
+            try:
+                value = cached_series.iloc[pos_idx]
+            except IndexError:
+                return None
+            return float(value) if not pd.isna(value) else np.nan
+
+        # 兼容旧行为：仅在 idx=-1（最近值）时可从最新值缓存读取
+        if idx == -1 and name in self._indicator_cache:
+            return self._indicator_cache[name]
 
         # forming bar 是视图最后一个位置，其指标值只存在于缓存中
         if self._forming_bar is not None and pos_idx == self._df_count:
             return self._indicator_cache.get(name)
 
-        # 从 _base_df_ref 或 _df_ref 中取指标（列名已含周期前缀，直接匹配）
+        # 从 _base_df_ref 或 _df_ref 中取指标（兼容旧缓存/落地数据）
         target_df: pd.DataFrame | None = None
         if self._base_df_ref is not None and name in self._base_df_ref.columns:
             target_df = self._base_df_ref
@@ -561,6 +570,7 @@ class PeriodDataView:
         """存储一列指标计算结果（视图自身的数据写入，由 DataFeed 计算后调用）
 
         - 缓存视图最后一个位置的值，供 idx=-1 快速读取（运行时策略只读这个）
+        - 缓存当前视图内完整指标序列，供 idx=-2/-3 与 indicator_history 稳定读取
         - persist=True 时额外把结果写回基础周期 DataFrame，供回测结束后落地 parquet：
           - 将非 NaN 结果写回 base_df（所有周期统一写回 base）
             只写非 NaN，避免预热期 NaN 覆盖历史正确值
@@ -570,6 +580,7 @@ class PeriodDataView:
         """
         last_val = result_series.iloc[-1]
         self._indicator_cache[col_name] = float(last_val) if not pd.isna(last_val) else np.nan
+        self._indicator_series_cache[col_name] = result_series.reset_index(drop=True).copy()
 
         if not persist or self._base_df_ref is None:
             return
@@ -579,6 +590,26 @@ class PeriodDataView:
 
         if self._df_ref is not self._base_df_ref and not pd.isna(last_val):
             self._base_df_ref.loc[self._current_time, col_name] = float(last_val)
+
+    def indicator_series(self, name: str, bars: int | None = None) -> pd.Series:
+        """获取当前视图内的指标序列。"""
+        if bars is not None and bars <= 0:
+            raise ValueError("bars must be positive")
+
+        cached_series = self._indicator_series_cache.get(name)
+        if cached_series is not None:
+            series = cached_series
+        else:
+            values = [self.get_indicator(name, idx) for idx in range(self.length)]
+            series = pd.Series(values, dtype="float64")
+
+        if bars is not None:
+            series = series.iloc[-bars:]
+        return series.reset_index(drop=True).copy()
+
+    def indicator_history(self, name: str, bars: int) -> list[float]:
+        """获取最近 bars 根的指标历史。"""
+        return [float(v) for v in self.indicator_series(name, bars).tolist()]
 
     # --- 便捷访问器 ---
 
