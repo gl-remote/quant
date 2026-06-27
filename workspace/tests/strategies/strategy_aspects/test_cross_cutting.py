@@ -647,6 +647,8 @@ class TestDataRequirementsCrossMerge:
         atr_inds = [i for i in reqs.indicators["15m"] if i.name == "atr"]
         assert len(atr_inds) == 1
         assert atr_inds[0].params == {"period": 14}
+        assert atr_inds[0].window == 15
+        assert reqs.periods["15m"].lookback_bars == 16
 
         # MACD 指标注册在 1m 周期
         assert "1m" in reqs.indicators

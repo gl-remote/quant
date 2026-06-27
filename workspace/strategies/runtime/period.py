@@ -487,9 +487,18 @@ class PeriodDataView:
         if idx == -1 and name in self._indicator_cache:
             return self._indicator_cache[name]
 
-        # forming bar 是视图最后一个位置，其指标值只存在于缓存中
+        # forming bar 是视图最后一个位置，其指标值优先从缓存读取；没有缓存时可从 base_df 落地列按 current_time 读取
         if self._forming_bar is not None and pos_idx == self._df_count:
-            return self._indicator_cache.get(name)
+            cached_value = self._indicator_cache.get(name)
+            if cached_value is not None:
+                return cached_value
+            if self._base_df_ref is not None and name in self._base_df_ref.columns:
+                try:
+                    value = cast(float, self._base_df_ref.loc[self._current_time, name])
+                except KeyError:
+                    return None
+                return float(value) if not pd.isna(value) else np.nan
+            return None
 
         # 从 _base_df_ref 或 _df_ref 中取指标（兼容旧缓存/落地数据）
         target_df: pd.DataFrame | None = None
@@ -506,8 +515,12 @@ class PeriodDataView:
             return None
 
         try:
-            return float(target_df[name].iloc[real_idx])
-        except IndexError:
+            if target_df is self._base_df_ref and target_df is not self._df_ref:
+                value = target_df.loc[self._df_ref.index[real_idx], name]
+            else:
+                value = target_df[name].iloc[real_idx]
+            return float(value) if not pd.isna(value) else np.nan
+        except (IndexError, KeyError):
             return None
 
     def get_events(self) -> list[Event]:

@@ -102,6 +102,8 @@ def load_feed(feeds_dir: str) -> "DataFeed":
     with open(meta_path, encoding="utf-8") as f:
         meta = json.load(f)
 
+    from .data_feed import DataFeed
+
     feed = DataFeed(symbol=meta["symbol"])
     if meta.get("source"):
         feed.source = meta["source"]
