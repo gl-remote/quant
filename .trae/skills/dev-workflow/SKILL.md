@@ -25,23 +25,27 @@ description: "Runs the quant dev branch workflow. Invoke when starting work, com
 ## 新开发任务流程
 
 1. 确认目标 dev 分支和任务范围。
-   - 目标 dev 分支通常是类似 `dev/0.5`、`0.4.2` 这种版本开发分支。
+   - 目标 dev 分支必须匹配 `dev/*`；通常选择最高版本的 `dev/*` 分支。
    - 不在 `main` / `master` 上直接开发。
-2. 从目标 dev 分支新建独立开发分支。
+2. 更新目标 dev 分支（仅在新建分支前）。
+   - 切换到目标 dev 分支。
+   - 按仓库当前策略拉取最新代码。
+   - 记录更新后的目标 dev `HEAD` 作为开分支 hash。
+3. 从目标 dev 分支新建独立开发分支。
    - 分支名前缀按任务类型选择：`feature/`、`fix/`、`experiment/`。
    - 如果任务有关联 roadmap 文档，优先让分支名和 roadmap 文件名或任务名对应。
-3. 记录开分支 hash。
+4. 记录开分支 hash。
    - `开分支 hash` 是创建开发分支时目标 dev 分支的 `HEAD`。
    - 这个 hash 在开分支时即可记录，不等到提交后再补。
-4. 文档元数据写入边界：
+5. 文档元数据写入边界：
    - roadmap 默认只维护阶段目标、评价标准和候选方向。
    - 具体实验方向、开发分支、开分支 hash、参数对照和中间结果写入 `docs/workbench/`。
    - 不要把实验过程和开发分支信息直接写入 roadmap，除非用户明确要求 roadmap 记录流程约束。
-5. 如果没有关联 roadmap / workbench 文档，不主动创建文档；只在最终回复中说明开发分支和相关 hash。
-6. 开发完成并提交后，回填 `实现提交 hash`。
+6. 如果没有关联 roadmap / workbench 文档，不主动创建文档；只在最终回复中说明开发分支和相关 hash。
+7. 开发完成并提交后，回填 `实现提交 hash`。
    - `实现提交 hash` 是开发分支上完成该任务的提交 hash。
    - 如果一个任务包含多个实现提交，可记录最终提交 hash；必要时记录 commit range，例如 `abc1234..def5678`。
-7. 不把 `合并提交 hash` 作为必填 meta。
+8. 不把 `合并提交 hash` 作为必填 meta。
    - 合并提交 hash 只有合回 dev 后才可能明确，且可能因为 merge、squash、fast-forward 策略不同而不存在或语义不同。
    - 如用户明确要求，可在合并后再补充。
 
@@ -100,28 +104,33 @@ description: "Runs the quant dev branch workflow. Invoke when starting work, com
 ## 合并回 dev 流程
 
 1. 确认当前开发分支和目标 dev 分支。
-   - 目标 dev 分支通常是类似 `dev/0.5`、`0.4.2` 这种版本开发分支。
+   - 目标 dev 分支必须匹配 `dev/*`；通常选择最高版本的 `dev/*` 分支。
    - 不对 `main` / `master` 直接执行合并或推送。
 2. 检查 Git 状态。
    - 运行 `git status --short --branch`。
    - 查看 staged / unstaged diff。
    - 检查未跟踪文件，避免提交 `.env`、凭据、本地数据、缓存、大文件等。
-3. 拉取最新目标 dev 分支。
+3. 合并前防误判门禁。
+   - 在执行 checkout / merge / cherry-pick 前，先向用户展示并确认：当前分支、目标 dev 分支、双方 HEAD、待合入 commit 列表。
+   - 不根据当前所在分支、最近使用分支、branch list 顺序或版本号习惯推断目标 dev 分支。
+   - 检查 `git log --oneline <target-dev>..<feature-branch>` 和 `git log --oneline <feature-branch>..<target-dev>`。
+   - 若待合入列表含明显非本任务提交，不直接 merge；改为让用户确认 cherry-pick 哪些提交。
+4. 更新目标 dev 分支。
    - 切换到目标 dev 分支。
-   - `git pull --rebase` 或按仓库当前策略拉取最新代码。
-4. 将当前开发分支 rebase 到最新 dev 分支。
-   - 切回开发分支。
-   - 执行 `git rebase <dev-branch>`。
-   - 如有冲突，停止并让用户确认冲突解决方式；不要强行覆盖用户改动。
-5. 验证 rebase 后状态。
+   - 按仓库当前策略拉取最新代码。
+5. 不自动 rebase 开发分支。
+   - 合并阶段不要求、也不主动执行 `git rebase <dev-branch>`。
+   - “在哪就是哪”：保留当前分支关系，先观察一段时间。
+   - 如果出现分支落后、提交范围混乱或冲突风险，只提示用户并等待确认，不自动改写开发分支历史。
+6. 验证合并前状态。
    - 检查 `git status --short --branch`。
    - 根据改动类型运行必要验证；Python 命令必须使用 `uv run`。
-6. 合并回目标 dev 分支。
+7. 合并回目标 dev 分支。
    - 切回目标 dev 分支。
    - 使用 `git merge --no-ff <feature-branch> -m "merge: ..."` 保留任务边界。
    - 合并前后都检查状态。
-7. 合并后再次验证核心改动。
-8. 不 push，除非用户明确要求。
+8. 合并后再次验证核心改动。
+9. 不 push，除非用户明确要求。
 
 ## Push 流程
 
@@ -145,7 +154,8 @@ description: "Runs the quant dev branch workflow. Invoke when starting work, com
 - 不运行破坏性 Git 命令，例如 `reset --hard`、`checkout .`、`restore .`、`clean -f`、`branch -D`，除非用户明确要求。
 - 不自动提交或推送；提交/推送必须有用户明确授权。
 - 暂存文件时优先指定具体文件，避免 `git add .` 或 `git add -A` 误加入敏感文件。
-- 遇到冲突、未提交改动、远端分支落后、目标分支不明确时，先询问用户。
+- 遇到冲突、未提交改动、远端分支落后、目标分支不明确、待合入 commit 范围包含非本任务提交时，先询问用户。
+- 合并流程中不要自动 rebase 开发分支；需要改写历史时必须由用户明确要求。
 - 文档文件通常不在 pre-commit 域 hook 覆盖范围内；提交时若 hook 提醒 docs 未覆盖，需人工确认链接和内容边界即可，不要为了 docs 强行补测试。
 
 ## 项目约束
