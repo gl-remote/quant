@@ -26,7 +26,7 @@ def test_atr_pullback_params_defaults() -> None:
 def test_atr_pullback_memory_allows_signal_after_recent_pullback() -> None:
     values = [60.0, 42.0, 53.0]
     ctx = SimpleNamespace(
-        multi={"5m": SimpleNamespace(length=len(values), indicator=lambda _name, idx=-1: values[idx])},
+        multi={"5m": SimpleNamespace(indicator_history=lambda _name, bars: values[-bars:])},
     )
     cfg = ATRCrossParams(kdj_pullback_long=45, kdj_signal_long=50)
 
@@ -36,7 +36,7 @@ def test_atr_pullback_memory_allows_signal_after_recent_pullback() -> None:
 def test_atr_pullback_memory_requires_retrigger() -> None:
     values = [60.0, 42.0, 49.0]
     ctx = SimpleNamespace(
-        multi={"5m": SimpleNamespace(length=len(values), indicator=lambda _name, idx=-1: values[idx])},
+        multi={"5m": SimpleNamespace(indicator_history=lambda _name, bars: values[-bars:])},
     )
     cfg = ATRCrossParams(kdj_signal_long=50)
 

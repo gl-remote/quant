@@ -18,7 +18,8 @@ from numpy.typing import NDArray
 class IndicatorSpec:
     """指标定义 — 描述指标如何计算
 
-    window 可包含模板值（如 "{sma_short}"），在构建 data_requirements 时从 strategy_config 解析。
+    window 表示计算当前指标值所需的最小历史 bar 数，可包含模板值（如 "{sma_short}"），
+    在构建 data_requirements 时从 strategy_config 解析。
     """
 
     name: str

@@ -174,7 +174,7 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
             return None
         reqs.merge(
             DataRequirements(
-                periods={"5m": PeriodRequirements(lookback_bars=20)},
+                periods={"5m": PeriodRequirements(lookback_bars=2)},
                 indicators={"5m": [KDJ]},
                 events=EventsRequirements.no_events(),
             )
@@ -190,7 +190,6 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
 
         risk = ctx.aspects.risk
         exit_reasons = risk.take_profit.exit + risk.stop_loss.exit
-        self._update_kdj_history(state, ctx)
 
         # ── 有持仓：exit 风控建议触发 → 出场 ──
         if direction and exit_reasons:
@@ -216,63 +215,33 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
                 ctx.bar.close, state.capital, config.position_ratio, state.contract_size, state.margin
             )
 
-            if direction_keys["long"] <= long_keys and self._has_long_pullback(ctx, config, state):
+            if direction_keys["long"] <= long_keys and self._has_long_pullback(ctx, config):
                 signal = Signal(action=TRADE_ACTION_BUY, reason="long_entry", volume=vol)
-            elif direction_keys["short"] <= short_keys and self._has_short_pullback(ctx, config, state):
+            elif direction_keys["short"] <= short_keys and self._has_short_pullback(ctx, config):
                 signal = Signal(action=TRADE_ACTION_SELL, reason="short_entry", volume=vol)
 
         self._update_holding_bars(state, signal)
         return signal
 
-    def _has_long_pullback(
-        self, ctx: BarContext, config: ATRCrossParams, state: State[ATRCrossParams] | None = None
-    ) -> bool:
-        values = self._recent_kdj_values(ctx, 2, state)
+    def _has_long_pullback(self, ctx: BarContext, config: ATRCrossParams) -> bool:
+        values = self._recent_kdj_values(ctx, 2)
         if len(values) < 2:
             return False
         return values[-1] > config.kdj_signal_long
 
-    def _has_short_pullback(
-        self, ctx: BarContext, config: ATRCrossParams, state: State[ATRCrossParams] | None = None
-    ) -> bool:
-        values = self._recent_kdj_values(ctx, 2, state)
+    def _has_short_pullback(self, ctx: BarContext, config: ATRCrossParams) -> bool:
+        values = self._recent_kdj_values(ctx, 2)
         if len(values) < 2:
             return False
         return values[-1] < config.kdj_signal_short
 
     @staticmethod
-    def _update_kdj_history(state: State[ATRCrossParams], ctx: BarContext) -> None:
-        view = ctx.multi.get("5m")
-        if view is None:
-            return
-        col = generate_indicator_column_name(KDJ.name, KDJ.params, period="5m")
-        latest = view.indicator(col, -1)
-        if latest is None or isnan(latest):
-            return
-        history = state.extra.setdefault(f"atr_{col}_history", [])
-        history.append(latest)
-        del history[:-2]
-
-    @staticmethod
-    def _recent_kdj_values(
-        ctx: BarContext, lookback_bars: int, state: State[ATRCrossParams] | None = None
-    ) -> list[float]:
+    def _recent_kdj_values(ctx: BarContext, lookback_bars: int) -> list[float]:
         view = ctx.multi.get("5m")
         if view is None:
             return []
         col = generate_indicator_column_name(KDJ.name, KDJ.params, period="5m")
-        history_key = f"atr_{col}_history"
-        if state is None:
-            values: list[float] = []
-            max_bars = min(lookback_bars, view.length)
-            for i in range(max_bars, 0, -1):
-                value = view.indicator(col, -i)
-                if value is not None and not isnan(value):
-                    values.append(value)
-            return values
-
-        history = state.extra.setdefault(history_key, [])
-        return list(history)
+        return [value for value in view.indicator_history(col, lookback_bars) if not isnan(value)]
 
     @staticmethod
     def _holding_bars(state: State[ATRCrossParams]) -> int:

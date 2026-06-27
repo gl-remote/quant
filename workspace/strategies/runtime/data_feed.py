@@ -443,6 +443,14 @@ class DataFeed:
 
     # ── 上下文构建 ────────────────────────────────────
 
+    def _period_indicator_lookback(self, period_name: str, requested_lookback: int) -> int:
+        indicator_lookbacks = [
+            int(spec.window) + 1 for spec in self.get_registered_indicators(period_name) if isinstance(spec.window, int)
+        ]
+        if not indicator_lookbacks:
+            return requested_lookback
+        return max(requested_lookback, max(indicator_lookbacks))
+
     def _get_period_views(
         self,
         requirements: DataRequirements,
@@ -451,7 +459,8 @@ class DataFeed:
         """阶段1：为所有需求周期构建视图"""
         multi: dict[str, PeriodDataView] = {}
         for period, req in requirements.periods.items():
-            view = self.get_data(period, current_time, req.lookback_bars)
+            lookback_bars = self._period_indicator_lookback(period, req.lookback_bars)
+            view = self.get_data(period, current_time, lookback_bars)
             if view is not None:
                 multi[period] = view
         return multi
