@@ -1,3 +1,5 @@
+import type { ParamValue } from "./optuna";
+
 export interface SummaryItem {
   symbol: string;
   total_return: number;
@@ -51,7 +53,7 @@ export interface BacktestRecord {
   kline_interval: string;
   strategy_version: string;
   git_hash: string;
-  params: { name: string; value: number }[];
+  params: { name: string; value: ParamValue; type?: string }[];
   daily: DailyPoint[];
   total_net_pnl?: number;
   daily_net_pnl?: number;

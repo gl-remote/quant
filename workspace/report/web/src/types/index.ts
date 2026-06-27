@@ -24,6 +24,7 @@ export type {
 export type {
   ContourTrial,
   ContourMeta,
+  ParamValue,
   BestParam,
   DenormalizedScatter,
   OptunaData,

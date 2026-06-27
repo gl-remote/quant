@@ -27,7 +27,7 @@ from .models import (
 
 # ── 当前代码期望的 schema 版本 ────────────────────────────────
 # 任何新的 ALTER TABLE 都要让这个数 +1，并在 MIGRATIONS 中追加一条
-CURRENT_SCHEMA_VERSION: int = 3
+CURRENT_SCHEMA_VERSION: int = 4
 
 # ── 迁移清单（按版本号升序排列） ────────────────────────────
 # 约定：version 从 1 开始单调递增；每条 migration.up 只执行一个结构变更
@@ -35,17 +35,22 @@ MIGRATIONS: list[dict] = [
     {
         "version": 1,
         "description": "初始化 schema_info 表；对现有旧库做第一次版本标记",
-        "up": lambda: _migration_1_init_schema_info(),
+        "up": lambda allow_aggressive=False: _migration_1_init_schema_info(),
     },
     {
         "version": 2,
         "description": "补齐 runs / backtest_trades / backtests / backtest_daily 的历史字段",
-        "up": lambda: _migration_2_add_historical_columns(),
+        "up": lambda allow_aggressive=False: _migration_2_add_historical_columns(),
     },
     {
         "version": 3,
         "description": "扩展 backtest_params 支持非数值策略参数",
-        "up": lambda: _migration_3_extend_backtest_params(),
+        "up": lambda allow_aggressive=False: _migration_3_extend_backtest_params(),
+    },
+    {
+        "version": 4,
+        "description": "重建 backtest_params，移除 param_value 的旧 NOT NULL 约束",
+        "up": lambda allow_aggressive=False: _migration_4_rebuild_backtest_params(allow_aggressive),
     },
 ]
 
@@ -73,7 +78,7 @@ class SchemaVersionManager:
             # schema_info 表不存在 → 这是一张从未跑过版本化迁移的旧库
             return 0
 
-    def run_pending_migrations(self) -> None:
+    def run_pending_migrations(self, *, allow_aggressive: bool = False) -> None:
         """执行待执行的迁移。失败直接 raise，不吞异常"""
         self.ensure_schema_info_table()
 
@@ -87,9 +92,10 @@ class SchemaVersionManager:
             return
 
         logger.info(
-            "检测到待执行迁移：当前 db={}，代码期望={}，开始按顺序执行…",
+            "检测到待执行迁移：当前 db={}，代码期望={}，aggressive={}，开始按顺序执行…",
             db_version,
             CURRENT_SCHEMA_VERSION,
+            allow_aggressive,
         )
 
         for migration in sorted(MIGRATIONS, key=lambda m: m["version"]):
@@ -98,12 +104,12 @@ class SchemaVersionManager:
                 continue
 
             description: str = migration["description"]
-            up_fn: Callable[[], None] = migration["up"]
+            up_fn: Callable[[bool], None] = migration["up"]
 
             logger.info("执行迁移 #{}：{}", version, description)
             try:
                 with database.atomic():
-                    up_fn()
+                    up_fn(allow_aggressive)
                     SchemaInfo.create(
                         version=version,
                         description=description,
@@ -129,6 +135,15 @@ def _table_columns(table_name: str) -> set[str]:
     """读取某张表已有列名，用于「字段不存在时再加」"""
     cursor = database.execute_sql(f"PRAGMA table_info({table_name})")
     return {row[1] for row in cursor.fetchall()}
+
+
+def _column_notnull(table_name: str, column_name: str) -> bool:
+    """读取 SQLite 列 NOT NULL 约束。"""
+    cursor = database.execute_sql(f"PRAGMA table_info({table_name})")
+    for row in cursor.fetchall():
+        if row[1] == column_name:
+            return bool(row[3])
+    return False
 
 
 def _migration_1_init_schema_info() -> None:
@@ -207,13 +222,65 @@ def _migration_3_extend_backtest_params() -> None:
         )
 
 
+def _migration_4_rebuild_backtest_params(allow_aggressive: bool) -> None:
+    """重建 backtest_params，使 param_value 真正允许 NULL。"""
+    if not _column_notnull("backtest_params", "param_value"):
+        return
+    if not allow_aggressive:
+        raise RuntimeError(
+            "backtest_params.param_value 仍有 NOT NULL 约束；"
+            "需要开启 data.allow_aggressive_schema_migration 后才能重建旧表"
+        )
+
+    cols = _table_columns("backtest_params")
+    if "param_type" not in cols:
+        database.execute_sql("ALTER TABLE backtest_params ADD COLUMN param_type VARCHAR(255) DEFAULT 'float'")
+    if "param_text" not in cols:
+        database.execute_sql("ALTER TABLE backtest_params ADD COLUMN param_text TEXT")
+    database.execute_sql("UPDATE backtest_params SET param_text = CAST(param_value AS TEXT) WHERE param_text IS NULL")
+    database.execute_sql("PRAGMA foreign_keys=OFF")
+    try:
+        database.execute_sql(
+            """
+            CREATE TABLE backtest_params_new (
+                id INTEGER NOT NULL PRIMARY KEY,
+                backtest_id INTEGER NOT NULL,
+                param_name VARCHAR(255) NOT NULL,
+                param_value REAL,
+                param_type VARCHAR(255) NOT NULL DEFAULT 'float',
+                param_text TEXT,
+                FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE
+            )
+            """
+        )
+        database.execute_sql(
+            """
+            INSERT INTO backtest_params_new (
+                id, backtest_id, param_name, param_value, param_type, param_text
+            )
+            SELECT id,
+                   backtest_id,
+                   param_name,
+                   param_value,
+                   COALESCE(param_type, 'float'),
+                   COALESCE(param_text, CAST(param_value AS TEXT))
+            FROM backtest_params
+            """
+        )
+        database.execute_sql("DROP TABLE backtest_params")
+        database.execute_sql("ALTER TABLE backtest_params_new RENAME TO backtest_params")
+        database.execute_sql("CREATE INDEX backtestparam_backtest_id ON backtest_params (backtest_id)")
+    finally:
+        database.execute_sql("PRAGMA foreign_keys=ON")
+
+
 # ── 公开 API ─────────────────────────────────────────────
 
 
-def run_pending_migrations() -> None:
+def run_pending_migrations(*, allow_aggressive: bool = False) -> None:
     """外部入口：执行所有待执行的迁移"""
     manager = SchemaVersionManager()
-    manager.run_pending_migrations()
+    manager.run_pending_migrations(allow_aggressive=allow_aggressive)
 
 
 def get_current_version() -> int:

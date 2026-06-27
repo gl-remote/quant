@@ -501,7 +501,7 @@ def get_live_trade_model(table_name: str | None = None) -> type[RealtimeTrade]:
     return RealtimeTrade
 
 
-def init_database(db_path: str) -> None:
+def init_database(db_path: str, *, allow_aggressive_schema_migration: bool = False) -> None:
     """初始化数据库连接 + 执行版本化迁移
 
     迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
@@ -523,7 +523,9 @@ def init_database(db_path: str) -> None:
     )  # pyright: ignore[reportUnknownMemberType]
     from . import schema as _schema
 
-    _schema.run_pending_migrations()
+    _schema.run_pending_migrations(
+        allow_aggressive=allow_aggressive_schema_migration,
+    )
 
 
 def close_database() -> None:

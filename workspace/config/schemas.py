@@ -22,7 +22,6 @@ from common.constants import (
     DEFAULT_COMMISSION_RATE,
     DEFAULT_CONTRACT_SIZE,
     DEFAULT_INITIAL_CAPITAL,
-    DEFAULT_POSITION_RATIO,
     DEFAULT_PRICE_TICK,
     DEFAULT_SLIPPAGE,
 )
@@ -39,43 +38,18 @@ from pydantic import (
 
 
 class StrategyItemConfig(BaseModel):
-    """单个策略配置项。extra=\"allow\" 允许策略自定义参数字段。"""
+    """单个策略配置项。
+
+    这里只定义跨策略元数据。策略私有参数通过 extra="allow" 原样透传，
+    由具体策略 dataclass / 参数模型负责声明和校验。
+    """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="allow")
 
     name: str
     enabled: bool = True
-    sma_short: int = 10
-    sma_long: int = 40
-    stop_loss_ratio: float = 0.03
-    take_profit_ratio: float = 0.05
-    position_ratio: float = DEFAULT_POSITION_RATIO
     kline_period: int = 5
-    atr_period: int = 14
-    atr_stop_loss_multiplier: float = 2.0
-    atr_take_profit_multiplier: float = 3.0
-    trailing_activation_atr: float = 1.0
-    trailing_drawdown_ratio: float = 0.25
-    kdj_pullback_long: int = 45
-    kdj_pullback_short: int = 55
-    kdj_signal_long: int = 50
-    kdj_signal_short: int = 50
-    time_stop_bars: int = 48
     search_space: dict[str, dict[str, Any]] = Field(default_factory=dict)
-
-    @field_validator("stop_loss_ratio", "take_profit_ratio", "position_ratio")
-    @classmethod
-    def _ratio_in_range(cls, v: float) -> float:
-        if not (0 < v <= 1):
-            raise ValueError(f"ratio must be in (0, 1], got {v}")
-        return v
-
-    @field_validator("sma_short")
-    @classmethod
-    def _sma_positive(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError(f"sma_short must be positive, got {v}")
-        return v
 
 
 # ============================================================
@@ -165,6 +139,7 @@ class DataConfig(BaseModel):
 
     provider: str = "tqsdk"
     cache_enabled: bool = False
+    allow_aggressive_schema_migration: bool = False
     environment: DataEnvironment
     base_dir: str = ""
     export_dir: str = ""

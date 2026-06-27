@@ -6,9 +6,9 @@
   "type": "object",
   "required": ["study_name", "trial_count", "best_value", "best_params", "optimization_history"],
   "properties": {
-    "study_name": {"type": "string", "minLength": 1},
+    "study_name": {"type": "string"},
     "trial_count": {"type": "integer", "minimum": 0},
-    "best_value": {"type": "number"},
+    "best_value": {"type": ["number", "null"]},
     "best_params": {
       "type": "array",
       "items": {
@@ -22,7 +22,7 @@
       }
     },
     "optimization_history": {
-      "type": "object",
+      "type": ["object", "null"],
       "required": ["series"],
       "properties": {
         "series": {

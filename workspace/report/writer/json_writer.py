@@ -177,12 +177,29 @@ def export_trades_json(run_id: int, dm: DataManager | None = None) -> None:
 
 
 def export_optuna_json(run_id: int, dm: DataManager | None = None) -> None:
-    """导出 Optuna 优化数据 JSON（含图表配置）"""
+    """导出 Optuna 优化数据 JSON（含图表配置）。
+
+    非参数搜索 run 没有关联 study，也仍写出一个空 optuna.json，
+    保持 report artifact 集合稳定。
+    """
     import os
 
     dm = _get_dm(dm)
     optuna_data = dm.get_optuna_data(run_id)
     if not optuna_data:
+        _write_json(
+            run_data_dir(run_id) / "optuna.json",
+            {
+                "study_name": "",
+                "trial_count": 0,
+                "best_value": None,
+                "best_params": [],
+                "optimization_history": None,
+                "param_importances": None,
+                "parallel_coordinate": None,
+                "contours": None,
+            },
+        )
         return
 
     study_name = str(optuna_data.get("study_name", ""))

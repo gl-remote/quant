@@ -14,6 +14,7 @@ from data import DataManager
 from loguru import logger
 
 from ..cache import BuildCache
+from ..output_paths import run_data_dir
 from ..writer import (
     export_backtests_json,
     export_equity_json,
@@ -73,7 +74,7 @@ def run_data_exports(
         elif cache:
             # 通用增量检查: 基于指纹/缓存哈希对比
             new_data = getter(dm, run_id)
-            if cache.needs_update(data_type, run_id, new_data):
+            if cache.needs_update(data_type, run_id, new_data) or _artifact_missing(run_id, data_type):
                 exporter(run_id, dm)
                 cache.update_fingerprint(data_type, run_id, new_data)
                 logger.info("→ 导出 {}（数据已变更）", data_type)
@@ -96,6 +97,11 @@ def run_data_exports(
 
 
 # ── 指纹收集函数 ─────────────────────────────────────────────────────────
+
+
+def _artifact_missing(run_id: int, data_type: str) -> bool:
+    """增量缓存命中时仍确保对应 artifact 文件真实存在。"""
+    return not (run_data_dir(run_id) / f"{data_type}.json").is_file()
 
 
 def _collect_equity_fingerprint(dm: DataManager, run_id: int) -> dict[str, object]:

@@ -150,6 +150,7 @@ trailing_drawdown_ratio = 0.3
 [data]
 provider = "tqsdk"                          # export 默认数据源
 cache_enabled = false                        # 是否启用缓存
+allow_aggressive_schema_migration = true     # 允许必要时重建旧 SQLite 表结构
 base_dir = "project_data"                     # 项目本地数据根目录
 export_dir = "project_data/market_data/csv"    # CSV 导出目录
 filename_template = "{symbol}.{provider}.{interval}.csv"  # 文件名模板：标的名.数据源.周期.csv

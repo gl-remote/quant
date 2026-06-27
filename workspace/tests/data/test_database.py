@@ -8,6 +8,7 @@
 """
 
 import os
+import sqlite3
 
 import pandas as pd
 import pytest
@@ -36,7 +37,6 @@ class TestDataStoreInit:
 
     def test_tables_exist(self, temp_db_path):
         store = DataStore(temp_db_path)
-        import sqlite3
 
         conn = sqlite3.connect(temp_db_path)
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -44,6 +44,58 @@ class TestDataStoreInit:
         store.close()
         assert "export_metadata" in tables
         assert "operation_logs" in tables
+
+    def test_aggressive_migration_rebuilds_backtest_params_value_nullable(self, temp_db_path):
+        conn = sqlite3.connect(temp_db_path)
+        conn.executescript(
+            """
+            CREATE TABLE backtests (
+                id INTEGER NOT NULL PRIMARY KEY,
+                symbol VARCHAR(255) NOT NULL,
+                strategy VARCHAR(255) NOT NULL,
+                total_trades INTEGER NOT NULL,
+                total_return REAL NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE backtest_params (
+                id INTEGER NOT NULL PRIMARY KEY,
+                backtest_id INTEGER NOT NULL,
+                param_name VARCHAR(255) NOT NULL,
+                param_value REAL NOT NULL,
+                FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE
+            );
+            CREATE INDEX backtestparam_backtest_id ON backtest_params (backtest_id);
+            CREATE TABLE schema_info (
+                id INTEGER NOT NULL PRIMARY KEY,
+                version INTEGER NOT NULL,
+                description VARCHAR(255) NOT NULL,
+                applied_at DATETIME NOT NULL
+            );
+            INSERT INTO schema_info (version, description, applied_at) VALUES (3, 'legacy', CURRENT_TIMESTAMP);
+            INSERT INTO backtests (id, symbol, strategy, total_trades, total_return)
+            VALUES (1, 'DCE.m2509', 'ma', 1, 0.0);
+            INSERT INTO backtest_params (id, backtest_id, param_name, param_value)
+            VALUES (1, 1, 'sma_short', 5.0);
+            """
+        )
+        conn.close()
+
+        store = DataStore(temp_db_path, allow_aggressive_schema_migration=True)
+        from data.models import BacktestParam
+
+        params = {row.param_name: row for row in BacktestParam.select().where(BacktestParam.backtest == 1)}
+        store.close()
+
+        conn = sqlite3.connect(temp_db_path)
+        param_value_info = [
+            row for row in conn.execute("PRAGMA table_info(backtest_params)") if row[1] == "param_value"
+        ][0]
+        conn.close()
+        assert param_value_info[3] == 0
+        assert params["sma_short"].param_value == 5.0
+        assert params["sma_short"].param_type == "float"
+        assert params["sma_short"].param_text == "5.0"
 
 
 # ═══════════════════════════════════════════════════════════

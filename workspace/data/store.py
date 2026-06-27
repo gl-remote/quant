@@ -94,7 +94,13 @@ def _param_record_fields(value: Any) -> dict[str, Any]:
 class DataStore:
     """数据存储层 - 管理数据库连接和 CRUD 操作"""
 
-    def __init__(self, db_path: str, *, create: bool = True) -> None:
+    def __init__(
+        self,
+        db_path: str,
+        *,
+        create: bool = True,
+        allow_aggressive_schema_migration: bool = False,
+    ) -> None:
         if create:
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         elif not Path(db_path).exists():
@@ -106,6 +112,7 @@ class DataStore:
                 "foreign_keys": 1,
             },
         )
+        self._allow_aggressive_schema_migration = allow_aggressive_schema_migration
         self._insert_count: int = 0
         if create:
             self._init_tables()
@@ -128,7 +135,9 @@ class DataStore:
             ],
             safe=True,
         )
-        _schema.run_pending_migrations()
+        _schema.run_pending_migrations(
+            allow_aggressive=self._allow_aggressive_schema_migration,
+        )
 
     def close(self) -> None:
         """关闭数据库连接"""
