@@ -80,7 +80,7 @@ class BacktestRecord(BaseModel):
     ewm_sharpe: float | None = None  # [vnpy] EWM夏普比率
     rgr_ratio: float | None = None  # [vnpy] RGR比率
 
-    # 交易统计 (total_trades 来自 vnpy; win/loss/avg 基于逐笔 pnl 聚合)
+    # 交易统计 (total_trades 来自 vnpy; win/loss/avg 基于逐笔毛 pnl 聚合)
     total_trades: int = 0  # [vnpy] 总成交笔数（含开仓+平仓）
     win_trades: int | None = None
     loss_trades: int | None = None
@@ -114,8 +114,8 @@ class TradeRecord(BaseModel):
     open_price: float
     close_price: float
     quantity: float
-    pnl: float = 0.0  # 净盈亏（已扣除 commission + slippage）
-    commission: float = 0.0  # 该笔平仓周期总手续费（开仓侧 + 平仓侧）
+    pnl: float = 0.0  # 逐笔毛盈亏；不扣 commission/slippage
+    commission: float = 0.0  # 该笔成交手续费；open/close 各自记录本侧手续费
     created_at: str | None = None
 
     @field_validator("quantity")
@@ -268,7 +268,7 @@ class Backtest(OrmBaseModel):
 
     字段来源说明:
       - vnpy 直接提供: vnpy calculate_statistics() 输出，基于日度净盈亏(net_pnl)计算
-      - 自行计算: 从逐笔交易记录(pnl)聚合统计，改后同样基于净盈亏
+      - 自行计算: 从逐笔交易记录(pnl)聚合统计，pnl 为毛盈亏，不含手续费/滑点
       - 配置入参: 回测运行时传入的参数
     """
 
@@ -372,8 +372,8 @@ class BacktestTrade(OrmBaseModel):
     open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
     close_price: FloatField = FloatField()  # 实际成交价（开仓/平仓均为此笔的执行价格）
     quantity: FloatField = FloatField()
-    pnl: FloatField = FloatField()  # 净盈亏（已扣除 commission + slippage）
-    commission: FloatField = FloatField()  # 该笔平仓周期总手续费（开仓侧 + 平仓侧）
+    pnl: FloatField = FloatField()  # 逐笔毛盈亏；不扣 commission/slippage
+    commission: FloatField = FloatField()  # 该笔成交手续费；open/close 各自记录本侧手续费
     reason: CharField = CharField(max_length=512, default="")
     created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 

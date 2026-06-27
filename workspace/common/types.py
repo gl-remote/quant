@@ -71,7 +71,7 @@ class BacktestResult:
 
     字段来源说明:
       - vnpy 直接提供: vnpy calculate_statistics() 输出
-      - 自行计算: 从逐笔交易记录(pnl)聚合统计（基于净盈亏）
+      - 自行计算: 从逐笔交易记录(pnl)聚合统计（pnl 为毛盈亏，不含手续费/滑点）
       - 配置入参: 回测运行时传入的参数
     """
 

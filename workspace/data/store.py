@@ -414,6 +414,10 @@ class DataStore:
         输入 trades 字段名必须与 ORM BacktestTrade 对齐:
             datetime, symbol, direction, offset,
             open_price, close_price, quantity, pnl, commission
+
+        口径说明：
+            pnl 为逐笔毛盈亏，不扣手续费/滑点；commission 为该成交本侧手续费。
+            净收益以 backtest_daily.net_pnl / backtests.total_net_pnl 为准。
         """
         now = datetime.now()
         rows: list[dict[str, object]] = []
