@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import pytest
 from strategies.core.indicators import IndicatorSpec, ema_func, kdj_func, sma_func
 from strategies.core.types import Bar
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
@@ -16,6 +17,7 @@ from strategies.runtime.requirements import (
     EventsRequirements,
     PeriodRequirements,
 )
+from strategies.runtime.serialization import dump_feed, load_feed
 
 
 def generate_test_bars(num_bars: int = 100) -> list[Bar]:
@@ -855,6 +857,118 @@ def test_indicator_history_uses_view_cache_without_dump_indicators():
     assert "1m_sma_3" not in feed.get_period("1m").data.columns  # type: ignore[union-attr]
 
 
+def test_indicator_history_prefers_view_cache_when_persisted_column_changes():
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_IND_HISTORY_PERSIST", datetime(2024, 1, 1, 9, 0), 10)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_IND_HISTORY_PERSIST")
+    feed.dump_indicators = True
+
+    ctx = feed.build_context(reqs, bars[7])
+    view = ctx.multi["1m"]
+    previous = view.indicator("1m_sma_3", -2)
+    latest = view.indicator("1m_sma_3", -1)
+    assert previous is not None and latest is not None
+
+    period = feed.get_period("1m")
+    assert period is not None
+    calculation_index = view.to_calculation_df().index
+    period.data.loc[calculation_index[-2:], "1m_sma_3"] = [999.0, 1000.0]
+
+    history = view.indicator_history("1m_sma_3", 2)
+    copied = view.indicator_series("1m_sma_3", 2)
+    copied.iloc[-1] = 1000.0
+
+    assert view.indicator("1m_sma_3", -2) == previous
+    assert view.indicator("1m_sma_3", -1) == latest
+    assert history == [previous, latest]
+    assert view.indicator("1m_sma_3", -1) != copied.iloc[-1]
+
+
+def test_indicator_history_falls_back_to_persisted_column_without_view_cache():
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_IND_HISTORY_FALLBACK", datetime(2024, 1, 1, 9, 0), 10)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_IND_HISTORY_FALLBACK")
+    feed.dump_indicators = True
+    ctx = feed.build_context(reqs, bars[7])
+    expected_history = ctx.multi["1m"].indicator_history("1m_sma_3", 2)
+
+    view = feed.get_data("1m", bars[7].datetime, lookback_bars=4)
+    assert view is not None
+    fallback_history = view.indicator_history("1m_sma_3", 2)
+
+    assert fallback_history == expected_history
+    assert view.indicator_series("1m_sma_3", 2).tolist() == expected_history
+    assert view.indicator("1m_sma_3", -2) == expected_history[0]
+    assert view.indicator("1m_sma_3", -1) == expected_history[1]
+
+
+def test_indicator_series_and_history_bars_boundaries():
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_IND_HISTORY_BOUNDS", datetime(2024, 1, 1, 9, 0), 6)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_IND_HISTORY_BOUNDS")
+    view = feed.build_context(reqs, bars[-1]).multi["1m"]
+
+    with pytest.raises(ValueError, match="bars must be positive"):
+        view.indicator_series("1m_sma_3", 0)
+    with pytest.raises(ValueError, match="bars must be positive"):
+        view.indicator_history("1m_sma_3", -1)
+
+    full_history = view.indicator_history("1m_sma_3", 99)
+    full_series = view.indicator_series("1m_sma_3")
+    assert len(full_history) == view.length
+    assert np.allclose(full_history, full_series.to_numpy(), equal_nan=True)
+
+
+def test_period_indicator_lookback_uses_largest_int_window_and_ignores_non_int_windows():
+    reqs = make_datafeed_requirements(
+        {"1m": 5},
+        indicators={
+            "1m": [
+                IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func),
+                IndicatorSpec(name="ema", params={"period": 12}, window=12, func=ema_func),
+                IndicatorSpec(name="sma", params={"period": "{sma_short}"}, window="{sma_short}", func=sma_func),
+                IndicatorSpec(name="sma", params={"period": 7.5}, window=7.5, func=sma_func),
+            ]
+        },
+    )
+    feed = DataFeed("TEST_LOOKBACK_WINDOWS", requirements=reqs)
+
+    assert feed._period_indicator_lookback("1m", 5) == 13
+
+    template_only_reqs = make_datafeed_requirements(
+        {"1m": 5},
+        indicators={
+            "1m": [
+                IndicatorSpec(name="sma", params={"period": "{sma_short}"}, window="{sma_short}", func=sma_func),
+                IndicatorSpec(name="sma", params={"period": 7.5}, window=7.5, func=sma_func),
+            ]
+        },
+    )
+    template_only_feed = DataFeed("TEST_LOOKBACK_TEMPLATE", requirements=template_only_reqs)
+
+    assert template_only_feed._period_indicator_lookback("1m", 5) == 5
+
+
+def test_get_data_rejects_non_positive_lookback_bars():
+    reqs = make_datafeed_requirements({"1m": 5})
+    bars = make_linear_bars("TEST_LOOKBACK_BOUNDS", datetime(2024, 1, 1, 9, 0), 3)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_LOOKBACK_BOUNDS")
+
+    with pytest.raises(ValueError, match="lookback_bars must be positive"):
+        feed.get_data("1m", bars[-1].datetime, lookback_bars=0)
+    with pytest.raises(ValueError, match="lookback_bars must be positive"):
+        feed.get_data("1m", bars[-1].datetime, lookback_bars=-1)
+
+
 def test_indicator_window_expands_view_for_kdj():
     reqs = make_datafeed_requirements(
         {"1m": 2},
@@ -898,6 +1012,48 @@ def test_high_period_indicator_history_uses_forming_bar_without_future_data():
 
     assert latest == expected
     assert history[-1] == expected
+
+
+def test_high_period_indicator_falls_back_to_base_persisted_column_without_view_cache():
+    reqs = make_datafeed_requirements(
+        {"5m": 5, "15m": 2},
+        indicators={"15m": [IndicatorSpec(name="sma", params={"period": 2}, window=2, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_HIGH_IND_FALLBACK", datetime(2024, 1, 1, 10, 0), 5, step_minutes=5)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_HIGH_IND_FALLBACK")
+    feed.dump_indicators = True
+
+    cached_view = feed.build_context(reqs, bars[4]).multi["15m"]
+    expected_history = cached_view.indicator_history("15m_sma_2", 2)
+    fallback_view = feed.get_data("15m", bars[4].datetime, lookback_bars=2)
+    assert fallback_view is not None
+
+    fallback_history = fallback_view.indicator_history("15m_sma_2", 2)
+
+    assert np.allclose(fallback_history, expected_history, equal_nan=True)
+    assert fallback_view.indicator("15m_sma_2", -1) == expected_history[-1]
+
+
+def test_load_feed_uses_persisted_indicator_columns_without_recalculation(tmp_path):
+    pytest.importorskip("pyarrow")
+    reqs = make_datafeed_requirements(
+        {"1m": 2},
+        indicators={"1m": [IndicatorSpec(name="sma", params={"period": 3}, window=3, func=sma_func)]},
+    )
+    bars = make_linear_bars("TEST_SERIALIZED_IND", datetime(2024, 1, 1, 9, 0), 10)
+    feed = build_deterministic_feed(reqs, bars, symbol="TEST_SERIALIZED_IND")
+    feed.dump_indicators = True
+    expected_history = feed.build_context(reqs, bars[7]).multi["1m"].indicator_history("1m_sma_3", 2)
+
+    feeds_dir = tmp_path / "feeds"
+    dump_feed(feed, str(feeds_dir))
+    loaded = load_feed(str(feeds_dir))
+    loaded_view = loaded.get_data("1m", bars[7].datetime, lookback_bars=2)
+    assert loaded_view is not None
+
+    assert loaded.get_registered_indicators("1m")[0].func is None
+    assert loaded_view.indicator_history("1m_sma_3", 2) == expected_history
+    assert loaded_view.indicator("1m_sma_3", -1) == expected_history[-1]
 
 
 def test_data_feed_create_factory():

@@ -7,7 +7,7 @@
 """
 
 from strategies.core.indicators import generate_indicator_column_name
-from strategies.strategy_aspects.indicators import KDJ, MACD, SMA
+from strategies.strategy_aspects.indicators import ATR, KDJ, MACD, SMA, build_indicator
 
 # --------------------------
 # MACD 测试
@@ -89,6 +89,39 @@ class TestSMAFactory:
         assert generate_indicator_column_name(spec.name, spec.params) == "sma_{sma_short}"
         assert spec.params == {"period": "{sma_short}"}
         assert spec.window == "{sma_short}"
+
+
+class TestATRFactory:
+    """测试 ATR() 工厂函数"""
+
+    def test_atr_default_window_uses_calculation_lookback(self):
+        spec = ATR()
+        assert spec.name == "atr"
+        assert generate_indicator_column_name(spec.name, spec.params) == "atr_14"
+        assert spec.params == {"period": 14}
+        assert spec.window == 15
+
+    def test_atr_custom_int_window_uses_period_plus_one(self):
+        spec = ATR(20)
+        assert generate_indicator_column_name(spec.name, spec.params) == "atr_20"
+        assert spec.params == {"period": 20}
+        assert spec.window == 21
+
+    def test_atr_with_template_value(self):
+        spec = ATR("{atr_period}")
+        assert generate_indicator_column_name(spec.name, spec.params) == "atr_{atr_period}"
+        assert spec.params == {"period": "{atr_period}"}
+        assert spec.window == "{atr_period}"
+
+
+class TestBuildIndicator:
+    """测试 DSL 指标工厂分发"""
+
+    def test_build_indicator_atr_without_params(self):
+        assert build_indicator("atr", ()) == ATR()
+
+    def test_build_indicator_atr_with_params(self):
+        assert build_indicator("atr", (20,)) == ATR(20)
 
 
 # --------------------------
