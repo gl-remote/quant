@@ -148,7 +148,7 @@ project_data/database/backtest/quant.db
 | `live` | `main.py live`、report | `project_data/database/live/quant.db` | `live_sessions`、`live_trades`、`operation_logs`；如该环境存在同构 run/backtest 数据，也在本环境内读取 |
 | `unit_test` | pytest 临时库 | 测试临时目录，不落入 `project_data` | 测试构造的数据 |
 
-第一阶段不新增第四类交易环境。当前规划中的 `paper trading` 与 `test` 的语义区分已记录在 `docs/roadmap/plan.md` 的 `DEF-09`；本阶段不处理该语义建模，只为现有命令环境提供数据库隔离。
+第一阶段不新增第四类交易环境。当前规划中的 `paper trading` 与 `test` 的语义区分已记录在 `docs/roadmap/engineering-roadmap.md` 的 `DEF-09`；本阶段不处理该语义建模，只为现有命令环境提供数据库隔离。
 
 ## CLI --env / --config 与命令约束
 

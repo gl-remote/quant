@@ -18,7 +18,9 @@
 
 ## Roadmap / 未来规划
 
-- [项目改进计划](roadmap/plan.md) — 活跃，总体路线图 + 待办 + 已知缺陷
+- [工程长期路线图](roadmap/engineering-roadmap.md) — 活跃，工程路线图 + 待办 + 已知缺陷
+- [策略研究框架](roadmap/strategy-research-framework.md) — 活跃，长期策略研究方法论与结构塑形框架
+- [策略短期实验规划](roadmap/strategy-short-term-plan.md) — 活跃，短期策略实验执行计划
 
 ## Archive / 已归档设计记录
 
