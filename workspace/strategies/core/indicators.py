@@ -23,7 +23,7 @@ class IndicatorSpec:
 
     name: str
     params: dict[str, Any]
-    window: int | str = 250
+    window: int | str | float = 250
     func: Callable[..., NDArray[np.float64]] | None = None
 
 
