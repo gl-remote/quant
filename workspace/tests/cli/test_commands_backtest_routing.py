@@ -28,6 +28,7 @@ def _make_args(**overrides):
         "profile": False,
         "no_search": False,
         "dump_indicators": False,
+        "strategy_params": None,
         "env": "backtest",
         "config": None,
     }
@@ -77,6 +78,71 @@ def test_build_search_request_fields():
     assert req.trials == 8
     assert req.parallel is True
     assert req.workers == 4
+    assert req.strategy_param_overrides == {}
+
+
+def test_build_search_request_parses_strategy_params():
+    from cli.commands.backtest import _build_search_request
+
+    args = _make_args(strategy_params='{"stop_widen_multiplier":1.5,"price_tick":1.0}')
+    req = _build_search_request(args)
+
+    assert req.strategy_param_overrides == {"stop_widen_multiplier": 1.5, "price_tick": 1.0}
+
+
+def test_build_search_request_rejects_invalid_strategy_params():
+    from cli.commands.backtest import _build_search_request
+
+    with pytest.raises(ValueError, match="合法 JSON"):
+        _build_search_request(_make_args(strategy_params="{"))
+
+    with pytest.raises(ValueError, match="顶层必须是 object"):
+        _build_search_request(_make_args(strategy_params="[]"))
+
+
+def test_register_accepts_single_mode_and_strategy_params() -> None:
+    from cli.commands.backtest import register
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    register(subparsers)
+
+    args = parser.parse_args(
+        [
+            "backtest",
+            "--strategy",
+            "ma",
+            "--mode",
+            "single",
+            "--strategy-params",
+            '{"sma_short":5}',
+        ]
+    )
+
+    assert args.mode == "single"
+    assert args.strategy_params == '{"sma_short":5}'
+
+
+def test_validate_rejects_strategy_params_for_walk_forward():
+    from cli.commands.backtest import _validate_cross_field
+
+    with pytest.raises(ValueError, match="search/single"):
+        _validate_cross_field(_make_args(mode="walk-forward", strategy_params='{"sma_short":5}'))
+
+
+def test_validate_rejects_strategy_params_for_tqsdk():
+    from cli.commands.backtest import _validate_cross_field
+
+    with pytest.raises(ValueError, match="仅支持 --engine vnpy"):
+        _validate_cross_field(
+            _make_args(
+                engine="tqsdk",
+                symbol="DCE.m2509",
+                start="2025-01-01",
+                end="2025-06-30",
+                strategy_params='{"sma_short":5}',
+            )
+        )
 
 
 def test_build_walk_forward_request_fields():
@@ -173,6 +239,35 @@ def test_cmd_backtest_routes_vnpy_search(monkeypatch: pytest.MonkeyPatch) -> Non
     assert req.symbol == "DCE.m2509"
     assert req.parallel is True
     assert req.workers == 2
+
+
+def test_cmd_backtest_routes_vnpy_single_as_no_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    from cli.commands import backtest
+
+    calls: list[tuple[str, Any]] = []
+
+    class _Workflow:
+        def __init__(self, **_: Any) -> None:
+            pass
+
+        def run_vnpy_search(self, req) -> None:
+            calls.append(("search", req))
+
+        def run_vnpy_walk_forward(self, req) -> None:
+            calls.append(("walk_forward", req))
+
+        def run_tqsdk(self, req) -> None:
+            calls.append(("tqsdk", req))
+
+    monkeypatch.setattr(backtest, "BacktestRunWorkflow", _Workflow)
+
+    backtest.cmd_backtest(_make_args(mode="single", symbol="DCE.m2509", strategy_params='{"sma_short":5}'))
+
+    assert len(calls) == 1
+    route, req = calls[0]
+    assert route == "search"
+    assert req.no_search is True
+    assert req.strategy_param_overrides == {"sma_short": 5}
 
 
 def test_cmd_backtest_routes_vnpy_walk_forward(monkeypatch: pytest.MonkeyPatch) -> None:

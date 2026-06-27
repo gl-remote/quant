@@ -3,7 +3,8 @@
 > 类型：Roadmap / 短期实验规划\
 > 状态：执行中\
 > 创建日期：2026-06-27\
-> 研究框架：[策略长期共识：低验证成本价格区间下的结构塑形框架](./strategy-research-framework.md)
+> 研究框架：[策略长期共识：低验证成本价格区间下的结构塑形框架](./strategy-research-framework.md)\
+> 文档边界：本文件只维护阶段目标、评价标准和候选方向；具体实验方向、开发分支、开分支 hash、参数对照和中间结果统一写入 [`docs/workbench`](../workbench/)，结论稳定后再归档到 [`docs/archive/strategy-research`](../archive/strategy-research/)；若实验中发现回测引擎、DataFeed、vnpy 桥接、CLI / runner、指标或成本口径等底层框架问题，应按 [`docs/issues`](../issues/) 工作流先提 issue 并暂停受影响实验。
 
 ## 1. 短期目标
 

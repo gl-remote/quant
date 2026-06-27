@@ -20,7 +20,8 @@ CLI 层职责（commands 在 CLI 体系中的定位）：
 from __future__ import annotations
 
 import argparse
-from typing import Any
+import json
+from typing import Any, cast
 
 from loguru import logger
 
@@ -89,9 +90,9 @@ def register(subparsers: Any) -> None:
     )
     p.add_argument(
         "--mode",
-        choices=["search", "walk-forward"],
+        choices=["search", "single", "walk-forward"],
         default="search",
-        help="回测模式: search=参数搜索(默认), walk-forward=滚动验证（仅 --engine vnpy 生效）",
+        help="回测模式: search=参数搜索(默认), single=固定参数单次回测, walk-forward=滚动验证（仅 --engine vnpy 生效）",
     )
     p.add_argument(
         "--optimizer",
@@ -119,6 +120,11 @@ def register(subparsers: Any) -> None:
         action="store_true",
         help="把指标列回写到基础周期 DataFrame 供 debug 查看（仅单次回测生效，有性能开销）",
     )
+    p.add_argument(
+        "--strategy-params",
+        default=None,
+        help="策略参数 JSON 覆盖，优先级高于配置文件，例如 '{\"stop_widen_multiplier\":1.5}'（仅 vnpy 生效）",
+    )
     add_environment_arguments(p)
 
 
@@ -131,6 +137,9 @@ def cmd_backtest(args: argparse.Namespace) -> None:
     if args.engine == "vnpy":
         if args.mode == "walk-forward":
             workflow.run_vnpy_walk_forward(_build_walk_forward_request(args))
+        elif args.mode == "single":
+            args.no_search = True
+            workflow.run_vnpy_search(_build_search_request(args))
         else:
             workflow.run_vnpy_search(_build_search_request(args))
     elif args.engine == "tqsdk":
@@ -151,6 +160,8 @@ def _validate_cross_field(args: argparse.Namespace) -> None:
         logger.warning("--gui 仅在 --engine tqsdk 下生效，已忽略当前 --gui 标志")
 
     if args.engine == "tqsdk":
+        if getattr(args, "strategy_params", None):
+            raise ValueError("--strategy-params 仅支持 --engine vnpy")
         if not args.symbol:
             raise ValueError("--engine tqsdk 必须指定 --symbol")
         if not args.start or not args.end:
@@ -159,6 +170,21 @@ def _validate_cross_field(args: argparse.Namespace) -> None:
             logger.warning("--mode 仅在 --engine vnpy 下生效，TqSdk 路径已忽略")
         if args.parallel:
             logger.warning("--parallel 仅在 --engine vnpy 下生效，TqSdk 路径已忽略")
+
+    if args.engine == "vnpy" and args.mode == "walk-forward" and getattr(args, "strategy_params", None):
+        raise ValueError("--strategy-params 暂仅支持 vnpy search/single 模式")
+
+
+def _parse_strategy_params(raw: str | None) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"--strategy-params 必须是合法 JSON: {e.msg}") from e
+    if not isinstance(parsed, dict):
+        raise ValueError("--strategy-params JSON 顶层必须是 object")
+    return cast(dict[str, Any], parsed)
 
 
 # ── argparse → request 翻译 ─────────────────────────────
@@ -181,6 +207,7 @@ def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
         profile=bool(args.profile),
         no_search=bool(args.no_search),
         dump_indicators=bool(args.dump_indicators),
+        strategy_param_overrides=_parse_strategy_params(args.strategy_params),
     )
 
 
