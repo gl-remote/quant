@@ -5,7 +5,7 @@
 > 创建日期：2026-06-27  
 > 开发分支：experiment/low-validation-cost-r1-trend-pullback  
 > 开分支 hash：8c7163a  
-> 实现提交 hash：待提交  
+> 实现提交 hash：842c31e..ad633f6  
 > 归档说明：策略实现、单测和临时研究脚本已在归档后清理，仅保留长期参考结论。
 
 ## 1. 研究问题
