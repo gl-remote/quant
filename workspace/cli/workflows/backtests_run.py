@@ -32,6 +32,7 @@ from backtest import (
     SearchResultPersister,
     VnpyBacktestEngine,
     WalkForwardPersister,
+    load_strategy_and_config,
 )
 from common.constants import (
     LOG_STATUS_ERROR,
@@ -48,6 +49,8 @@ from config import ConfigManager
 from config.schemas import BacktestConfig
 from data import DataManager
 from loguru import logger
+from strategies.core import Strategy
+from strategies.runtime.aggregate import parse_period_minutes
 from strategies.runtime.data_feed import DataFeed
 from strategies.utils import (
     apply_strategy_config,
@@ -136,6 +139,8 @@ class BacktestRunWorkflow:
         """vnpy 批量参数搜索（含串行 / 并行）"""
         bc = self._cm.get_backtest_config()
         strategy_params = self._strategy_params(req.strategy)
+        interval = self._strategy_required_interval(req.strategy, strategy_params, bc.interval)
+        bc = bc.model_copy(update={"interval": interval})
 
         datasets = self._load_datasets(req.symbol, req.pattern, req.start, req.end, bc.interval)
         if datasets is None:
@@ -182,6 +187,8 @@ class BacktestRunWorkflow:
         """vnpy Walk-Forward 滚动验证"""
         bc = self._cm.get_backtest_config()
         strategy_params = self._strategy_params(req.strategy)
+        interval = self._strategy_required_interval(req.strategy, strategy_params, bc.interval)
+        bc = bc.model_copy(update={"interval": interval})
 
         datasets = self._load_datasets(req.symbol, req.pattern, req.start, req.end, bc.interval)
         if datasets is None:
@@ -260,7 +267,7 @@ class BacktestRunWorkflow:
             contract_size=int(bc.contract_size),
             margin=0.1,
         )
-        bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
+        bridge: TqsdkStrategyBridge[Any] = TqsdkStrategyBridge(strategy=cast(Strategy[Any], strategy_core), state=state)
 
         logger.info(
             "回测: {} {}~{} 资金={} strategy={} GUI={}",
@@ -329,6 +336,28 @@ class BacktestRunWorkflow:
     def _strategy_params(self, strategy_name: str) -> dict[str, Any]:
         sc = self._cm.get_strategy_config(strategy_name or "ma")
         return sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+
+    @staticmethod
+    def _strategy_required_interval(strategy_name: str, strategy_params: dict[str, Any], default_interval: str) -> str:
+        strategy_cls, strategy_config = load_strategy_and_config(strategy_name, strategy_params)
+        requirements = strategy_cls().data_requirements(strategy_config)
+        if requirements is None:
+            return default_interval
+        all_periods = set(requirements.periods)
+        for period in requirements.indicators:
+            all_periods.add(period)
+        if not all_periods:
+            return default_interval
+        required_interval = min(all_periods, key=parse_period_minutes)
+        if parse_period_minutes(default_interval) > parse_period_minutes(required_interval):
+            logger.info(
+                "策略 {} 需要最小周期 {}，覆盖回测配置周期 {}",
+                strategy_name,
+                required_interval,
+                default_interval,
+            )
+            return required_interval
+        return default_interval
 
     def _load_datasets(
         self,

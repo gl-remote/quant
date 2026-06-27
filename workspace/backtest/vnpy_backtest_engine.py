@@ -693,7 +693,7 @@ class VnpyBacktestEngine:
         # 步骤 2: 按时间排序 + FIFO 配对计算逐笔盈亏
         trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
 
-        open_queue: list[tuple[str, float, float]] = []
+        open_queues: dict[str, list[tuple[float, float]]] = {"long": [], "short": []}
         trade_pnls: list[float] = [0.0] * len(trades_list)
         trade_commissions: list[float] = [0.0] * len(trades_list)
         trade_open_prices: list[float] = [0.0] * len(trades_list)
@@ -721,7 +721,7 @@ class VnpyBacktestEngine:
                     else ""
                 )
                 direction = DIRECTION_MAP.get(direction_str, direction_str)
-                open_queue.append((direction, trade_price, trade_volume))
+                open_queues.setdefault(direction, []).append((trade_price, trade_volume))
                 trade_pnls[i] = 0.0
                 trade_open_prices[i] = trade_price
                 trade_commissions[i] = trade_price * trade_volume * size * rate
@@ -741,17 +741,15 @@ class VnpyBacktestEngine:
                 remaining = trade_volume
                 gross_pnl = 0.0
                 matched_opens: list[tuple[float, float]] = []
+                open_queue = open_queues.setdefault(expected_open_dir, [])
 
                 while remaining > 0 and open_queue:
-                    open_dir, open_price, open_vol = open_queue[0]
-                    if open_dir != expected_open_dir:
-                        open_queue.pop(0)
-                        continue
+                    open_price, open_vol = open_queue[0]
                     matched_vol = min(remaining, open_vol)
                     matched_opens.append((open_price, matched_vol))
                     price_diff = trade_price - open_price
 
-                    if open_dir == "long":
+                    if expected_open_dir == "long":
                         gross_pnl += price_diff * matched_vol * size
                     else:
                         gross_pnl += -price_diff * matched_vol * size
@@ -760,7 +758,7 @@ class VnpyBacktestEngine:
                     if matched_vol >= open_vol:
                         open_queue.pop(0)
                     else:
-                        open_queue[0] = (open_dir, open_price, open_vol - matched_vol)
+                        open_queue[0] = (open_price, open_vol - matched_vol)
 
                 # 加权平均开仓价（与 PnL 同源的 FIFO 配对结果）
                 total_matched_cost = sum(p * v for p, v in matched_opens)
@@ -769,7 +767,8 @@ class VnpyBacktestEngine:
 
                 if remaining > 0:
                     logger.warning(
-                        f"[{symbol}] 平仓有余量未配对: dir={direction} "
+                        f"[{symbol}] 平仓有余量未配对: close_dir={direction} "
+                        f"expected_open_dir={expected_open_dir} "
                         f"qty={trade_volume} remaining={remaining} "
                         f"open_queue_empty={not bool(open_queue)}"
                     )
@@ -836,10 +835,11 @@ class VnpyBacktestEngine:
         if not formatted_trades:
             return
 
-        # 只取有实际盈亏的交易（排除开仓和平仓盈亏为0的情况）
-        closed_trades = [t for t in formatted_trades if cast(float, t["pnl"]) != 0]
-        win_list = [t for t in closed_trades if cast(float, t["pnl"]) > 0]
-        loss_list = [t for t in closed_trades if cast(float, t["pnl"]) < 0]
+        # 统计盈亏数量时只纳入非零盈亏；连赢连亏序列遍历平仓交易，pnl=0 切断序列但不计入输赢。
+        close_trades = [t for t in formatted_trades if t.get("offset") != "open"]
+        non_zero_trades = [t for t in close_trades if cast(float, t["pnl"]) != 0]
+        win_list = [t for t in non_zero_trades if cast(float, t["pnl"]) > 0]
+        loss_list = [t for t in non_zero_trades if cast(float, t["pnl"]) < 0]
         win_cnt = len(win_list)
         loss_cnt = len(loss_list)
         total_trade_cnt = win_cnt + loss_cnt
@@ -852,17 +852,20 @@ class VnpyBacktestEngine:
         max_consecutive_loss = 0
         cur_win = 0
         cur_loss = 0
-        for t in formatted_trades:
+        for t in close_trades:
             if cast(float, t["pnl"]) > 0:
                 cur_win += 1
                 cur_loss = 0
                 if cur_win > max_consecutive_win:
                     max_consecutive_win = cur_win
-            else:
+            elif cast(float, t["pnl"]) < 0:
                 cur_loss += 1
                 cur_win = 0
                 if cur_loss > max_consecutive_loss:
                     max_consecutive_loss = cur_loss
+            else:
+                cur_win = 0
+                cur_loss = 0
 
         statistics["win_trades"] = win_cnt
         statistics["loss_trades"] = loss_cnt

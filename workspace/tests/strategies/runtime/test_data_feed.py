@@ -9,7 +9,7 @@ from strategies.core.indicators import IndicatorSpec, ema_func, kdj_func, sma_fu
 from strategies.core.types import Bar
 from strategies.ma_strategy import MACrossParams, MaStrategyCore
 from strategies.runtime.cache import clear_cache, get_cached_feed, set_cached_feed
-from strategies.runtime.data_feed import DataFeed
+from strategies.runtime.data_feed import DataFeed, _feed_satisfies_requirements
 from strategies.runtime.events import BigTradeEvent, Event
 from strategies.runtime.period import PeriodDataView
 from strategies.runtime.requirements import (
@@ -254,6 +254,24 @@ def make_view(
         lookback_bars = len(bars)
 
     return period_data.get_data(current_time, lookback_bars, events_df)
+
+
+def test_cache_hit_requires_matching_base_period_and_required_periods():
+    cached_reqs = make_datafeed_requirements({"5m": 5})
+    strategy_reqs = make_datafeed_requirements({"1m": 5})
+    bars = make_linear_bars("TEST_CACHE_PERIOD", datetime(2024, 1, 1, 9, 0), 12, step_minutes=5)
+    cached_feed = build_deterministic_feed(cached_reqs, bars, symbol="TEST_CACHE_PERIOD")
+
+    assert cached_feed.base_period == "5m"
+    assert not _feed_satisfies_requirements(cached_feed, strategy_reqs, None)
+
+
+def test_cache_hit_accepts_matching_required_periods():
+    reqs = make_datafeed_requirements({"1m": 5})
+    bars = make_linear_bars("TEST_CACHE_MATCH", datetime(2024, 1, 1, 9, 0), 12)
+    cached_feed = build_deterministic_feed(reqs, bars, symbol="TEST_CACHE_MATCH")
+
+    assert _feed_satisfies_requirements(cached_feed, reqs, ("2024-01-01", "2024-01-01"))
 
 
 def test_data_feed_basic():

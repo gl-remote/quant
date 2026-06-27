@@ -7,6 +7,16 @@ import pytest
 from backtest.vnpy_backtest_engine import VnpyBacktestEngine, _override_blown_up_stats
 
 
+def _trade(dt: str, direction: str, offset: str, price: float, volume: float):
+    return SimpleNamespace(
+        datetime=pd.Timestamp(dt).to_pydatetime(),
+        direction=SimpleNamespace(value=direction),
+        offset=SimpleNamespace(value=offset),
+        price=price,
+        volume=volume,
+    )
+
+
 def _make_daily(net_pnls: list[float]) -> pd.DataFrame:
     """构造 calculate_result() 形态的逐日 DataFrame"""
     n = len(net_pnls)
@@ -46,6 +56,41 @@ def test_parse_trades_records_commission_on_each_fill():
     assert trades[0]["commission"] == pytest.approx(2.0)
     assert trades[1]["commission"] == pytest.approx(2.2)
     assert sum(t["commission"] for t in trades) == pytest.approx(4.2)
+
+
+def test_calculate_trade_stats_ignores_open_and_flat_trades_for_loss_streak():
+    stats: dict = {}
+    trades = [
+        {"offset": "open", "pnl": 0.0},
+        {"offset": "close", "pnl": -10.0},
+        {"offset": "close", "pnl": 0.0},
+        {"offset": "open", "pnl": 0.0},
+        {"offset": "close", "pnl": -20.0},
+        {"offset": "close", "pnl": -30.0},
+        {"offset": "close", "pnl": 40.0},
+    ]
+
+    VnpyBacktestEngine._calculate_trade_stats(stats, trades)
+
+    assert stats["loss_trades"] == 3
+    assert stats["win_trades"] == 1
+    assert stats["max_consecutive_loss"] == 2
+    assert stats["max_consecutive_win"] == 1
+
+
+def test_parse_trades_pairs_long_open_with_short_close_without_warning(caplog):
+    engine = SimpleNamespace(
+        trades={
+            "BACKTESTING.1": _trade("2024-01-01 09:00", "多", "开", 100.0, 2.0),
+            "BACKTESTING.2": _trade("2024-01-01 10:00", "空", "平", 110.0, 2.0),
+        }
+    )
+
+    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509", rate=0.001, size=10)
+
+    assert "平仓有余量未配对" not in caplog.text
+    assert trades[1]["open_price"] == 100.0
+    assert trades[1]["pnl"] == pytest.approx(200.0)
 
 
 def test_blown_up_balance_crosses_zero_yields_negative_sharpe():

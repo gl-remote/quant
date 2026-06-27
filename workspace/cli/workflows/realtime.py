@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 from common.tqsdk_imports import tqsdk
@@ -22,7 +22,7 @@ from config import ConfigManager
 from data import DataManager
 from data.models import RealtimeSession, RealtimeTrade, database
 from loguru import logger
-from strategies import Signal
+from strategies import Signal, Strategy
 from strategies.bridges.tqsdk_bridge import TqsdkStrategyBridge
 from strategies.ma_strategy import MACrossParams
 from strategies.utils import apply_strategy_config, get_strategy_class_name, load_strategy
@@ -104,7 +104,10 @@ class TqsdkRealtimeWorkflow:
             margin=0.1,
         )
 
-        bridge = TqsdkStrategyBridge(strategy=strategy, state=state)
+        bridge: TqsdkStrategyBridge[MACrossParams] = TqsdkStrategyBridge(
+            strategy=cast(Strategy[MACrossParams], strategy),
+            state=state,
+        )
         account_name = type(tq_account).__name__
 
         # ── 数据库持久化：环境隔离由独立 SQLite 文件承担，实时链路使用统一表名 ──
