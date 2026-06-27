@@ -5,7 +5,7 @@
 > 来源 roadmap：[策略短期实验规划](../../roadmap/strategy-short-term-plan.md)  
 > 开发分支：`experiment/low-validation-cost-r1-breakout-retest`  
 > 开分支 hash：`bf4347d`  
-> 实现提交 hash：待提交
+> 实现提交 hash：`b02bc19`
 
 ## 1. 核心问题
 
