@@ -7,7 +7,7 @@
 > 发现基准 hash：9c3a740  
 > 开发分支：fix/framework-indicator-history  
 > 开分支 hash：630296b  
-> 实现提交 hash：待提交  
+> 实现提交 hash：cc7655d  
 > 关联文档：[strategy-atr-tuning.md](./strategy-atr-tuning.md)  
 > 目标：修复策略运行时对指标历史值和指标计算窗口的不稳定支持，避免策略层重复维护指标状态。
 
