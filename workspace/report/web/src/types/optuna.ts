@@ -1,5 +1,7 @@
 import type { EChartsOption } from "echarts";
 
+export type ParamValue = number | string | boolean | null;
+
 export interface ContourTrial {
   params: Record<string, number>;
   value: number | null;
@@ -12,7 +14,7 @@ export interface ContourMeta {
 
 export interface BestParam {
   name: string;
-  value: number;
+  value: ParamValue;
 }
 
 export interface DenormalizedScatter {

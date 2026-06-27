@@ -14,6 +14,8 @@ export interface NavItem {
   symbols: number;
   status: string;
   created: string;
+  use_fixed_seed?: boolean;
+  random_seed?: number | null;
 }
 
 export type RunLogs = string;
