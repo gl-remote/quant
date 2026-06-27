@@ -90,13 +90,15 @@
 
 ## 4. 实现建议
 
-优先用现有切面/DSL 表达策略意图：
+优先用现有切面/DSL 表达策略意图，避免在策略类中重复实现方向、确认、止盈止损、冷却等通用逻辑。实现新策略或调整策略前，先看 `strategy_aspects` 的模块说明。
 
-- `data_requirements()` 声明数据需求；
+- `data_requirements()` 只补充策略特有数据需求；DSL 涉及的指标会自动合并；
 - `@trend_long` / `@trend_short` 声明趋势方向；
 - `@confirm_long` / `@confirm_short` 声明确认条件；
-- `@exit_for_take_profit` / `@exit_for_stop_loss` 声明风控；
-- `@entry_block_*` 声明入场阻断。
+- `@exit_for_take_profit` / `@exit_for_stop_loss` 声明出场风控建议；
+- `@entry_block_*` 声明入场阻断建议。
+
+DSL 切面只写入 `ctx.aspects`，不直接交易；交易决策仍由策略 `on_bar()` 消费这些建议完成。
 
 如果只是验证结构假设或满足测试，可以先用策略内常量，确认有效后再参数化。需要用户配置、优化器搜索或复现实验的参数，再放入策略参数类和配置文件。
 

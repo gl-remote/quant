@@ -6,6 +6,8 @@
 
 from ..core.indicators import IndicatorSpec, atr_func, kdj_func, macd_func, sma_func
 
+IndicatorParam = int | float | str
+
 MACD = IndicatorSpec(
     name="macd",
     params={"fast": 12, "slow": 26, "signal": 9},
@@ -21,7 +23,7 @@ KDJ = IndicatorSpec(
 )
 
 
-def SMA(period: int | str) -> IndicatorSpec:  # noqa: N802
+def SMA(period: IndicatorParam) -> IndicatorSpec:  # noqa: N802
     """SMA 指标工厂 — 支持模板值，如 SMA("{sma_short}")"""
     return IndicatorSpec(
         name="sma",
@@ -31,7 +33,7 @@ def SMA(period: int | str) -> IndicatorSpec:  # noqa: N802
     )
 
 
-def ATR(period: int | str = 14) -> IndicatorSpec:  # noqa: N802
+def ATR(period: IndicatorParam = 14) -> IndicatorSpec:  # noqa: N802
     """ATR 指标工厂 — 支持模板值，如 ATR("{atr_period}")"""
     return IndicatorSpec(
         name="atr",
@@ -39,3 +41,18 @@ def ATR(period: int | str = 14) -> IndicatorSpec:  # noqa: N802
         window=period,
         func=atr_func,
     )
+
+
+def build_indicator(name: str, params: tuple[IndicatorParam, ...]) -> IndicatorSpec | None:
+    """按 DSL 指标名和参数构造 IndicatorSpec。"""
+    if name == "macd":
+        return MACD
+    if name == "kdj":
+        return KDJ
+    if name == "sma":
+        if not params:
+            return None
+        return SMA(params[0])
+    if name == "atr":
+        return ATR(params[0]) if params else ATR()
+    return None

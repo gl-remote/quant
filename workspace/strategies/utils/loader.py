@@ -6,14 +6,13 @@
 
 import importlib
 from pathlib import Path
-from typing import Any
 
 from common.constants import STRATEGY_MA
 
-from strategies import Strategy
+from ..core import Strategy
 
 
-def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> Strategy:
+def load_strategy(strategy_name: str | None = None, **strategy_kwargs: object) -> Strategy[object]:
     """根据名称动态加载策略实例
 
     支持三种传入方式:
@@ -60,6 +59,6 @@ def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> S
     raise ValueError(f"策略文件 {name}.py 中未找到 Strategy 实现类")
 
 
-def get_strategy_class_name(strategy: Strategy) -> str:
+def get_strategy_class_name(strategy: Strategy[object]) -> str:
     """获取策略类名用于日志显示"""
     return type(strategy).__name__
