@@ -8,7 +8,7 @@ from typing import Any
 # In editable-install mode (pip install -e), the source lives at the
 # original location, so we can walk up to the repo root and then to
 # workspace/packages/contracts/schemas/.
-_SCHEMAS_DIR = Path(__file__).resolve().parent.parent.parent.parent.parent / "packages" / "contracts" / "schemas"
+_SCHEMAS_DIR = Path(__file__).resolve().parents[3] / "contracts" / "schemas"
 
 
 def load_schema(name: str) -> dict[str, Any]:

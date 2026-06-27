@@ -102,8 +102,12 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().database_path
-            self._store = DataStore(db_path, create=self._create_database)
+            data_config = self._get_config().get_data_config()
+            self._store = DataStore(
+                data_config.database_path,
+                create=self._create_database,
+                allow_aggressive_schema_migration=data_config.allow_aggressive_schema_migration,
+            )
 
     @property
     def store(self) -> DataStore:
