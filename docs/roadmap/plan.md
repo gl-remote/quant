@@ -87,7 +87,7 @@ main.py
 
 | 工作项 | 说明 | 状态 |
 |--------|------|------|
-| MA 正期望优化规划 | 围绕 MA baseline 持续优化入场、过滤、出场和参数鲁棒性，直到验证长期正期望或明确失败退出 | 🟡 进行中，见 [ma-positive-expectancy.md](file:///Users/gaolei/Documents/src/quant/docs/roadmap/ma-positive-expectancy.md) |
+| MA 正期望优化复盘 | MA baseline 主线阶段性退出，作为后续策略对照基准保留 | ✅ 已归档，见 [ma-positive-expectancy.md](../archive/strategy-research/ma-positive-expectancy.md) |
 | MA 多品种验证 | 同一参数组在多个合约上跑通，排查单品种偶然性 | 🟡 进行中 |
 | MA 多窗口验证 | 按时间窗口滚动验证，排除窗口过拟合 | 🟡 进行中 |
 | 交易成本敏感性 | 评估手续费、滑点对策略收益的侵蚀 | 🟡 进行中 |

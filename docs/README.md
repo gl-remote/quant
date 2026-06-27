@@ -19,7 +19,6 @@
 ## Roadmap / 未来规划
 
 - [项目改进计划](roadmap/plan.md) — 活跃，总体路线图 + 待办 + 已知缺陷
-- [ATR 策略稳健正期望 Roadmap](roadmap/strategy-atr-tuning.md) — 活跃，当前策略调优主线
 
 ## Archive / 已归档设计记录
 

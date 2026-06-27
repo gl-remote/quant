@@ -22,7 +22,8 @@
 |------|------|
 | `aspects/` | 方向/风控切面 DSL 体系 |
 | `backtest/` | 回测链路重构与优化 |
-| `strategy/` | 策略设计改进 |
+| `strategy-research/` | 策略研究复盘与阶段性结论 |
+| `strategy/` | 策略工程设计改进 |
 | `infra/` | 基础设施、报告模块、目录规划 |
 | `deprecated/` | 已废弃的历史方案（仅供参考） |
 
@@ -58,9 +59,12 @@
 | [backtest-parallel.md](backtest/backtest-parallel.md) | 已实现设计记录 | 已实现 | 2026-06-19 | ParallelBacktestOptimizer 并行回测 |
 | [backtest-refactor-plan.md](backtest/backtest-refactor-plan.md) | 已实现设计记录 | 阶段 0-9 已完成 | 2026-06-23 | 回测链路分阶段重构 |
 
-### strategy/ — 策略设计
+### strategy-research/ — 策略研究复盘
 
-暂无活跃条目。误归档的 MA 策略盈利改进文档已转为 ATR 策略稳健正期望 Roadmap，见 `../roadmap/strategy-atr-tuning.md`。
+| 文件 | 类型 | 状态 | 完成日期 | 说明 |
+|------|------|------|---------|------|
+| [ma-positive-expectancy.md](strategy-research/ma-positive-expectancy.md) | 策略研究复盘 | 主触发方向暂停 | 2026-06-26 | MA baseline 正期望研究复盘，保留 `ma8` baseline |
+| [strategy-atr-tuning.md](strategy-research/strategy-atr-tuning.md) | 策略研究复盘 | 主触发方向降级 | 2026-06-27 | ATR 主触发方向降级，保留 ATR 风控模块 |
 
 ### infra/ — 基础设施
 

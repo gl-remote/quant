@@ -8,7 +8,7 @@
 
 ## 1. 目标
 
-围绕 [ma_strategy.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/ma_strategy.py)，验证 MA 是否能形成可迁移、可解释、扣除成本后仍具备长期正期望的中低频趋势策略。
+围绕 [ma_strategy.py](../../../workspace/strategies/ma_strategy.py)，验证 MA 是否能形成可迁移、可解释、扣除成本后仍具备长期正期望的中低频趋势策略。
 
 当前一个多月测试数据下，目标策略形态是：
 
