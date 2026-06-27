@@ -121,6 +121,12 @@ class ATRCrossParams:
     time_stop_bars: int = 48
     """入场后最长持仓 5m K 线数量，默认 48 根约 1 个交易日"""
 
+    entry_cooldown_minutes: int = 10
+    """止盈/止损平仓后的入场冷却分钟数，默认 10 分钟"""
+
+    exit_on_reverse_signal: bool = False
+    """持仓时遇到反向入场条件是否退出，默认关闭"""
+
 
 # ── 建议型方向切面声明 ──
 # 装饰器从下到上执行，运行时所有切面先评估条件写入 ctx.aspects，
@@ -130,8 +136,8 @@ class ATRCrossParams:
 # ── 做空方向切面 ──
 @trend_short("sma({sma_short})@15m < sma({sma_long})@15m")
 # ── 风控切面 ──
-@entry_block_after_take_profit("cooldown() < 10")
-@entry_block_after_stop_loss("cooldown() < 10")
+@entry_block_after_take_profit("cooldown() < {entry_cooldown_minutes}")
+@entry_block_after_stop_loss("cooldown() < {entry_cooldown_minutes}")
 @exit_for_take_profit(
     "peak_profit() >= atr@15m * {trailing_activation_atr} && drawdown_pct() >= {trailing_drawdown_ratio}"
 )
@@ -201,6 +207,9 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
                 volume=state.position.volume,
             )
             signal.diagnostics = first_exit.detail
+        elif direction and config.exit_on_reverse_signal and self._has_reverse_signal(state, ctx, config):
+            action = TRADE_ACTION_SELL if direction == TRADE_DIRECTION_LONG else TRADE_ACTION_BUY
+            signal = Signal(action=action, reason="reverse_exit", volume=state.position.volume)
         elif direction and self._holding_bars(state) >= config.time_stop_bars:
             action = TRADE_ACTION_SELL if direction == TRADE_DIRECTION_LONG else TRADE_ACTION_BUY
             signal = Signal(action=action, reason="time_stop", volume=state.position.volume)
@@ -234,6 +243,12 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
         if len(values) < 2:
             return False
         return values[-1] < config.kdj_signal_short
+
+    def _has_reverse_signal(self, state: State[ATRCrossParams], ctx: BarContext, config: ATRCrossParams) -> bool:
+        direction_keys: dict[str, set[str]] = type(self).__direction_keys__
+        if state.position.direction == TRADE_DIRECTION_LONG:
+            return direction_keys["short"] <= ctx.aspects.direction.short.keys and self._has_short_pullback(ctx, config)
+        return direction_keys["long"] <= ctx.aspects.direction.long.keys and self._has_long_pullback(ctx, config)
 
     @staticmethod
     def _recent_kdj_values(ctx: BarContext, lookback_bars: int) -> list[float]:

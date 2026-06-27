@@ -23,6 +23,8 @@ def test_atr_pullback_params_defaults() -> None:
     assert cfg.kdj_signal_long == 50
     assert cfg.kdj_signal_short == 50
     assert cfg.time_stop_bars == 48
+    assert cfg.entry_cooldown_minutes == 10
+    assert not cfg.exit_on_reverse_signal
 
 
 def test_atr_pullback_memory_allows_signal_after_recent_pullback() -> None:
