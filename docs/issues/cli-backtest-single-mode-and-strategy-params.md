@@ -3,7 +3,7 @@
 > 类型：CLI 功能缺口 / 实验复现能力
 > 状态：已验证
 > 发现日期：2026-06-27
-> 修复提交 hash：待提交
+> 修复提交 hash：96f2869
 > 发现分支：experiment/low-validation-cost-r2-bollinger-retest
 > 关联实验：[`low-validation-cost-r2-bollinger-retest`](../workbench/low-validation-cost-r2-bollinger-retest.md)
 > 相关代码：[`workspace/cli/commands/backtest.py`](../../workspace/cli/commands/backtest.py)、[`workspace/cli/workflows/backtests_run.py`](../../workspace/cli/workflows/backtests_run.py)

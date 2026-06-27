@@ -6,7 +6,7 @@
 > 来源规划：[strategy-short-term-plan.md](../roadmap/strategy-short-term-plan.md)  
 > 开发分支：experiment/low-validation-cost-r2-bollinger-retest  
 > 开分支 hash：bf4347d  
-> 实现提交 hash：待提交
+> 实现提交 hash：96f2869
 
 ## 1. 核心问题
 
