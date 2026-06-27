@@ -83,6 +83,7 @@ class VnpySearchRequest:
     no_search: bool = False
     dump_indicators: bool = False
     early_stop_patience: int | None = None
+    strategy_param_overrides: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -138,7 +139,7 @@ class BacktestRunWorkflow:
     def run_vnpy_search(self, req: VnpySearchRequest) -> None:
         """vnpy 批量参数搜索（含串行 / 并行）"""
         bc = self._cm.get_backtest_config()
-        strategy_params = self._strategy_params(req.strategy)
+        strategy_params = self._strategy_params(req.strategy, req.strategy_param_overrides)
         interval = self._strategy_required_interval(req.strategy, strategy_params, bc.interval)
         bc = bc.model_copy(update={"interval": interval})
 
@@ -333,9 +334,12 @@ class BacktestRunWorkflow:
 
     # ── vnpy 公共部分 ──────────────────────────────────
 
-    def _strategy_params(self, strategy_name: str) -> dict[str, Any]:
+    def _strategy_params(self, strategy_name: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         sc = self._cm.get_strategy_config(strategy_name or "ma")
-        return sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+        params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+        if overrides:
+            params.update(overrides)
+        return params
 
     @staticmethod
     def _strategy_required_interval(strategy_name: str, strategy_params: dict[str, Any], default_interval: str) -> str:
