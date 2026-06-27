@@ -1,14 +1,14 @@
 # 策略运行时指标历史读取问题
 
 > 类型：Roadmap / 框架缺陷记录  
-> 状态：待修复  
+> 状态：已完成  
 > 创建日期：2026-06-26  
 > 发现分支：feature/atr-signal-density  
 > 发现基准 hash：9c3a740  
 > 开发分支：fix/framework-indicator-history  
 > 开分支 hash：630296b  
-> 实现提交 hash：cc7655d  
-> 关联文档：[strategy-atr-tuning.md](./strategy-atr-tuning.md)  
+> 实现提交 hash：5a553c9  
+> 关联文档：[strategy-atr-tuning.md](../../roadmap/strategy-atr-tuning.md)  
 > 目标：修复策略运行时对指标历史值和指标计算窗口的不稳定支持，避免策略层重复维护指标状态。
 
 ## 1. 背景
