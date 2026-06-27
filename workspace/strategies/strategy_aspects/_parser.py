@@ -1,7 +1,7 @@
 """字符串表达式解析器（Pratt Parser）— 装饰器 DSL 字符串化的核心。
 
 将形如 ``"macd@1m > 0 && sma({sma_short})@5m > sma({sma_long})@5m"``
-的字符串表达式解析为 ``_ParsedPredicate``，兼容 ``_Predicate`` Protocol，
+的字符串表达式解析为 ``_ParsedPredicate``，兼容 ``AspectPredicate`` Protocol，
 供方向/风控装饰器统一使用。
 
 用法::
@@ -20,6 +20,7 @@ from typing import Any, Literal
 
 from .builtins import call_builtin
 from .primitives import MetricRef
+from .templates import resolve_template_value
 
 # ── Token 定义 ─────────────────────────────────────────────
 
@@ -89,22 +90,6 @@ def tokenize(source: str) -> list[Token]:
         tokens.append(Token(type=_match_type(match), value=match.group(), pos=match.start()))
     tokens.append(Token(type="EOF", value="", pos=len(source)))
     return tokens
-
-
-def _resolve_template_value(value: Any, config: Any) -> Any:
-    """解析模板值，支持完整模板和部分模板。"""
-    if not isinstance(value, str):
-        return value
-    full_match = re.match(r"^\{(\w+)\}$", value)
-    if full_match:
-        return getattr(config, full_match.group(1), value)
-    if "{" in value:
-
-        def _replace(m: re.Match[str]) -> str:
-            return str(getattr(config, m.group(1)))
-
-        return re.sub(r"\{(\w+)\}", _replace, value)
-    return value
 
 
 def _as_indicator_params(params: list[Any]) -> tuple[float | int | str, ...] | None:
@@ -377,7 +362,7 @@ def parse_expr(source: str) -> _ParsedPredicate:
     """解析 DSL 字符串表达式为 ``_ParsedPredicate``。
 
     :param source: DSL 表达式字符串，如 ``"macd@1m > 0"``
-    :returns: 满足 ``_Predicate`` Protocol 的可求值谓词对象
+    :returns: 满足 ``AspectPredicate`` Protocol 的可求值谓词对象
     :raises SyntaxError: 语法错误时抛出，含位置信息
     """
     tokens = tokenize(source)
@@ -390,7 +375,7 @@ def parse_expr(source: str) -> _ParsedPredicate:
 
 
 class _ParsedPredicate:
-    """将解析后的表达式树包装为 ``_Predicate`` Protocol。
+    """将解析后的表达式树包装为 ``AspectPredicate`` Protocol。
 
     由 ``parse_expr`` 返回，不直接构造。
     """
@@ -398,7 +383,7 @@ class _ParsedPredicate:
     def __init__(self, expr: Expr) -> None:
         self._expr = expr
 
-    # ── _Predicate Protocol ──
+    # ── AspectPredicate Protocol ──
 
     @property
     def metrics(self) -> tuple[MetricRef, ...]:
@@ -521,7 +506,7 @@ def _read_indicator_value(ctx: Any, metric: MetricRef, config: Any) -> Any:
     if view is None:
         return None
     col = generate_indicator_column_name(metric.indicator.name, metric.indicator.params, period=metric.period)
-    resolved_col = _resolve_template_value(col, config)
+    resolved_col = resolve_template_value(col, config)
     return view.indicator(resolved_col, -1)
 
 
@@ -529,7 +514,7 @@ def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
     """从 ctx.multi[period] 读取指标值；数据未就绪时返回 None。"""
     from .indicators import build_indicator
 
-    resolved_params = _as_indicator_params([_resolve_template_value(p, config) for p in expr.params])
+    resolved_params = _as_indicator_params([resolve_template_value(p, config) for p in expr.params])
     if resolved_params is None:
         return None
     indicator = build_indicator(expr.indicator_name, resolved_params)

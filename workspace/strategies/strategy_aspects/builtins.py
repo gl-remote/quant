@@ -14,40 +14,20 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-BUILTIN_FUNCTIONS: frozenset[str] = frozenset(
-    {
-        "cooldown",
-        "profit_abs",
-        "profit_pct",
-        "loss_abs",
-        "loss_pct",
-        "peak_profit",
-        "drawdown_pct",
-    }
-)
+BuiltinFn = Callable[[Any, Any], float | None]
 
 
 def call_builtin(name: str, ctx: Any, config: Any) -> float | None:
     """调用 DSL 内置函数；数据不足或函数不存在时返回 None。"""
-    try:
-        if name == "cooldown":
-            return _cooldown(ctx, config)
-        if name == "profit_abs":
-            return _profit_abs(ctx, config)
-        if name == "profit_pct":
-            return _profit_pct(ctx, config)
-        if name == "loss_abs":
-            return _loss_abs(ctx, config)
-        if name == "loss_pct":
-            return _loss_pct(ctx, config)
-        if name == "peak_profit":
-            return _peak_profit(ctx, config)
-        if name == "drawdown_pct":
-            return _drawdown_pct(ctx, config)
+    builtin = BUILTIN_FUNCTIONS.get(name)
+    if builtin is None:
         return None
+    try:
+        return builtin(ctx, config)
     except (AttributeError, TypeError):
         return None
 
@@ -140,3 +120,14 @@ def _drawdown_pct(ctx: Any, config: Any) -> float | None:
     if pos is None or not pos.direction or pos.highest_price == 0:
         return None
     return abs(pos.highest_price - ctx.bar.close) / pos.highest_price  # type: ignore[no-any-return]
+
+
+BUILTIN_FUNCTIONS: dict[str, BuiltinFn] = {
+    "cooldown": _cooldown,
+    "profit_abs": _profit_abs,
+    "profit_pct": _profit_pct,
+    "loss_abs": _loss_abs,
+    "loss_pct": _loss_pct,
+    "peak_profit": _peak_profit,
+    "drawdown_pct": _drawdown_pct,
+}

@@ -32,7 +32,8 @@
 - 布尔组合：``&& || and or``，支持括号分组
 - 自定义理由名：``@confirm_long("macd@1m > 0", tag="macd_fast_up")``
 
-详见 ``_parser.py`` 及 ``docs/roadmap/decorator-string-dsl.md``。
+表达式语法以 ``_parser.py`` 为准；可用指标见 ``indicators.py`` 的 ``build_indicator()``，
+内置函数见 ``builtins.py``。
 """
 
 from ._core import confirm_long, confirm_short, trend_long, trend_short
