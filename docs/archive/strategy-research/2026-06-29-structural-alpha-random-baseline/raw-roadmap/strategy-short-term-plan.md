@@ -3,9 +3,10 @@
 > 类型：Roadmap / 短期研究计划  
 > 状态：执行中  
 > 创建日期：2026-06-28  
-> 研究框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](./strategy-research-framework.md)  
-> 历史规划：[历史短期实验规划](../archive/strategy-research/2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
-> 文档边界：本文件只维护阶段目标、评价标准和候选方向；具体实验过程、参数对照、中间结果、开发分支和临时结论统一写入 [`docs/workbench`](../workbench/)，结论稳定后再归档到 [`docs/archive/strategy-research`](../archive/strategy-research/)；若实验中发现回测引擎、DataFeed、vnpy 桥接、CLI / runner、指标或成本口径等底层框架问题，应按 [`docs/issues`](../issues/) 工作流先提 issue 并暂停受影响实验。
+> 研究框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../../../roadmap/strategy-research-framework.md)  
+> 历史规划：[历史短期实验规划](../2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
+> 原始路径：`docs/roadmap/strategy-short-term-plan.md`  
+> 归档说明：本文件为阶段结束后保存的 roadmap 原文版，链接已按 archive 相对路径修正。
 
 ## 1. 短期定位
 
