@@ -14,7 +14,7 @@
 
 - 开发分支：experiment/structural-alpha-r5-hourly-liquidity-sweep
 - 开分支 hash：04b8573
-- 实现提交 hash：待回填
+- 实现提交 hash：f3d2ccb
 
 ## 核心问题
 
