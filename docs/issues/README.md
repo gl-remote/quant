@@ -54,6 +54,14 @@
 ## 当前处理建议
 ```
 
+## 当前 issue 索引
+
+| Issue | 状态 | 说明 |
+|-------|------|------|
+| [cli-entry-workspace-pythonpath.md](./cli-entry-workspace-pythonpath.md) | 已确认 | CLI 入口未自动暴露 `workspace` 包路径 |
+| [vnpy-close-trade-pairing-warning.md](./vnpy-close-trade-pairing-warning.md) | 待排查 | vnpy 平仓未配对警告影响成交级统计口径 |
+| [prevday-volume-random-baseline-performance.md](./prevday-volume-random-baseline-performance.md) | 待排查 | `prevday_volume_filter` 随机对照批量运行性能异常偏慢 |
+
 ## 重要约定
 
 - issue 文档记录的是框架问题，不是策略结论。

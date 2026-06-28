@@ -69,6 +69,10 @@ class StrategyFactory:
         Raises:
             TypeError: 无法提取配置类型时抛出
         """
+        maybe_config_cls = getattr(strategy_cls, "config_type", None)
+        if isinstance(maybe_config_cls, type):
+            return maybe_config_cls
+
         config_cls: type | None = None
         for base in getattr(strategy_cls, "__orig_bases__", []):
             origin = typing.get_origin(base)
