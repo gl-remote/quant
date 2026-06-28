@@ -14,7 +14,7 @@
 
 - 开发分支：experiment/structural-alpha-r6-low-volatility-restart
 - 开分支 hash：6159e93
-- 实现提交 hash：待回填
+- 实现提交 hash：101b71c
 
 ## 核心问题
 
