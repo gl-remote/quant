@@ -3,8 +3,8 @@
 > 类型：Roadmap / 长期研究共识  
 > 状态：指导后续策略实验  
 > 创建日期：2026-06-27  
-> 相关归档：[MA 策略正期望优化复盘](../archive/strategy-research/ma-positive-expectancy.md)、[ATR 策略研究复盘](../archive/strategy-research/strategy-atr-tuning.md)  
-> 短期执行：[策略短期实验规划](./strategy-short-term-plan.md)
+> 相关归档：[MA 策略正期望优化复盘](../archive/strategy-research/2026-06-26-indicator-baseline/ma-positive-expectancy.md)、[ATR 策略研究复盘](../archive/strategy-research/2026-06-26-indicator-baseline/strategy-atr-tuning.md)、[历史短期实验规划](../archive/strategy-research/2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
+> 短期执行：[策略短期研究计划](./strategy-short-term-plan.md)
 
 ## 1. 核心共识
 
@@ -36,18 +36,19 @@
 
 这更符合小资金约束：账户不能长期等待少数右尾行情，也无法依赖大量品种分散来平滑亏损簇；但可以优先寻找市场共同关注、失败边界和盈利上界相对清晰的共识价格区间，在这些区间用明确账户风险预算做方向选择实验。
 
-## 2. 为什么不做原创 alpha discovery
+## 2. 我们对 Alpha 与 Beta 的选择
 
-| 原因 | 说明 |
-|------|------|
-| 数据不足 | 当前样本长度和品种覆盖不足以支持可靠的新因子发现 |
-| 算力有限 | 大规模特征搜索、组合筛选和稳健性验证成本过高 |
-| 资金有限 | 账户无法承受大量试错、长亏损簇和广泛分散前的波动 |
-| 过拟合风险高 | 参数搜索容易在短样本中拟合噪声 |
-| 归因困难 | 复杂组合信号很难解释收益来源和失效原因 |
-| 与当前优势不匹配 | 当前更适合做回测框架、成本约束、风控、报告和执行层面的工程化验证 |
+本项目并不是不追求 alpha，而是不以原创预测型 alpha discovery 为主线；同时也不把主要收益来源建立在长期 beta 暴露、广泛分散和大数定律兑现之上。
+
+| 路径 | 本项目选择 | 原因 |
+|------|------------|------|
+| 原创预测型 Alpha | 不作为主线 | 当前样本长度、品种覆盖、算力和研究资源不足以支持可靠的新因子发现；参数搜索、复杂指标组合和多重过滤容易在短样本中拟合噪声，且收益归因困难 |
+| 长期 Beta / 风险溢价 | 不作为主线 | 小资金账户难以承受长期暴露带来的长亏损簇、尾部回撤和广泛分散前的波动，也无法依赖大量品种和长期大数定律平滑收益路径 |
+| 结构型 Alpha | 作为主线 | 当前更适合围绕共识价格区间、明确失败边界、短期盈利上界、账户风险预算、成本约束和执行质量，验证是否存在可重复的成本后正期望结构 |
 
 因此，参数搜索、复杂指标组合和多重过滤不应被当作发现 alpha 的工具。Optuna / Bayesian search 只能在结构已经成立后用于局部参数平台验证，不能承担“创造策略优势”的职责。
+
+本项目追求的 alpha，不是“更早预测未来方向”的信号优势，而是：在市场共同关注、失败边界清晰、验证成本可控的价格区间内，通过价格原始盈亏比、账户风险预算、胜率 / 盈亏比转化和成本后期望，塑造可验证的结构性优势。
 
 ## 3. 我们选择的交易哲学
 
@@ -627,7 +628,42 @@ Price Action、Wyckoff、Market Profile、均值回归、突破交易、Scalping
 15. 参数附近没有稳定平台，轻微扰动即断崖式退化；
 16. 无法解释收益来自共识价格区间、接受 / 拒绝质量、失败边界、盈利上界、账户风险预算、止损放宽、止盈、时间退出、成本还是市场状态变化。
 
-## 10. 总结
+## 10. 短期计划归档目录约定
+
+`docs/roadmap/strategy-short-term-plan.md` 永远表示当前活跃短期研究计划。
+
+当一个短期研究阶段结束时，不再把归档重点放在单个历史计划文件名上，而是把该阶段的短期计划、实验归档和相关复盘统一放入带日期和主题的目录：
+
+```text
+docs/archive/strategy-research/<YYYY-MM-DD>-<阶段主题>/
+```
+
+示例：
+
+```text
+docs/archive/strategy-research/2026-06-27-low-validation-cost/
+docs/archive/strategy-research/2026-06-28-structural-alpha/
+docs/archive/strategy-research/2026-07-xx-auction-structure/
+```
+
+目录内文件按内容命名即可，不要求某个文件承担强索引职责：
+
+```text
+<阶段主题>-short-term-plan.md
+<实验版本或结构主题>.md
+<必要复盘或补充说明>.md
+```
+
+含义：
+
+| 路径 | 含义 |
+|------|------|
+| `docs/roadmap/strategy-short-term-plan.md` | 当前活跃短期研究计划 |
+| `docs/archive/strategy-research/<YYYY-MM-DD>-<阶段主题>/` | 某个历史研究阶段的归档集合 |
+
+因此，后续归档短期计划时，应先根据该阶段的核心研究主题建立 `<YYYY-MM-DD>-<阶段主题>` 目录，再把该阶段相关计划、实验摘要和必要复盘放入该目录，并同步修正长期框架、实验归档和 issues 中的相对链接。
+
+## 11. 总结
 
 后续研究应坚持：
 

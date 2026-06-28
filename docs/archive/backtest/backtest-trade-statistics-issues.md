@@ -5,7 +5,7 @@
 > 创建日期：2026-06-27  
 > 发现分支：experiment/low-validation-cost-r1  
 > 发现基准 hash：f557d25  
-> 关联实验：[low-validation-cost-r1-bollinger-squeeze-breakout.md](../strategy-research/low-validation-cost-r1-bollinger-squeeze-breakout.md)  
+> 关联实验：[low-validation-cost-r1-bollinger-squeeze-breakout.md](../strategy-research/2026-06-27-low-validation-cost/low-validation-cost-r1-bollinger-squeeze-breakout.md)  
 > 相关代码：[vnpy_backtest_engine.py](../../../workspace/backtest/vnpy_backtest_engine.py)
 
 ## 1. 背景

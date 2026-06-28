@@ -2,7 +2,7 @@
 
 > 状态：未通过 / 暂停方向  
 > 研究方向：前高 / 前低突破后的首次回踩接受 / 失败  
-> 来源 roadmap：[策略短期实验规划](../../roadmap/strategy-short-term-plan.md)  
+> 来源 roadmap：[策略短期实验规划](./low-validation-cost-short-term-plan.md)  
 > 开发分支：`experiment/low-validation-cost-r1-breakout-retest`  
 > 开分支 hash：`bf4347d`  
 > 实现提交 hash：`b02bc19`

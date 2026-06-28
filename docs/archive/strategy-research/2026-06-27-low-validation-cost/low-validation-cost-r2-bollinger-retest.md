@@ -3,7 +3,7 @@
 > 类型：Archive / 策略实验摘要  
 > 状态：已完成 / 未通过  
 > 创建日期：2026-06-27  
-> 来源规划：[strategy-short-term-plan.md](../../roadmap/strategy-short-term-plan.md)  
+> 来源规划：[low-validation-cost-short-term-plan.md](./low-validation-cost-short-term-plan.md)  
 > 开发分支：experiment/low-validation-cost-r2-bollinger-retest  
 > 开分支 hash：bf4347d  
 > 实现提交 hash：96f2869
@@ -105,6 +105,6 @@ R2 固定参数组未通过。
 
 ## 7. 复现备注
 
-原始结果最初由临时固定参数单次回测生成。实验过程中发现 CLI 缺少显式单次回测和策略参数覆盖入口，已记录并修复于 [cli-backtest-single-mode-and-strategy-params.md](../../issues/cli-backtest-single-mode-and-strategy-params.md)。
+原始结果最初由临时固定参数单次回测生成。实验过程中发现 CLI 缺少显式单次回测和策略参数覆盖入口，已记录并修复于 [cli-backtest-single-mode-and-strategy-params.md](../../../issues/cli-backtest-single-mode-and-strategy-params.md)。
 
 由于本轮结构未通过，实验策略代码未进入长期策略目录。若未来需要复现，应先按本文第 2、3 节重新实现最小实验策略，再使用修复后的 CLI 单次回测入口运行固定参数组合。

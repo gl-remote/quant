@@ -6,8 +6,8 @@
 > 开发分支：feature/atr-signal-density  
 > 开分支 hash：9c3a740  
 > 实现提交 hash：f790ed3  
-> 策略代码：[atr_strategy.py](../../../workspace/strategies/atr_strategy.py)  
-> 框架问题：[framework-indicator-history-issues.md](../aspects/framework-indicator-history-issues.md)
+> 策略代码：[atr_strategy.py](../../../../workspace/strategies/atr_strategy.py)  
+> 框架问题：[framework-indicator-history-issues.md](../../aspects/framework-indicator-history-issues.md)
 
 ## 1. 研究目标
 

@@ -8,7 +8,7 @@
 > 开发分支：fix/framework-indicator-history  
 > 开分支 hash：630296b  
 > 实现提交 hash：5a553c9  
-> 关联文档：[strategy-atr-tuning.md](../strategy-research/strategy-atr-tuning.md)  
+> 关联文档：[strategy-atr-tuning.md](../strategy-research/2026-06-26-indicator-baseline/strategy-atr-tuning.md)  
 > 目标：修复策略运行时对指标历史值和指标计算窗口的不稳定支持，避免策略层重复维护指标状态。
 
 ## 1. 背景
@@ -253,6 +253,6 @@ IndicatorSpec(
 
 ## 6. 与 ATR roadmap 的关系
 
-本问题是在 [strategy-atr-tuning.md](../strategy-research/strategy-atr-tuning.md) 的 P1.5 信号密度重构过程中发现的框架层缺陷。
+本问题是在 [strategy-atr-tuning.md](../strategy-research/2026-06-26-indicator-baseline/strategy-atr-tuning.md) 的 P1.5 信号密度重构过程中发现的框架层缺陷。
 
 短期 ATR 可继续使用策略层缓存推进实验；长期应先修复本框架问题，再清理 ATR 中的临时绕法。

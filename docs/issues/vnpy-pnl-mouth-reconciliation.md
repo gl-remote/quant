@@ -2,7 +2,7 @@
 
 > 状态：已验证  
 > 发现来源：`low-validation-cost-r1-breakout-retest` 实验  
-> 关联归档：[low-validation-cost-r1-breakout-retest](../archive/strategy-research/low-validation-cost-r1-breakout-retest.md)
+> 关联归档：[low-validation-cost-r1-breakout-retest](../archive/strategy-research/2026-06-27-low-validation-cost/low-validation-cost-r1-breakout-retest.md)
 
 ## 问题
 

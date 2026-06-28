@@ -3,7 +3,7 @@
 > 类型：Archive / 策略实验记录  
 > 状态：已归档；暂停当前形态，不进入参数搜索  
 > 创建日期：2026-06-27  
-> 来源规划：[strategy-short-term-plan.md](../../roadmap/strategy-short-term-plan.md)  
+> 来源规划：[low-validation-cost-short-term-plan.md](./low-validation-cost-short-term-plan.md)  
 > 分支：experiment/low-validation-cost-r1  
 > 代码状态：实验策略和一次性 runner 已清理，不进入主线
 
@@ -39,7 +39,7 @@ R1 仅做多，用于观察边界宽窄对结果的影响。
    严格失败边界、实际止损边界、止损放宽倍数、时间退出、exit reason 这些字段值得保留为后续低验证成本实验模板。
 
 4. **统计和数据链路已修正**  
-   最大连续亏损统计、开平仓配对、DataFeed 缓存周期校验和正式 CLI 策略周期选择已修复，归档记录见 [backtest-trade-statistics-issues.md](../backtest/backtest-trade-statistics-issues.md)。
+   最大连续亏损统计、开平仓配对、DataFeed 缓存周期校验和正式 CLI 策略周期选择已修复，归档记录见 [backtest-trade-statistics-issues.md](../../backtest/backtest-trade-statistics-issues.md)。
 
 ## 4. 决策
 

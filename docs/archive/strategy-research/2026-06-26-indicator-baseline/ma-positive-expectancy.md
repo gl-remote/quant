@@ -8,7 +8,7 @@
 
 ## 1. 目标
 
-围绕 [ma_strategy.py](../../../workspace/strategies/ma_strategy.py)，验证 MA 是否能形成可迁移、可解释、扣除成本后仍具备长期正期望的中低频趋势策略。
+围绕 [ma_strategy.py](../../../../workspace/strategies/ma_strategy.py)，验证 MA 是否能形成可迁移、可解释、扣除成本后仍具备长期正期望的中低频趋势策略。
 
 当前一个多月测试数据下，目标策略形态是：
 
@@ -46,7 +46,7 @@
 | 事项 | 结论 |
 |------|------|
 | 初始 baseline | 每条回测均只有 1 笔交易，不能作为正期望证据 |
-| 低交易活跃度惩罚 | [optimizer.py](file:///Users/gaolei/Documents/src/quant/workspace/backtest/optimizer.py) 加入低交易次数惩罚后，所有低活跃度 trial 得分被压到 `-999` |
+| 低交易活跃度惩罚 | [optimizer.py](../../../../workspace/backtest/optimizer.py) 加入低交易次数惩罚后，所有低活跃度 trial 得分被压到 `-999` |
 | 暴露的问题 | 优化器保护生效，但 MA 入场/出场结构无法产生足够样本 |
 | 决策 | 不继续扩大 trial，先拆解信号和出场结构 |
 
@@ -92,7 +92,7 @@
 
 ### 3.4 ma8 九轮验证
 
-[ma_strategy.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/ma_strategy.py) 升级为 `ma8`：
+[ma_strategy.py](../../../../workspace/strategies/ma_strategy.py) 升级为 `ma8`：
 
 - 方向结构改成 `15m` SMA 背景 + `5m` MACD/KDJ 触发；
 - 去掉 `1m` 方向确认；
