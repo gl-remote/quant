@@ -8,7 +8,7 @@
 > 研究框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)  
 > 开发分支：`experiment/structural-alpha-r3-volume-shock-boundary`  
 > 开分支 hash：`9c619c4`  
-> 实现提交 hash：待补
+> 实现提交 hash：`ee239f1`
 
 ## 1. 核心问题
 
