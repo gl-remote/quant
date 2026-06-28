@@ -190,6 +190,14 @@ class VnpyBacktestBridge(CtaTemplate):
             if bar.low < pos.lowest_price:
                 pos.lowest_price = bar.low
 
+    @staticmethod
+    def _format_diagnostic_value(key: str, value: Any) -> str:
+        if isinstance(value, bool):
+            return f"{key}={value}"
+        if isinstance(value, int | float):
+            return f"{key}={value:.4f}"
+        return f"{key}={value}"
+
     def _log_bar_diagnostics(self, bar_time: pd.Timestamp, signal: Signal, close_price: float) -> None:
         """统一诊断日志 — 有信号逐条打，无信号百条采样
 
@@ -202,7 +210,7 @@ class VnpyBacktestBridge(CtaTemplate):
         self._bar_log_count += 1
 
         if signal.action:
-            diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+            diag_str = " ".join(self._format_diagnostic_value(key, value) for key, value in signal.diagnostics.items())
             logger.debug(
                 "[{}] {} signal={} reason={} vol={} | {}",
                 self.strategy_name,
@@ -214,7 +222,9 @@ class VnpyBacktestBridge(CtaTemplate):
             )
         elif self._bar_log_count % 100 == 1:
             if signal.diagnostics:
-                diag_str = " ".join(f"{k}={v:.4f}" for k, v in signal.diagnostics.items())
+                diag_str = " ".join(
+                    self._format_diagnostic_value(key, value) for key, value in signal.diagnostics.items()
+                )
             else:
                 diag_str = f"close={close_price:.4f}"
             logger.debug("[{}] {} no signal | {}", self.strategy_name, bar_time, diag_str)
