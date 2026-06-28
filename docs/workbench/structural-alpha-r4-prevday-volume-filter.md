@@ -8,7 +8,7 @@
 > 研究框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)  
 > 开发分支：`experiment/structural-alpha-r4-consensus-volume-filter`  
 > 开分支 hash：`8984d9d`  
-> 实现提交 hash：待回填
+> 实现提交 hash：`5c94dfd`
 
 ## 1. 核心问题
 
