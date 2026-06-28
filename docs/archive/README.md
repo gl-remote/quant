@@ -58,6 +58,8 @@
 |------|------|------|---------|------|
 | [backtest-parallel.md](backtest/backtest-parallel.md) | 已实现设计记录 | 已实现 | 2026-06-19 | ParallelBacktestOptimizer 并行回测 |
 | [backtest-refactor-plan.md](backtest/backtest-refactor-plan.md) | 已实现设计记录 | 阶段 0-9 已完成 | 2026-06-23 | 回测链路分阶段重构 |
+| [cli-backtest-single-mode-and-strategy-params.md](backtest/cli-backtest-single-mode-and-strategy-params.md) | CLI 功能缺口记录 | 已验证 | 2026-06-27 | 显式 single 回测模式与策略参数覆盖入口 |
+| [vnpy-pnl-mouth-reconciliation.md](backtest/vnpy-pnl-mouth-reconciliation.md) | 数据口径记录 | 已验证 | 2026-06-27 | vnpy daily_results 与 backtest_trades PnL 口径对账 |
 
 ### strategy-research/ — 策略研究复盘
 
