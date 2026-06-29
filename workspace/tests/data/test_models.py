@@ -192,6 +192,7 @@ class TestTradeRecord:
             offset="open",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
             pnl=250.0,
         )
@@ -207,6 +208,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=0,
                 pnl=0.0,
             )
@@ -220,6 +222,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=-1,
                 pnl=0.0,
             )
@@ -233,6 +236,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=5,
                 pnl=0.0,
                 commission=-0.1,
@@ -246,9 +250,8 @@ class TestTradeRecord:
             direction="long",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
-            pnl=0.0,
-            commission=0.0,
         )
         assert t.commission == 0.0
 
@@ -260,6 +263,7 @@ class TestTradeRecord:
             direction="long",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
         )
         d = t.model_dump(exclude_none=True)
@@ -276,6 +280,7 @@ class TestTradeRecord:
             "direction": "short",
             "open_price": 4000.0,
             "close_price": 3900.0,
+            "price": 3900.0,
             "quantity": 3,
             "pnl": 300.0,
         }

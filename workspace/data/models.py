@@ -13,6 +13,7 @@ from pathlib import Path
 from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from peewee import (
     SQL,
+    BooleanField,
     CharField,
     DateField,
     DateTimeField,
@@ -103,7 +104,7 @@ class BacktestRecord(BaseModel):
 
 
 class TradeRecord(BaseModel):
-    """交易记录"""
+    """回测原始成交记录"""
 
     id: int | None = None
     backtest_id: int
@@ -111,11 +112,17 @@ class TradeRecord(BaseModel):
     symbol: str
     direction: str
     offset: str = "open"
-    open_price: float
-    close_price: float
+    price: float
     quantity: float
-    pnl: float = 0.0  # 逐笔毛盈亏；不扣 commission/slippage
-    commission: float = 0.0  # 该笔成交手续费；open/close 各自记录本侧手续费
+    reason: str = ""
+    engine_trade_id: str | None = None
+    engine_order_id: str | None = None
+    raw_direction: str | None = None
+    raw_offset: str | None = None
+    open_price: float | None = None
+    close_price: float | None = None
+    pnl: float = 0.0
+    commission: float = 0.0
     created_at: str | None = None
 
     @field_validator("quantity")
@@ -353,15 +360,10 @@ class BacktestParam(OrmBaseModel):
 
 
 class BacktestTrade(OrmBaseModel):
-    """回测交易明细（逐笔成交记录）
+    """回测原始成交记录（raw simulated fill）。
 
-    注意: vnpy 的 TradeData 代表单笔成交(fill)，不是完整交易(trade)。
-
-    open_price / close_price 语义:
-      开仓记录 (offset=open): open_price = close_price = 成交价
-      平仓记录 (offset=close):
-        open_price = 加权平均开仓价（FIFO 配对时同方向待配对开仓的 Σ(price×vol)/Σ(vol)）
-        close_price = 平仓成交价
+    clearing 业务域负责后续 FIFO 配对、PnL、手续费和滑点归因。
+    open_price / close_price / pnl / commission 仅为 report 契约兼容字段，不再作为权威清算口径。
     """
 
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trades", on_delete="CASCADE")
@@ -369,16 +371,123 @@ class BacktestTrade(OrmBaseModel):
     symbol: CharField = CharField()
     direction: CharField = CharField()
     offset: CharField = CharField()
-    open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
-    close_price: FloatField = FloatField()  # 实际成交价（开仓/平仓均为此笔的执行价格）
+    price: FloatField = FloatField()
     quantity: FloatField = FloatField()
-    pnl: FloatField = FloatField()  # 逐笔毛盈亏；不扣 commission/slippage
-    commission: FloatField = FloatField()  # 该笔成交手续费；open/close 各自记录本侧手续费
     reason: CharField = CharField(max_length=512, default="")
+    engine_trade_id: CharField = CharField(null=True, max_length=128)
+    engine_order_id: CharField = CharField(null=True, max_length=128)
+    raw_direction: CharField = CharField(null=True, max_length=32)
+    raw_offset: CharField = CharField(null=True, max_length=32)
+    open_price: FloatField = FloatField(default=0.0)
+    close_price: FloatField = FloatField(default=0.0)
+    pnl: FloatField = FloatField(default=0.0)
+    commission: FloatField = FloatField(default=0.0)
     created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = "backtest_trades"
+
+
+class TradeClearing(OrmBaseModel):
+    """成交配对清算记录。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trade_clearings", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="trade_clearings", null=True, on_delete="SET NULL")
+    symbol: CharField = CharField()
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="open_clearings", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="close_clearings", null=True, on_delete="SET NULL"
+    )
+    source_trade_ids: TextField = TextField(null=True)
+    direction: CharField = CharField()
+    volume: FloatField = FloatField()
+    open_time: DateTimeField = DateTimeField()
+    close_time: DateTimeField = DateTimeField()
+    open_price: FloatField = FloatField()
+    close_price: FloatField = FloatField()
+    contract_multiplier: FloatField = FloatField()
+    price_tick: FloatField = FloatField(null=True)
+    gross_pnl: FloatField = FloatField()
+    commission: FloatField = FloatField()
+    slippage_cost: FloatField = FloatField()
+    net_pnl: FloatField = FloatField()
+    open_reason: CharField = CharField(max_length=512, default="")
+    close_reason: CharField = CharField(max_length=512, default="")
+    holding_seconds: FloatField = FloatField(null=True)
+    holding_bars: IntegerField = IntegerField(null=True)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    forced_close_reason: CharField = CharField(null=True, max_length=128)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "trade_clearings"
+
+
+class AccountLedgerEntry(OrmBaseModel):
+    """账户账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="account_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="account_ledger_entries", null=True, on_delete="SET NULL")
+    trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="account_ledger_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="account_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField(null=True)
+    cash_delta: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    unrealized_pnl_delta: FloatField = FloatField(default=0.0)
+    commission_delta: FloatField = FloatField(default=0.0)
+    slippage_delta: FloatField = FloatField(default=0.0)
+    cash_balance: FloatField = FloatField(default=0.0)
+    realized_pnl_balance: FloatField = FloatField(default=0.0)
+    unrealized_pnl_balance: FloatField = FloatField(default=0.0)
+    equity: FloatField = FloatField(default=0.0)
+    margin: FloatField = FloatField(null=True)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "account_ledger_entries"
+
+
+class PositionLedgerEntry(OrmBaseModel):
+    """持仓账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="position_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="position_ledger_entries", null=True, on_delete="SET NULL")
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_open_entries", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_close_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="position_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField()
+    direction: CharField = CharField()
+    volume_delta: FloatField = FloatField(default=0.0)
+    position_volume: FloatField = FloatField(default=0.0)
+    avg_open_price: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "position_ledger_entries"
 
 
 class BacktestDaily(OrmBaseModel):
@@ -516,6 +625,9 @@ def init_database(db_path: str, *, allow_aggressive_schema_migration: bool = Fal
             Backtest,
             BacktestParam,
             BacktestTrade,
+            TradeClearing,
+            AccountLedgerEntry,
+            PositionLedgerEntry,
             BacktestDaily,
             SchemaInfo,
         ],

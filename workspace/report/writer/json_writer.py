@@ -166,10 +166,13 @@ def export_trades_json(run_id: int, dm: DataManager | None = None) -> None:
                     "offset": offset,
                     "open_price": t.open_price,
                     "close_price": t.close_price,
+                    "price": t.price,
                     "quantity": t.quantity,
                     "pnl": t.pnl,
                     "commission": t.commission,
                     "reason": t.reason if hasattr(t, "reason") else "",
+                    "engine_trade_id": t.engine_trade_id,
+                    "engine_order_id": t.engine_order_id,
                 }
             )
 

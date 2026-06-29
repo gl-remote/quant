@@ -31,7 +31,7 @@ def _make_daily(net_pnls: list[float]) -> pd.DataFrame:
     )
 
 
-def test_parse_trades_records_commission_on_each_fill():
+def test_parse_trades_records_raw_fills_without_commission():
     engine = SimpleNamespace(
         trades={
             "BACKTESTING.1": SimpleNamespace(
@@ -51,11 +51,12 @@ def test_parse_trades_records_commission_on_each_fill():
         }
     )
 
-    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509", rate=0.001, size=10)
+    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509")
 
-    assert trades[0]["commission"] == pytest.approx(2.0)
-    assert trades[1]["commission"] == pytest.approx(2.2)
-    assert sum(t["commission"] for t in trades) == pytest.approx(4.2)
+    assert trades[0]["price"] == pytest.approx(100.0)
+    assert trades[1]["price"] == pytest.approx(110.0)
+    assert trades[0]["commission"] == 0.0
+    assert trades[1]["commission"] == 0.0
 
 
 def test_calculate_trade_stats_ignores_open_and_flat_trades_for_loss_streak():
@@ -78,7 +79,7 @@ def test_calculate_trade_stats_ignores_open_and_flat_trades_for_loss_streak():
     assert stats["max_consecutive_win"] == 1
 
 
-def test_parse_trades_pairs_long_open_with_short_close_without_warning(caplog):
+def test_parse_trades_keeps_close_fill_as_raw_record(caplog):
     engine = SimpleNamespace(
         trades={
             "BACKTESTING.1": _trade("2024-01-01 09:00", "多", "开", 100.0, 2.0),
@@ -86,11 +87,12 @@ def test_parse_trades_pairs_long_open_with_short_close_without_warning(caplog):
         }
     )
 
-    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509", rate=0.001, size=10)
+    trades = VnpyBacktestEngine._parse_trades(None, engine, "DCE.m2509")
 
     assert "平仓有余量未配对" not in caplog.text
-    assert trades[1]["open_price"] == 100.0
-    assert trades[1]["pnl"] == pytest.approx(200.0)
+    assert trades[1]["price"] == 110.0
+    assert trades[1]["open_price"] == 110.0
+    assert trades[1]["pnl"] == 0.0
 
 
 def test_blown_up_balance_crosses_zero_yields_negative_sharpe():

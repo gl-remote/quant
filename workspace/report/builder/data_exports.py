@@ -133,7 +133,13 @@ def _collect_trades_fingerprint(dm: DataManager, run_id: int) -> dict[str, objec
         if not s_id:
             continue
         symbol = str(s.get("symbol", ""))
-        result[symbol] = len(list(dm.query_trades(int(str(s_id)))))
+        trades = dm.query_trades(int(str(s_id)))
+        result[symbol] = {
+            "count": len(trades),
+            "total_net_pnl": s.get("total_net_pnl"),
+            "total_commission": s.get("total_commission"),
+            "total_slippage": s.get("total_slippage"),
+        }
     return result
 
 
