@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from dataclasses import dataclass, field
+from functools import wraps
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .state import State
@@ -31,33 +33,110 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-def _auto_finalize(
+@dataclass(frozen=True)
+class DecisionPayloadDiagnosticsContract:
+    """策略决策事件诊断载荷约束。
+
+    当前阶段只约束 decision_payload 的外层结构，不强制所有策略立即提供
+    alpha / risk / execution 业务对象；这些命名空间先作为标准落点保留。
+
+    后续团队可以逐步把 structural-alpha-r1 的三个工程需求接进来：
+    - alpha：落 StructureCandidate / Alpha 结构候选；
+    - risk：落 RiskBudgetDecision / pre-trade risk 预算结果；
+    - execution：落 ExecutionTradeDiagnostics / 回测生命周期诊断。
+
+    strategy 与 aspects 承接当前已有的平铺 diagnostics，保证旧策略和测试暂不需要
+    一次性迁移。clearing 可以把该 payload 作为上下文输入之一，但账务事实仍应来自
+    成交记录、合约参数和成本模型。
+    """
+
+    strategy: dict[str, Any] = field(default_factory=dict)
+    aspects: dict[str, Any] = field(default_factory=dict)
+    alpha: dict[str, Any] = field(default_factory=dict)
+    risk: dict[str, Any] = field(default_factory=dict)
+    execution: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "strategy": self.strategy,
+            "aspects": self.aspects,
+            "alpha": self.alpha,
+            "risk": self.risk,
+            "execution": self.execution,
+        }
+
+
+@dataclass(frozen=True)
+class DecisionPayloadContract:
+    """Signal.decision_payload 的标准 envelope。
+
+    该对象定义策略信号出站后的机器可读事件载荷形状。`reason` 不放入这里，
+    继续由 Signal.reason / Trade.reason / BacktestTrade.reason 承担人类摘要语义。
+
+    当前只把 dataclass 转成 dict 后写入 Signal.decision_payload，避免改动 bridge、
+    tqsdk、DB、report 的现有 JSON 链路。未来字段稳定后，可以进一步替换为
+    TypedDict / Pydantic schema / 独立 artifact 表。
+    """
+
+    diagnostics: DecisionPayloadDiagnosticsContract
+    schema_version: int = 1
+    source: str = "strategy"
+    event_type: str = "strategy_signal"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "source": self.source,
+            "event_type": self.event_type,
+            "diagnostics": self.diagnostics.to_dict(),
+        }
+
+    def validate(self) -> None:
+        payload = self.to_dict()
+        required_top_level = {"schema_version", "source", "event_type", "diagnostics"}
+        missing_top_level = required_top_level - payload.keys()
+        if missing_top_level:
+            raise ValueError(f"decision_payload 缺少顶层字段: {sorted(missing_top_level)}")
+
+        diagnostics = payload["diagnostics"]
+        if not isinstance(diagnostics, dict):
+            raise TypeError("decision_payload.diagnostics 必须是 dict")
+
+        required_diagnostics = {"strategy", "aspects", "alpha", "risk", "execution"}
+        missing_diagnostics = required_diagnostics - diagnostics.keys()
+        if missing_diagnostics:
+            raise ValueError(f"decision_payload.diagnostics 缺少字段: {sorted(missing_diagnostics)}")
+
+
+def _finalize_signal(
     on_bar: Callable[..., Signal],
 ) -> Callable[..., Signal]:
-    """装饰器：自动在 on_bar 返回后做信号后处理
+    """装饰器：在 Strategy.on_bar 返回后统一完成 Signal 出站格式化
 
     不用子类做任何事，基类装饰器自动处理，完全无感知。
     处理所有策略共有的信号格式化逻辑：
       1. 将方向建议与风控建议展平写入 diagnostics
       2. 将 ctx.aspects.diagnostics 拷贝到 signal.diagnostics
-      3. 有信号时将 reason 格式化为 JSON（含 diagnostics）
+      3. 有信号时生成机器可读 decision_payload，reason 保留人类摘要语义
     """
-    import json
 
+    @wraps(on_bar)
     def wrapper(self: Strategy[T], state: State[T], ctx: BarContext) -> Signal:
         signal = on_bar(self, state, ctx)
         # 展平方向建议到 diagnostics
         ctx.aspects.flush_diagnostics()
         # 拷贝 diagnostics
-        signal.diagnostics = ctx.aspects.diagnostics
-        # 有信号时 reason 改为 JSON 格式
+        signal.diagnostics = {**signal.diagnostics, **ctx.aspects.diagnostics}
+        # 有信号时生成机器可读载荷；reason 不再承载结构化主数据
         if signal.action:
-            signal.reason = json.dumps(
-                {
-                    "r": signal.reason,
-                    **signal.diagnostics,
-                }
+            payload = DecisionPayloadContract(
+                diagnostics=DecisionPayloadDiagnosticsContract(
+                    strategy=signal.diagnostics,
+                    aspects=ctx.aspects.diagnostics,
+                )
             )
+            payload.validate()
+            signal.decision_payload = payload.to_dict()
         return signal
 
     return wrapper
@@ -112,6 +191,14 @@ class Strategy(ABC, Generic[T]):
     VERSION: str = "v0.0.0"
     """策略版本号，用于追踪策略变更"""
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        on_bar = cls.__dict__.get("on_bar")
+        if on_bar is None:
+            return
+        wrapped = _finalize_signal(on_bar)
+        cls.on_bar = wrapped  # type: ignore[method-assign]
+
     # ---- 数据需求声明 ----
 
     def data_requirements(self, config: T) -> DataRequirements | None:
@@ -141,7 +228,6 @@ class Strategy(ABC, Generic[T]):
 
     # ---- 核心交易接口 ----
 
-    @_auto_finalize
     @abstractmethod
     def on_bar(self, state: State[T], ctx: BarContext) -> Signal:
         """处理一根K线，返回完整交易决策

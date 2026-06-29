@@ -36,6 +36,8 @@ from common.types import BacktestResult
 from loguru import logger
 from peewee import OperationalError
 
+from .connection import bind_database, database
+from .migrations import run_pending_migrations
 from .models import (
     AccountLedgerEntry,
     Backtest,
@@ -51,8 +53,6 @@ from .models import (
     SchemaInfo,
     TradeClearing,
     TradeRecord,
-    bind_database,
-    database,
 )
 
 
@@ -134,8 +134,6 @@ class DataStore:
 
     def _init_tables(self) -> None:
         """初始化数据库表 + 执行版本化迁移"""
-        from . import schema as _schema
-
         database.create_tables(
             [
                 Run,
@@ -153,7 +151,7 @@ class DataStore:
             ],
             safe=True,
         )
-        _schema.run_pending_migrations(
+        run_pending_migrations(
             allow_aggressive=self._allow_aggressive_schema_migration,
         )
 
@@ -443,6 +441,9 @@ class DataStore:
                     "price": price,
                     "quantity": _f(trade["quantity"]),
                     "reason": str(trade.get("reason", "")),
+                    "decision_payload_json": str(trade["decision_payload_json"])
+                    if trade.get("decision_payload_json") is not None
+                    else None,
                     "engine_trade_id": str(trade["engine_trade_id"])
                     if trade.get("engine_trade_id") is not None
                     else None,

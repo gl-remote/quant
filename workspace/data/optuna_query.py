@@ -6,7 +6,7 @@
 DataManager.get_optuna_data() 委托到此模块。
 DataStore 不再包含这些方法。
 
-数据库路径由 data 层管理（通过 models.database），
+数据库路径由 data 层管理（通过 connection.database），
 外部调用方无需关心 DB 位置。
 """
 
@@ -15,7 +15,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .models import RunStudy, database
+from .connection import database
+from .models import RunStudy
 
 
 def _f(val: Any) -> float:

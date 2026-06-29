@@ -30,7 +30,7 @@ from config.app_config import BacktestConfig
 from loguru import logger
 from strategies.utils import serialize_strategy_params
 
-from .data_utils import calculate_date_range, df_to_vnpy_datalines, resolve_interval
+from .data_utils import append_synthetic_liquidation_bar, calculate_date_range, df_to_vnpy_datalines, resolve_interval
 from .results import WalkForwardResult, WalkForwardWindowResult, aggregate_walk_forward
 from .strategy_factory import create_strategy_class
 
@@ -452,7 +452,9 @@ class VnpyBacktestEngine:
 
         # ── 步骤 3: 数据准备 ───────────────────────────
         interval = resolve_interval(self.interval)
-        bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
+        real_bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
+        bars = append_synthetic_liquidation_bar(real_bars)
+        last_real_bar_time = pd.Timestamp(real_bars[-1].datetime) if real_bars else None
         data_start, data_end, total_days = calculate_date_range(df)
 
         # ── 步骤 4: 逐策略执行 ─────────────────────────
@@ -492,6 +494,7 @@ class VnpyBacktestEngine:
                 strategy_params=strategy_params,
                 bt_id=bt_id,
                 margin=mg,
+                last_real_bar_time=last_real_bar_time,
             )
             engine.history_data = bars
 
@@ -592,6 +595,7 @@ class VnpyBacktestEngine:
         strategy_params: dict[str, Any],
         bt_id: int,
         margin: float,
+        last_real_bar_time: pd.Timestamp | None,
     ) -> Any:
         """准备并返回 vnpy BacktestingEngine 实例
 
@@ -635,6 +639,7 @@ class VnpyBacktestEngine:
             margin=margin,
             run_id=self._run_id or 0,
             backtest_id=bt_id,
+            last_real_bar_time=last_real_bar_time,
         )
         engine.add_strategy(strategy_cls, {"price_tick": pricetick})
 
@@ -683,6 +688,7 @@ class VnpyBacktestEngine:
                 "pnl": 0.0,
                 "commission": 0.0,
                 "reason": getattr(trade, "reason", ""),
+                "decision_payload_json": getattr(trade, "decision_payload_json", ""),
                 "engine_trade_id": getattr(trade, "vt_tradeid", None) or getattr(trade, "tradeid", None),
                 "engine_order_id": getattr(trade, "vt_orderid", None) or getattr(trade, "orderid", None),
                 "raw_direction": raw_direction,

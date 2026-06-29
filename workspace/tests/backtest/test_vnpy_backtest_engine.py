@@ -1,9 +1,11 @@
 """测试 backtest/vnpy_backtest_engine.py — 爆仓统计重算"""
 
+import json
 from types import SimpleNamespace
 
 import pandas as pd
 import pytest
+from backtest.data_utils import append_synthetic_liquidation_bar
 from backtest.vnpy_backtest_engine import VnpyBacktestEngine, _override_blown_up_stats
 
 
@@ -31,7 +33,54 @@ def _make_daily(net_pnls: list[float]) -> pd.DataFrame:
     )
 
 
+def test_append_synthetic_liquidation_bar_uses_last_close_price():
+    from vnpy.trader.constant import Exchange, Interval
+    from vnpy.trader.object import BarData
+
+    bars = [
+        BarData(
+            symbol="m2509",
+            exchange=Exchange.DCE,
+            datetime=pd.Timestamp("2024-01-01 09:00").to_pydatetime(),
+            interval=Interval.MINUTE,
+            open_price=100.0,
+            high_price=105.0,
+            low_price=99.0,
+            close_price=103.0,
+            volume=10,
+            gateway_name="CSV",
+        )
+    ]
+
+    result = append_synthetic_liquidation_bar(bars)
+
+    assert len(result) == 2
+    assert result[0] is bars[0]
+    assert result[1].datetime == pd.Timestamp("2024-01-01 09:01").to_pydatetime()
+    assert result[1].open_price == pytest.approx(103.0)
+    assert result[1].high_price == pytest.approx(103.0)
+    assert result[1].low_price == pytest.approx(103.0)
+    assert result[1].close_price == pytest.approx(103.0)
+    assert result[1].volume == 0
+    assert result[1].is_synthetic_liquidation is True  # type: ignore[attr-defined]
+
+
 def test_parse_trades_records_raw_fills_without_commission():
+    decision_payload = {
+        "schema_version": 1,
+        "source": "vnpy_backtest_bridge",
+        "event_type": "system_forced_flat",
+        "diagnostics": {
+            "strategy": {},
+            "aspects": {},
+            "alpha": {},
+            "risk": {},
+            "execution": {
+                "trigger": "backtest_end",
+                "policy": "synthetic_liquidation_bar",
+            },
+        },
+    }
     engine = SimpleNamespace(
         trades={
             "BACKTESTING.1": SimpleNamespace(
@@ -40,6 +89,7 @@ def test_parse_trades_records_raw_fills_without_commission():
                 offset=SimpleNamespace(value="开"),
                 price=100.0,
                 volume=2.0,
+                decision_payload_json=json.dumps(decision_payload, ensure_ascii=False),
             ),
             "BACKTESTING.2": SimpleNamespace(
                 datetime=pd.Timestamp("2024-01-01 10:00").to_pydatetime(),
@@ -57,6 +107,10 @@ def test_parse_trades_records_raw_fills_without_commission():
     assert trades[1]["price"] == pytest.approx(110.0)
     assert trades[0]["commission"] == 0.0
     assert trades[1]["commission"] == 0.0
+    assert json.loads(trades[0]["decision_payload_json"])["diagnostics"]["execution"] == {
+        "trigger": "backtest_end",
+        "policy": "synthetic_liquidation_bar",
+    }
 
 
 def test_calculate_trade_stats_ignores_open_and_flat_trades_for_loss_streak():

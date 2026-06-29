@@ -6,7 +6,7 @@ ctx.aspects 做出场/入场决策。
 架构:
 - 方向判断: confirm_long / confirm_short / trend_long / trend_short 装饰器
 - 风控建议: exit_for_take_profit / exit_for_stop_loss / entry_block_after_take_profit / entry_block_after_stop_loss
-- 信号后处理: @_auto_finalize 装饰器（框架层，策略无感）
+- 信号后处理: _finalize_signal 装饰器（框架层，策略无感）
 """
 
 from dataclasses import dataclass
@@ -150,7 +150,7 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
 
     方向判断与风控建议均由切面装饰器声明并写入 ctx.aspects，
     on_bar 负责消费这些建议完成出场/入场决策。
-    信号后处理由 @_auto_finalize 装饰器自动完成。
+    信号后处理由 _finalize_signal 装饰器自动完成。
 
     决策规则:
     - 有持仓 + ctx.aspects.risk 非空 → 出场（取第一个 risk reason 作为 signal reason）

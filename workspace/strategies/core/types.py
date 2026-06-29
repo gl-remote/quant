@@ -49,11 +49,13 @@ class Signal:
     """
 
     action: TradeAction = ""  # 'buy' | 'sell' | ''
-    reason: str = ""  # 'golden_cross' | 'stop_loss' | ...
+    reason: str = ""  # 人类可读的信号摘要，如 'golden_cross' / 'stop_loss'
     volume: float = 0  # 策略预计算的开仓手数
     diagnostics: dict[str, Any] = field(default_factory=dict)
     """决策快照，策略将决策时依赖的指标值塞入此 dict，Bridge 统一用于诊断日志
     例如: {"entry_price": 4000, "highest_price": 4200, "atr": 50, ...}"""
+    decision_payload: dict[str, Any] = field(default_factory=dict)
+    """机器可读的信号事件载荷，用于落库和离线分析；reason 只保留人类摘要语义。"""
 
 
 @dataclass
@@ -84,3 +86,4 @@ class Fill:
     price: float = 0.0
     volume: float = 0
     reason: str = ""  # 触发原因
+    decision_payload: dict[str, Any] = field(default_factory=dict)

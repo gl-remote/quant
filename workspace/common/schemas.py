@@ -114,7 +114,8 @@ class TradeRecordSchema(pa.DataFrameModel):
         offset: 开平标志（open/close/closetoday）
         price: 实际模拟成交价，已包含 vnpy 撮合层应用的滑点
         quantity: 成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
-        reason: 策略或引擎记录的成交原因，当前仍可能是非结构化字符串
+        reason: 策略或引擎记录的人类可读成交原因
+        decision_payload_json: 机器可读的信号事件载荷 JSON，用于离线诊断和报告
         engine_trade_id: vn.py 原始 trade id / vt_tradeid
         engine_order_id: vn.py 原始 order id / vt_orderid
         raw_direction: 引擎原始 direction 字符串，用于排查映射问题

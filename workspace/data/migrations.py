@@ -20,14 +20,12 @@ from datetime import datetime
 
 from loguru import logger
 
-from .models import (
-    SchemaInfo,
-    database,
-)
+from .connection import database
+from .models import SchemaInfo
 
 # ── 当前代码期望的 schema 版本 ────────────────────────────────
 # 任何新的 ALTER TABLE 都要让这个数 +1，并在 MIGRATIONS 中追加一条
-CURRENT_SCHEMA_VERSION: int = 6
+CURRENT_SCHEMA_VERSION: int = 7
 
 # ── 迁移清单（按版本号升序排列） ────────────────────────────
 # 约定：version 从 1 开始单调递增；每条 migration.up 只执行一个结构变更
@@ -61,6 +59,11 @@ MIGRATIONS: list[dict] = [
         "version": 6,
         "description": "新增清算域账户账本和持仓账本表",
         "up": lambda allow_aggressive=False: _migration_6_add_account_position_ledgers(),
+    },
+    {
+        "version": 7,
+        "description": "新增 backtest_trades 机器可读信号事件载荷字段",
+        "up": lambda allow_aggressive=False: _migration_7_add_trade_decision_payload(),
     },
 ]
 
@@ -443,6 +446,12 @@ def _migration_6_add_account_position_ledgers() -> None:
     database.execute_sql(
         "CREATE INDEX IF NOT EXISTS positionledgerentries_close_trade_id ON position_ledger_entries (close_trade_id)"
     )
+
+
+def _migration_7_add_trade_decision_payload() -> None:
+    cols = _table_columns("backtest_trades")
+    if "decision_payload_json" not in cols:
+        database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN decision_payload_json TEXT")
 
 
 # ── 公开 API ─────────────────────────────────────────────

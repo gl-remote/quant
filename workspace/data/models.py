@@ -6,8 +6,6 @@
 3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
-from pathlib import Path
-
 # 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
 # 注：此 import 作为 re-export 供上层模块使用
 from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
@@ -21,10 +19,11 @@ from peewee import (
     ForeignKeyField,
     IntegerField,
     Model,
-    SqliteDatabase,
     TextField,
 )
 from pydantic import BaseModel, field_validator
+
+from .connection import database as peewee_database
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）
@@ -115,6 +114,7 @@ class TradeRecord(BaseModel):
     price: float
     quantity: float
     reason: str = ""
+    decision_payload_json: str | None = None
     engine_trade_id: str | None = None
     engine_order_id: str | None = None
     raw_direction: str | None = None
@@ -174,40 +174,12 @@ class DataLoadResult(BaseModel):
 # ORM 模型（内部使用，不对外暴露）
 # ==============================================================================
 
-database = SqliteDatabase(None)
-
-
-def _normalize_db_path(db_path: str) -> str:
-    return str(Path(db_path).expanduser().resolve())
-
-
-def current_database_path() -> str | None:
-    db_path = database.database
-    return _normalize_db_path(str(db_path)) if db_path else None
-
-
-def reset_database_binding() -> None:
-    if not database.is_closed():
-        _ = database.close()
-    database.init(None)  # pyright: ignore[reportUnknownMemberType]
-
-
-def bind_database(db_path: str, *, pragmas: dict[str, object] | None = None) -> str:
-    expected_path = _normalize_db_path(db_path)
-    current_path = current_database_path()
-    if current_path is None:
-        database.init(expected_path, pragmas=pragmas)  # pyright: ignore[reportUnknownMemberType]
-        return expected_path
-    if current_path == expected_path:
-        return expected_path
-    raise RuntimeError(f"peewee database already bound: current={current_path}, target={expected_path}")
-
 
 class OrmBaseModel(Model):
     """基础模型"""
 
     class Meta:
-        database: SqliteDatabase = database
+        database = peewee_database
 
 
 class ExportMetadata(OrmBaseModel):
@@ -374,6 +346,7 @@ class BacktestTrade(OrmBaseModel):
     price: FloatField = FloatField()
     quantity: FloatField = FloatField()
     reason: CharField = CharField(max_length=512, default="")
+    decision_payload_json: TextField = TextField(null=True)
     engine_trade_id: CharField = CharField(null=True, max_length=128)
     engine_order_id: CharField = CharField(null=True, max_length=128)
     raw_direction: CharField = CharField(null=True, max_length=32)
@@ -516,15 +489,15 @@ class BacktestDaily(OrmBaseModel):
 
 
 class SchemaInfo(OrmBaseModel):
-    """数据库 schema 版本表 — 配合 data/schema.py 实现极简版本化迁移
+    """数据库 schema 版本表 — 配合 data/migrations.py 实现极简版本化迁移
 
-    每条记录代表一次已执行的迁移。version 单调递增，与 data/schema.py 中的
+    每条记录代表一次已执行的迁移。version 单调递增，与 data/migrations.py 中的
     CURRENT_SCHEMA_VERSION / MIGRATIONS 对齐。
 
     约定（给 AI 看）：新增迁移时必须同时更新 3 个地方：
     1. data/models.py 中的 ORM 字段定义（改表结构）
-    2. data/schema.py 中的 CURRENT_SCHEMA_VERSION（+1）
-    3. data/schema.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
+    2. data/migrations.py 中的 CURRENT_SCHEMA_VERSION（+1）
+    3. data/migrations.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
     """
 
     version: IntegerField = IntegerField(unique=True)
@@ -608,38 +581,3 @@ def get_live_session_model(table_name: str | None = None) -> type[RealtimeSessio
 def get_live_trade_model(table_name: str | None = None) -> type[RealtimeTrade]:
     """获取实时信号/成交模型。"""
     return RealtimeTrade
-
-
-def init_database(db_path: str, *, allow_aggressive_schema_migration: bool = False) -> None:
-    """初始化数据库连接 + 执行版本化迁移
-
-    迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
-    """
-    bind_database(db_path)
-    database.create_tables(
-        [
-            Run,
-            RunStudy,
-            ExportMetadata,
-            OperationLog,
-            Backtest,
-            BacktestParam,
-            BacktestTrade,
-            TradeClearing,
-            AccountLedgerEntry,
-            PositionLedgerEntry,
-            BacktestDaily,
-            SchemaInfo,
-        ],
-        safe=True,
-    )  # pyright: ignore[reportUnknownMemberType]
-    from . import schema as _schema
-
-    _schema.run_pending_migrations(
-        allow_aggressive=allow_aggressive_schema_migration,
-    )
-
-
-def close_database() -> None:
-    """关闭数据库连接并重置绑定"""
-    reset_database_binding()

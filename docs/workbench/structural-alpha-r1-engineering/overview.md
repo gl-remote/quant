@@ -79,6 +79,46 @@ Research / Alpha
 
 字段应尽量使用数字、枚举和布尔值。展示格式化只在报告层处理，不在 artifact 层提前格式化。
 
+### 4.1 当前技术选择
+
+现阶段先不直接实现完整的 `StructureCandidate`、`RiskBudgetDecision` 和 `ExecutionTradeDiagnostics` 业务对象，而是先打通统一的决策事件载荷通道。
+
+当前约定：
+
+```text
+Strategy.on_bar()
+→ Signal.reason                  # 人类可读摘要
+→ Signal.decision_payload          # 机器可读结构化上下文
+→ Bridge order_id context          # 订单级归因
+→ backtest trade artifact / DB
+→ report / analytics / clearing context
+```
+
+技术选择如下：
+
+1. `reason` 只保留人类摘要语义，不再作为结构化主数据载体；
+2. `decision_payload` 作为策略决策事件的机器可读载荷；
+3. `decision_payload` 使用统一 envelope：
+
+```text
+schema_version
+source
+event_type
+diagnostics.strategy
+diagnostics.aspects
+diagnostics.alpha
+diagnostics.risk
+diagnostics.execution
+```
+
+4. `diagnostics.alpha` 预留给后续 `StructureCandidate`；
+5. `diagnostics.risk` 预留给后续 `RiskBudgetDecision`；
+6. `diagnostics.execution` 预留给后续 `ExecutionTradeDiagnostics`；
+7. Bridge 内部运行时保持结构化对象，只在 vnpy / DB / report 边界序列化为 JSON 字符串；
+8. Clearing 可以消费 `decision_payload` 作为交易上下文，但账务事实仍以成交记录、合约参数和成本模型为准。
+
+这一选择的目的不是提前完成三个业务域，而是先固定跨策略、回测、清算和报告之间的结构化数据通道，避免继续把诊断信息散落在自然语言 `reason`、日志字符串或策略私有字段中。
+
 ## 5. 非目标
 
 当前阶段不优先做：

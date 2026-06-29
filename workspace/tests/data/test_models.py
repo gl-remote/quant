@@ -1,6 +1,7 @@
 """测试 data/models.py — Pydantic 模型与 ORM 模型"""
 
 import pytest
+from data.lifecycle import close_database, init_database
 from data.models import (
     Backtest,
     BacktestDaily,
@@ -14,10 +15,8 @@ from data.models import (
     RealtimeTrade,
     SymbolInfo,
     TradeRecord,
-    close_database,
     get_live_session_model,
     get_live_trade_model,
-    init_database,
 )
 
 # ==============================================================================
@@ -378,7 +377,7 @@ class TestOrmModels:
 
 
 # ==============================================================================
-# init_database / close_database
+# lifecycle init_database / close_database
 # ==============================================================================
 
 

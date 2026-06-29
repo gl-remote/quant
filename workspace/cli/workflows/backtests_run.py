@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import cProfile
+import json
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -748,6 +749,9 @@ class BacktestRunWorkflow:
                     "pnl": 0.0,
                     "commission": 0.0,
                     "reason": f.reason,
+                    "decision_payload_json": json.dumps(f.decision_payload, ensure_ascii=False)
+                    if f.decision_payload
+                    else None,
                 }
                 for f in fills
             ]

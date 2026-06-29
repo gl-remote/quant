@@ -171,6 +171,7 @@ def export_trades_json(run_id: int, dm: DataManager | None = None) -> None:
                     "pnl": t.pnl,
                     "commission": t.commission,
                     "reason": t.reason if hasattr(t, "reason") else "",
+                    "decision_payload_json": t.decision_payload_json if hasattr(t, "decision_payload_json") else None,
                     "engine_trade_id": t.engine_trade_id,
                     "engine_order_id": t.engine_order_id,
                 }
