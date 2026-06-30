@@ -7,7 +7,7 @@ from typing import Any, Literal, Protocol, TypedDict, cast, override
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.formulas import position_size
 
-from .core import CORE_VERSION, Bar, Fill, Signal, State, Strategy
+from .core import CORE_VERSION, Bar, Fill, Signal, State, Strategy, placeholder_diagnostics
 from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
 
 ReacceptMode = Literal["band_inner", "band_mid"]
@@ -105,6 +105,7 @@ class HourlyLiquiditySweepStrategyCore(Strategy[HourlyLiquiditySweepParams]):
         )
 
     @override
+    @placeholder_diagnostics
     def on_bar(self, state: State[HourlyLiquiditySweepParams], ctx: BarContext) -> Signal:
         config = state.strategy_config
         self._ensure_session(state, ctx)

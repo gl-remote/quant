@@ -25,6 +25,7 @@
 """
 
 from .base import Strategy, UninitializedStrategy
+from .diagnostics.placeholder import placeholder_diagnostics
 from .state import State
 from .types import Bar, Fill, Signal, StrategyPosition
 
@@ -45,4 +46,6 @@ __all__ = [
     "StrategyPosition",
     # 运行时状态
     "State",
+    # 临时占位诊断工具
+    "placeholder_diagnostics",
 ]

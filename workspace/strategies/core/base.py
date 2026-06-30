@@ -107,6 +107,12 @@ class DecisionPayloadContract:
         if missing_diagnostics:
             raise ValueError(f"decision_payload.diagnostics 缺少字段: {sorted(missing_diagnostics)}")
 
+        # 方案 B：带 action 的信号必须填满 alpha / risk / execution 三层（全有全无）。
+        # 现有策略可通过 diagnostics.placeholder_diagnostics 装饰器补占位通过校验。
+        empty_layers = [layer for layer in ("alpha", "risk", "execution") if not diagnostics[layer]]
+        if empty_layers:
+            raise ValueError(f"decision_payload.diagnostics 必须非空的层为空: {sorted(empty_layers)}")
+
 
 def _finalize_signal(
     on_bar: Callable[..., Signal],
@@ -133,6 +139,9 @@ def _finalize_signal(
                 diagnostics=DecisionPayloadDiagnosticsContract(
                     strategy=signal.diagnostics,
                     aspects=ctx.aspects.diagnostics,
+                    alpha=signal.alpha.to_dict(),
+                    risk=signal.risk.to_dict(),
+                    execution=signal.execution.to_dict(),
                 )
             )
             payload.validate()

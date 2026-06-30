@@ -282,9 +282,10 @@ class TestMaStrategyEntry:
         assert payload["event_type"] == "strategy_signal"
         assert "reason" not in payload
         assert set(payload["diagnostics"]) == {"strategy", "aspects", "alpha", "risk", "execution"}
-        assert payload["diagnostics"]["alpha"] == {}
-        assert payload["diagnostics"]["risk"] == {}
-        assert payload["diagnostics"]["execution"] == {}
+        # 现有策略通过 placeholder_diagnostics 装饰器补占位，三层非空但不含业务含义
+        assert payload["diagnostics"]["alpha"] == {"placeholder": True}
+        assert payload["diagnostics"]["risk"] == {"placeholder": True}
+        assert payload["diagnostics"]["execution"] == {"placeholder": True}
         assert isinstance(payload["diagnostics"]["strategy"], dict)
         assert isinstance(payload["diagnostics"]["aspects"], dict)
 

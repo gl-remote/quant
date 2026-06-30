@@ -22,6 +22,8 @@ from typing import Any
 
 from common.types import PositionDirection, TradeAction
 
+from .diagnostics import AlphaDiagnostics, ExecutionDiagnostics, RiskDiagnostics
+
 
 @dataclass
 class Bar:
@@ -54,6 +56,12 @@ class Signal:
     diagnostics: dict[str, Any] = field(default_factory=dict)
     """决策快照，策略将决策时依赖的指标值塞入此 dict，Bridge 统一用于诊断日志
     例如: {"entry_price": 4000, "highest_price": 4200, "atr": 50, ...}"""
+    alpha: AlphaDiagnostics = field(default_factory=AlphaDiagnostics)
+    """Alpha 诊断层：为什么该交易（方向假设、结构依据）。带 action 时必须非空。"""
+    risk: RiskDiagnostics = field(default_factory=RiskDiagnostics)
+    """Risk 诊断层：能不能交易、下多少（风险预算、sizing）。带 action 时必须非空。"""
+    execution: ExecutionDiagnostics = field(default_factory=ExecutionDiagnostics)
+    """Execution 诊断层：如何成交与退出（exit reason、MAE/MFE 等）。带 action 时必须非空。"""
     decision_payload: dict[str, Any] = field(default_factory=dict)
     """机器可读的信号事件载荷，用于落库和离线分析；reason 只保留人类摘要语义。"""
 

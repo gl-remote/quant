@@ -34,6 +34,7 @@ from .core import (
     Signal,
     State,
     Strategy,
+    placeholder_diagnostics,
 )
 from .runtime import BarContext
 from .strategy_aspects import (
@@ -184,6 +185,7 @@ class MaStrategyCore(Strategy[MACrossParams]):
     # ---- Strategy 接口 ----
 
     @override
+    @placeholder_diagnostics
     def on_bar(self, state: State[MACrossParams], ctx: BarContext) -> Signal:
         """消费方向建议与风控建议，做出场/入场决策"""
         config = state.strategy_config

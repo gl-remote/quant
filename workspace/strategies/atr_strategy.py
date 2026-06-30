@@ -34,6 +34,7 @@ from .core import (
     Signal,
     State,
     Strategy,
+    placeholder_diagnostics,
 )
 from .core.indicators import generate_indicator_column_name
 from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
@@ -188,6 +189,7 @@ class ATRStrategyCore(Strategy[ATRCrossParams]):
         return reqs
 
     @override
+    @placeholder_diagnostics
     def on_bar(self, state: State[ATRCrossParams], ctx: BarContext) -> Signal:
         """消费方向建议与风控建议，做出场/入场决策"""
         config = state.strategy_config
