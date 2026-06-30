@@ -7,7 +7,7 @@ from typing import Any, Literal, TypedDict, cast, override
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.formulas import position_size
 
-from .core import CORE_VERSION, Fill, Signal, State, Strategy
+from .core import CORE_VERSION, Fill, Signal, State, Strategy, placeholder_diagnostics
 from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
 
 TakeProfitMode = Literal["mid", "opposite", "r"]
@@ -81,6 +81,7 @@ class VolumeShockBoundaryStrategyCore(Strategy[VolumeShockBoundaryParams]):
         )
 
     @override
+    @placeholder_diagnostics
     def on_bar(self, state: State[VolumeShockBoundaryParams], ctx: BarContext) -> Signal:
         config = state.strategy_config
         self._ensure_session(state, ctx)

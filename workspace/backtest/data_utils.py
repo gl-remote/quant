@@ -119,3 +119,46 @@ def df_to_vnpy_datalines(
 
     logger.debug(f"转换完成: {len(bars)} 条 BarData")
     return bars
+
+
+def append_synthetic_liquidation_bar(bars: list[BarData]) -> list[BarData]:
+    """在真实行情尾部追加一根清算撮合 bar，用于回测结束强制平仓。"""
+    from vnpy.trader.constant import Interval
+    from vnpy.trader.object import BarData
+
+    if not bars:
+        return bars
+
+    last_bar = bars[-1]
+    bar_interval = last_bar.interval if last_bar.interval is not None else Interval.DAILY
+    synthetic_dt = pd.Timestamp(last_bar.datetime) + _interval_delta(bar_interval)
+    synthetic_bar = BarData(
+        symbol=last_bar.symbol,
+        exchange=last_bar.exchange,
+        datetime=synthetic_dt.to_pydatetime(),
+        interval=bar_interval,
+        open_price=last_bar.close_price,
+        high_price=last_bar.close_price,
+        low_price=last_bar.close_price,
+        close_price=last_bar.close_price,
+        volume=0,
+        gateway_name=last_bar.gateway_name,
+    )
+    synthetic_bar.is_synthetic_liquidation = True  # type: ignore[attr-defined]
+    return [*bars, synthetic_bar]
+
+
+def _interval_delta(interval: Interval) -> pd.Timedelta:
+    from vnpy.trader.constant import Interval
+
+    if interval == Interval.MINUTE:
+        return pd.Timedelta(minutes=1)
+    if hasattr(Interval, "MINUTE_5") and interval == Interval.MINUTE_5:
+        return pd.Timedelta(minutes=5)
+    if hasattr(Interval, "MINUTE_15") and interval == Interval.MINUTE_15:
+        return pd.Timedelta(minutes=15)
+    if hasattr(Interval, "MINUTE_30") and interval == Interval.MINUTE_30:
+        return pd.Timedelta(minutes=30)
+    if interval == Interval.HOUR:
+        return pd.Timedelta(hours=1)
+    return pd.Timedelta(days=1)

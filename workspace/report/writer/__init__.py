@@ -14,6 +14,7 @@
 from .json_writer import (
     build_kline_dict,
     export_backtests_json,
+    export_clearing_diagnostics_json,
     export_equity_json,
     export_kline_json,
     export_optuna_json,
@@ -31,6 +32,7 @@ __all__ = [
     "export_kline_json",
     "export_trades_json",
     "export_optuna_json",
+    "export_clearing_diagnostics_json",
     "write_nav_json",
     "build_kline_dict",
 ]

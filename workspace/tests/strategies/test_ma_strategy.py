@@ -258,6 +258,37 @@ class TestMaStrategyEntry:
         assert "long" in signal.reason.lower() or "entry" in signal.reason.lower()
         assert signal.volume > 0
 
+    def test_decision_payload_contract_for_entry_signal(self):
+        strat = MaStrategyCore()
+        cfg = MACrossParams()
+        ctx = _make_ctx(
+            close_prices=[100.0] * 30,
+            periods={"1m": 30, "5m": 10, "15m": 10},
+            is_long=True,
+        )
+
+        state = State(
+            symbol="TEST",
+            period="1m",
+            strategy_config=cfg,
+            capital=100000.0,
+            contract_size=10,
+        )
+
+        signal = strat.on_bar(state, ctx)
+        payload = signal.decision_payload
+        assert payload["schema_version"] == 1
+        assert payload["source"] == "strategy"
+        assert payload["event_type"] == "strategy_signal"
+        assert "reason" not in payload
+        assert set(payload["diagnostics"]) == {"strategy", "aspects", "alpha", "risk", "execution"}
+        # 现有策略通过 placeholder_diagnostics 装饰器补占位，三层非空但不含业务含义
+        assert payload["diagnostics"]["alpha"] == {"placeholder": True}
+        assert payload["diagnostics"]["risk"] == {"placeholder": True}
+        assert payload["diagnostics"]["execution"] == {"placeholder": True}
+        assert isinstance(payload["diagnostics"]["strategy"], dict)
+        assert isinstance(payload["diagnostics"]["aspects"], dict)
+
     def test_short_entry(self):
         strat = MaStrategyCore()
         cfg = MACrossParams()
@@ -288,7 +319,7 @@ class TestMaStrategyEntry:
             periods={"1m": 30, "5m": 10, "15m": 10},
         )
         trend_key = "sma_sma_short_15m_gt_sma_sma_long_15m"
-        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
+        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key, "detail": {}})())
 
         state = State(
             symbol="TEST",
@@ -309,7 +340,7 @@ class TestMaStrategyEntry:
             periods={"1m": 30, "5m": 10, "15m": 10},
         )
         trend_key = "sma_sma_short_15m_gt_sma_sma_long_15m"
-        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key})())
+        ctx.aspects.direction.long.trend.append(type("Reason", (), {"key": trend_key, "detail": {}})())
 
         state = State(
             symbol="TEST",

@@ -19,7 +19,7 @@
 #       例: bash scripts/test.sh lint backtest   只 ruff check backtest/
 #           bash scripts/test.sh unit strategies 只 pytest tests/strategies/
 #   <stage>  = lint | format | type | unit | integration | slow | local-data | coverage | all（缺省 all）
-#   <domain> = common|config|data|backtest|strategies|report|cli|contracts|report-web
+#   <domain> = common|config|data|backtest|clearing|strategies|report|cli|contracts|report-web
 #              （可选，缺省全量 Python；report-web 走前端工具链 eslint/tsc/vitest）
 #
 # ----------------------------------------------------------------------------
@@ -90,7 +90,7 @@ if [ -n "$DOMAIN" ]; then
     SRC="$(resolve_src "$DOMAIN")"
     if [ -z "$SRC" ]; then
         echo -e "${RED}未知业务域: $DOMAIN${NC}"
-        echo "可选: common|config|data|backtest|strategies|report|cli|contracts"
+        echo "可选: common|config|data|backtest|clearing|strategies|report|cli|contracts"
         exit 1
     fi
     TST="$(resolve_test "$DOMAIN")"
@@ -119,6 +119,7 @@ case "$STAGE" in
             run_coverage workspace/config "$(resolve_coverage_min config)" workspace/tests/config/
             run_coverage workspace/data "$(resolve_coverage_min data)" workspace/tests/data/
             run_coverage workspace/backtest "$(resolve_coverage_min backtest)" workspace/tests/backtest/
+            run_coverage workspace/clearing "$(resolve_coverage_min clearing)" workspace/tests/clearing/
             run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
             run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
             run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/
@@ -170,6 +171,7 @@ case "$STAGE" in
             run_coverage workspace/config "$(resolve_coverage_min config)" workspace/tests/config/
             run_coverage workspace/data "$(resolve_coverage_min data)" workspace/tests/data/
             run_coverage workspace/backtest "$(resolve_coverage_min backtest)" workspace/tests/backtest/
+            run_coverage workspace/clearing "$(resolve_coverage_min clearing)" workspace/tests/clearing/
             run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
             run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
             run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/

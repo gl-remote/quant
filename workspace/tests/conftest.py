@@ -33,8 +33,8 @@ def sample_kline_df():
 @pytest.fixture(autouse=True)
 def _reset_global_state():
     from config.app_config import ConfigManager
+    from data.connection import reset_database_binding
     from data.manager import DataManager
-    from data.models import reset_database_binding
 
     ConfigManager.reset()
     DataManager.reset_environment()

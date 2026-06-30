@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from .models import Backtest, BacktestParam
+from .models import Backtest, BacktestParam, TradeClearing
 from .optuna_query import get_best_trial_index
 
 if TYPE_CHECKING:
@@ -237,4 +237,149 @@ def get_equity_data(store: DataStore, backtest_id: int) -> dict[str, object] | N
         "dates": [r["date"] for r in rows],
         "equity": [_f(r["equity"]) for r in rows],
         "drawdown": [_f(r["drawdown"]) for r in rows],
+    }
+
+
+# ── 结构诊断报告聚合（消费 trade_clearings，不重新计算账务）────────────
+
+
+def _query_clearings(backtest_id: int) -> list[dict[str, Any]]:
+    """读取单个回测的清算记录（含结构诊断透传字段）。"""
+    return list(
+        TradeClearing.select()
+        .where(TradeClearing.backtest_id == backtest_id)
+        .order_by(TradeClearing.close_time.asc())
+        .dicts()
+    )
+
+
+def _parse_diagnostics(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, str) and raw:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _breakeven_win_rate(avg_win: float, avg_loss: float) -> float:
+    """盈亏平衡胜率 = avg_loss / (avg_win + avg_loss)。"""
+    denom = avg_win + avg_loss
+    return avg_loss / denom if denom > 0 else 0.0
+
+
+def _max_loss_cluster(net_values: list[float]) -> int:
+    best = 0
+    current = 0
+    for value in net_values:
+        if value < 0:
+            current += 1
+            best = max(best, current)
+        else:
+            current = 0
+    return best
+
+
+def build_clearing_diagnostics(backtest_id: int) -> dict[str, object]:
+    """聚合单个回测的成本后指标、exit reason 分布、原始 R 与 MAE/MFE 分布。
+
+    报告层只消费 clearing artifact，不重新计算手续费/滑点/PnL。结构解释字段来自
+    diagnostics_json 透传，缺失时对应分布为空（上游策略尚未按推荐字段填充）。
+    """
+    clearings = _query_clearings(backtest_id)
+    if not clearings:
+        return {"backtest_id": backtest_id, "trade_count": 0}
+
+    net_values = [_f(c.get("net_pnl")) for c in clearings]
+    wins = [v for v in net_values if v > 0]
+    losses = [v for v in net_values if v < 0]
+    win_cnt = len(wins)
+    loss_cnt = len(losses)
+    closed = win_cnt + loss_cnt
+    avg_win = sum(wins) / win_cnt if win_cnt else 0.0
+    avg_loss = abs(sum(losses) / loss_cnt) if loss_cnt else 0.0
+    win_rate = win_cnt / closed if closed else 0.0
+    payoff_ratio = avg_win / avg_loss if avg_loss > 0 else 0.0
+    breakeven = _breakeven_win_rate(avg_win, avg_loss)
+
+    exit_reason_dist: dict[str, int] = {}
+    raw_account_r: list[float] = []
+    raw_price_r: list[float] = []
+    mae_values: list[float] = []
+    mfe_values: list[float] = []
+    for c in clearings:
+        reason = c.get("exit_reason") or "unspecified"
+        exit_reason_dist[str(reason)] = exit_reason_dist.get(str(reason), 0) + 1
+        if c.get("mae") is not None:
+            mae_values.append(_f(c.get("mae")))
+        if c.get("mfe") is not None:
+            mfe_values.append(_f(c.get("mfe")))
+        diag = _parse_diagnostics(c.get("diagnostics_json"))
+        risk = diag.get("risk") if isinstance(diag.get("risk"), dict) else {}
+        if isinstance(risk, dict):
+            if risk.get("raw_account_r_multiple") is not None:
+                raw_account_r.append(_f(risk.get("raw_account_r_multiple")))
+            if risk.get("raw_price_r_multiple") is not None:
+                raw_price_r.append(_f(risk.get("raw_price_r_multiple")))
+
+    return {
+        "backtest_id": backtest_id,
+        "trade_count": closed,
+        "total_net_pnl": sum(net_values),
+        "cost_adjusted_win_rate": win_rate,
+        "cost_adjusted_payoff_ratio": payoff_ratio,
+        "breakeven_win_rate": breakeven,
+        "win_rate_margin": win_rate - breakeven,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "max_single_loss": min(net_values) if net_values else 0.0,
+        "max_consecutive_losses": _max_loss_cluster(net_values),
+        "exit_reason_distribution": exit_reason_dist,
+        "raw_account_r_multiples": raw_account_r,
+        "raw_price_r_multiples": raw_price_r,
+        "mae_values": mae_values,
+        "mfe_values": mfe_values,
+    }
+
+
+def build_clearing_diagnostics_for_run(store: DataStore, run_id: int) -> list[dict[str, object]]:
+    """聚合 run 下全局最优参数组合各品种的结构诊断。"""
+    backtests = list(
+        Backtest.select(Backtest.id, Backtest.symbol, Backtest.engine_config)
+        .where(Backtest.run_id == run_id, Backtest.status == "success")
+        .dicts()
+    )
+    backtests = _filter_by_best_trial(backtests, run_id)
+    result: list[dict[str, object]] = []
+    for bt in backtests:
+        summary = build_clearing_diagnostics(_i(bt["id"]))
+        summary["symbol"] = bt["symbol"]
+        result.append(summary)
+    return result
+
+
+def build_exit_policy_diff(backtest_id_a: int, backtest_id_b: int) -> dict[str, object]:
+    """对比两个回测的退出结构（成本后指标变化），回答胜率提升是否覆盖盈亏比下降。"""
+    a = build_clearing_diagnostics(backtest_id_a)
+    b = build_clearing_diagnostics(backtest_id_b)
+
+    def _delta(key: str) -> float:
+        return _f(b.get(key)) - _f(a.get(key))
+
+    return {
+        "backtest_id_a": backtest_id_a,
+        "backtest_id_b": backtest_id_b,
+        "a": a,
+        "b": b,
+        "delta": {
+            "trade_count": _delta("trade_count"),
+            "cost_adjusted_win_rate": _delta("cost_adjusted_win_rate"),
+            "cost_adjusted_payoff_ratio": _delta("cost_adjusted_payoff_ratio"),
+            "breakeven_win_rate": _delta("breakeven_win_rate"),
+            "win_rate_margin": _delta("win_rate_margin"),
+            "max_single_loss": _delta("max_single_loss"),
+            "max_consecutive_losses": _delta("max_consecutive_losses"),
+            "total_net_pnl": _delta("total_net_pnl"),
+        },
     }

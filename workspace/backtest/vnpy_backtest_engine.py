@@ -23,14 +23,14 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 from common.constants import DIRECTION_MAP, OFFSET_MAP
-from common.contract_specs import BROKER_ADDON_DFCF, CONTRACT_SPECS
+from common.contract_specs import CONTRACT_SPECS
 from common.symbol_utils import parse_contract
 from common.types import BacktestResult
 from config.app_config import BacktestConfig
 from loguru import logger
 from strategies.utils import serialize_strategy_params
 
-from .data_utils import calculate_date_range, df_to_vnpy_datalines, resolve_interval
+from .data_utils import append_synthetic_liquidation_bar, calculate_date_range, df_to_vnpy_datalines, resolve_interval
 from .results import WalkForwardResult, WalkForwardWindowResult, aggregate_walk_forward
 from .strategy_factory import create_strategy_class
 
@@ -452,7 +452,9 @@ class VnpyBacktestEngine:
 
         # ── 步骤 3: 数据准备 ───────────────────────────
         interval = resolve_interval(self.interval)
-        bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
+        real_bars = df_to_vnpy_datalines(df, pure_symbol, exchange_code, interval)
+        bars = append_synthetic_liquidation_bar(real_bars)
+        last_real_bar_time = pd.Timestamp(real_bars[-1].datetime) if real_bars else None
         data_start, data_end, total_days = calculate_date_range(df)
 
         # ── 步骤 4: 逐策略执行 ─────────────────────────
@@ -483,7 +485,7 @@ class VnpyBacktestEngine:
                 interval=interval,
                 start_dt=df["datetime"].iloc[0].to_pydatetime(),
                 end_dt=df["datetime"].iloc[-1].to_pydatetime(),
-                rate=cr,
+                rate=0.0,
                 slippage_val=sl,
                 size=cs,
                 pricetick=pt,
@@ -492,6 +494,7 @@ class VnpyBacktestEngine:
                 strategy_params=strategy_params,
                 bt_id=bt_id,
                 margin=mg,
+                last_real_bar_time=last_real_bar_time,
             )
             engine.history_data = bars
 
@@ -502,11 +505,10 @@ class VnpyBacktestEngine:
             daily_results = engine.calculate_result()
             statistics = engine.calculate_statistics()
 
-            # ── 步骤 6: 解析与格式化交易记录 ────
-            formatted_trades = self._parse_trades(engine, symbol, cr, cs)
+            # ── 步骤 6: 解析与格式化原始成交记录 ────
+            formatted_trades = self._parse_trades(engine, symbol)
 
-            # ── 步骤 7: 从逐笔交易计算附加统计 ──
-            self._calculate_trade_stats(statistics, formatted_trades)
+            # ── 步骤 7: 交易级清算统计由 clearing 域回填 ──
 
             # ── 步骤 8: 爆仓状态检测 ──
             # vnpy calculate_statistics() 在爆仓(balance≤0)时所有指标返回 0，
@@ -515,7 +517,6 @@ class VnpyBacktestEngine:
                 statistics
                 and not statistics.get("sharpe_ratio")
                 and not statistics.get("max_drawdown")
-                and formatted_trades
                 and not daily_results.empty
             ):
                 logger.warning(f"[{symbol}] 检测到爆仓，从 daily_results 重新计算统计指标")
@@ -556,28 +557,14 @@ class VnpyBacktestEngine:
             pt = spec.tick
             sl = spec.tick * spec.slip_tick
             mg = spec.margin
-            # vnpy 只支持费率模式 commission = price × volume × size × rate
-            # 固定元/手品种需要换算为 rate = 总手续费/手 / (均价 × 合约乘数)
-            avg_price = float(df[["open", "high", "low", "close"]].mean().mean()) if not df.empty else 0.0
-            if avg_price > 0 and spec.size > 0:
-                total_per_lot = spec.commission + BROKER_ADDON_DFCF
-                if spec.is_rate:
-                    cr = spec.commission + BROKER_ADDON_DFCF / (avg_price * spec.size)
-                else:
-                    cr = total_per_lot / (avg_price * spec.size)
-            else:
-                # avg_price=0 或 size=0: 全部回退到默认值
-                cs = self.contract_size
-                pt = self.price_tick
-                sl = self.slippage
-                mg = 0.1
-                cr = self.commission_rate
+            # vnpy 只支持费率模式；真实手续费由 clearing 域统一计算。
+            cr = 0.0
         else:
             cs = self.contract_size
             pt = self.price_tick
             sl = self.slippage
             mg = 0.1
-            cr = self.commission_rate
+            cr = 0.0
         return cs, pt, sl, mg, cr
 
     # ── 拆分出的子方法：获取策略版本 ─────────────────────
@@ -608,6 +595,7 @@ class VnpyBacktestEngine:
         strategy_params: dict[str, Any],
         bt_id: int,
         margin: float,
+        last_real_bar_time: pd.Timestamp | None,
     ) -> Any:
         """准备并返回 vnpy BacktestingEngine 实例
 
@@ -651,6 +639,7 @@ class VnpyBacktestEngine:
             margin=margin,
             run_id=self._run_id or 0,
             backtest_id=bt_id,
+            last_real_bar_time=last_real_bar_time,
         )
         engine.add_strategy(strategy_cls, {"price_tick": pricetick})
 
@@ -662,151 +651,48 @@ class VnpyBacktestEngine:
         self,
         engine: Any,
         symbol: str,
-        rate: float,
-        size: float,
     ) -> list[dict[str, Any]]:
-        """从 vnpy engine 中提取交易记录并格式化
-
-        完成:
-        1. 从 engine.trades 获取 TradeData 对象列表
-        2. 按时间排序后进行 FIFO 配对，计算每笔平仓的净盈亏
-        3. 转换为标准字典格式（字段与 ORM BacktestTrade 对齐）
-
-        调试沉淀(2026-06-04):
-        - vn.py BacktestingEngine.trades 是字典而非列表，键格式: 'BACKTESTING.1', 'BACKTESTING.2'...
-        - TradeData 无 trade_pnl/commission 字段，费用在 FIFO 配对层面自行计算
-
-        Args:
-            engine: vnpy BacktestingEngine 实例
-            symbol: 品种代码（注入到每条记录）
-            rate: 费率（用于计算手续费）
-            size: 合约乘数
-
-        Returns:
-            标准字典列表，每条记录含 datetime/symbol/direction/offset/open_price/close_price/quantity/pnl/commission
-        """
-        # 步骤 1: 提取 vnpy TradeData 对象
+        """从 vnpy engine 中提取 raw fill 记录。"""
         trades_list: list[Any] = []
         if hasattr(engine, "trades"):
             trades_list = list(engine.trades.values())
-
-        # 步骤 2: 按时间排序 + FIFO 配对计算逐笔盈亏
         trades_list.sort(key=lambda t: t.datetime.timestamp() if t.datetime else 0)
 
-        open_queues: dict[str, list[tuple[float, float]]] = {"long": [], "short": []}
-        trade_pnls: list[float] = [0.0] * len(trades_list)
-        trade_commissions: list[float] = [0.0] * len(trades_list)
-        trade_open_prices: list[float] = [0.0] * len(trades_list)
-
-        for i, trade in enumerate(trades_list):
-            offset_val = getattr(trade, "offset", None)
-            offset_str = (
-                offset_val.value
-                if offset_val is not None and hasattr(offset_val, "value")
-                else str(offset_val)
-                if offset_val
-                else ""
-            )
-            offset = OFFSET_MAP.get(offset_str, offset_str)
-            trade_price = getattr(trade, "price", 0.0)
-            trade_volume = getattr(trade, "volume", 0.0)
-
-            if offset == "open":
-                direction_val = getattr(trade, "direction", None)
-                direction_str = (
-                    direction_val.value
-                    if direction_val is not None and hasattr(direction_val, "value")
-                    else str(direction_val)
-                    if direction_val
-                    else ""
-                )
-                direction = DIRECTION_MAP.get(direction_str, direction_str)
-                open_queues.setdefault(direction, []).append((trade_price, trade_volume))
-                trade_pnls[i] = 0.0
-                trade_open_prices[i] = trade_price
-                trade_commissions[i] = trade_price * trade_volume * size * rate
-            else:
-                # 平仓
-                direction_val = getattr(trade, "direction", None)
-                direction_str = (
-                    direction_val.value
-                    if direction_val is not None and hasattr(direction_val, "value")
-                    else str(direction_val)
-                    if direction_val
-                    else ""
-                )
-                direction = DIRECTION_MAP.get(direction_str, direction_str)
-                expected_open_dir: str = "long" if direction == "short" else "short"
-
-                remaining = trade_volume
-                gross_pnl = 0.0
-                matched_opens: list[tuple[float, float]] = []
-                open_queue = open_queues.setdefault(expected_open_dir, [])
-
-                while remaining > 0 and open_queue:
-                    open_price, open_vol = open_queue[0]
-                    matched_vol = min(remaining, open_vol)
-                    matched_opens.append((open_price, matched_vol))
-                    price_diff = trade_price - open_price
-
-                    if expected_open_dir == "long":
-                        gross_pnl += price_diff * matched_vol * size
-                    else:
-                        gross_pnl += -price_diff * matched_vol * size
-
-                    remaining -= matched_vol
-                    if matched_vol >= open_vol:
-                        open_queue.pop(0)
-                    else:
-                        open_queue[0] = (open_price, open_vol - matched_vol)
-
-                # 加权平均开仓价（与 PnL 同源的 FIFO 配对结果）
-                total_matched_cost = sum(p * v for p, v in matched_opens)
-                total_matched_vol = sum(v for _, v in matched_opens)
-                trade_open_prices[i] = total_matched_cost / total_matched_vol if total_matched_vol > 0 else trade_price
-
-                if remaining > 0:
-                    logger.warning(
-                        f"[{symbol}] 平仓有余量未配对: close_dir={direction} "
-                        f"expected_open_dir={expected_open_dir} "
-                        f"qty={trade_volume} remaining={remaining} "
-                        f"open_queue_empty={not bool(open_queue)}"
-                    )
-
-                trade_pnls[i] = gross_pnl
-                trade_commissions[i] = trade_price * trade_volume * size * rate
-
-        # 步骤 3: 转换为标准字典格式
         formatted_trades: list[dict[str, Any]] = []
-        for i, trade in enumerate(trades_list):
+        for trade in trades_list:
             dt = getattr(trade, "datetime", None)
             direction_val = getattr(trade, "direction", None)
             offset_val = getattr(trade, "offset", None)
             price_val = getattr(trade, "price", 0.0)
             quantity_val = getattr(trade, "volume", 0.0)
-
-            direction = (
-                DIRECTION_MAP.get(direction_val.value)
+            raw_direction = (
+                direction_val.value
                 if direction_val is not None and hasattr(direction_val, "value")
-                else DIRECTION_MAP.get(str(direction_val), str(direction_val))
+                else str(direction_val)
             )
-            offset = (
-                OFFSET_MAP.get(offset_val.value)
-                if offset_val is not None and hasattr(offset_val, "value")
-                else OFFSET_MAP.get(str(offset_val), str(offset_val))
+            raw_offset = (
+                offset_val.value if offset_val is not None and hasattr(offset_val, "value") else str(offset_val)
             )
+            direction = DIRECTION_MAP.get(raw_direction, raw_direction)
+            offset = OFFSET_MAP.get(raw_offset, raw_offset)
 
             trade_dict = {
                 "datetime": dt,
                 "symbol": symbol,
                 "direction": direction,
                 "offset": offset,
-                "open_price": trade_open_prices[i],
+                "price": price_val,
+                "open_price": price_val,
                 "close_price": price_val,
                 "quantity": quantity_val,
-                "pnl": trade_pnls[i],
-                "commission": trade_commissions[i],
+                "pnl": 0.0,
+                "commission": 0.0,
                 "reason": getattr(trade, "reason", ""),
+                "decision_payload_json": getattr(trade, "decision_payload_json", ""),
+                "engine_trade_id": getattr(trade, "vt_tradeid", None) or getattr(trade, "tradeid", None),
+                "engine_order_id": getattr(trade, "vt_orderid", None) or getattr(trade, "orderid", None),
+                "raw_direction": raw_direction,
+                "raw_offset": raw_offset,
             }
             formatted_trades.append(trade_dict)
 

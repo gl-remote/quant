@@ -19,6 +19,8 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
+import json
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -36,11 +38,18 @@ from loguru import logger
 from vnpy_ctastrategy import CtaTemplate
 
 from strategies import Bar, Fill, Signal, State, Strategy, UninitializedStrategy
+from strategies.core.base import DecisionPayloadContract, DecisionPayloadDiagnosticsContract
 from strategies.core.types import StrategyPosition
 from strategies.runtime import (
     DataFeed,
     DataRequirements,
 )
+
+
+@dataclass(frozen=True)
+class SignalDecisionContext:
+    reason: str
+    decision_payload: dict[str, Any]
 
 
 class VnpyBacktestBridge(CtaTemplate):
@@ -85,6 +94,9 @@ class VnpyBacktestBridge(CtaTemplate):
         self._requirements: DataRequirements | None = None
         self._data_feed: DataFeed | None = None
         self.entry_price: float = 0.0
+        self._order_contexts: dict[str, SignalDecisionContext] = {}
+        self._last_real_bar_time: pd.Timestamp | None = getattr(type(self), "last_real_bar_time", None)
+        self._forced_flat_submitted: bool = False
 
     def is_initialized(self) -> bool:
         """检查策略是否已初始化（注入）
@@ -239,6 +251,10 @@ class VnpyBacktestBridge(CtaTemplate):
             return
         bar_time = pd.Timestamp(raw_dt)
         close_price = float(getattr(bar, "close_price", 0))
+        is_synthetic_liquidation = bool(getattr(bar, "is_synthetic_liquidation", False))
+
+        if is_synthetic_liquidation:
+            return
 
         assert self._data_feed is not None
         assert self._requirements is not None
@@ -276,6 +292,39 @@ class VnpyBacktestBridge(CtaTemplate):
                     self.pos,
                     close_price,
                 )
+
+        self._force_flat_at_backtest_end(bar_time, close_price)
+
+    def _force_flat_at_backtest_end(self, bar_time: pd.Timestamp, price: float) -> None:
+        if self._forced_flat_submitted or self._last_real_bar_time is None:
+            return
+        if bar_time < self._last_real_bar_time:
+            return
+        pos = float(self.pos)
+        if pos == 0:
+            self._forced_flat_submitted = True
+            return
+
+        self._forced_flat_submitted = True
+        payload = DecisionPayloadContract(
+            source="vnpy_backtest_bridge",
+            event_type="system_forced_flat",
+            diagnostics=DecisionPayloadDiagnosticsContract(
+                execution={
+                    "trigger": "backtest_end",
+                    "policy": "synthetic_liquidation_bar",
+                }
+            ),
+        )
+        payload.validate()
+        signal = Signal(
+            action=TRADE_ACTION_BUY if pos < 0 else TRADE_ACTION_SELL,
+            reason="forced_flat_at_backtest_end",
+            volume=abs(pos),
+            decision_payload=payload.to_dict(),
+        )
+        self._dispatch_signal(signal, price, bar_time)
+        logger.debug("[{}] {} 回测结束强制平仓 @{:.2f} x{}", self.strategy_name, bar_time, price, abs(pos))
 
     def _dispatch_signal(self, signal: Signal, price: float, bar_time: pd.Timestamp) -> bool:
         """根据 signal.action 和当前持仓判断执行哪种交易。返回是否实际触发下单
@@ -348,8 +397,12 @@ class VnpyBacktestBridge(CtaTemplate):
 
         is_long = self._resolve_direction(direction)
         is_open = self._resolve_offset(getattr(trade, "offset", None))
-        trade_reason = getattr(self, "_last_signal_reason", "")
+        context = self._get_trade_context(trade)
+        trade_reason = context.reason if context else ""
+        trade_payload = context.decision_payload if context else {}
+        trade_payload_json = json.dumps(trade_payload, ensure_ascii=False) if trade_payload else ""
         trade.reason = trade_reason  # 注入到 vnpy TradeData
+        trade.decision_payload_json = trade_payload_json
 
         self._apply_trade_to_state(
             is_long=is_long,
@@ -358,6 +411,7 @@ class VnpyBacktestBridge(CtaTemplate):
             volume=trade_volume,
             dt=trade_datetime,
             reason=trade_reason,
+            decision_payload=trade_payload,
         )
 
     def _resolve_direction(self, direction: Any) -> bool:
@@ -378,6 +432,33 @@ class VnpyBacktestBridge(CtaTemplate):
             return offset.upper() == "OPEN"
         return False
 
+    def _trade_order_ids(self, trade: Any) -> list[str]:
+        ids: list[str] = []
+        for attr in ("vt_orderid", "orderid"):
+            value = getattr(trade, attr, None)
+            if value:
+                ids.append(str(value))
+        return ids
+
+    def _get_trade_context(self, trade: Any) -> SignalDecisionContext | None:
+        for order_id in self._trade_order_ids(trade):
+            context = self._order_contexts.get(order_id)
+            if context is not None:
+                return context
+        return None
+
+    def _register_order_context(self, order_ids: str | list[str], signal: Signal) -> None:
+        ids = [order_ids] if isinstance(order_ids, str) else order_ids
+        if not ids:
+            return
+        context = SignalDecisionContext(
+            reason=signal.reason,
+            decision_payload=signal.decision_payload,
+        )
+        for order_id in ids:
+            if order_id:
+                self._order_contexts[str(order_id)] = context
+
     def _apply_trade_to_state(
         self,
         is_long: bool,
@@ -386,6 +467,7 @@ class VnpyBacktestBridge(CtaTemplate):
         volume: float,
         dt: Any,
         reason: str,
+        decision_payload: dict[str, Any],
     ) -> None:
         """根据成交方向/开平，更新 state.position 并记录 fill
 
@@ -402,6 +484,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 price=price,
                 volume=volume,
                 reason=reason,
+                decision_payload=decision_payload,
             )
             self._state.position = StrategyPosition(
                 direction=dir_value,
@@ -419,6 +502,7 @@ class VnpyBacktestBridge(CtaTemplate):
                 price=price,
                 volume=volume,
                 reason=reason,
+                decision_payload=decision_payload,
             )
             self._state.position = StrategyPosition()
 
@@ -454,18 +538,17 @@ class VnpyBacktestBridge(CtaTemplate):
         :param is_short: 做空开仓
         :param is_cover: 做空平仓
         """
-        self._last_signal_reason = signal.reason  # 暂存给 on_trade 使用
-
         if is_buy or is_short:
             volume = signal.volume
             if volume <= 0:
                 return
             if is_buy:
-                self.buy(price, volume)
+                order_ids = self.buy(price, volume)
                 action_label = "买入开多"
             else:
-                self.short(price, volume)
+                order_ids = self.short(price, volume)
                 action_label = "卖出开空"
+            self._register_order_context(order_ids, signal)
             self.entry_price = price
             logger.debug(f"[{self.strategy_name}] {bar_time} {action_label} @{price:.2f} x{volume}")
             return
@@ -475,10 +558,11 @@ class VnpyBacktestBridge(CtaTemplate):
         if pos <= 0:
             return
         if is_cover:
-            self.cover(price, pos)
+            order_ids = self.cover(price, pos)
             action_label = f"{signal.reason}买入平空"
         else:
-            self.sell(price, pos)
+            order_ids = self.sell(price, pos)
             action_label = f"{signal.reason}卖出平多"
+        self._register_order_context(order_ids, signal)
         self.entry_price = 0.0
         logger.debug(f"[{self.strategy_name}] {bar_time} {action_label} @{price:.2f}")

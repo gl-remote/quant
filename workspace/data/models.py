@@ -6,13 +6,12 @@
 3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
-from pathlib import Path
-
 # 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
 # 注：此 import 作为 re-export 供上层模块使用
 from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from peewee import (
     SQL,
+    BooleanField,
     CharField,
     DateField,
     DateTimeField,
@@ -20,10 +19,11 @@ from peewee import (
     ForeignKeyField,
     IntegerField,
     Model,
-    SqliteDatabase,
     TextField,
 )
 from pydantic import BaseModel, field_validator
+
+from .connection import database as peewee_database
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）
@@ -103,7 +103,7 @@ class BacktestRecord(BaseModel):
 
 
 class TradeRecord(BaseModel):
-    """交易记录"""
+    """回测原始成交记录"""
 
     id: int | None = None
     backtest_id: int
@@ -111,11 +111,18 @@ class TradeRecord(BaseModel):
     symbol: str
     direction: str
     offset: str = "open"
-    open_price: float
-    close_price: float
+    price: float
     quantity: float
-    pnl: float = 0.0  # 逐笔毛盈亏；不扣 commission/slippage
-    commission: float = 0.0  # 该笔成交手续费；open/close 各自记录本侧手续费
+    reason: str = ""
+    decision_payload_json: str | None = None
+    engine_trade_id: str | None = None
+    engine_order_id: str | None = None
+    raw_direction: str | None = None
+    raw_offset: str | None = None
+    open_price: float | None = None
+    close_price: float | None = None
+    pnl: float = 0.0
+    commission: float = 0.0
     created_at: str | None = None
 
     @field_validator("quantity")
@@ -167,40 +174,12 @@ class DataLoadResult(BaseModel):
 # ORM 模型（内部使用，不对外暴露）
 # ==============================================================================
 
-database = SqliteDatabase(None)
-
-
-def _normalize_db_path(db_path: str) -> str:
-    return str(Path(db_path).expanduser().resolve())
-
-
-def current_database_path() -> str | None:
-    db_path = database.database
-    return _normalize_db_path(str(db_path)) if db_path else None
-
-
-def reset_database_binding() -> None:
-    if not database.is_closed():
-        _ = database.close()
-    database.init(None)  # pyright: ignore[reportUnknownMemberType]
-
-
-def bind_database(db_path: str, *, pragmas: dict[str, object] | None = None) -> str:
-    expected_path = _normalize_db_path(db_path)
-    current_path = current_database_path()
-    if current_path is None:
-        database.init(expected_path, pragmas=pragmas)  # pyright: ignore[reportUnknownMemberType]
-        return expected_path
-    if current_path == expected_path:
-        return expected_path
-    raise RuntimeError(f"peewee database already bound: current={current_path}, target={expected_path}")
-
 
 class OrmBaseModel(Model):
     """基础模型"""
 
     class Meta:
-        database: SqliteDatabase = database
+        database = peewee_database
 
 
 class ExportMetadata(OrmBaseModel):
@@ -353,15 +332,10 @@ class BacktestParam(OrmBaseModel):
 
 
 class BacktestTrade(OrmBaseModel):
-    """回测交易明细（逐笔成交记录）
+    """回测原始成交记录（raw simulated fill）。
 
-    注意: vnpy 的 TradeData 代表单笔成交(fill)，不是完整交易(trade)。
-
-    open_price / close_price 语义:
-      开仓记录 (offset=open): open_price = close_price = 成交价
-      平仓记录 (offset=close):
-        open_price = 加权平均开仓价（FIFO 配对时同方向待配对开仓的 Σ(price×vol)/Σ(vol)）
-        close_price = 平仓成交价
+    clearing 业务域负责后续 FIFO 配对、PnL、手续费和滑点归因。
+    open_price / close_price / pnl / commission 仅为 report 契约兼容字段，不再作为权威清算口径。
     """
 
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trades", on_delete="CASCADE")
@@ -369,16 +343,131 @@ class BacktestTrade(OrmBaseModel):
     symbol: CharField = CharField()
     direction: CharField = CharField()
     offset: CharField = CharField()
-    open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
-    close_price: FloatField = FloatField()  # 实际成交价（开仓/平仓均为此笔的执行价格）
+    price: FloatField = FloatField()
     quantity: FloatField = FloatField()
-    pnl: FloatField = FloatField()  # 逐笔毛盈亏；不扣 commission/slippage
-    commission: FloatField = FloatField()  # 该笔成交手续费；open/close 各自记录本侧手续费
     reason: CharField = CharField(max_length=512, default="")
+    decision_payload_json: TextField = TextField(null=True)
+    engine_trade_id: CharField = CharField(null=True, max_length=128)
+    engine_order_id: CharField = CharField(null=True, max_length=128)
+    raw_direction: CharField = CharField(null=True, max_length=32)
+    raw_offset: CharField = CharField(null=True, max_length=32)
+    open_price: FloatField = FloatField(default=0.0)
+    close_price: FloatField = FloatField(default=0.0)
+    pnl: FloatField = FloatField(default=0.0)
+    commission: FloatField = FloatField(default=0.0)
     created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = "backtest_trades"
+
+
+class TradeClearing(OrmBaseModel):
+    """成交配对清算记录。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trade_clearings", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="trade_clearings", null=True, on_delete="SET NULL")
+    symbol: CharField = CharField()
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="open_clearings", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="close_clearings", null=True, on_delete="SET NULL"
+    )
+    source_trade_ids: TextField = TextField(null=True)
+    direction: CharField = CharField()
+    volume: FloatField = FloatField()
+    open_time: DateTimeField = DateTimeField()
+    close_time: DateTimeField = DateTimeField()
+    open_price: FloatField = FloatField()
+    close_price: FloatField = FloatField()
+    contract_multiplier: FloatField = FloatField()
+    price_tick: FloatField = FloatField(null=True)
+    gross_pnl: FloatField = FloatField()
+    commission: FloatField = FloatField()
+    slippage_cost: FloatField = FloatField()
+    net_pnl: FloatField = FloatField()
+    open_reason: CharField = CharField(max_length=512, default="")
+    close_reason: CharField = CharField(max_length=512, default="")
+    holding_seconds: FloatField = FloatField(null=True)
+    holding_bars: IntegerField = IntegerField(null=True)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    forced_close_reason: CharField = CharField(null=True, max_length=128)
+    # 结构诊断透传与派生字段（2026-06-30 新增）
+    # diagnostics_json: 原样透传开仓成交 decision_payload 的 alpha/risk/execution 三层；
+    #   字段集随策略族变化，不拆成固定列，聚合在报告查询层解析。
+    exit_reason: CharField = CharField(null=True, max_length=64)  # 规约后的退出原因枚举
+    mae: FloatField = FloatField(null=True)  # 最大不利波动（价格口径，clearing 从 K 线派生）
+    mfe: FloatField = FloatField(null=True)  # 最大有利波动（价格口径，clearing 从 K 线派生）
+    diagnostics_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "trade_clearings"
+
+
+class AccountLedgerEntry(OrmBaseModel):
+    """账户账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="account_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="account_ledger_entries", null=True, on_delete="SET NULL")
+    trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="account_ledger_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="account_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField(null=True)
+    cash_delta: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    unrealized_pnl_delta: FloatField = FloatField(default=0.0)
+    commission_delta: FloatField = FloatField(default=0.0)
+    slippage_delta: FloatField = FloatField(default=0.0)
+    cash_balance: FloatField = FloatField(default=0.0)
+    realized_pnl_balance: FloatField = FloatField(default=0.0)
+    unrealized_pnl_balance: FloatField = FloatField(default=0.0)
+    equity: FloatField = FloatField(default=0.0)
+    margin: FloatField = FloatField(null=True)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "account_ledger_entries"
+
+
+class PositionLedgerEntry(OrmBaseModel):
+    """持仓账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="position_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="position_ledger_entries", null=True, on_delete="SET NULL")
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_open_entries", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_close_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="position_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField()
+    direction: CharField = CharField()
+    volume_delta: FloatField = FloatField(default=0.0)
+    position_volume: FloatField = FloatField(default=0.0)
+    avg_open_price: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "position_ledger_entries"
 
 
 class BacktestDaily(OrmBaseModel):
@@ -407,15 +496,15 @@ class BacktestDaily(OrmBaseModel):
 
 
 class SchemaInfo(OrmBaseModel):
-    """数据库 schema 版本表 — 配合 data/schema.py 实现极简版本化迁移
+    """数据库 schema 版本表 — 配合 data/migrations.py 实现极简版本化迁移
 
-    每条记录代表一次已执行的迁移。version 单调递增，与 data/schema.py 中的
+    每条记录代表一次已执行的迁移。version 单调递增，与 data/migrations.py 中的
     CURRENT_SCHEMA_VERSION / MIGRATIONS 对齐。
 
     约定（给 AI 看）：新增迁移时必须同时更新 3 个地方：
     1. data/models.py 中的 ORM 字段定义（改表结构）
-    2. data/schema.py 中的 CURRENT_SCHEMA_VERSION（+1）
-    3. data/schema.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
+    2. data/migrations.py 中的 CURRENT_SCHEMA_VERSION（+1）
+    3. data/migrations.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
     """
 
     version: IntegerField = IntegerField(unique=True)
@@ -499,35 +588,3 @@ def get_live_session_model(table_name: str | None = None) -> type[RealtimeSessio
 def get_live_trade_model(table_name: str | None = None) -> type[RealtimeTrade]:
     """获取实时信号/成交模型。"""
     return RealtimeTrade
-
-
-def init_database(db_path: str, *, allow_aggressive_schema_migration: bool = False) -> None:
-    """初始化数据库连接 + 执行版本化迁移
-
-    迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
-    """
-    bind_database(db_path)
-    database.create_tables(
-        [
-            Run,
-            RunStudy,
-            ExportMetadata,
-            OperationLog,
-            Backtest,
-            BacktestParam,
-            BacktestTrade,
-            BacktestDaily,
-            SchemaInfo,
-        ],
-        safe=True,
-    )  # pyright: ignore[reportUnknownMemberType]
-    from . import schema as _schema
-
-    _schema.run_pending_migrations(
-        allow_aggressive=allow_aggressive_schema_migration,
-    )
-
-
-def close_database() -> None:
-    """关闭数据库连接并重置绑定"""
-    reset_database_binding()

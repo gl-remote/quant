@@ -20,7 +20,8 @@ from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL
 from common.tqsdk_imports import tqsdk
 from config import ConfigManager
 from data import DataManager
-from data.models import RealtimeSession, RealtimeTrade, database
+from data.connection import database
+from data.models import RealtimeSession, RealtimeTrade
 from loguru import logger
 from strategies import Signal, Strategy
 from strategies.bridges.tqsdk_bridge import TqsdkStrategyBridge

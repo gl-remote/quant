@@ -442,6 +442,27 @@ class DataManager:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
 
+    def get_backtests_for_clearing(self, run_id: int) -> list[dict[str, object]]:
+        """查询 run 下需要清算的成功 backtest。"""
+        return self.store.get_backtests_for_clearing(run_id)
+
+    def replace_clearing_outputs(
+        self,
+        backtest_id: int,
+        clearing_rows: list[dict[str, object]],
+        account_ledger_rows: list[dict[str, object]],
+        position_ledger_rows: list[dict[str, object]],
+        summary_fields: dict[str, object],
+    ) -> None:
+        """幂等替换单个 backtest 的清算、账户账本、持仓账本并回填汇总。"""
+        self.store.replace_clearing_outputs(
+            backtest_id,
+            clearing_rows,
+            account_ledger_rows,
+            position_ledger_rows,
+            summary_fields,
+        )
+
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
@@ -555,6 +576,20 @@ class DataManager:
         from .optuna_query import get_optuna_data as _query
 
         return _query(run_id)
+
+    def get_clearing_diagnostics_for_run(self, run_id: int) -> list[dict[str, object]]:
+        """获取 run 下各品种的结构诊断聚合（成本后指标 / exit reason / R 分布）。"""
+        from .report_queries import build_clearing_diagnostics_for_run as _query
+
+        self._init_store()
+        return _query(self.store, run_id)
+
+    def get_exit_policy_diff(self, backtest_id_a: int, backtest_id_b: int) -> dict[str, object]:
+        """对比两个回测的退出结构（成本后指标变化）。"""
+        from .report_queries import build_exit_policy_diff as _query
+
+        self._init_store()
+        return _query(backtest_id_a, backtest_id_b)
 
     # ── 资源管理 ────────────────────────────────────────────
 

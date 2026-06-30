@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { RunInfo } from "@/types";
 
-export type TabId = "backtest" | "params" | "logs";
+export type TabId = "backtest" | "structure" | "params" | "logs";
 
 interface Props {
   runId: number;
@@ -84,6 +84,19 @@ export default function RunHeader({
           className={`${tabBtn} ${activeTab === "backtest" ? tabActive : tabInactive}`}
         >
           回测结果
+        </button>
+        <button
+          role="tab"
+          id="tab-structure"
+          aria-selected={activeTab === "structure"}
+          aria-controls="panel-structure"
+          tabIndex={activeTab === "structure" ? 0 : -1}
+          data-ql-id="RUN-PG-TAB-STRUCTURE"
+          onClick={() => onTabChange("structure")}
+          onKeyDown={(e) => handleTabKeyDown(e, "structure")}
+          className={`${tabBtn} ${activeTab === "structure" ? tabActive : tabInactive}`}
+        >
+          结构诊断
         </button>
         <button
           role="tab"

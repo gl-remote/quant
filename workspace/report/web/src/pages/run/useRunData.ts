@@ -10,6 +10,7 @@ import type {
   OptunaData,
   RunLogs,
   TradesData,
+  ClearingDiagnostics,
 } from "@/types";
 
 export interface RunData {
@@ -21,6 +22,7 @@ export interface RunData {
   optuna: OptunaData | null;
   runLogs: RunLogs | null;
   tradesData: TradesData | null;
+  diagnostics: ClearingDiagnostics[] | null;
   kline: KlineData | null;
   klineLoading: boolean;
   loading: boolean;
@@ -58,6 +60,10 @@ export function useRunData(): RunData {
     "trades.json",
     runId
   );
+  const { data: diagnostics } = useFetchJson<ClearingDiagnostics[]>(
+    "clearing_diagnostics.json",
+    runId
+  );
 
   useEffect(() => {
     if (summary && summary.length > 0 && !selectedSymbol) {
@@ -91,6 +97,7 @@ export function useRunData(): RunData {
     optuna,
     runLogs,
     tradesData,
+    diagnostics,
     kline,
     klineLoading,
     loading,

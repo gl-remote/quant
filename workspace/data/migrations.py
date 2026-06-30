@@ -20,14 +20,12 @@ from datetime import datetime
 
 from loguru import logger
 
-from .models import (
-    SchemaInfo,
-    database,
-)
+from .connection import database
+from .models import SchemaInfo
 
 # ── 当前代码期望的 schema 版本 ────────────────────────────────
 # 任何新的 ALTER TABLE 都要让这个数 +1，并在 MIGRATIONS 中追加一条
-CURRENT_SCHEMA_VERSION: int = 4
+CURRENT_SCHEMA_VERSION: int = 8
 
 # ── 迁移清单（按版本号升序排列） ────────────────────────────
 # 约定：version 从 1 开始单调递增；每条 migration.up 只执行一个结构变更
@@ -51,6 +49,26 @@ MIGRATIONS: list[dict] = [
         "version": 4,
         "description": "重建 backtest_params，移除 param_value 的旧 NOT NULL 约束",
         "up": lambda allow_aggressive=False: _migration_4_rebuild_backtest_params(allow_aggressive),
+    },
+    {
+        "version": 5,
+        "description": "将 backtest_trades 转为 raw fill 并新增 trade_clearings",
+        "up": lambda allow_aggressive=False: _migration_5_add_clearing_tables(),
+    },
+    {
+        "version": 6,
+        "description": "新增清算域账户账本和持仓账本表",
+        "up": lambda allow_aggressive=False: _migration_6_add_account_position_ledgers(),
+    },
+    {
+        "version": 7,
+        "description": "新增 backtest_trades 机器可读信号事件载荷字段",
+        "up": lambda allow_aggressive=False: _migration_7_add_trade_decision_payload(),
+    },
+    {
+        "version": 8,
+        "description": "trade_clearings 新增结构诊断透传与派生字段（diagnostics_json/exit_reason/mae/mfe）",
+        "up": lambda allow_aggressive=False: _migration_8_add_clearing_diagnostics(),
     },
 ]
 
@@ -272,6 +290,187 @@ def _migration_4_rebuild_backtest_params(allow_aggressive: bool) -> None:
         database.execute_sql("CREATE INDEX backtestparam_backtest_id ON backtest_params (backtest_id)")
     finally:
         database.execute_sql("PRAGMA foreign_keys=ON")
+
+
+def _migration_5_add_clearing_tables() -> None:
+    """将 backtest_trades 扩展为 raw fill，并新增清算表。"""
+    bt_trades_cols = _table_columns("backtest_trades")
+    bt_trades_new_cols: list[tuple[str, str]] = [
+        ("price", "REAL"),
+        ("engine_trade_id", "VARCHAR(128)"),
+        ("engine_order_id", "VARCHAR(128)"),
+        ("raw_direction", "VARCHAR(32)"),
+        ("raw_offset", "VARCHAR(32)"),
+    ]
+    for col_name, col_type in bt_trades_new_cols:
+        if col_name not in bt_trades_cols:
+            database.execute_sql(f"ALTER TABLE backtest_trades ADD COLUMN {col_name} {col_type}")
+    if "price" not in bt_trades_cols:
+        database.execute_sql(
+            "UPDATE backtest_trades SET price = COALESCE(NULLIF(close_price, 0), NULLIF(open_price, 0), 0)"
+        )
+
+    database.execute_sql(
+        """
+        CREATE TABLE IF NOT EXISTS trade_clearings (
+            id INTEGER NOT NULL PRIMARY KEY,
+            backtest_id INTEGER NOT NULL,
+            run_id INTEGER,
+            symbol VARCHAR(255) NOT NULL,
+            open_trade_id INTEGER,
+            close_trade_id INTEGER,
+            source_trade_ids TEXT,
+            direction VARCHAR(255) NOT NULL,
+            volume REAL NOT NULL,
+            open_time DATETIME NOT NULL,
+            close_time DATETIME NOT NULL,
+            open_price REAL NOT NULL,
+            close_price REAL NOT NULL,
+            contract_multiplier REAL NOT NULL,
+            price_tick REAL,
+            gross_pnl REAL NOT NULL,
+            commission REAL NOT NULL,
+            slippage_cost REAL NOT NULL,
+            net_pnl REAL NOT NULL,
+            open_reason VARCHAR(512) NOT NULL DEFAULT '',
+            close_reason VARCHAR(512) NOT NULL DEFAULT '',
+            holding_seconds REAL,
+            holding_bars INTEGER,
+            is_forced_close INTEGER NOT NULL DEFAULT 0,
+            forced_close_reason VARCHAR(128),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE,
+            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE SET NULL,
+            FOREIGN KEY(open_trade_id) REFERENCES backtest_trades(id) ON DELETE SET NULL,
+            FOREIGN KEY(close_trade_id) REFERENCES backtest_trades(id) ON DELETE SET NULL
+        )
+        """
+    )
+    database.execute_sql("CREATE INDEX IF NOT EXISTS tradeclearings_backtest_id ON trade_clearings (backtest_id)")
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS tradeclearings_backtest_close_time ON trade_clearings (backtest_id, close_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS tradeclearings_backtest_symbol ON trade_clearings (backtest_id, symbol)"
+    )
+    database.execute_sql("CREATE INDEX IF NOT EXISTS tradeclearings_open_trade_id ON trade_clearings (open_trade_id)")
+    database.execute_sql("CREATE INDEX IF NOT EXISTS tradeclearings_close_trade_id ON trade_clearings (close_trade_id)")
+
+
+def _migration_6_add_account_position_ledgers() -> None:
+    _migration_5_add_clearing_tables()
+    database.execute_sql(
+        """
+        CREATE TABLE IF NOT EXISTS account_ledger_entries (
+            id INTEGER NOT NULL PRIMARY KEY,
+            backtest_id INTEGER NOT NULL,
+            run_id INTEGER,
+            trade_id INTEGER,
+            clearing_id INTEGER,
+            source_type VARCHAR(32) NOT NULL DEFAULT 'backtest',
+            source_id INTEGER,
+            event_time DATETIME NOT NULL,
+            event_type VARCHAR(64) NOT NULL,
+            symbol VARCHAR(255),
+            cash_delta REAL NOT NULL DEFAULT 0,
+            realized_pnl_delta REAL NOT NULL DEFAULT 0,
+            unrealized_pnl_delta REAL NOT NULL DEFAULT 0,
+            commission_delta REAL NOT NULL DEFAULT 0,
+            slippage_delta REAL NOT NULL DEFAULT 0,
+            cash_balance REAL NOT NULL DEFAULT 0,
+            realized_pnl_balance REAL NOT NULL DEFAULT 0,
+            unrealized_pnl_balance REAL NOT NULL DEFAULT 0,
+            equity REAL NOT NULL DEFAULT 0,
+            margin REAL,
+            metadata_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE,
+            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE SET NULL,
+            FOREIGN KEY(trade_id) REFERENCES backtest_trades(id) ON DELETE SET NULL,
+            FOREIGN KEY(clearing_id) REFERENCES trade_clearings(id) ON DELETE CASCADE
+        )
+        """
+    )
+    database.execute_sql(
+        """
+        CREATE TABLE IF NOT EXISTS position_ledger_entries (
+            id INTEGER NOT NULL PRIMARY KEY,
+            backtest_id INTEGER NOT NULL,
+            run_id INTEGER,
+            open_trade_id INTEGER,
+            close_trade_id INTEGER,
+            clearing_id INTEGER,
+            source_type VARCHAR(32) NOT NULL DEFAULT 'backtest',
+            source_id INTEGER,
+            event_time DATETIME NOT NULL,
+            event_type VARCHAR(64) NOT NULL,
+            symbol VARCHAR(255) NOT NULL,
+            direction VARCHAR(255) NOT NULL,
+            volume_delta REAL NOT NULL DEFAULT 0,
+            position_volume REAL NOT NULL DEFAULT 0,
+            avg_open_price REAL NOT NULL DEFAULT 0,
+            realized_pnl_delta REAL NOT NULL DEFAULT 0,
+            is_forced_close INTEGER NOT NULL DEFAULT 0,
+            metadata_json TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE,
+            FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE SET NULL,
+            FOREIGN KEY(open_trade_id) REFERENCES backtest_trades(id) ON DELETE SET NULL,
+            FOREIGN KEY(close_trade_id) REFERENCES backtest_trades(id) ON DELETE SET NULL,
+            FOREIGN KEY(clearing_id) REFERENCES trade_clearings(id) ON DELETE CASCADE
+        )
+        """
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS accountledgerentries_backtest_time ON account_ledger_entries (backtest_id, event_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS accountledgerentries_run_time ON account_ledger_entries (run_id, event_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS accountledgerentries_clearing_id ON account_ledger_entries (clearing_id)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS accountledgerentries_trade_id ON account_ledger_entries (trade_id)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_backtest_time ON position_ledger_entries (backtest_id, event_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_run_time ON position_ledger_entries (run_id, event_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_symbol_direction_time ON position_ledger_entries (backtest_id, symbol, direction, event_time)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_clearing_id ON position_ledger_entries (clearing_id)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_open_trade_id ON position_ledger_entries (open_trade_id)"
+    )
+    database.execute_sql(
+        "CREATE INDEX IF NOT EXISTS positionledgerentries_close_trade_id ON position_ledger_entries (close_trade_id)"
+    )
+
+
+def _migration_7_add_trade_decision_payload() -> None:
+    cols = _table_columns("backtest_trades")
+    if "decision_payload_json" not in cols:
+        database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN decision_payload_json TEXT")
+
+
+def _migration_8_add_clearing_diagnostics() -> None:
+    """trade_clearings 承载结构诊断：原样透传三层 dict 与 clearing 派生量。"""
+    cols = _table_columns("trade_clearings")
+    new_cols: list[tuple[str, str]] = [
+        ("exit_reason", "VARCHAR(64)"),
+        ("mae", "REAL"),
+        ("mfe", "REAL"),
+        ("diagnostics_json", "TEXT"),
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in cols:
+            database.execute_sql(f"ALTER TABLE trade_clearings ADD COLUMN {col_name} {col_type}")
 
 
 # ── 公开 API ─────────────────────────────────────────────

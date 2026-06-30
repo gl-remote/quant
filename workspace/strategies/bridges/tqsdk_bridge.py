@@ -590,6 +590,7 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             price=fill_price,
             volume=signal.volume,
             reason=signal.reason,
+            decision_payload=signal.decision_payload,
         )
         self._state.fills.append(fill)
 

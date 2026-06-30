@@ -97,6 +97,20 @@ class TestDataStoreInit:
         assert params["sma_short"].param_type == "float"
         assert params["sma_short"].param_text == "5.0"
 
+    def test_migration_adds_clearing_diagnostics_columns(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        store.close()
+
+        from data.migrations import get_current_version, get_expected_version
+
+        assert get_expected_version() >= 8
+
+        conn = sqlite3.connect(temp_db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(trade_clearings)")}
+        conn.close()
+        assert {"diagnostics_json", "exit_reason", "mae", "mfe"} <= cols
+        assert get_current_version() == get_expected_version()
+
 
 # ═══════════════════════════════════════════════════════════
 # 操作日志 & 元数据
@@ -492,7 +506,13 @@ class TestTradeRecordSchema:
                 "offset": ["open", "close"],
                 "open_price": [3500.0, 3520.0],
                 "close_price": [3500.0, 3520.0],
+                "price": [3500.0, 3520.0],
                 "quantity": [1.0, 1.0],
+                "reason": ["", ""],
+                "engine_trade_id": [None, None],
+                "engine_order_id": [None, None],
+                "raw_direction": [None, None],
+                "raw_offset": [None, None],
                 "pnl": [200.0, -100.0],
                 "commission": [3.0, 3.0],
             }
@@ -509,7 +529,13 @@ class TestTradeRecordSchema:
                 "offset": ["open"],
                 "open_price": [3500.0],
                 "close_price": [3500.0],
+                "price": [3500.0],
                 "quantity": [1.0],
+                "reason": [""],
+                "engine_trade_id": [None],
+                "engine_order_id": [None],
+                "raw_direction": [None],
+                "raw_offset": [None],
                 "pnl": [0.0],
                 "commission": [0.0],
             }
@@ -526,7 +552,13 @@ class TestTradeRecordSchema:
                 "offset": ["open"],
                 "open_price": [-100.0],
                 "close_price": [3500.0],
+                "price": [-100.0],
                 "quantity": [1.0],
+                "reason": [""],
+                "engine_trade_id": [None],
+                "engine_order_id": [None],
+                "raw_direction": [None],
+                "raw_offset": [None],
                 "pnl": [0.0],
                 "commission": [0.0],
             }

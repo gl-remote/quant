@@ -36,7 +36,10 @@ from common.types import BacktestResult
 from loguru import logger
 from peewee import OperationalError
 
+from .connection import bind_database, database
+from .migrations import run_pending_migrations
 from .models import (
+    AccountLedgerEntry,
     Backtest,
     BacktestDaily,
     BacktestParam,
@@ -44,12 +47,12 @@ from .models import (
     BacktestTrade,
     ExportMetadata,
     OperationLog,
+    PositionLedgerEntry,
     Run,
     RunStudy,
     SchemaInfo,
+    TradeClearing,
     TradeRecord,
-    bind_database,
-    database,
 )
 
 
@@ -91,6 +94,18 @@ def _param_record_fields(value: Any) -> dict[str, Any]:
     return fields
 
 
+def _attach_clearing_ids(rows: list[dict[str, object]], clearing_ids: list[int]) -> list[dict[str, object]]:
+    """把临时 clearing_index 替换成真实 clearing_id。"""
+    result: list[dict[str, object]] = []
+    for row in rows:
+        new_row = dict(row)
+        index = new_row.pop("clearing_index", None)
+        if index is not None and int(str(index)) < len(clearing_ids):
+            new_row["clearing_id"] = clearing_ids[int(str(index))]
+        result.append(new_row)
+    return result
+
+
 class DataStore:
     """数据存储层 - 管理数据库连接和 CRUD 操作"""
 
@@ -119,8 +134,6 @@ class DataStore:
 
     def _init_tables(self) -> None:
         """初始化数据库表 + 执行版本化迁移"""
-        from . import schema as _schema
-
         database.create_tables(
             [
                 Run,
@@ -130,12 +143,15 @@ class DataStore:
                 Backtest,
                 BacktestParam,
                 BacktestTrade,
+                TradeClearing,
+                AccountLedgerEntry,
+                PositionLedgerEntry,
                 BacktestDaily,
                 SchemaInfo,
             ],
             safe=True,
         )
-        _schema.run_pending_migrations(
+        run_pending_migrations(
             allow_aggressive=self._allow_aggressive_schema_migration,
         )
 
@@ -409,20 +425,12 @@ class DataStore:
         return fields
 
     def insert_backtest_trades(self, backtest_id: int, trades: list[dict[str, object]]) -> int:
-        """批量插入交易明细
-
-        输入 trades 字段名必须与 ORM BacktestTrade 对齐:
-            datetime, symbol, direction, offset,
-            open_price, close_price, quantity, pnl, commission
-
-        口径说明：
-            pnl 为逐笔毛盈亏，不扣手续费/滑点；commission 为该成交本侧手续费。
-            净收益以 backtest_daily.net_pnl / backtests.total_net_pnl 为准。
-        """
+        """批量插入回测原始成交记录。"""
         now = datetime.now()
         rows: list[dict[str, object]] = []
 
         for trade in trades:
+            price = _f(trade.get("price", trade.get("close_price", trade.get("open_price", 0.0))))
             rows.append(
                 {
                     "backtest_id": backtest_id,
@@ -430,12 +438,24 @@ class DataStore:
                     "datetime": trade["datetime"],
                     "direction": str(trade["direction"]).lower(),
                     "offset": str(trade.get("offset", "open")).lower(),
-                    "open_price": _f(trade["open_price"]),
-                    "close_price": _f(trade["close_price"]),
+                    "price": price,
                     "quantity": _f(trade["quantity"]),
+                    "reason": str(trade.get("reason", "")),
+                    "decision_payload_json": str(trade["decision_payload_json"])
+                    if trade.get("decision_payload_json") is not None
+                    else None,
+                    "engine_trade_id": str(trade["engine_trade_id"])
+                    if trade.get("engine_trade_id") is not None
+                    else None,
+                    "engine_order_id": str(trade["engine_order_id"])
+                    if trade.get("engine_order_id") is not None
+                    else None,
+                    "raw_direction": str(trade["raw_direction"]) if trade.get("raw_direction") is not None else None,
+                    "raw_offset": str(trade["raw_offset"]) if trade.get("raw_offset") is not None else None,
+                    "open_price": price,
+                    "close_price": price,
                     "pnl": _f(trade.get("pnl", 0.0)),
                     "commission": _f(trade.get("commission", 0.0)),
-                    "reason": str(trade.get("reason", "")),
                     "created_at": now,
                 }
             )
@@ -443,7 +463,6 @@ class DataStore:
         if not rows:
             return 0
 
-        # Pandera 验证
         try:
             trades_df = pd.DataFrame(rows)
             trades_df["datetime"] = pd.to_datetime(trades_df["datetime"])
@@ -496,7 +515,7 @@ class DataStore:
         rows = list(
             BacktestTrade.select()
             .where(BacktestTrade.backtest_id == backtest_id)
-            .order_by(BacktestTrade.datetime.asc())
+            .order_by(BacktestTrade.datetime.asc(), BacktestTrade.id.asc())
             .dicts()
         )
 
@@ -508,6 +527,39 @@ class DataStore:
             row["backtest_id"] = row.pop("backtest_id") if "backtest_id" in row else backtest_id
             records.append(TradeRecord(**row))
         return records
+
+    def replace_clearing_outputs(
+        self,
+        backtest_id: int,
+        clearing_rows: list[dict[str, object]],
+        account_ledger_rows: list[dict[str, object]],
+        position_ledger_rows: list[dict[str, object]],
+        summary_fields: dict[str, object],
+    ) -> None:
+        """幂等替换单个 backtest 的清算、账户账本、持仓账本并回填汇总。"""
+        with database.atomic():
+            AccountLedgerEntry.delete().where(AccountLedgerEntry.backtest_id == backtest_id).execute()
+            PositionLedgerEntry.delete().where(PositionLedgerEntry.backtest_id == backtest_id).execute()
+            TradeClearing.delete().where(TradeClearing.backtest_id == backtest_id).execute()
+
+            clearing_ids: list[int] = []
+            for row in clearing_rows:
+                clearing = TradeClearing.create(**row)
+                clearing_ids.append(int(clearing.id))
+
+            account_rows = _attach_clearing_ids(account_ledger_rows, clearing_ids)
+            position_rows = _attach_clearing_ids(position_ledger_rows, clearing_ids)
+            if account_rows:
+                AccountLedgerEntry.insert_many(account_rows).execute()
+            if position_rows:
+                PositionLedgerEntry.insert_many(position_rows).execute()
+            if summary_fields:
+                Backtest.update(**summary_fields, updated_at=datetime.now()).where(Backtest.id == backtest_id).execute()
+
+    def get_backtests_for_clearing(self, run_id: int) -> list[dict[str, object]]:
+        """查询 run 下需要清算的成功 backtest。"""
+        rows = Backtest.select().where(Backtest.run_id == run_id, Backtest.status == "success").dicts()
+        return list(rows)
 
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
@@ -643,6 +695,9 @@ class DataStore:
                 logger.warning(f"回测记录不存在 id={backtest_id}")
                 return False
             with database.atomic():
+                AccountLedgerEntry.delete().where(AccountLedgerEntry.backtest_id == backtest_id).execute()
+                PositionLedgerEntry.delete().where(PositionLedgerEntry.backtest_id == backtest_id).execute()
+                TradeClearing.delete().where(TradeClearing.backtest_id == backtest_id).execute()
                 BacktestDaily.delete().where(BacktestDaily.backtest_id == backtest_id).execute()
                 BacktestTrade.delete().where(BacktestTrade.backtest_id == backtest_id).execute()
                 bt.delete_instance()

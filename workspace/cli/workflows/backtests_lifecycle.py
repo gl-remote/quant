@@ -111,9 +111,12 @@ class RunFinalizer:
            其中 hook（detach + export_json）在 frontend 之后、entry_html 之前执行，
            确保 logs.json 落盘后再打包入口 HTML，只打包一次。
         """
+        from cli.workflows.clearing import ClearingRequest, ClearingWorkflow
         from cli.workflows.report import ReportBuildRequest, ReportWorkflow
 
         self._dm.store.finish_run(run_id, status)
+        if status == "success":
+            ClearingWorkflow(self._dm).run(ClearingRequest(run_id=run_id))
         ReportWorkflow(self._dm).build(
             ReportBuildRequest(
                 run_id=run_id,
