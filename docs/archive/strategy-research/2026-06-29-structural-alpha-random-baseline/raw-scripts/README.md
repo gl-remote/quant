@@ -52,7 +52,7 @@
 
 ## 4. 已知相关 issue
 
-- [vnpy 平仓未配对警告影响成交级统计口径](../../../../issues/vnpy-close-trade-pairing-warning.md)
+- [vnpy 平仓未配对警告影响成交级统计口径](../../../backtest/vnpy-close-trade-pairing-warning.md)
 - [prevday_volume_filter 随机对照批量运行性能异常偏慢](../../../../issues/prevday-volume-random-baseline-performance.md)
 
 ## 5. 推荐阅读顺序

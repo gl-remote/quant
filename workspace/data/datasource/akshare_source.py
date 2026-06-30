@@ -149,13 +149,13 @@ class AkShareDataSource(BaseDataSource):
         CZCE.SR309 → SR309
         SHFE.rb2410 → RB2410
         """
-        from common.symbol_utils import parse_contract
+        from common.symbol_utils import extract_contract_code, parse_contract
 
         c = parse_contract(symbol)
         if c:
             return c.contract_code.upper()
-        # 解析失败时回退：去掉交易所前缀 + 转大写
-        return symbol.split(".", 1)[-1].upper() if "." in symbol else symbol.upper()
+        code = extract_contract_code(symbol)
+        return code.upper() if code else symbol.upper()
 
 
 def _filter_by_date(df: pd.DataFrame, start_date: str, end_date: str, col: str = "datetime") -> pd.DataFrame:
