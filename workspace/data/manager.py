@@ -577,6 +577,20 @@ class DataManager:
 
         return _query(run_id)
 
+    def get_clearing_diagnostics_for_run(self, run_id: int) -> list[dict[str, object]]:
+        """获取 run 下各品种的结构诊断聚合（成本后指标 / exit reason / R 分布）。"""
+        from .report_queries import build_clearing_diagnostics_for_run as _query
+
+        self._init_store()
+        return _query(self.store, run_id)
+
+    def get_exit_policy_diff(self, backtest_id_a: int, backtest_id_b: int) -> dict[str, object]:
+        """对比两个回测的退出结构（成本后指标变化）。"""
+        from .report_queries import build_exit_policy_diff as _query
+
+        self._init_store()
+        return _query(backtest_id_a, backtest_id_b)
+
     # ── 资源管理 ────────────────────────────────────────────
 
     def clear_cache(self) -> None:

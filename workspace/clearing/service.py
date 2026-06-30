@@ -38,6 +38,7 @@ class OpenLot:
     price: float
     remaining: float
     reason: str
+    decision_payload: dict[str, object] | None = None
 
 
 @dataclass
@@ -107,6 +108,7 @@ class BacktestClearingService:
                         price=float(trade.price),
                         remaining=float(trade.quantity),
                         reason=str(trade.reason or ""),
+                        decision_payload=_parse_decision_payload(trade.decision_payload_json),
                     )
                 )
                 continue
@@ -124,6 +126,8 @@ class BacktestClearingService:
                     position_direction=position_direction,
                     cost_spec=cost_spec,
                     forced_reason=None,
+                    close_payload=_parse_decision_payload(trade.decision_payload_json),
+                    bars=bars,
                 )
             )
 
@@ -146,6 +150,8 @@ class BacktestClearingService:
                         position_direction=position_direction,
                         cost_spec=cost_spec,
                         forced_reason="forced_close_at_backtest_end",
+                        close_payload=None,
+                        bars=bars,
                     )
                 )
 
@@ -166,10 +172,13 @@ class BacktestClearingService:
         position_direction: str,
         cost_spec: CostSpec,
         forced_reason: str | None,
+        close_payload: dict[str, object] | None = None,
+        bars: pd.DataFrame | None = None,
     ) -> list[dict[str, object]]:
         remaining = float(close_trade.quantity) if close_trade is not None else sum(lot.remaining for lot in open_lots)
 
         rows: list[dict[str, object]] = []
+        backtest_id = _int_field(backtest, "id")
         while remaining > 0 and open_lots:
             lot = open_lots[0]
             volume = min(remaining, lot.remaining)
@@ -179,9 +188,18 @@ class BacktestClearingService:
             )
             slippage_cost = self._slippage_cost(volume, cost_spec) * 2
             net_pnl = gross_pnl - commission - slippage_cost
+            mae, mfe, holding_bars = self._price_excursion(
+                bars, lot.open_time, close_time, lot.price, position_direction
+            )
+            diagnostics = self._collect_diagnostics(
+                backtest_id=backtest_id,
+                open_payload=lot.decision_payload,
+                close_payload=close_payload,
+                forced_reason=forced_reason,
+            )
             rows.append(
                 {
-                    "backtest_id": _int_field(backtest, "id"),
+                    "backtest_id": backtest_id,
                     "run_id": backtest.get("run"),
                     "symbol": lot.symbol,
                     "open_trade_id": lot.trade_id or None,
@@ -205,9 +223,13 @@ class BacktestClearingService:
                     "open_reason": lot.reason,
                     "close_reason": close_reason,
                     "holding_seconds": (close_time - lot.open_time).total_seconds(),
-                    "holding_bars": None,
+                    "holding_bars": holding_bars,
                     "is_forced_close": forced_reason is not None,
                     "forced_close_reason": forced_reason,
+                    "exit_reason": self._resolve_exit_reason(diagnostics, forced_reason),
+                    "mae": mae,
+                    "mfe": mfe,
+                    "diagnostics_json": json.dumps(diagnostics, ensure_ascii=False) if diagnostics else None,
                     "created_at": datetime.now(),
                 }
             )
@@ -224,6 +246,102 @@ class BacktestClearingService:
                 remaining,
             )
         return rows
+
+    # 推荐字段：策略族应填的诊断字段，缺失时打 warning（见 strategies/core/diagnostics/*.py）。
+    _RECOMMENDED_ALPHA: tuple[str, ...] = ("strict_failure_boundary", "expected_profit_boundary")
+    _RECOMMENDED_RISK: tuple[str, ...] = ("strict_failure_distance", "raw_account_r_multiple")
+
+    def _collect_diagnostics(
+        self,
+        *,
+        backtest_id: int,
+        open_payload: dict[str, object] | None,
+        close_payload: dict[str, object] | None,
+        forced_reason: str | None,
+    ) -> dict[str, object]:
+        """汇总开仓/平仓 decision_payload 的三层诊断，原样透传供报告层解析。
+
+        alpha / risk 在开仓时决策，取开仓成交载荷；execution 在平仓时决策，取平仓
+        成交载荷。缺推荐字段时打 warning（报告层假设策略已按推荐字段填充）。
+        """
+        open_diag = _payload_diagnostics(open_payload)
+        close_diag = _payload_diagnostics(close_payload)
+        alpha = _layer_dict(open_diag.get("alpha"))
+        risk = _layer_dict(open_diag.get("risk"))
+        execution = _layer_dict(close_diag.get("execution")) or _layer_dict(open_diag.get("execution"))
+
+        if not _is_real(alpha) and forced_reason is None:
+            logger.warning("backtest_id={} 清算成交缺 alpha 诊断（开仓未填结构候选）", backtest_id)
+        if not _is_real(risk) and forced_reason is None:
+            logger.warning("backtest_id={} 清算成交缺 risk 诊断（开仓未填风险预算）", backtest_id)
+        self._warn_missing_fields(backtest_id, "alpha", alpha, self._RECOMMENDED_ALPHA, forced_reason)
+        self._warn_missing_fields(backtest_id, "risk", risk, self._RECOMMENDED_RISK, forced_reason)
+
+        diagnostics: dict[str, object] = {}
+        if _is_real(alpha):
+            diagnostics["alpha"] = alpha
+        if _is_real(risk):
+            diagnostics["risk"] = risk
+        if _is_real(execution):
+            diagnostics["execution"] = execution
+        return diagnostics
+
+    @staticmethod
+    def _warn_missing_fields(
+        backtest_id: int,
+        layer: str,
+        fields: dict[str, object],
+        recommended: tuple[str, ...],
+        forced_reason: str | None,
+    ) -> None:
+        if forced_reason is not None or not _is_real(fields):
+            return
+        missing = [name for name in recommended if name not in fields]
+        if missing:
+            logger.warning("backtest_id={} {} 诊断缺推荐字段: {}", backtest_id, layer, missing)
+
+    @staticmethod
+    def _resolve_exit_reason(diagnostics: dict[str, object], forced_reason: str | None) -> str | None:
+        """退出原因枚举：优先 execution.exit_reason，其次强平标记。"""
+        if forced_reason is not None:
+            return "forced_close"
+        execution = diagnostics.get("execution")
+        if isinstance(execution, dict):
+            value = execution.get("exit_reason")
+            if isinstance(value, str) and value:
+                return value
+        return None
+
+    @staticmethod
+    def _price_excursion(
+        bars: pd.DataFrame | None,
+        open_time: datetime,
+        close_time: datetime,
+        open_price: float,
+        position_direction: str,
+    ) -> tuple[float | None, float | None, int | None]:
+        """从持仓区间 K 线派生 MAE / MFE（价格口径）与持仓 K 线数。
+
+        MAE = 最大不利价格偏移（>=0），MFE = 最大有利价格偏移（>=0）。
+        long 有利方向向上，short 有利方向向下。
+        """
+        if bars is None or bars.empty or "datetime" not in bars.columns:
+            return None, None, None
+        mask = (bars["datetime"] >= pd.Timestamp(open_time)) & (bars["datetime"] <= pd.Timestamp(close_time))
+        window = bars.loc[mask]
+        if window.empty:
+            return None, None, 0
+        highs = window["high"].astype(float) if "high" in window.columns else window["close"].astype(float)
+        lows = window["low"].astype(float) if "low" in window.columns else window["close"].astype(float)
+        max_high = float(highs.max())
+        min_low = float(lows.min())
+        if position_direction == "long":
+            mfe = max(0.0, max_high - open_price)
+            mae = max(0.0, open_price - min_low)
+        else:
+            mfe = max(0.0, open_price - min_low)
+            mae = max(0.0, max_high - open_price)
+        return mae, mfe, int(len(window))
 
     @staticmethod
     def _gross_pnl(direction: str, open_price: float, close_price: float, volume: float, size: float) -> float:
@@ -450,6 +568,37 @@ class BacktestClearingService:
             "end_balance": initial_capital + total_net_pnl if initial_capital else backtest.get("end_balance"),
             "total_return": total_net_pnl / initial_capital * 100 if initial_capital else backtest.get("total_return"),
         }
+
+
+def _parse_decision_payload(payload_json: str | None) -> dict[str, object] | None:
+    """解析成交记录的 decision_payload_json。无效或为空返回 None。"""
+    if not payload_json:
+        return None
+    try:
+        data = json.loads(payload_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _payload_diagnostics(payload: dict[str, object] | None) -> dict[str, object]:
+    """取 decision_payload 的 diagnostics 子树。"""
+    if not payload:
+        return {}
+    diagnostics = payload.get("diagnostics")
+    return diagnostics if isinstance(diagnostics, dict) else {}
+
+
+def _layer_dict(value: object) -> dict[str, object]:
+    """取诊断层 dict，非 dict 归一为空 dict。"""
+    return value if isinstance(value, dict) else {}
+
+
+def _is_real(fields: object) -> bool:
+    """判断诊断层是否为真实填充（非空且非占位）。"""
+    if not isinstance(fields, dict) or not fields:
+        return False
+    return not (len(fields) == 1 and fields.get("placeholder") is True)
 
 
 def _int_field(row: dict[str, object], key: str, default: int = 0) -> int:

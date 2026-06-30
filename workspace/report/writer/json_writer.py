@@ -242,6 +242,13 @@ def write_nav_json(dm: DataManager | None = None) -> None:
     _write_json(nav_json_path(), runs)
 
 
+def export_clearing_diagnostics_json(run_id: int, dm: DataManager | None = None) -> None:
+    """导出 run 下各品种结构诊断聚合（成本后指标 / exit reason / R 分布）。"""
+    dm = _get_dm(dm)
+    data = dm.get_clearing_diagnostics_for_run(run_id)
+    _write_json(run_data_dir(run_id) / "clearing_diagnostics.json", data)
+
+
 # ── 内部工具函数 ──────────────────────────────────────────────────────────
 
 

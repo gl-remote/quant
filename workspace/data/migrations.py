@@ -25,7 +25,7 @@ from .models import SchemaInfo
 
 # ── 当前代码期望的 schema 版本 ────────────────────────────────
 # 任何新的 ALTER TABLE 都要让这个数 +1，并在 MIGRATIONS 中追加一条
-CURRENT_SCHEMA_VERSION: int = 7
+CURRENT_SCHEMA_VERSION: int = 8
 
 # ── 迁移清单（按版本号升序排列） ────────────────────────────
 # 约定：version 从 1 开始单调递增；每条 migration.up 只执行一个结构变更
@@ -64,6 +64,11 @@ MIGRATIONS: list[dict] = [
         "version": 7,
         "description": "新增 backtest_trades 机器可读信号事件载荷字段",
         "up": lambda allow_aggressive=False: _migration_7_add_trade_decision_payload(),
+    },
+    {
+        "version": 8,
+        "description": "trade_clearings 新增结构诊断透传与派生字段（diagnostics_json/exit_reason/mae/mfe）",
+        "up": lambda allow_aggressive=False: _migration_8_add_clearing_diagnostics(),
     },
 ]
 
@@ -452,6 +457,20 @@ def _migration_7_add_trade_decision_payload() -> None:
     cols = _table_columns("backtest_trades")
     if "decision_payload_json" not in cols:
         database.execute_sql("ALTER TABLE backtest_trades ADD COLUMN decision_payload_json TEXT")
+
+
+def _migration_8_add_clearing_diagnostics() -> None:
+    """trade_clearings 承载结构诊断：原样透传三层 dict 与 clearing 派生量。"""
+    cols = _table_columns("trade_clearings")
+    new_cols: list[tuple[str, str]] = [
+        ("exit_reason", "VARCHAR(64)"),
+        ("mae", "REAL"),
+        ("mfe", "REAL"),
+        ("diagnostics_json", "TEXT"),
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in cols:
+            database.execute_sql(f"ALTER TABLE trade_clearings ADD COLUMN {col_name} {col_type}")
 
 
 # ── 公开 API ─────────────────────────────────────────────

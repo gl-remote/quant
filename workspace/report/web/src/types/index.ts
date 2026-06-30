@@ -30,3 +30,7 @@ export type {
   OptunaData,
   EChartsOption,
 } from "./optuna";
+
+export type {
+  ClearingDiagnostics,
+} from "./diagnostics";

@@ -392,6 +392,13 @@ class TradeClearing(OrmBaseModel):
     holding_bars: IntegerField = IntegerField(null=True)
     is_forced_close: BooleanField = BooleanField(default=False)
     forced_close_reason: CharField = CharField(null=True, max_length=128)
+    # 结构诊断透传与派生字段（2026-06-30 新增）
+    # diagnostics_json: 原样透传开仓成交 decision_payload 的 alpha/risk/execution 三层；
+    #   字段集随策略族变化，不拆成固定列，聚合在报告查询层解析。
+    exit_reason: CharField = CharField(null=True, max_length=64)  # 规约后的退出原因枚举
+    mae: FloatField = FloatField(null=True)  # 最大不利波动（价格口径，clearing 从 K 线派生）
+    mfe: FloatField = FloatField(null=True)  # 最大有利波动（价格口径，clearing 从 K 线派生）
+    diagnostics_json: TextField = TextField(null=True)
     created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]

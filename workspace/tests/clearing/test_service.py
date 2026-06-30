@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import ClassVar
 
@@ -45,6 +46,7 @@ def _trade(
     price: float,
     quantity: float,
     reason: str = "",
+    decision_payload_json: str | None = None,
 ) -> TradeRecord:
     return TradeRecord(
         id=trade_id,
@@ -58,6 +60,25 @@ def _trade(
         close_price=price,
         quantity=quantity,
         reason=reason,
+        decision_payload_json=decision_payload_json,
+    )
+
+
+def _payload(**diagnostics: dict[str, object]) -> str:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "source": "strategy",
+            "event_type": "strategy_signal",
+            "diagnostics": {
+                "strategy": {},
+                "aspects": {},
+                "alpha": diagnostics.get("alpha", {}),
+                "risk": diagnostics.get("risk", {}),
+                "execution": diagnostics.get("execution", {}),
+            },
+        },
+        ensure_ascii=False,
     )
 
 
@@ -150,3 +171,205 @@ def test_clear_run_uses_backtests_from_data_manager() -> None:
 
     assert len(dm.replaced) == 1
     assert dm.replaced[0][0] == 1
+
+
+def test_clearing_transparently_carries_diagnostics_and_derives_excursion(tmp_path: Path) -> None:
+    bars_path = tmp_path / "bars.csv"
+    pd.DataFrame(
+        {
+            "datetime": ["2024-01-01 09:00:00", "2024-01-01 09:30:00", "2024-01-01 10:00:00"],
+            "open": [100.0, 103.0, 108.0],
+            "high": [101.0, 112.0, 110.0],
+            "low": [96.0, 102.0, 107.0],
+            "close": [100.0, 108.0, 110.0],
+        }
+    ).to_csv(bars_path, index=False)
+    dm = FakeDataManager(
+        [
+            _trade(
+                1,
+                "2024-01-01 09:00:00",
+                "long",
+                "open",
+                100.0,
+                1.0,
+                reason="entry",
+                decision_payload_json=_payload(
+                    alpha={"direction_hypothesis": "long", "strict_failure_boundary": 95.0},
+                    risk={"strict_failure_distance": 5.0, "raw_account_r_multiple": 2.0},
+                ),
+            ),
+            _trade(
+                2,
+                "2024-01-01 10:00:00",
+                "short",
+                "close",
+                110.0,
+                1.0,
+                reason="exit",
+                decision_payload_json=_payload(execution={"exit_reason": "take_profit"}),
+            ),
+        ]
+    )
+
+    BacktestClearingService(dm).clear_backtest(_backtest(str(bars_path)))
+
+    _, rows, _, _, _ = dm.replaced[0]
+    row = rows[0]
+    assert row["exit_reason"] == "take_profit"
+    # long 持仓：MFE 向上（112-100），MAE 向下（100-96）
+    assert row["mfe"] == pytest.approx(12.0)
+    assert row["mae"] == pytest.approx(4.0)
+    assert row["holding_bars"] == 3
+    diagnostics = json.loads(row["diagnostics_json"])
+    assert diagnostics["alpha"]["strict_failure_boundary"] == 95.0
+    assert diagnostics["risk"]["raw_account_r_multiple"] == 2.0
+    assert diagnostics["execution"]["exit_reason"] == "take_profit"
+
+
+def test_clearing_warns_when_recommended_fields_missing() -> None:
+    from loguru import logger
+
+    dm = FakeDataManager(
+        [
+            _trade(
+                1,
+                "2024-01-01 09:00:00",
+                "long",
+                "open",
+                100.0,
+                1.0,
+                decision_payload_json=_payload(alpha={"placeholder": True}, risk={"placeholder": True}),
+            ),
+            _trade(2, "2024-01-01 10:00:00", "short", "close", 110.0, 1.0),
+        ]
+    )
+
+    messages: list[str] = []
+    sink_id = logger.add(lambda m: messages.append(m), level="WARNING")
+    try:
+        BacktestClearingService(dm).clear_backtest(_backtest())
+    finally:
+        logger.remove(sink_id)
+
+    warnings = "".join(messages)
+    assert "缺 alpha 诊断" in warnings
+    assert "缺 risk 诊断" in warnings
+    _, rows, _, _, _ = dm.replaced[0]
+    # 占位被视为非真实填充，不写入 diagnostics_json
+    assert rows[0]["diagnostics_json"] is None
+    assert rows[0]["exit_reason"] is None
+
+
+def test_clearing_derives_short_excursion_direction(tmp_path: Path) -> None:
+    bars_path = tmp_path / "bars.csv"
+    pd.DataFrame(
+        {
+            "datetime": ["2024-01-01 09:00:00", "2024-01-01 09:30:00", "2024-01-01 10:00:00"],
+            "open": [100.0, 95.0, 92.0],
+            "high": [104.0, 96.0, 93.0],
+            "low": [99.0, 90.0, 88.0],
+            "close": [100.0, 92.0, 90.0],
+        }
+    ).to_csv(bars_path, index=False)
+    dm = FakeDataManager(
+        [
+            _trade(1, "2024-01-01 09:00:00", "short", "open", 100.0, 1.0, reason="entry"),
+            _trade(2, "2024-01-01 10:00:00", "long", "close", 90.0, 1.0, reason="exit"),
+        ]
+    )
+
+    BacktestClearingService(dm).clear_backtest(_backtest(str(bars_path)))
+
+    _, rows, _, _, _ = dm.replaced[0]
+    row = rows[0]
+    # short 持仓：有利方向向下（100-88=12），不利方向向上（104-100=4）
+    assert row["mfe"] == pytest.approx(12.0)
+    assert row["mae"] == pytest.approx(4.0)
+    assert row["holding_bars"] == 3
+
+
+def test_clearing_forced_close_sets_forced_exit_reason(tmp_path: Path) -> None:
+    bars_path = tmp_path / "bars.csv"
+    pd.DataFrame(
+        {
+            "datetime": ["2024-01-01 09:00:00", "2024-01-01 15:00:00"],
+            "open": [100.0, 105.0],
+            "high": [101.0, 106.0],
+            "low": [99.0, 104.0],
+            "close": [100.0, 105.0],
+        }
+    ).to_csv(bars_path, index=False)
+    # 只有开仓、无平仓 → 在回测结束时被强平
+    dm = FakeDataManager(
+        [
+            _trade(1, "2024-01-01 09:00:00", "long", "open", 100.0, 1.0),
+        ]
+    )
+
+    BacktestClearingService(dm).clear_backtest(_backtest(str(bars_path)))
+
+    _, rows, _, _, _ = dm.replaced[0]
+    assert len(rows) == 1
+    assert rows[0]["is_forced_close"] is True
+    assert rows[0]["exit_reason"] == "forced_close"
+
+
+def test_clearing_ignores_invalid_decision_payload_json(tmp_path: Path) -> None:
+    dm = FakeDataManager(
+        [
+            _trade(
+                1,
+                "2024-01-01 09:00:00",
+                "long",
+                "open",
+                100.0,
+                1.0,
+                decision_payload_json="{not-valid-json",
+            ),
+            _trade(2, "2024-01-01 10:00:00", "short", "close", 110.0, 1.0),
+        ]
+    )
+
+    BacktestClearingService(dm).clear_backtest(_backtest())
+
+    _, rows, _, _, _ = dm.replaced[0]
+    # 无效 JSON 解析为 None，诊断为空，不应抛错
+    assert rows[0]["diagnostics_json"] is None
+
+
+def test_clearing_warns_missing_recommended_when_alpha_real_but_incomplete() -> None:
+    from loguru import logger
+
+    dm = FakeDataManager(
+        [
+            _trade(
+                1,
+                "2024-01-01 09:00:00",
+                "long",
+                "open",
+                100.0,
+                1.0,
+                decision_payload_json=_payload(
+                    alpha={"direction_hypothesis": "long"},  # 真实填充但缺推荐字段
+                    risk={"account_equity": 100000.0},
+                ),
+            ),
+            _trade(2, "2024-01-01 10:00:00", "short", "close", 110.0, 1.0),
+        ]
+    )
+
+    messages: list[str] = []
+    sink_id = logger.add(lambda m: messages.append(m), level="WARNING")
+    try:
+        BacktestClearingService(dm).clear_backtest(_backtest())
+    finally:
+        logger.remove(sink_id)
+
+    warnings = "".join(messages)
+    assert "alpha 诊断缺推荐字段" in warnings
+    assert "risk 诊断缺推荐字段" in warnings
+    _, rows, _, _, _ = dm.replaced[0]
+    # 真实填充仍透传
+    diagnostics = json.loads(rows[0]["diagnostics_json"])
+    assert diagnostics["alpha"]["direction_hypothesis"] == "long"

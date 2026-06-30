@@ -7,6 +7,7 @@ import KlineChart from "@/components/charts/KlineChart";
 import EquityChart from "@/components/charts/EquityChart";
 import BacktestDetail from "@/pages/BacktestDetail";
 import OptunaCharts from "@/components/charts/OptunaCharts";
+import StructuralDiagnostics from "@/components/data/StructuralDiagnostics";
 import LogViewer from "@/components/data/RunLogs";
 
 export default function RunPage() {
@@ -82,6 +83,24 @@ export default function RunPage() {
                 />
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* 结构诊断 */}
+        <div
+          id="panel-structure"
+          role="tabpanel"
+          aria-labelledby="tab-structure"
+          className={activeTab === "structure" ? "block" : "hidden"}
+        >
+          <div
+            style={
+              activeTab === "structure"
+                ? { animation: "tabFadeIn 0.25s ease-out" }
+                : undefined
+            }
+          >
+            <StructuralDiagnostics data={data.diagnostics} />
           </div>
         </div>
 

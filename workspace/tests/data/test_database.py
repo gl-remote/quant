@@ -97,6 +97,20 @@ class TestDataStoreInit:
         assert params["sma_short"].param_type == "float"
         assert params["sma_short"].param_text == "5.0"
 
+    def test_migration_adds_clearing_diagnostics_columns(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        store.close()
+
+        from data.migrations import get_current_version, get_expected_version
+
+        assert get_expected_version() >= 8
+
+        conn = sqlite3.connect(temp_db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(trade_clearings)")}
+        conn.close()
+        assert {"diagnostics_json", "exit_reason", "mae", "mfe"} <= cols
+        assert get_current_version() == get_expected_version()
+
 
 # ═══════════════════════════════════════════════════════════
 # 操作日志 & 元数据
