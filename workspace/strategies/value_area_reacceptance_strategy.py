@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime, time
+from dataclasses import dataclass, replace
+from datetime import date, time
 from typing import Any, Literal, TypedDict, cast, override
 
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
 from common.formulas import position_size
 
 from .core import CORE_VERSION, Bar, Fill, Signal, State, Strategy, placeholder_diagnostics
+from .core.diagnostics import AlphaDiagnostics, ExecutionDiagnostics, RiskDiagnostics
 from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
 
 TakeProfitMode = Literal["poc", "opposite", "r"]
@@ -37,6 +38,7 @@ class ValueAreaReacceptanceParams:
     max_position_ratio: float = 0.3
     max_trades_per_day: int = 1
     min_reaccept_ticks: int = 0
+    min_reaccept_va_width_ratio: float = 0.0
     max_breakout_bars: int = 0
     min_target_ticks: int = 0
     min_price_raw_rr: float = 0.0
@@ -53,6 +55,8 @@ class ValueAreaLevels(TypedDict):
     low: float
     close: float
     open: float
+    profile: dict[float, float]
+    range_profile: dict[float, float]
 
 
 class PersistentValueInfo(TypedDict):
@@ -75,6 +79,26 @@ class WindowValueInfo(TypedDict):
     stable_poc: bool
 
 
+class PocQualityInfo(TypedDict):
+    va_width: float
+    poc_pct: float
+    poc_edge_distance: float
+    poc_edge_bucket: str
+    reaccept_depth: float
+    reaccept_depth_va_ratio: float
+    current_acceptance_migration: float
+    current_acceptance_migration_bucket: str
+    close_range_poc_divergence: float
+    close_range_poc_divergence_bucket: str
+    profile_high_volume_components: int
+    multi_modal_profile: bool
+    local_band_low: float
+    local_band_high: float
+    local_band_width: float
+    local_band_width_ratio: float
+    local_band_bucket: str
+
+
 class CurrentSession(TypedDict):
     date: date
     high: float
@@ -82,6 +106,7 @@ class CurrentSession(TypedDict):
     close: float
     open: float
     profile: dict[float, float]
+    range_profile: dict[float, float]
 
 
 class TradeInfo(TypedDict):
@@ -116,6 +141,15 @@ class TradeInfo(TypedDict):
     vah: float
     val: float
     poc: float
+    poc_edge_distance: float
+    poc_edge_bucket: str
+    current_acceptance_migration: float
+    current_acceptance_migration_bucket: str
+    local_band_width_ratio: float
+    local_band_bucket: str
+    multi_modal_profile: bool
+    close_range_poc_divergence: float
+    close_range_poc_divergence_bucket: str
 
 
 class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
@@ -216,6 +250,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         persistence = self._persistent_value_info(state, prev, config)
         context = self._window_value_info(ctx, config)
         context_target_distance = self._window_target_distance(side, entry, context)
+        poc_quality = self._poc_quality_info(ctx, prev, entry, config)
         state.extra["value_area_trade"] = TradeInfo(
             side=side,
             entry_price=entry,
@@ -248,6 +283,15 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             vah=prev["vah"],
             val=prev["val"],
             poc=prev["poc"],
+            poc_edge_distance=poc_quality["poc_edge_distance"],
+            poc_edge_bucket=poc_quality["poc_edge_bucket"],
+            current_acceptance_migration=poc_quality["current_acceptance_migration"],
+            current_acceptance_migration_bucket=poc_quality["current_acceptance_migration_bucket"],
+            local_band_width_ratio=poc_quality["local_band_width_ratio"],
+            local_band_bucket=poc_quality["local_band_bucket"],
+            multi_modal_profile=poc_quality["multi_modal_profile"],
+            close_range_poc_divergence=poc_quality["close_range_poc_divergence"],
+            close_range_poc_divergence_bucket=poc_quality["close_range_poc_divergence_bucket"],
         )
         state.extra["value_area_holding_bars"] = 0
         state.extra["value_area_path_best_progress"] = 0.0
@@ -259,6 +303,20 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         reason = "value_area_val_reaccept_long" if side == "long" else "value_area_vah_reject_short"
         signal = Signal(action=action, reason=reason, volume=volume)
         signal.diagnostics = self._diagnostics(ctx, prev, entry, strict_failure, stop_price, target_price)
+        self._attach_entry_diagnostics(
+            signal,
+            side=side,
+            entry=entry,
+            strict_failure=strict_failure,
+            stop_price=stop_price,
+            target_price=target_price,
+            target_distance=target_distance,
+            strict_distance=strict_distance,
+            volume=volume,
+            poc_quality=poc_quality,
+            prev=prev,
+            config=config,
+        )
         return signal
 
     def _exit_signal(
@@ -336,6 +394,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             "holding_bars": float(self._holding_bars(state)),
             "path_progress": path_progress,
         }
+        self._attach_exit_diagnostics(signal, reason=reason, trade=trade, holding_bars=self._holding_bars(state))
         return signal
 
     def _track_breakout(
@@ -365,7 +424,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     ) -> bool:
         if config.max_breakout_bars > 0 and breakout_bars > config.max_breakout_bars:
             return False
-        min_reaccept = config.min_reaccept_ticks * config.price_tick
+        min_reaccept = max(
+            config.min_reaccept_ticks * config.price_tick,
+            config.min_reaccept_va_width_ratio * (prev["vah"] - prev["val"]),
+        )
         if side == "long":
             return entry >= prev["val"] + min_reaccept
         return entry <= prev["vah"] - min_reaccept
@@ -459,6 +521,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             close=bar.close,
             open=bar.open,
             profile={},
+            range_profile={},
         )
         state.extra["value_area_trade_count"] = 0
         state.extra["value_area_holding_bars"] = 0
@@ -479,7 +542,13 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         current["high"] = max(current["high"], bar.high)
         current["low"] = min(current["low"], bar.low)
         current["close"] = bar.close
-        self._add_bar_to_profile(current["profile"], bar.low, bar.high, bar.close, bar.volume, config)
+        profile = cast(dict[float, float], current.get("profile", {}))
+        current["profile"] = profile
+        self._add_bar_to_profile(profile, bar.low, bar.high, bar.close, bar.volume, config)
+        range_profile = cast(dict[float, float], current.get("range_profile", {}))
+        current["range_profile"] = range_profile
+        range_config = replace(config, profile_mode="range")
+        self._add_bar_to_profile(range_profile, bar.low, bar.high, bar.close, bar.volume, range_config)
         state.extra["value_area_current_session"] = current
 
     @classmethod
@@ -525,6 +594,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 low=session["low"],
                 close=session["close"],
                 open=session["open"],
+                profile=profile,
+                range_profile=session.get("range_profile", {}),
             )
 
         prices = sorted(profile)
@@ -558,6 +629,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             low=session["low"],
             close=session["close"],
             open=session["open"],
+            profile=profile,
+            range_profile=session.get("range_profile", {}),
         )
 
     @staticmethod
@@ -586,22 +659,22 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     @staticmethod
     def _prev_levels(state: State[ValueAreaReacceptanceParams]) -> ValueAreaLevels | None:
         value = state.extra.get("value_area_levels")
-        return cast(ValueAreaLevels, value) if isinstance(value, dict) else None
+        return cast(ValueAreaLevels, cast(object, value)) if isinstance(value, dict) else None
 
     @staticmethod
     def _current_session(state: State[ValueAreaReacceptanceParams]) -> CurrentSession | None:
         value = state.extra.get("value_area_current_session")
-        return cast(CurrentSession, value) if isinstance(value, dict) else None
+        return cast(CurrentSession, cast(object, value)) if isinstance(value, dict) else None
 
     @staticmethod
     def _value_area_history(state: State[ValueAreaReacceptanceParams]) -> list[ValueAreaLevels]:
         value = state.extra.get("value_area_history")
-        return cast(list[ValueAreaLevels], value) if isinstance(value, list) else []
+        return cast(list[ValueAreaLevels], cast(object, value)) if isinstance(value, list) else []
 
     @staticmethod
     def _trade_info(state: State[ValueAreaReacceptanceParams]) -> TradeInfo | None:
         value = state.extra.get("value_area_trade")
-        return cast(TradeInfo, value) if isinstance(value, dict) else None
+        return cast(TradeInfo, cast(object, value)) if isinstance(value, dict) else None
 
     @staticmethod
     def _optional_float(value: Any) -> float | None:
@@ -793,12 +866,13 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     ) -> ValueAreaLevels:
         first = bars[0]
         session = CurrentSession(
-            date=cast(datetime, first.datetime).date(),
+            date=first.datetime.date(),
             high=float(first.high),
             low=float(first.low),
             close=float(first.close),
             open=float(first.open),
             profile={},
+            range_profile={},
         )
         for bar in bars:
             session["high"] = max(session["high"], float(bar.high))
@@ -806,6 +880,15 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             session["close"] = float(bar.close)
             cls._add_bar_to_profile(
                 session["profile"], float(bar.low), float(bar.high), float(bar.close), float(bar.volume), config
+            )
+            range_config = replace(config, profile_mode="range")
+            cls._add_bar_to_profile(
+                session["range_profile"],
+                float(bar.low),
+                float(bar.high),
+                float(bar.close),
+                float(bar.volume),
+                range_config,
             )
         return cls._build_value_area_levels(session, config)
 
@@ -879,6 +962,248 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         if price < poc:
             return "below"
         return "at"
+
+    @classmethod
+    def _poc_quality_info(
+        cls,
+        ctx: BarContext,
+        prev: ValueAreaLevels,
+        entry: float,
+        config: ValueAreaReacceptanceParams,
+    ) -> PocQualityInfo:
+        va_width = max(prev["vah"] - prev["val"], 0.0)
+        poc_pct = (prev["poc"] - prev["val"]) / va_width if va_width > 0 else 0.0
+        poc_pct = min(max(poc_pct, 0.0), 1.0)
+        poc_edge = min(poc_pct, 1.0 - poc_pct)
+        range_poc = cls._range_profile_poc(prev)
+        divergence = abs(range_poc - prev["poc"]) / va_width if va_width > 0 else 0.0
+        local_band = cls._profile_local_band(prev["poc"], prev, config)
+        local_band_width = local_band[1] - local_band[0]
+        local_band_width_ratio = local_band_width / va_width if va_width > 0 else 0.0
+        high_volume_components = cls._profile_high_volume_components(prev, config)
+        reaccept_depth = cls._reaccept_depth(entry, prev)
+        current_acceptance = cls._recent_close_median(ctx, config)
+        migration = abs(current_acceptance - prev["poc"]) / va_width if va_width > 0 else 0.0
+        return PocQualityInfo(
+            va_width=va_width,
+            poc_pct=poc_pct,
+            poc_edge_distance=poc_edge,
+            poc_edge_bucket=cls._poc_edge_bucket(poc_edge),
+            reaccept_depth=reaccept_depth,
+            reaccept_depth_va_ratio=reaccept_depth / va_width if va_width > 0 else 0.0,
+            current_acceptance_migration=migration,
+            current_acceptance_migration_bucket=cls._migration_bucket(migration),
+            close_range_poc_divergence=divergence,
+            close_range_poc_divergence_bucket=cls._divergence_bucket(divergence),
+            profile_high_volume_components=high_volume_components,
+            multi_modal_profile=high_volume_components >= 2,
+            local_band_low=local_band[0],
+            local_band_high=local_band[1],
+            local_band_width=local_band_width,
+            local_band_width_ratio=local_band_width_ratio,
+            local_band_bucket=cls._local_band_bucket(local_band_width_ratio),
+        )
+
+    @staticmethod
+    def _range_profile_poc(prev: ValueAreaLevels) -> float:
+        profile = prev.get("range_profile", {})
+        if not profile:
+            return prev["poc"]
+        return max(profile, key=lambda price: (profile[price], -abs(price - prev["close"])))
+
+    @classmethod
+    def _profile_local_band(
+        cls, poc: float, prev: ValueAreaLevels, config: ValueAreaReacceptanceParams
+    ) -> tuple[float, float]:
+        profile = prev.get("profile", {})
+        if not profile or poc not in profile:
+            return poc, poc
+        threshold = profile[poc] * 0.5
+        tick = config.price_tick
+        low = high = poc
+        while profile.get(cls._round_to_tick(low - tick, tick), 0.0) >= threshold:
+            low = cls._round_to_tick(low - tick, tick)
+        while profile.get(cls._round_to_tick(high + tick, tick), 0.0) >= threshold:
+            high = cls._round_to_tick(high + tick, tick)
+        return low, high
+
+    @classmethod
+    def _profile_high_volume_components(cls, prev: ValueAreaLevels, config: ValueAreaReacceptanceParams) -> int:
+        profile = prev.get("profile", {})
+        if not profile:
+            return 0
+        threshold = max(profile.values()) * 0.7
+        prices = sorted(price for price, volume in profile.items() if volume >= threshold)
+        if not prices:
+            return 0
+        components = 1
+        previous = prices[0]
+        for price in prices[1:]:
+            if price - previous > config.price_tick * 1.5:
+                components += 1
+            previous = price
+        return components
+
+    @classmethod
+    def _recent_profile(
+        cls,
+        ctx: BarContext,
+        config: ValueAreaReacceptanceParams,
+        *,
+        mode: ProfileMode,
+    ) -> dict[float, float]:
+        view = ctx.multi.get(config.kline_period)
+        if view is None or view.length <= 1:
+            return {}
+        bars = [bar for bar in (view.get_bar(i) for i in range(view.length - 1)) if bar is not None]
+        current_day = ctx.bar.datetime.date()
+        previous_day_bars = [bar for bar in bars if bar.datetime.date() < current_day]
+        if not previous_day_bars:
+            return {}
+        previous_date = previous_day_bars[-1].datetime.date()
+        profile_config = replace(config, profile_mode=mode)
+        profile: dict[float, float] = {}
+        for bar in previous_day_bars:
+            if bar.datetime.date() == previous_date:
+                cls._add_bar_to_profile(profile, bar.low, bar.high, bar.close, bar.volume, profile_config)
+        return profile
+
+    @classmethod
+    def _recent_close_median(cls, ctx: BarContext, config: ValueAreaReacceptanceParams) -> float:
+        view = ctx.multi.get(config.kline_period)
+        if view is None:
+            return ctx.bar.close
+        bars = [bar for bar in (view.get_bar(i) for i in range(-6, 0)) if bar is not None]
+        closes = sorted(float(bar.close) for bar in bars)
+        if not closes:
+            return ctx.bar.close
+        mid = len(closes) // 2
+        if len(closes) % 2:
+            return closes[mid]
+        return (closes[mid - 1] + closes[mid]) / 2
+
+    @staticmethod
+    def _reaccept_depth(entry: float, prev: ValueAreaLevels) -> float:
+        if entry <= prev["poc"]:
+            return max(0.0, entry - prev["val"])
+        return max(0.0, prev["vah"] - entry)
+
+    @staticmethod
+    def _poc_edge_bucket(edge: float) -> str:
+        if edge < 0.20:
+            return "edge"
+        if edge < 0.35:
+            return "mid_edge"
+        return "central"
+
+    @staticmethod
+    def _migration_bucket(migration: float) -> str:
+        if migration <= 0.30:
+            return "near_poc"
+        if migration <= 0.70:
+            return "mid"
+        return "away"
+
+    @staticmethod
+    def _local_band_bucket(width_ratio: float) -> str:
+        if width_ratio <= 0.10:
+            return "tight"
+        if width_ratio <= 0.25:
+            return "medium"
+        return "wide"
+
+    @staticmethod
+    def _divergence_bucket(divergence: float) -> str:
+        if divergence <= 0.10:
+            return "low"
+        if divergence <= 0.35:
+            return "medium"
+        return "high"
+
+    @staticmethod
+    def _attach_entry_diagnostics(
+        signal: Signal,
+        *,
+        side: Literal["long", "short"],
+        entry: float,
+        strict_failure: float,
+        stop_price: float,
+        target_price: float,
+        target_distance: float,
+        strict_distance: float,
+        volume: int,
+        poc_quality: PocQualityInfo,
+        prev: ValueAreaLevels,
+        config: ValueAreaReacceptanceParams,
+    ) -> None:
+        would_filter_edge_or_away = (
+            poc_quality["poc_edge_bucket"] == "edge" or poc_quality["current_acceptance_migration_bucket"] == "away"
+        )
+        signal.alpha = AlphaDiagnostics(
+            fields={
+                "direction_hypothesis": side,
+                "entry_reason": "value_area_reacceptance",
+                "consensus_zone_type": "previous_day_value_area",
+                "structure_source": "close_profile",
+                "entry_boundary": entry,
+                "strict_failure_boundary": strict_failure,
+                "expected_profit_boundary": target_price,
+                "acceptance_rejection_evidence": "failed_breakout_reacceptance",
+                "vah": prev["vah"],
+                "val": prev["val"],
+                "poc": prev["poc"],
+                "poc_edge_distance": poc_quality["poc_edge_distance"],
+                "poc_edge_bucket": poc_quality["poc_edge_bucket"],
+                "current_acceptance_migration": poc_quality["current_acceptance_migration"],
+                "current_acceptance_migration_bucket": poc_quality["current_acceptance_migration_bucket"],
+                "local_band_width_ratio": poc_quality["local_band_width_ratio"],
+                "local_band_bucket": poc_quality["local_band_bucket"],
+                "multi_modal_profile": poc_quality["multi_modal_profile"],
+                "close_range_poc_divergence": poc_quality["close_range_poc_divergence"],
+                "close_range_poc_divergence_bucket": poc_quality["close_range_poc_divergence_bucket"],
+                "would_filter_edge_or_away": would_filter_edge_or_away,
+                "would_filter_reason": "edge_or_away" if would_filter_edge_or_away else "none",
+            }
+        )
+        signal.risk = RiskDiagnostics(
+            fields={
+                "strict_failure_distance": strict_distance,
+                "expected_profit_distance": target_distance,
+                "raw_price_r_multiple": target_distance / strict_distance if strict_distance > 0 else 0.0,
+                "raw_account_r_multiple": target_distance / strict_distance if strict_distance > 0 else 0.0,
+                "actual_volume": volume,
+                "target_risk_ratio": config.risk_per_trade,
+                "stop_price": stop_price,
+                "min_reaccept_ticks": config.min_reaccept_ticks,
+                "min_reaccept_va_width_ratio": config.min_reaccept_va_width_ratio,
+                "reaccept_depth": poc_quality["reaccept_depth"],
+                "reaccept_depth_va_ratio": poc_quality["reaccept_depth_va_ratio"],
+                "va_width": poc_quality["va_width"],
+            }
+        )
+        signal.execution = ExecutionDiagnostics(fields={"entry_trigger": "bar_close", "actual_volume": volume})
+
+    @staticmethod
+    def _attach_exit_diagnostics(signal: Signal, *, reason: str, trade: TradeInfo, holding_bars: int) -> None:
+        signal.alpha = AlphaDiagnostics(
+            fields={
+                "direction_hypothesis": trade["side"],
+                "entry_reason": "value_area_reacceptance_exit",
+                "strict_failure_boundary": trade["strict_failure"],
+                "expected_profit_boundary": trade["target_price"],
+            }
+        )
+        signal.risk = RiskDiagnostics(
+            fields={
+                "strict_failure_distance": trade["strict_distance"],
+                "expected_profit_distance": trade["target_distance"],
+                "raw_price_r_multiple": trade["price_raw_rr"],
+                "raw_account_r_multiple": trade["price_raw_rr"],
+            }
+        )
+        signal.execution = ExecutionDiagnostics(
+            fields={"exit_reason": reason.split("|", maxsplit=1)[0], "holding_bars": holding_bars}
+        )
 
     @staticmethod
     def _diagnostics(
