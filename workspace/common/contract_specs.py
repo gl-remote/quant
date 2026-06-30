@@ -19,6 +19,8 @@
 
 from dataclasses import dataclass
 
+from common.symbol_utils import extract_contract_prefix
+
 # 常见期货公司加收标准（元/手，单边）
 BROKER_ADDON_DFCF = 1.3  # 东方财富: 玉米开平共5元→单边2.5, 交易所1.2, 加收=2.5-1.2=1.3
 
@@ -88,9 +90,9 @@ class _ContractRegistry:
 
     def get_symbol(self, symbol: str) -> ContractSpec | None:
         """通过完整 symbol 查询（如 'DCE.m2505', 'SHFE.rb2505'）"""
-        clean = symbol.split(".")[-1] if "." in symbol else symbol
-        # 去掉数字后缀: m2505 → m
-        prefix = "".join(c for c in clean if not c.isdigit())
+        prefix = extract_contract_prefix(symbol)
+        if prefix is None:
+            return None
         return self.get_prefix(prefix)
 
     def _register_all(self) -> None:

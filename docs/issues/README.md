@@ -59,7 +59,7 @@
 | Issue | 状态 | 说明 |
 |-------|------|------|
 | [cli-entry-workspace-pythonpath.md](./cli-entry-workspace-pythonpath.md) | 已确认 | CLI 入口未自动暴露 `workspace` 包路径 |
-| [vnpy-close-trade-pairing-warning.md](./vnpy-close-trade-pairing-warning.md) | 待排查 | vnpy 平仓未配对警告影响成交级统计口径 |
+| [vnpy-close-trade-pairing-warning.md](../archive/backtest/vnpy-close-trade-pairing-warning.md) | 已验证 / 已归档 | vnpy 平仓未配对警告影响成交级统计口径 |
 | [vnpy-tradedata-dynamic-payload.md](./vnpy-tradedata-dynamic-payload.md) | 已确认 | vnpy `TradeData` 动态扩展承载策略决策 payload 存在桥接边界风险 |
 | [prevday-volume-random-baseline-performance.md](./prevday-volume-random-baseline-performance.md) | 待排查 | `prevday_volume_filter` 随机对照批量运行性能异常偏慢 |
 

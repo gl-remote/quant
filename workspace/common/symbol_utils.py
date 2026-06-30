@@ -54,6 +54,22 @@ class ContractInfo:
         return f"{self.year:04d}-{self.month:02d}-01"
 
 
+def extract_contract_code(symbol: str) -> str | None:
+    """提取纯合约代码（不含交易所前缀），如 DCE.m2509 -> m2509。"""
+    if not symbol:
+        return None
+    return symbol.split(".", 1)[1] if "." in symbol else symbol
+
+
+def extract_contract_prefix(symbol: str) -> str | None:
+    """提取品种前缀（不含数字后缀），如 DCE.m2509 -> m。"""
+    contract_code = extract_contract_code(symbol)
+    if not contract_code:
+        return None
+    prefix = "".join(c for c in contract_code if not c.isdigit())
+    return prefix or None
+
+
 def parse_contract(symbol: str) -> ContractInfo | None:
     """解析期货品种代码，提取合约信息
 

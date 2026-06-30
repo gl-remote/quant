@@ -6,7 +6,7 @@ from backtest.walk_forward import (
     walk_forward_split,
     walk_forward_split_by_ratio,
 )
-from common.symbol_utils import parse_contract
+from common.symbol_utils import extract_contract_code, extract_contract_prefix, parse_contract
 
 # ==============================================================================
 # 辅助函数
@@ -35,6 +35,17 @@ def _make_kline_df(n_rows: int = 100, start_date: str = "2024-01-01") -> pd.Data
 
 
 class TestParseContract:
+    def test_extract_contract_code(self):
+        assert extract_contract_code("DCE.m2509") == "m2509"
+        assert extract_contract_code("m2509") == "m2509"
+        assert extract_contract_code("") is None
+
+    def test_extract_contract_prefix(self):
+        assert extract_contract_prefix("DCE.m2509") == "m"
+        assert extract_contract_prefix("SHFE.rb2505") == "rb"
+        assert extract_contract_prefix("m2509") == "m"
+        assert extract_contract_prefix("") is None
+
     def test_with_exchange(self):
         c = parse_contract("DCE.m2509")
         assert c is not None

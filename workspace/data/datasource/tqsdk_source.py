@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, ClassVar
 
 import pandas as pd
+from common.symbol_utils import extract_contract_code
 from loguru import logger
 
 from .base import BaseDataSource, Qlib_COLUMNS
@@ -173,9 +174,8 @@ class TqSdkDataSource(BaseDataSource):
     def _parse_expiry(symbol: str) -> datetime | None:
         """从合约代码解析到期年月。合约格式：交易所.品种YYMM，如 DCE.m2601 → 2026-01-01。"""
         try:
-            # 取点后部分的最后4位作为 YYMM
-            code = symbol.split(".")[-1]
-            if len(code) < 4:
+            code = extract_contract_code(symbol)
+            if code is None or len(code) < 4:
                 return None
             yymm = code[-4:]
             yy = int(yymm[:2])
