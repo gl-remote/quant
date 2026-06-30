@@ -513,12 +513,11 @@ class VnpyBacktestEngine:
             # ── 步骤 8: 爆仓状态检测 ──
             # vnpy calculate_statistics() 在爆仓(balance≤0)时所有指标返回 0，
             # 此时从 daily_results 自行计算补上核心统计。
-            if (
-                statistics
-                and not statistics.get("sharpe_ratio")
-                and not statistics.get("max_drawdown")
-                and not daily_results.empty
-            ):
+            is_blown_up = False
+            if daily_results is not None and not daily_results.empty and "net_pnl" in daily_results:
+                min_balance = float((daily_results["net_pnl"].cumsum() + self.initial_capital).min())
+                is_blown_up = min_balance <= 0
+            if is_blown_up and statistics and not statistics.get("sharpe_ratio") and not statistics.get("max_drawdown"):
                 logger.warning(f"[{symbol}] 检测到爆仓，从 daily_results 重新计算统计指标")
                 _override_blown_up_stats(statistics, daily_results, self.initial_capital)
 
