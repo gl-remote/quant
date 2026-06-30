@@ -1,7 +1,9 @@
 # 回测执行与交易诊断规划
 
-> 类型：Workbench / Backtest Execution 规划草案  
-> 状态：草案  
+> 类型：Archive / 工程支撑规划归档  
+> 状态：已归档；执行诊断通道部分落地，结构型最小策略待实现  
+> 完成日期：2026-06-30  
+> Git 参考：`2fd6858` 诊断层通道；`ba4cf11` clearing diagnostics reporting pipeline  
 > 创建日期：2026-06-29  
 > 来源：由 [structural-alpha-r1 工程支撑总览](overview.md) 拆分  
 > 文档边界：本文只规划回测中的入场、退出、成交模拟和交易生命周期诊断；不定义 Alpha 结构、不做交易前风险预算、不承担清算账务和报告归因。
@@ -62,6 +64,34 @@ Execution Simulation / Backtest Engine / Trade Lifecycle Diagnostics
 | `exit_reason` | strict_failure、take_profit、time_exit、relaxed_stop、abnormal 等 |
 | `holding_bars` | 持仓 K 线数 |
 | `fast_retouch` | 是否快速再触及严格边界 |
+
+### 4.1 当前技术落点（2026-06-30）
+
+本轮尚未实现完整 `ExecutionTradeDiagnostics`，但已经落地执行诊断通道与部分派生字段：
+
+```text
+Signal.execution: ExecutionDiagnostics
+→ decision_payload.diagnostics.execution
+→ backtest_trades.decision_payload_json
+→ trade_clearings.diagnostics_json / exit_reason / mae / mfe
+→ clearing_diagnostics.json / report
+```
+
+当前已实现：
+
+- `Signal.execution` 非空校验；
+- 既有策略的临时占位装饰器；
+- clearing 可消费 `diagnostics.execution.exit_reason`；
+- 回测结束强平会稳定写入 `exit_reason = forced_close`；
+- `holding_bars`、`mae`、`mfe` 由 clearing 基于开平仓区间 K 线派生；
+- report 已能聚合 exit reason 分布、MAE / MFE 分布。
+
+当前未实现：
+
+- `structural-alpha-r1` 最小策略骨架；
+- strict / take_profit / time_exit / relaxed_stop 三类对照实验；
+- MAE / MFE 的 R 化字段；
+- 策略主动退出原因的系统化填充。
 
 ## 5. 最小对照组
 

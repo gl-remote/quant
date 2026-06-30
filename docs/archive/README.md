@@ -74,6 +74,7 @@
 |------|------|------|---------|------|
 | [report-refactor.md](infra/report-refactor.md) | 已实现设计记录 | 主体已实现 | 2026-05-27 | 报告模块 React + Vite SPA 重构 |
 | [directory-roadmap.md](infra/directory-roadmap.md) | 已实现设计记录 | 已归档 | 2026-06-24 | 目录结构长期规划 |
+| [structural-alpha-r1-engineering/overview.md](infra/structural-alpha-r1-engineering/overview.md) | 工程支撑规划归档 | 已归档；一期部分落地 | 2026-06-30 | structural-alpha-r1 诊断通道、clearing 与 analytics/report 工程底座 |
 
 ### deprecated/ — 已废弃的历史方案
 

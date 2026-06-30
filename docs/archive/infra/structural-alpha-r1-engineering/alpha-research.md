@@ -1,10 +1,12 @@
 # structural-alpha-r1 Alpha 研究规划
 
-> 类型：Workbench / Alpha Research 规划草案  
-> 状态：草案  
+> 类型：Archive / 工程支撑规划归档  
+> 状态：已归档；诊断通道已落地，真实 `StructureCandidate` 待实现  
+> 完成日期：2026-06-30  
+> Git 参考：`2fd6858` 诊断层通道；`ba4cf11` clearing diagnostics reporting pipeline  
 > 创建日期：2026-06-29  
 > 来源：由 [structural-alpha-r1 工程支撑总览](overview.md) 拆分  
-> 关联 roadmap：[策略短期研究计划](../../roadmap/strategy-short-term-plan.md)、[策略长期共识](../../roadmap/strategy-research-framework.md)  
+> 关联 roadmap：[策略短期研究计划](../../../roadmap/strategy-short-term-plan.md)、[策略长期共识](../../../roadmap/strategy-research-framework.md)  
 > 文档边界：本文只定义结构型 Alpha 的研究对象、共识价格区间、失败边界与盈利上界；不定义账户风险预算、成交撮合、清算账务或报告聚合。
 
 ## 1. 定位
@@ -127,6 +129,27 @@ StructureCandidate
 ```
 
 字段应尽量使用数字、枚举和布尔值。展示格式化只在报告层处理。
+
+### 6.1 当前技术落点（2026-06-30）
+
+本轮尚未实现真实 `StructureCandidate`，但已经为 Alpha 层预留了稳定通道：
+
+```text
+Signal.alpha: AlphaDiagnostics
+→ decision_payload.diagnostics.alpha
+→ backtest_trades.decision_payload_json
+→ trade_clearings.diagnostics_json
+→ clearing_diagnostics.json / report
+```
+
+当前规则：
+
+- `Signal.alpha` 必须非空；
+- 既有策略可临时使用 `placeholder_diagnostics` 跑通；
+- clearing 会过滤 `{"placeholder": true}`，避免把占位当作真实结构解释；
+- 如果策略填了真实 alpha 字段但缺少结构族推荐字段，clearing 记录 warning，不阻断 run。
+
+因此，Alpha 研究层下一步不需要重新设计通道，而应直接实现 `StructureCandidate` 并填充到 `Signal.alpha`。
 
 ## 7. 与其他模块的边界
 

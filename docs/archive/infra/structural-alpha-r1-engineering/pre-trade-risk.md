@@ -1,7 +1,9 @@
 # Pre-trade 风险预算与仓位规划
 
-> 类型：Workbench / Pre-trade Risk 规划草案  
-> 状态：草案  
+> 类型：Archive / 工程支撑规划归档  
+> 状态：已归档；诊断通道已落地，真实 `RiskBudgetDecision` 待实现  
+> 完成日期：2026-06-30  
+> Git 参考：`2fd6858` 诊断层通道；`ba4cf11` clearing diagnostics reporting pipeline  
 > 创建日期：2026-06-29  
 > 来源：由 [structural-alpha-r1 工程支撑总览](overview.md) 拆分  
 > 文档边界：本文只规划交易前风险预算、最小手数可交易性与仓位 sizing；不定义 Alpha 结构、不模拟成交退出、不做清算账务和绩效报告。
@@ -69,6 +71,28 @@ Pre-trade Risk Check / Position Sizing / Risk Engine
 | `raw_account_r_multiple` | 账户原始盈亏比 |
 | `risk_budget_passed` | 风险预算是否通过 |
 | `risk_budget_reject_reason` | 不通过原因 |
+
+### 4.1 当前技术落点（2026-06-30）
+
+本轮尚未实现真实 `RiskBudgetDecision` 与风险预算预筛函数，但已经为 Risk 层预留了稳定通道：
+
+```text
+Signal.risk: RiskDiagnostics
+→ decision_payload.diagnostics.risk
+→ backtest_trades.decision_payload_json
+→ trade_clearings.diagnostics_json
+→ clearing_diagnostics.json / report
+```
+
+当前规则：
+
+- `Signal.risk` 必须非空；
+- 既有策略可临时使用 `placeholder_diagnostics` 跑通；
+- clearing 会过滤 `{"placeholder": true}`；
+- 如果策略填了真实 risk 字段但缺少推荐字段，clearing 记录 warning，不阻断 run；
+- report 已能消费 `raw_account_r_multiple` / `raw_price_r_multiple`，但不会重新计算 risk budget。
+
+因此，Pre-trade Risk 下一步应实现 `RiskBudgetDecision`，并把结果写入 `Signal.risk`。
 
 ## 5. 拒绝条件
 
