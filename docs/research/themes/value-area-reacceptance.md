@@ -70,6 +70,114 @@ min_price_raw_rr = 0.5
 
 这些参数不是最终优化结果，只是当前用于诊断和复验的固定主线配置。
 
+### 3.1 min_target / price_raw_rr 预筛含义
+
+这两个参数只做入场前的空间预筛，不决定方向。
+
+```text
+min_target_ticks = 8
+```
+
+含义：
+
+```text
+entry 到 POC target 的距离至少要有 8 ticks。
+如果 POC 离 entry 太近，即使方向正确，也容易被手续费、滑点和噪声吃掉。
+```
+
+```text
+min_price_raw_rr = 0.5
+```
+
+含义：
+
+```text
+price_raw_rr = abs(POC - entry) / abs(entry - strict_failure)
+```
+
+也就是：
+
+```text
+目标价格空间 / 结构失败距离 >= 0.5。
+```
+
+它防止的是：
+
+```text
+POC 看起来有空间，但为了捕捉这段回归，需要承担过大的结构失败距离。
+```
+
+当前这两个参数会把样本自然裁剪到：
+
+```text
+entry 到 POC 至少 8 ticks；
+风险不能超过目标距离的 2 倍；
+保留的是有一定 POC 回归空间、但路径不能过差的样本。
+```
+
+### 3.2 failure boundary 当前定义
+
+当前结构失败边界在代码里叫 `strict_failure`。
+
+它不是 VAH / VAL 本身，而是：
+
+```text
+假突破过程中的突破极值 ± failure_buffer_ticks。
+```
+
+多头：
+
+```text
+前日 VAL 下破失败后重新接受做多；
+long_breakout_low = 下破期间最低 low；
+strict_failure = long_breakout_low - failure_buffer_ticks * price_tick。
+```
+
+空头：
+
+```text
+前日 VAH 上破失败后重新接受做空；
+short_breakout_high = 上破期间最高 high；
+strict_failure = short_breakout_high + failure_buffer_ticks * price_tick。
+```
+
+当前：
+
+```text
+failure_buffer_ticks = 1
+```
+
+所以结构失败边界是：
+
+```text
+多头：跌破下破极值再多 1 tick；
+空头：涨破上破极值再多 1 tick。
+```
+
+需要区分两个距离：
+
+```text
+strict_distance = abs(entry - strict_failure)
+stop_distance = strict_distance * stop_widen_multiplier
+```
+
+当前：
+
+```text
+stop_widen_multiplier = 1.5
+strict_close_exit = true
+```
+
+因此：
+
+```text
+真实 stop_price 比 strict_failure 更远；
+但 price_raw_rr 使用 strict_distance，而不是放宽后的 stop_distance；
+如果收盘价重新越过 strict_failure，会触发 strict_failure_close。
+```
+
+这意味着 `strict_failure` 是结构失效线，`stop_price` 是更宽的保护性硬止损线。
+
 ## 4. POC / VA 当前定义
 
 当前主线使用前一交易日的 5m close-profile：
@@ -150,6 +258,56 @@ POC / VA 真正有效时，提供的是：
 - [R4 交易周期敏感性](../../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r4-period-sensitivity.md)
 
 ### 5.3 2~3 ticks 是经验折中，不是最终优化参数
+
+当前 R15 主线样本里，3 ticks 相比 2 ticks 机会数减少：
+
+| 品种 | 2 ticks | 3 ticks | 减少 | 减少比例 |
+| --- | ---: | ---: | ---: | ---: |
+| DCE.m2601 | 6 | 5 | -1 | -16.7% |
+| CZCE.SR601 | 9 | 6 | -3 | -33.3% |
+| SHFE.rb2601 | 8 | 7 | -1 | -12.5% |
+| 合计 | 23 | 18 | -5 | -21.7% |
+
+当前观察到的 tick 结构：
+
+```text
+前日 VA 宽度通常约 23~24 ticks；
+盈利样本的 entry → POC 可兑现空间通常约 12~13 ticks；
+2~3 ticks reaccept 是在约 24 ticks 宽 VA 内，等待价格重新进入价值区的一小段确认。
+```
+
+但这组 tick 数不能直接解释为市场固有属性。
+
+更准确的判断是：
+
+```text
+固定 tick 数更像当前定义和筛选方法下形成的结构尺度；
+VA 内部相对位置、POC 是否靠边、当前接受区是否远离旧 POC，更可能具有市场结构含义。
+```
+
+原因：
+
+```text
+当前 VA / POC 来自前日 5m close-profile；
+value_area_ratio=0.7 的扩展算法会塑造 VA width；
+min_target_ticks=8 和 min_price_raw_rr=0.5 会过滤掉 POC 太近或风险收益太差的样本；
+因此 20~25 ticks VA width 和 10~15 ticks POC 路径，是“当前定义 + 当前筛选”下的观察结果。
+```
+
+当前更稳的市场结构表达不是：
+
+```text
+VA 必然约等于 24 ticks；
+盈利目标必然约等于 12 ticks。
+```
+
+而是：
+
+```text
+有效回归通常不是极短或极远路径；
+它更像从旧 VA 边界附近，回到一个未失效、位置合理、仍被当前短期价格接受的 POC；
+这个路径在当前样本中大致落在 VA width 的中等比例区间。
+```
 
 VA width 归一化尝试没有替代 fixed ticks：
 
@@ -453,6 +611,35 @@ if would_filter_edge_or_away:
 ```
 
 当前不建议启用。
+
+### 10.5 区分方法产物和市场属性
+
+后续若要判断 VA / POC tick 结构是否是市场固有属性，不能只看已触发交易的样本。
+
+建议对照：
+
+```text
+1. 不带交易筛选，统计所有交易日的前日 VA width；
+2. 比较 5m close-profile、5m range-profile、1m profile、真实成交量 profile；
+3. 换合约月份和更长历史；
+4. 优先观察比例结构，而不是固定 tick 数。
+```
+
+重点比例：
+
+```text
+poc_pct = (POC - VAL) / VA_width；
+poc_edge_distance = min(poc_pct, 1 - poc_pct)；
+target_to_va = abs(entry - POC) / VA_width；
+current_acceptance_migration = abs(current_acceptance - previous_POC) / VA_width。
+```
+
+当前判断：
+
+```text
+20~25 ticks VA width 和 10~15 ticks POC 路径，更像当前定义和筛选下的观察尺度；
+POC 靠边质量差、当前接受区远离旧 POC 后质量差，更像可能跨样本复验的市场结构假设。
+```
 
 ## 11. 关联文档
 
