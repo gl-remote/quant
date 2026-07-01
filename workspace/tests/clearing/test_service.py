@@ -121,6 +121,9 @@ def test_clear_backtest_pairs_fifo_and_updates_summary() -> None:
     assert rows[0]["close_trade_id"] == 3
     assert rows[0]["volume"] == 2.0
     assert rows[0]["gross_pnl"] == pytest.approx(200.0)
+    assert rows[0]["commission"] == pytest.approx(18.0)
+    assert rows[0]["slippage_cost"] == pytest.approx(20.0)
+    assert rows[0]["net_pnl"] == pytest.approx(162.0)
     assert rows[1]["open_trade_id"] == 2
     assert rows[1]["volume"] == 1.0
     assert rows[1]["gross_pnl"] == pytest.approx(90.0)

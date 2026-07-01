@@ -1,9 +1,10 @@
 # value_area_reacceptance POC / VA 质量诊断阶段归档
 
 > 类型：Archive / 策略实验摘要
-> 状态：已完成 / 当前样本通过诊断，未完成跨样本验证
+> 状态：已完成 / 当前样本形成 1m 候选，等待跨样本复验
 > 日期：2026-07-01
 > 原始记录：[`raw-workbench/`](./raw-workbench/)
+> 追加记录：[`value-area-reacceptance-r16-r24-1m-actual-rr-summary.md`](./raw-workbench/value-area-reacceptance-r16-r24-1m-actual-rr-summary.md)、[`value-area-reacceptance-r25-1m-vs-5m-actual-rr.md`](./raw-workbench/value-area-reacceptance-r25-1m-vs-5m-actual-rr.md)、[`value-area-reacceptance-r26-1m-stability-check.md`](./raw-workbench/value-area-reacceptance-r26-1m-stability-check.md)
 > 关联路线：[`strategy-research-framework.md`](../../../roadmap/strategy-research-framework.md)
 
 ## 1. 阶段问题
@@ -15,98 +16,88 @@
 以旧 POC 或 POC 附近共识区作为短期可兑现目标。
 ```
 
-阶段核心问题：
+阶段问题经历两次推进：
 
 ```text
-当前 POC / VA 定义是否足以代表“短期可兑现共识锚”？
-如果不是，哪些质量标签能解释好坏交易？
+R1~R15：诊断 POC / VA 质量，寻找坏结构标签；
+R16~R26：修正 actual RR 口径后，重新评估 1m 微观路径是否优于 5m。
 ```
 
-本阶段不是参数优化阶段，也没有把候选过滤器直接固化为真实交易规则。
+本阶段不是最终上线阶段。当前结论只说明：
 
-## 2. 固定主线设置
+```text
+当前样本中已经形成一个 1m 候选结构，
+但还没有完成跨合约、跨月份、更长历史验证。
+```
 
-主线回测使用：
+## 2. 关键口径修正：actual RR
+
+R22 发现并修正了 `min_price_raw_rr` 的口径问题。
+
+旧口径：
+
+```text
+min_price_raw_rr = raw POC target distance / strict_failure distance
+```
+
+但固定风险预算使用的是：
+
+```text
+stop_distance = strict_failure distance × stop_widen_multiplier
+```
+
+且 near-POC / 80% target 会改变实际执行目标。因此旧口径没有把实际 target 与实际 stop 放在同一风险口径下。
+
+R22 后修正为：
+
+```text
+actual_stop_distance = abs(stop_price - entry)
+execution_target_distance = abs(execution_target - entry)
+min_price_raw_rr = execution_target_distance / actual_stop_distance
+```
+
+影响：
+
+```text
+1. R1~R21 中涉及净收益、胜率、过滤强弱的交易结论需要降级；
+2. 结构性观察仍可保留，例如 POC 单点偏刚性、rb 拖累、1m 路径更细；
+3. R22 之后的交易结论以 actual RR 口径为准。
+```
+
+## 3. 当前候选结构
+
+R22~R26 后的当前候选：
 
 ```text
 strategy = value_area_reacceptance
-engine = vnpy
-execution period = 5m
-profile_mode = close
-value_area_ratio = 0.7
-min_breakout_ticks = 4
-failure_buffer_ticks = 1
+execution period = 1m
+profile source = previous-day 5m close-profile POC / VA
+symbols = DCE.m2601 / CZCE.SR601
+exclude = SHFE.rb2601
 take_profit_mode = poc
-max_hold_bars = 12
+target_distance_ratio = 0.8
+target_band_ticks = 0
+min_price_raw_rr = 0.8   # actual RR 口径
+min_reaccept_ticks = 2 / 3
+max_hold_bars = 60
 stop_widen_multiplier = 1.5
 strict_close_exit = true
 max_trades_per_day = 1
-min_reaccept_ticks = 2 / 3
-min_reaccept_va_width_ratio = 0
 min_target_ticks = 8
-min_price_raw_rr = 0.5
 ```
 
-主要样本：
+含义：
 
 ```text
-DCE.m2601
-CZCE.SR601
-SHFE.rb2601
+用 1m 捕捉更细的 reacceptance 路径；
+用 80% POC 距离兑现 near-POC；
+用 actual RR=0.8 过滤小赢大亏结构；
+暂时排除 rb，保留 m/SR。
 ```
 
-其中 DCE.m2601 是当前主线候选，CZCE.SR601 是观察样本，SHFE.rb2601 更接近负面对照。
+## 4. POC / VA 定义
 
-## 3. 关键实现与基础问题
-
-### 3.1 0-trade 误判爆仓修复
-
-早期发现 DCE.c2601 / DCE.cs2601 低成交不是因为初始资本不足，而是策略目标/POC 约束导致。
-
-同时修复 vn.py 回测统计误判：
-
-```text
-0-trade flat-equity backtest 不应被视为 blown-up。
-```
-
-修复后爆仓判断改为基于：
-
-```text
-daily_results["net_pnl"].cumsum() + initial_capital
-```
-
-只有累计余额 `<= 0` 才视为爆仓。
-
-### 3.2 POC 质量诊断字段落库
-
-策略运行时新增诊断字段：
-
-```text
-poc_edge_distance
-poc_edge_bucket
-current_acceptance_migration
-current_acceptance_migration_bucket
-local_band_width_ratio
-local_band_bucket
-multi_modal_profile
-close_range_poc_divergence
-close_range_poc_divergence_bucket
-would_filter_edge_or_away
-would_filter_reason
-```
-
-这些字段写入：
-
-```text
-backtest_trades.decision_payload_json
-trade_clearings.diagnostics_json
-```
-
-`would_filter_edge_or_away` 目前只是影子过滤标签，不改变 entry signal。
-
-## 4. POC / VA 定义诊断
-
-当前主线使用前一交易日的 5m close-profile：
+当前仍使用前一交易日的 5m close-profile：
 
 ```text
 profile: price -> accumulated volume
@@ -126,83 +117,44 @@ VA：
 直到覆盖 value_area_ratio=70% 的成交量。
 ```
 
-range-profile 也被计算为诊断字段，但没有替代主线 close-profile。
+range-profile 作为诊断字段保留，但没有替代主线 close-profile。
 
-R8 的关键结论：
+阶段判断保持：
 
 ```text
-close-profile POC 并非完全错误，
-关键盈利样本中它往往比 range-profile 更贴近短期可兑现目标。
-range-profile 可能过度平滑并推远目标。
+close-profile POC 并非完全错误；
+关键问题不是换 profile，
+而是 POC 是否是可兑现目标，以及执行目标是否过于单点刚性。
 ```
-
-因此本阶段没有切换到 range-profile，也没有使用 naive 全局 POC band。
 
 ## 5. 主要实验结论
 
-### 5.1 交易周期
+### 5.1 R1~R15：POC 质量标签阶段
 
-真实 15m 回测没有改善主线：
-
-```text
-15m 能过滤部分噪声，
-但也让失败后快速重新接受并回归 POC 的信号变慢、变模糊。
-```
-
-当前保留 5m 作为执行周期。
-
-### 5.2 reaccept 深度
-
-fixed 2~3 ticks 对结果敏感，但这不是简单参数优化问题。
-
-VA width 归一化尝试：
+R15 主线旧口径结果：
 
 ```text
-min_reaccept_va_width_ratio = 0.10 / 0.15
+n=41
+win_pct=43.9%
+tp_pct=29.3%
+net_pnl=1890.206
+median_pnl=-171.600
+worst_pnl=-1622.608
 ```
 
-没有替代 fixed ticks：
+分品种：
 
 ```text
-DCE.m2601 收益被压缩；
-CZCE.SR601 转负；
-SHFE.rb2601 仍为负。
+DCE.m2601   net_pnl=5909.600
+CZCE.SR601  net_pnl=1096.200
+SHFE.rb2601 net_pnl=-5115.594
 ```
 
-阶段解释：
-
-```text
-2~3 ticks 更像是在“足够进入价值区”和“不能错过 POC 回归窗口”之间形成的经验折中，
-不是单纯尺度归一化问题。
-```
-
-### 5.3 POC 质量标签
-
-最有解释力的标签：
+最有解释力的 POC 质量标签：
 
 ```text
 POC edge distance
 current-day acceptance migration
-```
-
-定义：
-
-```text
-poc_pct = (POC - VAL) / (VAH - VAL)
-poc_edge_distance = min(poc_pct, 1 - poc_pct)
-
-edge: poc_edge_distance < 0.20
-mid_edge: 0.20 <= poc_edge_distance < 0.35
-central: poc_edge_distance >= 0.35
-```
-
-```text
-current_acceptance = 最近 6 根执行周期 close 的中位数
-migration = abs(current_acceptance - previous_POC) / VA_width
-
-near_poc: migration <= 0.30
-mid: migration <= 0.70
-away: migration > 0.70
 ```
 
 组合标签：
@@ -212,219 +164,238 @@ edge_or_away = poc_edge_bucket == edge
             or current_acceptance_migration_bucket == away
 ```
 
-结构含义：
+旧口径下 shadow 结果很强：
 
 ```text
-旧 POC 太靠近前日 VA 边缘，
-或当前短期接受区已经明显远离旧 POC，
-因此旧 POC 作为短期可兑现共识锚的质量不足。
+raw:             n=41, win_pct=43.9%, net_pnl=1890.206
+shadow_kept:     n=25, win_pct=64.0%, net_pnl=10754.990
+shadow_filtered: n=16, win_pct=12.5%, net_pnl=-8864.784
 ```
 
-## 6. 关键统计结果
-
-### 6.1 原始主线结果
-
-R15 重新跑主线 6 组：
+但 R22 后需要降级为：
 
 ```text
-DCE.m2601: 456 / 457
-CZCE.SR601: 458 / 459
-SHFE.rb2601: 460 / 461
+edge_or_away 是有解释力的结构诊断标签；
+不能直接作为 actual RR 口径下的最终真实过滤器；
+1m 中直接迁移 5m edge_or_away 语义不稳定。
 ```
 
-清算口径 raw：
+### 5.2 R16~R21：1m 路径探索与失败尝试
+
+保留的结构观察：
 
 ```text
-n=41
-win_pct=43.9%
-tp_pct=29.3%
-net_pnl=1890.206
-median_pnl=-171.600
-worst_pnl=-1622.608
-left_tail_1000=4
+1. 1m 交易机会更多；
+2. 1m 与 5m 的 entry → POC tick 尺度接近；
+3. 1m 暴露出更多接近 POC 但未精确触达 POC 的路径；
+4. POC 单点目标偏刚性；
+5. SHFE.rb2601 在 1m 下拖累明显。
 ```
 
-分品种 raw：
+失败方向：
 
 ```text
-DCE.m2601   net_pnl=5909.600
-CZCE.SR601  net_pnl=1096.200
-SHFE.rb2601 net_pnl=-5115.594
+简单 MFE trailing：过早切断可恢复路径；
+简单 KDJ 阈值过滤：误伤高质量交易；
+直接迁移 5m edge_or_away 到 1m：语义不稳定。
 ```
 
-结论：原始策略略正但不稳定，收益主要来自 DCE.m，rb 明显拖累。
+### 5.3 R23~R24：actual RR 校准
 
-### 6.2 edge_or_away 影子过滤结果
+在 `1m + A4_no_rb` 下扫描 actual RR。
 
-清算口径：
+关键结果：
+
+| min_price_raw_rr | n | realized_payoff | win_pct | breakeven_win_pct | expectancy_R | worst_R |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.6 | 11 | 1.368 | 63.6% | 42.2% | 0.184 | -0.540 |
+| 0.7 | 10 | 1.635 | 60.0% | 37.9% | 0.197 | -0.540 |
+| 0.8 | 7 | 2.951 | 71.4% | 25.3% | 0.340 | -0.240 |
+| 0.9 | 5 | 3.974 | 80.0% | 20.1% | 0.396 | -0.133 |
+| 1.0 | 4 | 4.897 | 75.0% | 17.0% | 0.455 | -0.133 |
+
+判断：
 
 ```text
-raw:
-n=41, win_pct=43.9%, net_pnl=1890.206, left_tail_1000=4
-
-shadow_kept:
-n=25, win_pct=64.0%, net_pnl=10754.990, left_tail_1000=1
-
-shadow_filtered:
-n=16, win_pct=12.5%, net_pnl=-8864.784, left_tail_1000=3
+0.2~0.4 能恢复交易数，但 payoff 过低；
+0.9~1.0 指标漂亮但样本过少；
+0.8 是当前样本内最平衡候选。
 ```
 
-日级去重、同结构平均 PnL：
+### 5.4 R25：actual RR 口径下 1m vs 5m
 
-```text
-raw:
-n=23, win_pct=43.5%, net_pnl=130.399, left_tail_1000=2
+在 m/SR、A4、actual RR=0.6~0.8 下重新比较 1m 与 5m。
 
-shadow_kept:
-n=14, win_pct=64.3%, net_pnl=4633.791, left_tail_1000=1
-
-shadow_filtered:
-n=9, win_pct=11.1%, net_pnl=-4503.392, left_tail_1000=1
-```
+| period | n | win_pct | breakeven_win_pct | payoff | expectancy_R | net_pnl | median_pnl | worst_R |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1m | 28 | 64.3% | 37.5% | 1.669 | 0.228 | 12742 | 420 | -0.540 |
+| 5m | 29 | 34.5% | 22.7% | 3.412 | 0.105 | 6080 | -266 | -0.290 |
 
 结论：
 
 ```text
-edge_or_away 不是 2/3 ticks 重复样本造成的假象；
-它在 raw、日级去重、同结构平均 PnL 三种口径下都能稳定识别坏结构。
+在 m/SR、A4 near-POC、actual RR=0.6~0.8 的候选条件下，
+1m 的正期望强于 5m。
 ```
 
-但：
+边界：
 
 ```text
-SHFE.rb2601 的日级 shadow_kept 仍为负，
-说明该品种左尾不能靠 POC 标签单独修复。
+该结论不包含 rb；
+不代表所有 1m 设置优于 5m；
+样本仍小，必须扩样复验。
 ```
 
-## 7. 当前阶段判断
+### 5.5 R26：1m 候选稳定性检查
 
-本阶段最重要结论：
+固定：
 
 ```text
-value_area_reacceptance 的结构 alpha 雏形来自：
-旧 VA 边界被快速拒绝后，
-价格仍能回到一个位置合理、未失效、可兑现的 POC / POC band。
+1m + m/SR + actual RR=0.8
 ```
 
-POC / VA 有效时提供的是：
+比较 target 模式：
+
+| target | n | win_pct | breakeven_win_pct | payoff | expectancy_R | net_pnl | median_pnl | worst_R |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| A0_poc | 10 | 60.0% | 39.6% | 1.527 | 0.175 | 3492 | 370 | -0.540 |
+| A1_band_1 | 10 | 60.0% | 39.6% | 1.527 | 0.175 | 3492 | 370 | -0.540 |
+| A4_ratio_80 | 7 | 71.4% | 25.3% | 2.951 | 0.340 | 4758 | 520 | -0.240 |
+
+结论：
 
 ```text
-较近失败边界 + 适中可兑现目标 + 足够原始盈亏比
+A4_ratio_80 明显优于原始 POC / ±1 tick band；
+主要改善来自 SR，说明 1m 优势不是 DCE.m 单独撑起；
+min_reaccept_ticks=2/3 均为正，但 3 ticks 样本过少，不建议单独收窄。
 ```
 
-而不是：
+## 6. 当前阶段判断
+
+本阶段最新结论：
 
 ```text
-更远目标；
-更高账面 raw_rr；
-更深 reaccept；
-更长周期。
+value_area_reacceptance 的结构 alpha 雏形仍成立，
+但旧 5m POC 单点主线已被降级。
+
+在修正 actual RR 后，当前样本内最强候选转为：
+1m + m/SR + A4_ratio_80 + actual RR=0.8 + min_reaccept_ticks=2/3。
 ```
 
-`edge_or_away` 是当前最强的坏结构候选过滤器。
-
-但当前状态仍是：
+更精确地说：
 
 ```text
-候选过滤器 / 影子评估通过当前样本；
-未完成跨合约、跨月份、更长区间验证；
-不应直接视为最终交易规则。
+该策略显示出“更短周期更可靠”的倾向，
+但只在 near-POC、actual RR、排除 rb 的候选条件下成立。
 ```
 
-## 8. 保留与不保留
+当前不能说：
 
-### 8.1 保留
+```text
+1m 已经是可上线主线；
+rb 永久不可交易；
+0.8 是全局最优 RR；
+edge_or_away 已经可以真实过滤。
+```
 
-策略代码保留：
+当前可以说：
+
+```text
+1. POC 单点过刚性，80% POC 距离更适合作为 1m 执行目标；
+2. actual RR 过滤是必要口径，低 RR 会恢复交易数但削弱 payoff；
+3. m/SR 在 1m A4 + RR=0.8 下都呈正期望；
+4. rb 在当前 1m 结构中是主要负贡献，应单独诊断；
+5. 不扩大样本时，继续调参的边际价值已很低。
+```
+
+## 7. 保留与暂缓
+
+### 7.1 保留
+
+保留策略代码：
 
 ```text
 workspace/strategies/value_area_reacceptance_strategy.py
 ```
 
-原因：
+保留关键参数能力：
 
 ```text
-该策略仍处于活跃研究线，且已经具备运行时诊断字段。
-```
-
-保留诊断字段：
-
-```text
+target_distance_ratio
+target_band_ticks
+min_price_raw_rr  # actual RR 口径
 would_filter_edge_or_away
-would_filter_reason
 ```
 
-原因：
+### 7.2 暂缓
+
+| 方向 | 当前处理 | 原因 |
+| --- | --- | --- |
+| 继续小样本调参 | 暂停 | R26 后稳定性检查已足够，继续切桶易过拟合 |
+| MFE trailing | 暂缓 | 未改善核心失败，且压缩右尾 |
+| KDJ 阈值过滤 | 暂缓 | 误伤高质量样本 |
+| 继续降低 RR | 暂缓 | 只恢复交易数，payoff 不足 |
+| RR 0.9 / 1.0 | 暂缓 | 样本过少 |
+| rb 混入主候选 | 暂缓 | rb 是当前主要负贡献 |
+| edge_or_away 真实过滤 | 暂缓 | 旧口径下强，actual RR + 1m 下仍需复验 |
+
+## 8. 下一阶段最小方案
+
+下一步不应继续在当前小样本上调参，而应扩样验证当前候选。
+
+固定候选：
 
 ```text
-后续扩大样本时，可继续观察 raw / shadow_kept / shadow_filtered。
+period = 1m
+symbols = DCE.m / CZCE.SR
+exclude = SHFE.rb
+target_distance_ratio = 0.8
+target_band_ticks = 0
+min_price_raw_rr = 0.8
+min_reaccept_ticks = 2 / 3
 ```
 
-### 8.2 暂不启用
-
-暂不把 `edge_or_away` 固化为真实 entry filter。
-
-原因：
+扩样观察指标：
 
 ```text
-样本仍小；
-DCE.m 的 bad 日级结构只有 1 个；
-rb 的 not_bad 仍保留左尾；
-还没有跨合约、跨月份、更长窗口验证。
+n
+win_pct
+breakeven_win_pct
+realized_payoff
+expectancy_R
+net_pnl
+median_pnl
+worst_R
+loss_ge_0.5R
+分品种稳定性，尤其 SR 是否继续为正
 ```
 
-### 8.3 暂不继续
-
-若不扩大样本，不建议继续在当前样本上做更多参数或标签挖掘。
-
-原因：
+通过标准：
 
 ```text
-当前样本可支持的结论已经基本榨干；
-继续切小桶容易过拟合。
+1. win_pct 仍显著高于 breakeven_win_pct；
+2. realized_payoff 仍 > 1.5，最好 > 2；
+3. expectancy_R 仍为正；
+4. SR 仍为正，而不是完全依赖 DCE.m；
+5. worst_R / loss_ge_0.5R 不重新恶化。
 ```
 
-## 9. 后续最小方案
+若扩样通过，再考虑整理为正式候选策略；若扩样失败，则 1m 仍降级为结构诊断和执行层研究材料。
 
-下一阶段建议：
+## 9. 原始记录
 
-```text
-扩大样本的影子过滤复验。
-```
-
-最小方案：
+早期原始记录：
 
 ```text
-1. 保留当前交易信号和参数；
-2. 选择更多合约或更长历史区间；
-3. 继续写入 would_filter=edge_or_away；
-4. 报告 raw / shadow_kept / shadow_filtered；
-5. 分品种判断 DCE.m 是否适合进入候选策略；
-6. 判断 SR / rb 是否应降级、排除或需要额外左尾过滤。
-```
-
-只有当更大样本仍稳定时，才考虑：
-
-```text
-if would_filter_edge_or_away:
-    skip entry
-```
-
-作为真实交易规则。
-
-## 10. 原始记录
-
-原始阶段记录保存在：
-
-```text
-raw-workbench/
-```
-
-其中：
-
-```text
-value-area-reacceptance-stage-plan.md
-value-area-reacceptance-r1-risk-budget.md
+raw-workbench/value-area-reacceptance-r1-risk-budget.md
 ...
-value-area-reacceptance-r15-shadow-filter.md
+raw-workbench/value-area-reacceptance-r15-shadow-filter.md
+```
+
+追加记录：
+
+```text
+raw-workbench/value-area-reacceptance-r16-r24-1m-actual-rr-summary.md
+raw-workbench/value-area-reacceptance-r25-1m-vs-5m-actual-rr.md
+raw-workbench/value-area-reacceptance-r26-1m-stability-check.md
 ```
