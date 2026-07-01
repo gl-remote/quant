@@ -1,8 +1,8 @@
 # value_area_reacceptance R26：1m 候选稳定性检查
 
-> 类型：Workbench / 单轮实验记录  
-> 状态：已完成  
-> 日期：2026-07-01  
+> 类型：Workbench / 单轮实验记录
+> 状态：已完成
+> 日期：2026-07-01
 > 前置记录：[R25 actual RR 口径下 1m 与 5m 对照](./value-area-reacceptance-r25-1m-vs-5m-actual-rr.md)
 
 ## 1. 实验问题

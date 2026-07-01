@@ -1,8 +1,8 @@
 # value_area_reacceptance R25：actual RR 口径下 1m 与 5m 对照
 
-> 类型：Workbench / 单轮实验记录  
-> 状态：已完成  
-> 日期：2026-07-01  
+> 类型：Workbench / 单轮实验记录
+> 状态：已完成
+> 日期：2026-07-01
 > 前置记录：[R16-R24 actual RR 重整记录](./value-area-reacceptance-r16-r24-1m-actual-rr-summary.md)
 
 ## 1. 实验问题
