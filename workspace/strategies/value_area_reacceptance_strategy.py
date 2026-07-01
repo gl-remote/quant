@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date, time
+from datetime import date, datetime, time
 from typing import Any, Literal, TypedDict, cast, override
 
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG
@@ -15,6 +15,14 @@ from .strategy_aspects.indicators import KDJ
 
 TakeProfitMode = Literal["poc", "opposite", "r"]
 ProfileMode = Literal["close", "range"]
+TargetSource = Literal["poc", "opposite", "r", "reentry_r"]
+
+
+@dataclass(frozen=True)
+class TargetPlan:
+    source: TargetSource
+    raw_price: float
+    execution_price: float
 
 
 @dataclass
@@ -35,10 +43,21 @@ class ValueAreaReacceptanceParams:
     take_profit_r: float = 1.0
     max_hold_bars: int = 6
     stop_widen_multiplier: float = 1.0
+    stop_atr_bars: int = 0
+    stop_atr_multiplier: float = 0.0
+    stop_atr_ratio_bars: int = 0
+    min_stop_atr_ratio: float = 0.0
+    max_stop_atr_ratio: float = 0.0
+    exclude_stop_atr_ratio_low: float = 0.0
+    exclude_stop_atr_ratio_high: float = 0.0
     strict_close_exit: bool = True
     risk_per_trade: float = 0.02
     max_position_ratio: float = 0.3
     max_trades_per_day: int = 1
+    reentry_requires_prev_stop_same_direction: bool = False
+    reentry_requires_prev_take_profit_same_direction: bool = False
+    reentry_cooldown_minutes: int = 0
+    reentry_take_profit_r: float = 0.0
     min_reaccept_ticks: int = 0
     min_reaccept_va_width_ratio: float = 0.0
     max_breakout_bars: int = 0
@@ -124,6 +143,7 @@ class TradeInfo(TypedDict):
     stop_price: float
     target_price: float
     raw_target_price: float
+    target_source: TargetSource
     target_distance: float
     raw_target_distance: float
     strict_distance: float
@@ -168,7 +188,13 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @override
     def data_requirements(self, config: ValueAreaReacceptanceParams) -> DataRequirements | None:
-        periods = {config.kline_period: PeriodRequirements(lookback_bars=max(1, config.rolling_context_bars * 2))}
+        lookback_bars = max(
+            1,
+            config.rolling_context_bars * 2,
+            config.stop_atr_bars,
+            config.stop_atr_ratio_bars,
+        )
+        periods = {config.kline_period: PeriodRequirements(lookback_bars=lookback_bars)}
         indicators = {config.kline_period: [KDJ]} if self._uses_kdj_filter(config) else {}
         if config.context_period:
             periods[config.context_period] = PeriodRequirements(lookback_bars=config.context_lookback_bars)
@@ -234,6 +260,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         prev: ValueAreaLevels,
     ) -> Signal:
         entry = ctx.bar.close
+        if not self._reentry_allowed(state, config, side):
+            return Signal()
         buffer = config.failure_buffer_ticks * config.price_tick
         strict_failure = breakout_extreme - buffer if side == "long" else breakout_extreme + buffer
         strict_distance = abs(entry - strict_failure)
@@ -241,15 +269,21 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             return Signal()
         if not self._kdj_filter_ok(side, ctx, config):
             return Signal()
-        stop_distance = strict_distance * max(config.stop_widen_multiplier, 1.0)
+        structural_stop_distance = strict_distance * max(config.stop_widen_multiplier, 1.0)
+        atr_stop_distance = self._atr_stop_distance(ctx, config)
+        stop_distance = max(structural_stop_distance, atr_stop_distance)
+        stop_atr_ratio = self._stop_atr_ratio(ctx, config, stop_distance)
+        if not self._stop_atr_ratio_filter_ok(ctx, config, stop_distance):
+            return Signal()
         stop_price = entry - stop_distance if side == "long" else entry + stop_distance
-        raw_target_price = self._raw_target_price(side, entry, strict_distance, prev, config)
+        target_plan = self._target_plan(side, entry, strict_distance, prev, config, self._trade_count(state) > 0)
+        raw_target_price = target_plan.raw_price
         if not self._target_is_valid(side, entry, raw_target_price):
             return Signal()
         raw_target_distance = abs(raw_target_price - entry)
         if raw_target_distance < config.min_target_ticks * config.price_tick:
             return Signal()
-        target_price = self._execution_target_price(side, entry, raw_target_price, config)
+        target_price = target_plan.execution_price
         if not self._target_is_valid(side, entry, target_price):
             return Signal()
         target_distance = abs(target_price - entry)
@@ -274,10 +308,11 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             stop_price=stop_price,
             target_price=target_price,
             raw_target_price=raw_target_price,
+            target_source=target_plan.source,
             target_distance=target_distance,
             raw_target_distance=raw_target_distance,
             strict_distance=strict_distance,
-            price_raw_rr=raw_target_distance / strict_distance,
+            price_raw_rr=target_distance / stop_distance if stop_distance > 0 else 0.0,
             entry_bar_range=entry_bar_range,
             entry_bar_range_ratio=entry_bar_range / strict_distance,
             open_location=self._value_area_location(current_open, prev),
@@ -328,8 +363,13 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             strict_failure=strict_failure,
             stop_price=stop_price,
             target_price=target_price,
+            raw_target_price=raw_target_price,
+            target_source=target_plan.source,
             target_distance=target_distance,
+            raw_target_distance=raw_target_distance,
             strict_distance=strict_distance,
+            actual_stop_distance=stop_distance,
+            stop_atr_ratio=stop_atr_ratio,
             volume=volume,
             poc_quality=poc_quality,
             prev=prev,
@@ -417,6 +457,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             "holding_bars": float(self._holding_bars(state)),
             "path_progress": path_progress,
         }
+        state.extra["value_area_last_exit_reason"] = reason.split("|", maxsplit=1)[0]
+        state.extra["value_area_last_exit_side"] = trade["side"]
+        state.extra["value_area_last_exit_time"] = bar.datetime
         self._attach_exit_diagnostics(signal, reason=reason, trade=trade, holding_bars=self._holding_bars(state))
         return signal
 
@@ -455,21 +498,46 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             return entry >= prev["val"] + min_reaccept
         return entry <= prev["vah"] - min_reaccept
 
-    def _raw_target_price(
+    def _target_plan(
         self,
         side: Literal["long", "short"],
         entry: float,
         strict_distance: float,
         prev: ValueAreaLevels,
         config: ValueAreaReacceptanceParams,
+        is_reentry: bool = False,
+    ) -> TargetPlan:
+        source = self._target_source(config, is_reentry)
+        raw_price = self._raw_target_price(side, entry, strict_distance, prev, config, source)
+        execution_price = self._execution_target_price(side, entry, raw_price, config, source)
+        return TargetPlan(source=source, raw_price=raw_price, execution_price=execution_price)
+
+    @staticmethod
+    def _target_source(config: ValueAreaReacceptanceParams, is_reentry: bool) -> TargetSource:
+        if is_reentry and config.reentry_take_profit_r > 0:
+            return "reentry_r"
+        return config.take_profit_mode
+
+    @staticmethod
+    def _raw_target_price(
+        side: Literal["long", "short"],
+        entry: float,
+        strict_distance: float,
+        prev: ValueAreaLevels,
+        config: ValueAreaReacceptanceParams,
+        source: TargetSource | None = None,
     ) -> float:
-        if config.take_profit_mode == "poc":
+        if source is None:
+            source = config.take_profit_mode
+        if source == "reentry_r":
+            distance = strict_distance * config.reentry_take_profit_r
+            return entry + distance if side == "long" else entry - distance
+        if source == "poc":
             return prev["poc"]
-        if config.take_profit_mode == "opposite":
+        if source == "opposite":
             return prev["vah"] if side == "long" else prev["val"]
-        if side == "long":
-            return entry + strict_distance * config.take_profit_r
-        return entry - strict_distance * config.take_profit_r
+        distance = strict_distance * config.take_profit_r
+        return entry + distance if side == "long" else entry - distance
 
     @staticmethod
     def _execution_target_price(
@@ -477,12 +545,15 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         entry: float,
         raw_target: float,
         config: ValueAreaReacceptanceParams,
+        source: TargetSource | None = None,
     ) -> float:
+        if source is None:
+            source = config.take_profit_mode
         target = raw_target
-        if config.take_profit_mode == "poc" and config.target_band_ticks > 0:
+        if source == "poc" and config.target_band_ticks > 0:
             band = config.target_band_ticks * config.price_tick
             target = target - band if side == "long" else target + band
-        if config.target_distance_ratio < 1.0:
+        if source == "poc" and config.target_distance_ratio < 1.0:
             distance = abs(target - entry) * max(config.target_distance_ratio, 0.0)
             return entry + distance if side == "long" else entry - distance
         return target
@@ -522,6 +593,69 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         if side == "short" and config.kdj_short_min > 0:
             return kdj >= config.kdj_short_min
         return True
+
+    @staticmethod
+    def _atr_stop_distance(ctx: BarContext, config: ValueAreaReacceptanceParams) -> float:
+        if config.stop_atr_bars <= 0 or config.stop_atr_multiplier <= 0:
+            return 0.0
+        atr = ValueAreaReacceptanceStrategyCore._atr(ctx, config, config.stop_atr_bars)
+        return atr * config.stop_atr_multiplier if atr is not None else 0.0
+
+    @staticmethod
+    def _atr(ctx: BarContext, config: ValueAreaReacceptanceParams, bars_count: int) -> float | None:
+        if bars_count <= 0:
+            return None
+        view = ctx.multi.get(config.kline_period)
+        if view is None or view.length < 2:
+            return None
+
+        bars: list[Bar] = []
+        for idx in range(bars_count, 0, -1):
+            bar = view.get_bar(-idx)
+            if bar is not None:
+                bars.append(bar)
+        if len(bars) < 2:
+            return None
+
+        true_ranges: list[float] = []
+        prev_close = bars[0].close
+        for bar in bars[1:]:
+            true_ranges.append(max(bar.high - bar.low, abs(bar.high - prev_close), abs(bar.low - prev_close)))
+            prev_close = bar.close
+        if not true_ranges:
+            return None
+        return sum(true_ranges) / len(true_ranges)
+
+    @classmethod
+    def _stop_atr_ratio(
+        cls, ctx: BarContext, config: ValueAreaReacceptanceParams, stop_distance: float
+    ) -> float | None:
+        if config.stop_atr_ratio_bars <= 0:
+            return None
+        atr = cls._atr(ctx, config, config.stop_atr_ratio_bars)
+        if atr is None or atr <= 0:
+            return None
+        return stop_distance / atr
+
+    @classmethod
+    def _stop_atr_ratio_filter_ok(
+        cls,
+        ctx: BarContext,
+        config: ValueAreaReacceptanceParams,
+        stop_distance: float,
+    ) -> bool:
+        ratio = cls._stop_atr_ratio(ctx, config, stop_distance)
+        if ratio is None:
+            return True
+        if config.min_stop_atr_ratio > 0 and ratio < config.min_stop_atr_ratio:
+            return False
+        if config.max_stop_atr_ratio > 0 and ratio > config.max_stop_atr_ratio:
+            return False
+        return not (
+            config.exclude_stop_atr_ratio_low > 0
+            and config.exclude_stop_atr_ratio_high > config.exclude_stop_atr_ratio_low
+            and config.exclude_stop_atr_ratio_low <= ratio < config.exclude_stop_atr_ratio_high
+        )
 
     @staticmethod
     def _calc_volume(
@@ -587,8 +721,53 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             self._prev_levels(state) is not None
             and self._time_in_range(bar_time, config.trade_start_time, config.last_entry_time)
             and not self._is_force_flat_time(bar_time, config)
+            and self._cooldown_elapsed(state, ctx, config)
             and self._trade_count(state) < config.max_trades_per_day
         )
+
+    @staticmethod
+    def _cooldown_elapsed(
+        state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+    ) -> bool:
+        if config.reentry_cooldown_minutes <= 0 or ValueAreaReacceptanceStrategyCore._trade_count(state) == 0:
+            return True
+        value = state.extra.get("value_area_last_exit_time")
+        if not isinstance(value, datetime):
+            return True
+        return (ctx.bar.datetime - value).total_seconds() >= config.reentry_cooldown_minutes * 60
+
+    def _reentry_allowed(
+        self,
+        state: State[ValueAreaReacceptanceParams],
+        config: ValueAreaReacceptanceParams,
+        side: Literal["long", "short"],
+    ) -> bool:
+        if self._trade_count(state) == 0:
+            return True
+        if not self._has_reentry_exit_condition(config):
+            return True
+        return self._last_exit_side_allowed(state, side) and self._last_exit_reason_allowed(state, config)
+
+    @staticmethod
+    def _has_reentry_exit_condition(config: ValueAreaReacceptanceParams) -> bool:
+        return (
+            config.reentry_requires_prev_stop_same_direction or config.reentry_requires_prev_take_profit_same_direction
+        )
+
+    @staticmethod
+    def _last_exit_side_allowed(state: State[ValueAreaReacceptanceParams], side: Literal["long", "short"]) -> bool:
+        return state.extra.get("value_area_last_exit_side") == side
+
+    @staticmethod
+    def _last_exit_reason_allowed(
+        state: State[ValueAreaReacceptanceParams], config: ValueAreaReacceptanceParams
+    ) -> bool:
+        allowed_reasons: set[str] = set()
+        if config.reentry_requires_prev_stop_same_direction:
+            allowed_reasons.add("stop_loss")
+        if config.reentry_requires_prev_take_profit_same_direction:
+            allowed_reasons.add("take_profit")
+        return state.extra.get("value_area_last_exit_reason") in allowed_reasons
 
     def _ensure_session(
         self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
@@ -621,6 +800,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         state.extra.pop("value_area_long_breakout_bars", None)
         state.extra.pop("value_area_short_breakout_bars", None)
         state.extra.pop("value_area_trade", None)
+        state.extra.pop("value_area_last_exit_reason", None)
+        state.extra.pop("value_area_last_exit_side", None)
+        state.extra.pop("value_area_last_exit_time", None)
 
     def _update_current_session(
         self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
@@ -1219,8 +1401,13 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         strict_failure: float,
         stop_price: float,
         target_price: float,
+        raw_target_price: float,
+        target_source: TargetSource,
         target_distance: float,
+        raw_target_distance: float,
         strict_distance: float,
+        actual_stop_distance: float,
+        stop_atr_ratio: float | None,
         volume: int,
         poc_quality: PocQualityInfo,
         prev: ValueAreaLevels,
@@ -1239,7 +1426,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 "entry_boundary": entry,
                 "strict_failure_boundary": strict_failure,
                 "expected_profit_boundary": target_price,
-                "raw_expected_profit_boundary": prev["poc"] if config.take_profit_mode == "poc" else target_price,
+                "raw_expected_profit_boundary": raw_target_price,
+                "target_source": target_source,
                 "acceptance_rejection_evidence": "failed_breakout_reacceptance",
                 "vah": prev["vah"],
                 "val": prev["val"],
@@ -1267,23 +1455,28 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         signal.risk = RiskDiagnostics(
             fields={
                 "strict_failure_distance": strict_distance,
+                "actual_stop_distance": actual_stop_distance,
                 "expected_profit_distance": target_distance,
-                "raw_expected_profit_distance": abs(
-                    (prev["poc"] if config.take_profit_mode == "poc" else target_price) - entry
-                ),
-                "raw_price_r_multiple": target_distance / (strict_distance * max(config.stop_widen_multiplier, 1.0))
-                if strict_distance > 0
-                else 0.0,
-                "raw_account_r_multiple": target_distance / (strict_distance * max(config.stop_widen_multiplier, 1.0))
-                if strict_distance > 0
-                else 0.0,
+                "raw_expected_profit_distance": raw_target_distance,
+                "raw_price_r_multiple": target_distance / actual_stop_distance if actual_stop_distance > 0 else 0.0,
+                "raw_account_r_multiple": target_distance / actual_stop_distance if actual_stop_distance > 0 else 0.0,
                 "actual_volume": volume,
                 "target_risk_ratio": config.risk_per_trade,
                 "stop_price": stop_price,
+                "stop_atr_bars": config.stop_atr_bars,
+                "stop_atr_multiplier": config.stop_atr_multiplier,
+                "stop_atr_applied": actual_stop_distance > strict_distance * max(config.stop_widen_multiplier, 1.0),
+                "stop_atr_ratio_bars": config.stop_atr_ratio_bars,
+                "stop_atr_ratio": stop_atr_ratio,
+                "min_stop_atr_ratio": config.min_stop_atr_ratio,
+                "max_stop_atr_ratio": config.max_stop_atr_ratio,
+                "exclude_stop_atr_ratio_low": config.exclude_stop_atr_ratio_low,
+                "exclude_stop_atr_ratio_high": config.exclude_stop_atr_ratio_high,
                 "min_reaccept_ticks": config.min_reaccept_ticks,
                 "min_reaccept_va_width_ratio": config.min_reaccept_va_width_ratio,
                 "target_band_ticks": config.target_band_ticks,
                 "target_distance_ratio": config.target_distance_ratio,
+                "target_source": target_source,
                 "mfe_pullback_min_progress_ticks": config.mfe_pullback_min_progress_ticks,
                 "mfe_pullback_ticks": config.mfe_pullback_ticks,
                 "kdj_value": kdj_value,
@@ -1310,6 +1503,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             fields={
                 "strict_failure_distance": trade["strict_distance"],
                 "expected_profit_distance": trade["target_distance"],
+                "raw_expected_profit_distance": trade.get("raw_target_distance", trade["target_distance"]),
+                "target_source": trade.get("target_source", "unknown"),
                 "raw_price_r_multiple": trade["price_raw_rr"],
                 "raw_account_r_multiple": trade["price_raw_rr"],
             }
