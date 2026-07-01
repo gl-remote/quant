@@ -9,7 +9,9 @@ from common.formulas import position_size
 
 from .core import CORE_VERSION, Bar, Fill, Signal, State, Strategy, placeholder_diagnostics
 from .core.diagnostics import AlphaDiagnostics, ExecutionDiagnostics, RiskDiagnostics
+from .core.indicators import generate_indicator_column_name
 from .runtime import BarContext, DataRequirements, EventsRequirements, PeriodRequirements
+from .strategy_aspects.indicators import KDJ
 
 TakeProfitMode = Literal["poc", "opposite", "r"]
 ProfileMode = Literal["close", "range"]
@@ -42,6 +44,12 @@ class ValueAreaReacceptanceParams:
     max_breakout_bars: int = 0
     min_target_ticks: int = 0
     min_price_raw_rr: float = 0.0
+    target_band_ticks: int = 0
+    target_distance_ratio: float = 1.0
+    mfe_pullback_min_progress_ticks: int = 0
+    mfe_pullback_ticks: int = 0
+    kdj_long_max: float = 0.0
+    kdj_short_min: float = 0.0
     path_check_bars: int = 0
     min_path_progress_ticks: int = 0
 
@@ -115,7 +123,9 @@ class TradeInfo(TypedDict):
     strict_failure: float
     stop_price: float
     target_price: float
+    raw_target_price: float
     target_distance: float
+    raw_target_distance: float
     strict_distance: float
     price_raw_rr: float
     entry_bar_range: float
@@ -159,11 +169,12 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     @override
     def data_requirements(self, config: ValueAreaReacceptanceParams) -> DataRequirements | None:
         periods = {config.kline_period: PeriodRequirements(lookback_bars=max(1, config.rolling_context_bars * 2))}
+        indicators = {config.kline_period: [KDJ]} if self._uses_kdj_filter(config) else {}
         if config.context_period:
             periods[config.context_period] = PeriodRequirements(lookback_bars=config.context_lookback_bars)
         return DataRequirements(
             periods=periods,
-            indicators={},
+            indicators=indicators,
             events=EventsRequirements.no_events(),
         )
 
@@ -228,16 +239,21 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         strict_distance = abs(entry - strict_failure)
         if strict_distance <= 0:
             return Signal()
-
+        if not self._kdj_filter_ok(side, ctx, config):
+            return Signal()
         stop_distance = strict_distance * max(config.stop_widen_multiplier, 1.0)
         stop_price = entry - stop_distance if side == "long" else entry + stop_distance
-        target_price = self._target_price(side, entry, strict_distance, prev, config)
+        raw_target_price = self._raw_target_price(side, entry, strict_distance, prev, config)
+        if not self._target_is_valid(side, entry, raw_target_price):
+            return Signal()
+        raw_target_distance = abs(raw_target_price - entry)
+        if raw_target_distance < config.min_target_ticks * config.price_tick:
+            return Signal()
+        target_price = self._execution_target_price(side, entry, raw_target_price, config)
         if not self._target_is_valid(side, entry, target_price):
             return Signal()
         target_distance = abs(target_price - entry)
-        if target_distance < config.min_target_ticks * config.price_tick:
-            return Signal()
-        if strict_distance > 0 and target_distance / strict_distance < config.min_price_raw_rr:
+        if stop_distance > 0 and target_distance / stop_distance < config.min_price_raw_rr:
             return Signal()
 
         volume = self._calc_volume(state, entry, stop_distance, config)
@@ -257,9 +273,11 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             strict_failure=strict_failure,
             stop_price=stop_price,
             target_price=target_price,
+            raw_target_price=raw_target_price,
             target_distance=target_distance,
+            raw_target_distance=raw_target_distance,
             strict_distance=strict_distance,
-            price_raw_rr=target_distance / strict_distance,
+            price_raw_rr=raw_target_distance / strict_distance,
             entry_bar_range=entry_bar_range,
             entry_bar_range_ratio=entry_bar_range / strict_distance,
             open_location=self._value_area_location(current_open, prev),
@@ -316,6 +334,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             poc_quality=poc_quality,
             prev=prev,
             config=config,
+            kdj_value=self._current_kdj(ctx, config),
         )
         return signal
 
@@ -341,6 +360,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 reason = "strict_failure_close"
             elif bar.high >= trade["target_price"]:
                 reason = "take_profit"
+            elif self._mfe_pullback_failed(trade, config, path_progress, bar.close):
+                reason = "mfe_pullback"
             elif self._path_check_failed(state, config, path_progress):
                 reason = "path_failure"
             elif self._is_force_flat_time(bar.datetime.time(), config):
@@ -354,6 +375,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 reason = "strict_failure_close"
             elif bar.low <= trade["target_price"]:
                 reason = "take_profit"
+            elif self._mfe_pullback_failed(trade, config, path_progress, bar.close):
+                reason = "mfe_pullback"
             elif self._path_check_failed(state, config, path_progress):
                 reason = "path_failure"
             elif self._is_force_flat_time(bar.datetime.time(), config):
@@ -432,7 +455,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             return entry >= prev["val"] + min_reaccept
         return entry <= prev["vah"] - min_reaccept
 
-    def _target_price(
+    def _raw_target_price(
         self,
         side: Literal["long", "short"],
         entry: float,
@@ -449,8 +472,56 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return entry - strict_distance * config.take_profit_r
 
     @staticmethod
+    def _execution_target_price(
+        side: Literal["long", "short"],
+        entry: float,
+        raw_target: float,
+        config: ValueAreaReacceptanceParams,
+    ) -> float:
+        target = raw_target
+        if config.take_profit_mode == "poc" and config.target_band_ticks > 0:
+            band = config.target_band_ticks * config.price_tick
+            target = target - band if side == "long" else target + band
+        if config.target_distance_ratio < 1.0:
+            distance = abs(target - entry) * max(config.target_distance_ratio, 0.0)
+            return entry + distance if side == "long" else entry - distance
+        return target
+
+    @staticmethod
     def _target_is_valid(side: Literal["long", "short"], entry: float, target: float) -> bool:
         return target > entry if side == "long" else target < entry
+
+    @staticmethod
+    def _uses_kdj_filter(config: ValueAreaReacceptanceParams) -> bool:
+        return config.kdj_long_max > 0 or config.kdj_short_min > 0
+
+    @staticmethod
+    def _current_kdj(ctx: BarContext, config: ValueAreaReacceptanceParams) -> float | None:
+        view = ctx.multi.get(config.kline_period)
+        if view is None:
+            return None
+        col = generate_indicator_column_name(KDJ.name, KDJ.params, period=config.kline_period)
+        value = view.indicator(col)
+        if value is None or value != value:
+            return None
+        return float(value)
+
+    def _kdj_filter_ok(
+        self,
+        side: Literal["long", "short"],
+        ctx: BarContext,
+        config: ValueAreaReacceptanceParams,
+    ) -> bool:
+        if not self._uses_kdj_filter(config):
+            return True
+        kdj = self._current_kdj(ctx, config)
+        if kdj is None:
+            return False
+        if side == "long" and config.kdj_long_max > 0:
+            return kdj <= config.kdj_long_max
+        if side == "short" and config.kdj_short_min > 0:
+            return kdj >= config.kdj_short_min
+        return True
 
     @staticmethod
     def _calc_volume(
@@ -479,6 +550,25 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         best = max(self._float_extra(state, "value_area_path_best_progress"), progress)
         state.extra["value_area_path_best_progress"] = best
         return best
+
+    @staticmethod
+    def _mfe_pullback_failed(
+        trade: TradeInfo,
+        config: ValueAreaReacceptanceParams,
+        path_progress: float,
+        close: float,
+    ) -> bool:
+        if config.mfe_pullback_min_progress_ticks <= 0 or config.mfe_pullback_ticks <= 0:
+            return False
+        min_progress = config.mfe_pullback_min_progress_ticks * config.price_tick
+        if path_progress < min_progress:
+            return False
+        if trade["side"] == "long":
+            current_progress = max(0.0, close - trade["entry_price"])
+        else:
+            current_progress = max(0.0, trade["entry_price"] - close)
+        pullback = path_progress - current_progress
+        return pullback >= config.mfe_pullback_ticks * config.price_tick
 
     def _path_check_failed(
         self, state: State[ValueAreaReacceptanceParams], config: ValueAreaReacceptanceParams, path_progress: float
@@ -1135,6 +1225,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         poc_quality: PocQualityInfo,
         prev: ValueAreaLevels,
         config: ValueAreaReacceptanceParams,
+        kdj_value: float | None,
     ) -> None:
         would_filter_edge_or_away = (
             poc_quality["poc_edge_bucket"] == "edge" or poc_quality["current_acceptance_migration_bucket"] == "away"
@@ -1148,6 +1239,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 "entry_boundary": entry,
                 "strict_failure_boundary": strict_failure,
                 "expected_profit_boundary": target_price,
+                "raw_expected_profit_boundary": prev["poc"] if config.take_profit_mode == "poc" else target_price,
                 "acceptance_rejection_evidence": "failed_breakout_reacceptance",
                 "vah": prev["vah"],
                 "val": prev["val"],
@@ -1163,19 +1255,40 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
                 "close_range_poc_divergence_bucket": poc_quality["close_range_poc_divergence_bucket"],
                 "would_filter_edge_or_away": would_filter_edge_or_away,
                 "would_filter_reason": "edge_or_away" if would_filter_edge_or_away else "none",
+                "target_band_ticks": config.target_band_ticks,
+                "target_distance_ratio": config.target_distance_ratio,
+                "mfe_pullback_min_progress_ticks": config.mfe_pullback_min_progress_ticks,
+                "mfe_pullback_ticks": config.mfe_pullback_ticks,
+                "kdj_value": kdj_value,
+                "kdj_long_max": config.kdj_long_max,
+                "kdj_short_min": config.kdj_short_min,
             }
         )
         signal.risk = RiskDiagnostics(
             fields={
                 "strict_failure_distance": strict_distance,
                 "expected_profit_distance": target_distance,
-                "raw_price_r_multiple": target_distance / strict_distance if strict_distance > 0 else 0.0,
-                "raw_account_r_multiple": target_distance / strict_distance if strict_distance > 0 else 0.0,
+                "raw_expected_profit_distance": abs(
+                    (prev["poc"] if config.take_profit_mode == "poc" else target_price) - entry
+                ),
+                "raw_price_r_multiple": target_distance / (strict_distance * max(config.stop_widen_multiplier, 1.0))
+                if strict_distance > 0
+                else 0.0,
+                "raw_account_r_multiple": target_distance / (strict_distance * max(config.stop_widen_multiplier, 1.0))
+                if strict_distance > 0
+                else 0.0,
                 "actual_volume": volume,
                 "target_risk_ratio": config.risk_per_trade,
                 "stop_price": stop_price,
                 "min_reaccept_ticks": config.min_reaccept_ticks,
                 "min_reaccept_va_width_ratio": config.min_reaccept_va_width_ratio,
+                "target_band_ticks": config.target_band_ticks,
+                "target_distance_ratio": config.target_distance_ratio,
+                "mfe_pullback_min_progress_ticks": config.mfe_pullback_min_progress_ticks,
+                "mfe_pullback_ticks": config.mfe_pullback_ticks,
+                "kdj_value": kdj_value,
+                "kdj_long_max": config.kdj_long_max,
+                "kdj_short_min": config.kdj_short_min,
                 "reaccept_depth": poc_quality["reaccept_depth"],
                 "reaccept_depth_va_ratio": poc_quality["reaccept_depth_va_ratio"],
                 "va_width": poc_quality["va_width"],

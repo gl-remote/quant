@@ -4,8 +4,10 @@ from datetime import datetime
 
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT
 from strategies.core import Bar, Fill, State, StrategyPosition
+from strategies.core.indicators import generate_indicator_column_name
 from strategies.runtime import BarContext
 from strategies.runtime.period import PeriodData
+from strategies.strategy_aspects.indicators import KDJ
 from strategies.value_area_reacceptance_strategy import (
     CurrentSession,
     ValueAreaLevels,
@@ -53,6 +55,27 @@ def _ctx_with_multi(
     )
 
 
+def _ctx_with_indicator(
+    dt: datetime,
+    open_price: float,
+    high: float,
+    low: float,
+    close: float,
+    period: str,
+    indicator_name: str,
+    indicator_value: float,
+) -> BarContext:
+    period_data = PeriodData(period)
+    period_data.append_bars([_bar(dt, open_price, high, low, close)])
+    period_data.data[indicator_name] = indicator_value
+    return BarContext(
+        symbol="DCE.m2601",
+        bar=_bar(dt, open_price, high, low, close),
+        multi={period: period_data.get_data(dt, lookback_bars=1)},
+        events=[],
+    )
+
+
 def _state(config: ValueAreaReacceptanceParams | None = None) -> State[ValueAreaReacceptanceParams]:
     return State(
         symbol="DCE.m2601",
@@ -71,6 +94,13 @@ def test_data_requirements_uses_configured_period() -> None:
     assert set(reqs.periods) == {"1m"}
     assert reqs.periods["1m"].lookback_bars == 1
     assert reqs.indicators == {}
+
+    kdj_reqs = ValueAreaReacceptanceStrategyCore().data_requirements(
+        ValueAreaReacceptanceParams(kline_period="1m", kdj_long_max=45, kdj_short_min=55)
+    )
+    assert kdj_reqs is not None
+    assert set(kdj_reqs.indicators) == {"1m"}
+    assert kdj_reqs.indicators["1m"][0].name == "kdj"
 
     rolling_reqs = ValueAreaReacceptanceStrategyCore().data_requirements(
         ValueAreaReacceptanceParams(kline_period="5m", rolling_context_bars=12)
@@ -159,6 +189,66 @@ def test_short_reacceptance_entry_sets_trade_info() -> None:
     assert trade["target_price"] == 3010
 
 
+def test_kdj_threshold_filter_blocks_weak_reacceptance() -> None:
+    strategy = ValueAreaReacceptanceStrategyCore()
+    config = ValueAreaReacceptanceParams(
+        kline_period="1m", take_profit_mode="poc", min_breakout_ticks=2, kdj_long_max=45
+    )
+    state = _state(config)
+    state.extra["value_area_levels"] = ValueAreaLevels(
+        date=datetime(2025, 9, 1).date(),
+        vah=3020.0,
+        val=3000.0,
+        poc=3010.0,
+        high=3030.0,
+        low=2990.0,
+        close=3012.0,
+        open=3008.0,
+    )
+    state.extra["value_area_current_session"] = CurrentSession(
+        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+    )
+    col = generate_indicator_column_name(KDJ.name, KDJ.params, period="1m")
+
+    strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
+    signal = strategy.on_bar(
+        state, _ctx_with_indicator(datetime(2025, 9, 2, 9, 35), 2998, 3006, 2998, 3001, "1m", col, 60)
+    )
+
+    assert signal.action == ""
+    assert "value_area_trade" not in state.extra
+
+
+def test_kdj_threshold_filter_allows_confirmed_reacceptance() -> None:
+    strategy = ValueAreaReacceptanceStrategyCore()
+    config = ValueAreaReacceptanceParams(
+        kline_period="1m", take_profit_mode="poc", min_breakout_ticks=2, kdj_long_max=45
+    )
+    state = _state(config)
+    state.extra["value_area_levels"] = ValueAreaLevels(
+        date=datetime(2025, 9, 1).date(),
+        vah=3020.0,
+        val=3000.0,
+        poc=3010.0,
+        high=3030.0,
+        low=2990.0,
+        close=3012.0,
+        open=3008.0,
+    )
+    state.extra["value_area_current_session"] = CurrentSession(
+        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+    )
+    col = generate_indicator_column_name(KDJ.name, KDJ.params, period="1m")
+
+    strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
+    signal = strategy.on_bar(
+        state, _ctx_with_indicator(datetime(2025, 9, 2, 9, 35), 2998, 3006, 2998, 3001, "1m", col, 40)
+    )
+
+    assert signal.action == TRADE_ACTION_BUY
+    assert signal.alpha.fields["kdj_value"] == 40.0
+
+
 def test_entry_blocked_without_valid_target() -> None:
     strategy = ValueAreaReacceptanceStrategyCore()
     state = _state(ValueAreaReacceptanceParams(take_profit_mode="poc", min_breakout_ticks=2))
@@ -238,6 +328,38 @@ def test_quality_filters_block_long_breakout_stay_and_small_target() -> None:
 
     assert blocked_by_stay.action == ""
     assert blocked_by_target.action == ""
+
+
+def test_quality_filters_block_by_actual_rr_against_stop_distance() -> None:
+    strategy = ValueAreaReacceptanceStrategyCore()
+    state = _state(
+        ValueAreaReacceptanceParams(
+            take_profit_mode="poc",
+            min_breakout_ticks=2,
+            min_price_raw_rr=0.5,
+            stop_widen_multiplier=1.5,
+            target_distance_ratio=0.8,
+        )
+    )
+    state.extra["value_area_levels"] = ValueAreaLevels(
+        date=datetime(2025, 9, 1).date(),
+        vah=3020.0,
+        val=3000.0,
+        poc=3005.0,
+        high=3030.0,
+        low=2990.0,
+        close=3012.0,
+        open=3008.0,
+    )
+    state.extra["value_area_current_session"] = CurrentSession(
+        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+    )
+
+    strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
+    signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 35), 2998, 3006, 2998, 3001))
+
+    assert signal.action == ""
+    assert "value_area_trade" not in state.extra
 
 
 def test_exit_long_by_take_profit() -> None:
@@ -446,6 +568,55 @@ def test_path_failure_allows_trade_with_enough_progress() -> None:
     assert state.extra["value_area_path_best_progress"] == 3.0
 
 
+def test_mfe_pullback_exits_after_enough_progress_and_reversal() -> None:
+    strategy = ValueAreaReacceptanceStrategyCore()
+    state = _state(ValueAreaReacceptanceParams(mfe_pullback_min_progress_ticks=4, mfe_pullback_ticks=2))
+    state.position = StrategyPosition(direction=TRADE_DIRECTION_LONG, entry_price=3001, volume=3)
+    state.extra["value_area_trade"] = {
+        "side": "long",
+        "entry_price": 3001.0,
+        "strict_failure": 2996.0,
+        "stop_price": 2996.0,
+        "target_price": 3010.0,
+        "target_distance": 9.0,
+        "strict_distance": 5.0,
+        "price_raw_rr": 1.8,
+        "entry_bar_range": 5.0,
+        "entry_bar_range_ratio": 1.0,
+        "open_location": "inside",
+        "prev_close_location": "inside",
+        "open_poc_distance": 5.0,
+        "prev_close_poc_distance": 2.0,
+        "open_close_poc_relation": "above_to_below",
+        "persistent_value_days": 3,
+        "value_overlap_ratio": 0.85,
+        "poc_drift": 3.0,
+        "stable_poc": True,
+        "context_label": "1h",
+        "context_available": True,
+        "context_location": "inside",
+        "context_target_distance": 9.0,
+        "context_price_raw_rr": 1.8,
+        "context_persistence_bars": 3,
+        "context_overlap_ratio": 0.85,
+        "context_poc_drift": 3.0,
+        "context_stable_poc": True,
+        "vah": 3020.0,
+        "val": 3000.0,
+        "poc": 3010.0,
+    }
+    state.extra["value_area_current_session"] = CurrentSession(
+        date=datetime(2025, 9, 2).date(), high=3001.0, low=3001.0, close=3001.0, open=3001.0, profile={}
+    )
+
+    signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3001, 3006, 3002, 3003))
+
+    assert signal.action == TRADE_ACTION_SELL
+    assert signal.volume == 3
+    assert signal.reason.startswith("mfe_pullback|")
+    assert signal.diagnostics["path_progress"] == 5.0
+
+
 def test_target_modes_and_helpers() -> None:
     strategy = ValueAreaReacceptanceStrategyCore()
     prev = ValueAreaLevels(
@@ -460,16 +631,28 @@ def test_target_modes_and_helpers() -> None:
     )
 
     assert (
-        strategy._target_price("long", 3001, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite")) == 3020
+        strategy._raw_target_price("long", 3001, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite"))
+        == 3020
     )
     assert (
-        strategy._target_price("short", 3019, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite")) == 3000
+        strategy._raw_target_price("short", 3019, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite"))
+        == 3000
     )
     assert (
-        strategy._target_price(
+        strategy._raw_target_price(
             "short", 3019, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="r", take_profit_r=2)
         )
         == 3009
+    )
+    assert (
+        strategy._execution_target_price("long", 3001, 3010, ValueAreaReacceptanceParams(target_band_ticks=1)) == 3009
+    )
+    assert (
+        strategy._execution_target_price("short", 3019, 3010, ValueAreaReacceptanceParams(target_band_ticks=1)) == 3011
+    )
+    assert (
+        strategy._execution_target_price("long", 3001, 3010, ValueAreaReacceptanceParams(target_distance_ratio=0.8))
+        == 3008.2
     )
     assert strategy._target_is_valid("long", 3001, 3002)
     assert not strategy._target_is_valid("long", 3001, 3000)
