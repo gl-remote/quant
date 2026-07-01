@@ -29,6 +29,7 @@
 ```text
 当前一句话结论；
 当前主题列表；
+当前候选参数；
 下一步优先级；
 文档地图；
 AI 接手规则。
@@ -38,7 +39,7 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 主线 / POC 质量诊断已阶段收束 / 影子过滤待复验 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance | 主线 / R28 结构诊断形成 continuation/retry 候选 / 准备扩样 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
 
 主题文件承载该主线的完整现状：
 
@@ -46,13 +47,30 @@ AI 接手规则。
 策略结构；
 固定参数；
 POC / VA 定义；
-edge_or_away；
+首笔 VA reacceptance 与第 2/3 笔 continuation/retry 的拆分；
 当前统计结果；
-分品种结论；
-下一阶段待验证问题。
+下一阶段扩样计划。
 ```
 
-## 4. 关键归档
+## 4. 当前主线摘要
+
+```text
+value_area_reacceptance 仍是主线；
+旧 m/SR 单笔 POC 回归候选已经降级为历史对照；
+当前准备扩样的是 DCE.p continuation/retry 结构。
+
+扩样保守参数：
+reentry_take_profit_r = 1.3
+
+不继续在 DCE.p 四样本里细调 1.3 / 1.35 / 1.4，避免过拟合。
+```
+
+## 5. 关键文档
+
+当前工作台：
+
+- [R28 value_area_reacceptance 结构诊断](../workbench/value-area-reacceptance-r28-structure-diagnosis.md)
+- [R27 扩样复验](../workbench/value-area-reacceptance-r27-expanded-sample.md)
 
 最新阶段归档：
 
@@ -68,16 +86,17 @@ edge_or_away；
 - [raw-roadmap](../archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-roadmap/README.md)
 - [raw-workbench](../archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/README.md)
 
-## 5. 给 AI 的阅读顺序
+## 6. 给 AI 的阅读顺序
 
 后续 AI 接手策略研究时：
 
 ```text
 1. 先读 docs/research/strategy-current.md；
-2. 再读当前主题文件，例如 docs/research/themes/value-area-reacceptance.md；
-3. 再读主题文件引用的 archive 摘要；
-4. 只有需要查过程细节时，才进入 raw-workbench；
-5. 不要在当前样本继续切更细标签桶；
-6. 新实验过程写入 docs/workbench；
-7. 阶段稳定后再归档到 docs/archive。
+2. 再读当前主题文件 docs/research/themes/value-area-reacceptance.md；
+3. 需要实验细节时读 docs/workbench/value-area-reacceptance-r28-structure-diagnosis.md；
+4. 只有需要查旧阶段过程时，才进入 archive raw-workbench；
+5. 不要继续在 DCE.p 四样本内细调 reentry_take_profit_r；
+6. 下一步围绕 reentry_take_profit_r=1.3 分批扩样；
+7. 新实验过程写入 docs/workbench；
+8. 阶段稳定后再归档到 docs/archive。
 ```
