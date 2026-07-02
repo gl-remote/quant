@@ -29,6 +29,7 @@
 ```text
 当前一句话结论；
 当前主题列表；
+当前候选参数；
 下一步优先级；
 文档地图；
 AI 接手规则。
@@ -38,7 +39,7 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 主线 / POC 质量诊断已阶段收束 / 影子过滤待复验 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance | 活跃 / R29 扩样未通过 / R30 结构分支验证 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
 
 主题文件承载该主线的完整现状：
 
@@ -46,13 +47,32 @@ AI 接手规则。
 策略结构；
 固定参数；
 POC / VA 定义；
-edge_or_away；
+首笔 VA reacceptance 与第 2/3 笔 continuation/retry 的拆分；
 当前统计结果；
-分品种结论；
-下一阶段待验证问题。
+下一阶段扩样计划。
 ```
 
-## 4. 关键归档
+## 4. 当前主线摘要
+
+```text
+value_area_reacceptance 仍是活跃研究主题，但旧实盘候选规则已降级为 value_area_reacceptance_baseline；
+R29 扩样未通过，不能继续把 R28 DCE.p 四样本视为已验证主线；
+随机入场基准显示 VA reacceptance 事件仍有信息量。
+
+当前下一步是 R30 结构分支验证：
+1. VA 边界 → POC 的多次回归测试；
+2. failed reacceptance / continuation 对照线。
+
+不要继续在旧 baseline 上调 reentry_take_profit_r。
+```
+
+## 5. 关键文档
+
+当前归档：
+
+- [R29 扩样与随机基准复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+- [R28 value_area_reacceptance 结构诊断](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
+- [R27 扩样复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md)
 
 最新阶段归档：
 
@@ -68,16 +88,17 @@ edge_or_away；
 - [raw-roadmap](../archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-roadmap/README.md)
 - [raw-workbench](../archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/README.md)
 
-## 5. 给 AI 的阅读顺序
+## 6. 给 AI 的阅读顺序
 
 后续 AI 接手策略研究时：
 
 ```text
 1. 先读 docs/research/strategy-current.md；
-2. 再读当前主题文件，例如 docs/research/themes/value-area-reacceptance.md；
-3. 再读主题文件引用的 archive 摘要；
-4. 只有需要查过程细节时，才进入 raw-workbench；
-5. 不要在当前样本继续切更细标签桶；
-6. 新实验过程写入 docs/workbench；
-7. 阶段稳定后再归档到 docs/archive。
+2. 再读当前主题文件 docs/research/themes/value-area-reacceptance.md；
+3. 需要 R27-R29 实验细节时读 docs/archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/；
+4. 只有需要查旧阶段过程时，才进入 archive raw-workbench；
+5. 不要继续在旧 baseline 上调 reentry_take_profit_r；
+6. 下一步围绕 R30 多次 VA 回归 / continuation 分支做结构验证；
+7. 新实验过程写入 docs/workbench；
+8. 阶段稳定后再归档到 docs/archive。
 ```
