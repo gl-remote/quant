@@ -1,10 +1,10 @@
 # value_area_reacceptance R27：扩样复验
 
-> 类型：Workbench / 扩样复验记录
-> 状态：进行中
+> 类型：Archive / 扩样复验记录
+> 状态：已完成 / 外推样本未通过 / 转入结构诊断
 > 日期：2026-07-01
-> 关联当前状态：[strategy-current.md](../research/strategy-current.md)
-> 前置归档：[value_area_reacceptance POC / VA 质量诊断阶段归档](../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md)
+> 关联当前状态：[strategy-current.md](../../../research/strategy-current.md)
+> 前置归档：[value_area_reacceptance POC / VA 质量诊断阶段归档](../2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md)
 
 ## 1. 实验目标
 

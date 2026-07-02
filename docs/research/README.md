@@ -39,7 +39,7 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 主线 / R28 结构诊断形成 continuation/retry 候选 / 准备扩样 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance | 活跃 / R29 扩样未通过 / R30 结构分支验证 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
 
 主题文件承载该主线的完整现状：
 
@@ -55,22 +55,24 @@ POC / VA 定义；
 ## 4. 当前主线摘要
 
 ```text
-value_area_reacceptance 仍是主线；
-旧 m/SR 单笔 POC 回归候选已经降级为历史对照；
-当前准备扩样的是 DCE.p continuation/retry 结构。
+value_area_reacceptance 仍是活跃研究主题，但旧实盘候选规则已降级为 value_area_reacceptance_baseline；
+R29 扩样未通过，不能继续把 R28 DCE.p 四样本视为已验证主线；
+随机入场基准显示 VA reacceptance 事件仍有信息量。
 
-扩样保守参数：
-reentry_take_profit_r = 1.3
+当前下一步是 R30 结构分支验证：
+1. VA 边界 → POC 的多次回归测试；
+2. failed reacceptance / continuation 对照线。
 
-不继续在 DCE.p 四样本里细调 1.3 / 1.35 / 1.4，避免过拟合。
+不要继续在旧 baseline 上调 reentry_take_profit_r。
 ```
 
 ## 5. 关键文档
 
-当前工作台：
+当前归档：
 
-- [R28 value_area_reacceptance 结构诊断](../workbench/value-area-reacceptance-r28-structure-diagnosis.md)
-- [R27 扩样复验](../workbench/value-area-reacceptance-r27-expanded-sample.md)
+- [R29 扩样与随机基准复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+- [R28 value_area_reacceptance 结构诊断](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
+- [R27 扩样复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md)
 
 最新阶段归档：
 
@@ -93,10 +95,10 @@ reentry_take_profit_r = 1.3
 ```text
 1. 先读 docs/research/strategy-current.md；
 2. 再读当前主题文件 docs/research/themes/value-area-reacceptance.md；
-3. 需要实验细节时读 docs/workbench/value-area-reacceptance-r28-structure-diagnosis.md；
+3. 需要 R27-R29 实验细节时读 docs/archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/；
 4. 只有需要查旧阶段过程时，才进入 archive raw-workbench；
-5. 不要继续在 DCE.p 四样本内细调 reentry_take_profit_r；
-6. 下一步围绕 reentry_take_profit_r=1.3 分批扩样；
+5. 不要继续在旧 baseline 上调 reentry_take_profit_r；
+6. 下一步围绕 R30 多次 VA 回归 / continuation 分支做结构验证；
 7. 新实验过程写入 docs/workbench；
 8. 阶段稳定后再归档到 docs/archive。
 ```

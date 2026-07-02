@@ -1,311 +1,185 @@
 # value_area_reacceptance 主题研究现状
 
 > 类型：Research / 主题状态
-> 状态：活跃 / R28 结构诊断形成 continuation/retry 候选，准备扩样复验
+> 状态：活跃 / R29 扩样未通过 / R30 结构分支验证
 > 最近更新：2026-07-02
-> 当前工作台：[R28 value_area_reacceptance 结构诊断](../../workbench/value-area-reacceptance-r28-structure-diagnosis.md)
-> 前置扩样：[R27 扩样复验](../../workbench/value-area-reacceptance-r27-expanded-sample.md)
+> 当前归档：[R29 扩样与随机基准复验](../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+> 前置归档：[R28 结构诊断](../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
 > 返回总入口：[strategy-current.md](../strategy-current.md)
 
 ## 1. 主题一句话结论
 
 ```text
-value_area_reacceptance 仍是当前主线，但研究重心已经从旧 m/SR 单笔 POC 回归，
-转向 DCE.p 上更清晰的 continuation/retry 结构。
+value_area_reacceptance 不再作为一个可直接上线的固定交易策略推进。
 
-当前准备扩样验证的候选是：
-首笔吃 VA reacceptance 的 POC 回归；
-首笔失败后，等待 15m 冷却，同方向再入场，吃 failed-probe continuation；
-reentry 目标先用保守 1.3R，不继续在 DCE.p 小样本内细调。
+旧实现已重命名为 value_area_reacceptance_baseline，用于复现 R27-R29 历史规则和做结构基准。
+
+R29 扩样没有通过，但随机入场基准显示 VA reacceptance 事件仍有信息量。
+因此下一阶段不是继续调旧参数，而是拆成两条结构线：
+1. VA 边界 → POC 的多次回归测试；
+2. failed reacceptance / continuation 对照线。
 ```
 
 边界：
 
 ```text
-1. 当前最强证据主要来自 DCE.p 四个样本；
-2. 这不是最终上线规则；
-3. 旧 m/SR 结论已经降级为历史对照；
-4. 需要先扩样确认 continuation/retry 是否能外推。
+1. R28 DCE.p 四样本不能再视为已验证主线；
+2. R29 失败不能直接否定 VA reacceptance 事件；
+3. seq1/seq2/seq3 不应继续被机械地混成一套 reentry 逻辑；
+4. R30 先验证结构条件，不先调 stop/target。
 ```
 
-## 2. 当前候选结构
-
-准备扩样的候选版本：
+## 2. 当前保留代码与基准
 
 ```text
-value_area_reacceptance
-+ 1m execution
-+ previous-day close-profile VA / POC
-+ min_reaccept_ticks = 3
-+ stop_widen_multiplier = 1.0
-+ min_price_raw_rr = 0.8
-+ strict_close_exit = true
-+ max_trades_per_day = 3
-+ reentry_cooldown_minutes = 15
-+ reentry_requires_prev_stop_same_direction = true
-+ first trade: POC target with target_distance_ratio = 0.8
-+ reentry trade: conservative fixed R target, reentry_take_profit_r = 1.3
+value_area_reacceptance_baseline
+- 旧候选策略的 baseline 版本；
+- 保留 R27-R29 回测口径、诊断字段、退出逻辑；
+- 不再代表当前候选交易策略。
+
+value_area_random_baseline
+- 长期随机入场基准；
+- 复用 VA baseline 的事件、止损和退出口径；
+- 用 same-direction / random-direction 随机入场判断结构入口是否优于随机。
 ```
 
-候选参数：
+轻量随机基准 runner：
 
 ```text
-strategy = value_area_reacceptance
-engine = vnpy
-execution period = 1m
-profile_mode = close
-value_area_ratio = 0.7
-min_breakout_ticks = 4
-failure_buffer_ticks = 1
-strict_close_exit = true
-take_profit_mode = poc
-target_distance_ratio = 0.8
-target_band_ticks = 0
-min_reaccept_ticks = 3
-min_reaccept_va_width_ratio = 0
-max_hold_bars = 60
-stop_widen_multiplier = 1.0
-min_target_ticks = 8
-min_price_raw_rr = 0.8
-max_trades_per_day = 3
-reentry_cooldown_minutes = 15
-reentry_requires_prev_stop_same_direction = true
-reentry_take_profit_r = 1.3
+scripts/analysis/value_area_random_baseline_compare.py
 ```
 
-目标口径：
+注意：runner 的 `total_net_pnl` 使用 vnpy BacktestResult 口径，只能做同一 runner 内相对比较，不和 trade_clearings 清算口径混算。
+
+## 3. 已完成阶段结论
+
+### 3.1 R27 扩样后的降级
 
 ```text
-target_distance_ratio / target_band_ticks 只作用于首笔 POC 目标；
-reentry_take_profit_r 直接决定第 2/3 笔 R 目标；
-两类目标约束已经正交，不能再把 reentry 目标理解为会被 0.8 缩放的 raw target。
+旧 m/SR + 1m + A4_ratio_80 + actual RR=0.8 + min_reaccept_ticks=2/3 外推失败；
+旧 m/SR 单笔 POC 回归线不再作为主候选。
 ```
 
-## 3. 当前交易结构理解
-
-### 3.1 首笔：VA reacceptance / 价值回归
+### 3.2 R28 结构诊断
 
 ```text
-前日 VAL 下破失败后重新接受回价值区内 → 做多；
-前日 VAH 上破失败后重新接受回价值区内 → 做空；
-等待 1m 收盘价进入价值区内侧至少 3 ticks；
-首笔目标仍使用 POC 附近目标，即 entry → POC 距离的 80%。
+DCE.p 四样本内：
+- max_trades_per_day=1 时首笔 VA reacceptance 收益有限；
+- max_trades_per_day=3 后主要收益来自第 2 笔；
+- 第 1 笔更像 VA reversion；
+- 第 2/3 笔可能更像 continuation / retry；
+- reentry target 1.0R~1.35R 构成样本内平台，但继续细调会过拟合。
 ```
 
-### 3.2 第 2/3 笔：failed-probe continuation / 方向确认
+### 3.3 R29 扩样与随机基准
 
 ```text
-如果上一笔 stop_loss 且方向相同，
-说明市场在同一侧反复试探并拒绝原 VA 边界；
-等待 15m 冷却后允许再次入场；
-第 2/3 笔不再使用 POC 回归目标，而使用固定 R 目标。
+固定 R28 后的保守候选没有通过扩样：
+- DCE.m 明显失败；
+- DCE.y 接近但未通过；
+- DCE.c / DCE.cs 信号不足或弱负；
+- DCE.p 更早历史窗口失败，seq1 强负，seq2 接近打平。
+
+随机入场复验显示：
+- 结构规则虽然亏损，但仍优于 same-direction random；
+- 旧 DCE.p 失败样本上，结构没有退化成随机噪声；
+- 问题更可能在环境过滤、风险空间、交易序列或退出兑现层。
 ```
 
-当前解释：
+## 4. R30 主规则设想
+
+R30 将旧的“上一笔 stop_loss / 亏损后才 reentry”改成结构状态判断。
+
+### 4.1 VA 回归主线
+
+只做 VA 边界 → POC 更近方向：
 
 ```text
-第 1 笔和第 2/3 笔可能不是同一种钱：
-- 第 1 笔是价值区重新接受后的回归收益；
-- 第 2/3 笔是多次失败试探后的方向确认收益。
+VAL reacceptance long：entry 在 POC 下方，做多回归 POC；
+VAH reacceptance short：entry 在 POC 上方，做空回归 POC。
 ```
 
-## 4. 最近关键结果
-
-### 4.1 R27 扩样后的降级
+同侧多次交易不再按第几笔定义，而是记录同侧 VA 边界测试状态：
 
 ```text
-旧候选：1m + m/SR + A4_ratio_80 + actual RR=0.8 + min_reaccept_ticks=2/3。
-
-R27 外推后，旧候选没有形成足够稳定收益；
-因此不能继续围绕 m/SR 单笔 POC 回归硬调。
+last_breakout_ticks：上一次同侧打破 VA 边界的突破距离；
+last_reached_poc：上一次同侧回归是否充分测试 POC；
+attempt_count：当前 session 内同侧回归尝试次数。
 ```
 
-当前保留判断：
+允许开仓的候选条件：
 
 ```text
-旧候选仍说明 VA reacceptance 有结构 alpha 雏形，
-但它不是当前最值得扩样的主候选。
+B1：首次测试 POC；
+B2：current_breakout_ticks < last_breakout_ticks，说明外部接受力度减弱；
+B3：last_reached_poc is False，说明上次 POC 共识测试未完成。
 ```
 
-### 4.2 R28 结构诊断
+### 4.2 continuation 对照线
 
-核心发现：
+做远离 POC 的方向：
 
 ```text
-max_trades_per_day=1 只看首笔，收益有限；
-max_trades_per_day=3 后，主要增量来自第 2 笔；
-无条件放开重复入场会增加成本和噪音；
-“上一笔 stop_loss + 同方向 + 15m 冷却”能更好隔离 continuation/retry 结构。
+VAL reacceptance 后寻找继续向下 / failed reacceptance；
+VAH reacceptance 后寻找继续向上 / failed reacceptance。
 ```
 
-### 4.3 reentry R 目标稳健性
+这条线不再解释为 VA 回归，而是 continuation 候选；必须单独统计，不和 VA 回归主线混评。
 
-固定结构：
+## 5. R30 小矩阵
+
+| 组合 | 方向分支 | 开仓条件 | 目的 |
+| --- | --- | --- | --- |
+| R30-A | 更接近 POC | 首次测试 POC | 验证最纯 VA 回归是否仍有边际 |
+| R30-B | 更接近 POC | 突破距离弱于上次 | 验证外部接受衰减是否提高胜率 |
+| R30-C | 更接近 POC | 上次 POC 未充分测试 | 验证多次回归是否有结构价值 |
+| R30-D | 更接近 POC | B2 或 B3 | 验证完整多次 VA 回归规则 |
+| R30-E | 更远离 POC | 单独记录 | continuation 候选对照 |
+
+核心观测指标：
 
 ```text
-max_trades_per_day = 3
-reentry_cooldown_minutes = 15
-reentry_requires_prev_stop_same_direction = true
+POC touch rate
+entry_to_poc_ticks
+breakout_ticks
+breakout_ticks_delta
+by_condition pnl
+overlap pnl
+stop_loss 占比
+by_environment
+random baseline percentile
 ```
 
-DCE.p 四样本对照：
-
-| reentry target | n | wins | losses | win_pct | net_pnl | avg_pnl | worst | best | cost |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1.0R | 111 | 56 | 55 | 50.5 | 23165 | 209 | -2205 | 4335 | 6015 |
-| 1.2R | 111 | 55 | 56 | 49.5 | 23905 | 215 | -2205 | 4335 | 6015 |
-| 1.35R | 111 | 55 | 56 | 49.5 | 24925 | 225 | -2205 | 4335 | 6015 |
-| 1.5R | 111 | 54 | 57 | 48.6 | 20025 | 180 | -2205 | 4335 | 6015 |
-
-分交易序号：
-
-| target | seq1 net_pnl | seq2 net_pnl | seq3 net_pnl |
-| --- | ---: | ---: | ---: |
-| 1.0R | 9845 | 12560 | 760 |
-| 1.2R | 9845 | 12900 | 1160 |
-| 1.35R | 9845 | 13440 | 1640 |
-| 1.5R | 9845 | 8540 | 1640 |
-
-当前判断：
-
-```text
-1.0R / 1.2R / 1.35R 构成较稳定平台；
-1.35R 当前最高，但不应继续在当前四样本精调；
-1.5R 明显回落，说明目标过远会牺牲第 2 笔；
-seq3 只有 2 笔，不作为主判断。
-```
-
-因此下一轮扩样使用：
-
-```text
-reentry_take_profit_r = 1.3
-```
-
-## 5. POC / VA 定义
-
-当前仍使用前一交易日 close-profile：
-
-```text
-profile: price -> accumulated volume
-```
-
-POC：
-
-```text
-成交量最大的 price bucket；
-并列时选择离 session close 更近的价格。
-```
-
-VAH / VAL：
-
-```text
-从 POC 开始，按相邻 bucket 成交量贪婪扩展，
-直到覆盖 value_area_ratio=70% 的成交量。
-```
-
-当前判断：
-
-```text
-close-profile POC 并非完全错误；
-但 continuation/retry 分支中，第 2/3 笔不应该继续使用 POC 作为目标。
-```
-
-## 6. ATR / volatility normalization 状态
-
-```text
-ATR 可能在解决过拟合、提升泛化时发挥作用；
-尤其可用于 stop boundary normalization 或 ATR-ratio entry filter。
-```
-
-当前处理：
-
-```text
-保留为后续泛化变量；
-暂不并入当前扩样主规则；
-先验证 continuation/retry 结构本身是否外推。
-```
-
-## 7. 当前不建议继续的方向
+## 6. 当前不建议继续的方向
 
 | 方向 | 当前处理 | 原因 |
 | --- | --- | --- |
-| DCE.p 内继续细调 1.3 / 1.35 / 1.4 | 暂停 | 当前差异已足够，继续调参易过拟合 |
-| 直接采用 1.35R 为最终最优 | 暂停 | 只在四样本最高，需要扩样验证 |
-| 回到旧 m/SR 单笔 POC 候选硬调 | 暂停 | R27 外推表现不足 |
-| 无条件 max3 重复入场 | 暂停 | 成本和噪音增加，结构不够纯 |
-| 上一笔 take_profit 后同方向再入场 | 暂停 | 对照结果接近退回 max1，未支持 continuation 假设 |
-| ATR 过滤直接入主规则 | 暂缓 | 更适合后续泛化验证，不应现在混入主效应 |
-| edge_or_away 真实过滤 | 暂缓 | 旧口径强，当前结构下未重新证明 |
-| range-profile 替换 close-profile | 暂缓 | 当前主问题不是 profile 替换 |
+| 继续调旧 value_area_reacceptance_baseline | 停止 | baseline 只保留历史口径，不再叠加新逻辑 |
+| DCE.p 四样本内继续细调 1.3 / 1.35 / 1.4 | 停止 | R29 已证明不能直接外推 |
+| 把 seq2 直接解释为 VA 回归 | 暂停 | 可能属于 continuation，需要拆分验证 |
+| 直接用 strong_trend 过滤 | 暂缓 | 需要先看结构条件是否解释失败 |
+| ATR / volatility normalization 入主规则 | 暂缓 | 可能有助于泛化，但不应先混入主效应 |
+| range-profile 替换 close-profile | 暂缓 | 当前主问题不是 profile 定义替换 |
 
-## 8. 下一阶段待验证
-
-下一步应扩样验证当前 continuation/retry 候选，而不是继续当前小样本调参。
-
-固定候选：
+## 7. 下一阶段待验证
 
 ```text
-period = 1m
-profile_mode = close
-min_reaccept_ticks = 3
-stop_widen_multiplier = 1.0
-min_price_raw_rr = 0.8
-max_trades_per_day = 3
-reentry_cooldown_minutes = 15
-reentry_requires_prev_stop_same_direction = true
-reentry_take_profit_r = 1.3
+1. 新建 R30 workbench 文档；
+2. 实现独立的新策略或诊断策略，不在 baseline 上继续叠加；
+3. 固定 R29 样本和基础参数，先验证结构条件；
+4. 分别输出 B1/B2/B3 及 overlap 的 POC touch rate、pnl、stop_loss 占比；
+5. 用 value_area_random_baseline 做同 runner 随机对照；
+6. 如果 VA 回归主线失败而 continuation 对照更好，再把 continuation 独立成下一条策略线。
 ```
 
-扩样顺序：
-
-```text
-1. 先扩 DCE.p 更多合约 / 月份；
-2. 如果仍稳定，再扩到相近油脂油料或其他候选品种；
-3. 每批结束后记录总体、分合约、分 trade_seq；
-4. 同步标注强趋势、活跃度、异常数据；
-5. 不强求所有时期赚钱，重点看赚钱时期是否稳定、亏损时期是否可解释。
-```
-
-观察指标：
-
-```text
-n
-win_pct
-net_pnl
-avg_pnl
-worst / best
-cost
-trade_seq=1/2/3 拆解
-分合约稳定性
-第 2 笔 continuation 是否继续贡献主要收益
-强趋势 / 非强趋势差异
-活跃 / thin / suspicious 样本标签
-```
-
-通过标准：
-
-```text
-1. 扩样后总收益仍为正；
-2. 第 2 笔 continuation 仍是主要增量来源；
-3. 收益不是完全来自单个合约或极少数大单；
-4. 成本增加后仍有净优势；
-5. 失败样本能被行情状态、活跃度或结构条件解释。
-```
-
-如果扩样失败：
-
-```text
-将 continuation/retry 降级为 DCE.p 局部线索或过拟合；
-回到结构归因，而不是继续调 reentry_take_profit_r。
-```
-
-## 9. 关联文档
+## 8. 关联文档
 
 | 目的 | 文档 |
 | --- | --- |
 | 总入口 | [strategy-current.md](../strategy-current.md) |
-| R28 当前结构诊断 | [value-area-reacceptance-r28-structure-diagnosis.md](../../workbench/value-area-reacceptance-r28-structure-diagnosis.md) |
-| R27 扩样复验 | [value-area-reacceptance-r27-expanded-sample.md](../../workbench/value-area-reacceptance-r27-expanded-sample.md) |
+| R29 扩样与随机基准复验 | [value-area-reacceptance-r29-expanded-validation.md](../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
+| R28 结构诊断 | [value-area-reacceptance-r28-structure-diagnosis.md](../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
+| R27 扩样复验 | [value-area-reacceptance-r27-expanded-sample.md](../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
 | POC / VA 质量诊断阶段归档 | [value_area_reacceptance POC / VA 质量诊断阶段归档](../../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
 | R16-R24 actual RR 重整 | [value-area-reacceptance-r16-r24-1m-actual-rr-summary.md](../../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r16-r24-1m-actual-rr-summary.md) |
 | R25 1m vs 5m | [value-area-reacceptance-r25-1m-vs-5m-actual-rr.md](../../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r25-1m-vs-5m-actual-rr.md) |

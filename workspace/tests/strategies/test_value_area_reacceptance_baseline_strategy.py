@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# 文件级元信息：
+# - 创建背景：旧 value_area_reacceptance 策略重命名为 baseline 后，需要保留原有行为回归测试。
+# - 用途：验证 value_area_reacceptance_baseline 的数据需求、入场退出和诊断辅助函数不因重命名破坏。
+# - 注意事项：这些测试保护历史 baseline 口径，不代表该策略仍是当前候选交易策略。
 from datetime import datetime
 
 from common.constants import TRADE_ACTION_BUY, TRADE_ACTION_SELL, TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT
@@ -8,11 +12,11 @@ from strategies.core.indicators import generate_indicator_column_name
 from strategies.runtime import BarContext
 from strategies.runtime.period import PeriodData
 from strategies.strategy_aspects.indicators import KDJ
-from strategies.value_area_reacceptance_strategy import (
+from strategies.value_area_reacceptance_baseline_strategy import (
     CurrentSession,
     ValueAreaLevels,
-    ValueAreaReacceptanceParams,
-    ValueAreaReacceptanceStrategyCore,
+    ValueAreaReacceptanceBaselineParams,
+    ValueAreaReacceptanceBaselineStrategyCore,
 )
 
 
@@ -76,42 +80,88 @@ def _ctx_with_indicator(
     )
 
 
-def _state(config: ValueAreaReacceptanceParams | None = None) -> State[ValueAreaReacceptanceParams]:
+def _state(config: ValueAreaReacceptanceBaselineParams | None = None) -> State[ValueAreaReacceptanceBaselineParams]:
     return State(
         symbol="DCE.m2601",
         period="5m",
-        strategy_config=config or ValueAreaReacceptanceParams(),
+        strategy_config=config or ValueAreaReacceptanceBaselineParams(),
         capital=100000,
         contract_size=10,
         margin=0.1,
     )
 
 
+def _levels(
+    *,
+    date_value: datetime,
+    vah: float,
+    val: float,
+    poc: float,
+    high: float,
+    low: float,
+    close: float,
+    open_price: float,
+) -> ValueAreaLevels:
+    return ValueAreaLevels(
+        date=date_value.date(),
+        vah=vah,
+        val=val,
+        poc=poc,
+        high=high,
+        low=low,
+        close=close,
+        open=open_price,
+        profile={},
+        range_profile={},
+    )
+
+
+def _session(
+    *,
+    date_value: datetime,
+    high: float,
+    low: float,
+    close: float,
+    open_price: float,
+) -> CurrentSession:
+    return CurrentSession(
+        date=date_value.date(),
+        high=high,
+        low=low,
+        close=close,
+        open=open_price,
+        profile={},
+        range_profile={},
+    )
+
+
 def test_data_requirements_uses_configured_period() -> None:
-    reqs = ValueAreaReacceptanceStrategyCore().data_requirements(ValueAreaReacceptanceParams(kline_period="1m"))
+    reqs = ValueAreaReacceptanceBaselineStrategyCore().data_requirements(
+        ValueAreaReacceptanceBaselineParams(kline_period="1m")
+    )
 
     assert reqs is not None
     assert set(reqs.periods) == {"1m"}
     assert reqs.periods["1m"].lookback_bars == 1
     assert reqs.indicators == {}
 
-    kdj_reqs = ValueAreaReacceptanceStrategyCore().data_requirements(
-        ValueAreaReacceptanceParams(kline_period="1m", kdj_long_max=45, kdj_short_min=55)
+    kdj_reqs = ValueAreaReacceptanceBaselineStrategyCore().data_requirements(
+        ValueAreaReacceptanceBaselineParams(kline_period="1m", kdj_long_max=45, kdj_short_min=55)
     )
     assert kdj_reqs is not None
     assert set(kdj_reqs.indicators) == {"1m"}
     assert kdj_reqs.indicators["1m"][0].name == "kdj"
 
-    rolling_reqs = ValueAreaReacceptanceStrategyCore().data_requirements(
-        ValueAreaReacceptanceParams(kline_period="5m", rolling_context_bars=12)
+    rolling_reqs = ValueAreaReacceptanceBaselineStrategyCore().data_requirements(
+        ValueAreaReacceptanceBaselineParams(kline_period="5m", rolling_context_bars=12)
     )
     assert rolling_reqs is not None
     assert rolling_reqs.periods["5m"].lookback_bars == 24
 
 
 def test_session_rolls_current_profile_into_value_area_levels() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(price_tick=1.0, profile_mode="close"))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(price_tick=1.0, profile_mode="close"))
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 1, 9, 0), 3000, 3001, 2999, 3000, 100))
     strategy.on_bar(state, _ctx(datetime(2025, 9, 1, 9, 5), 3000, 3006, 2999, 3005, 300))
@@ -129,8 +179,8 @@ def test_session_rolls_current_profile_into_value_area_levels() -> None:
 
 
 def test_long_reacceptance_entry_sets_trade_info_and_volume() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(take_profit_mode="poc", min_breakout_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(take_profit_mode="poc", min_breakout_ticks=2))
     state.extra["value_area_levels"] = ValueAreaLevels(
         date=datetime(2025, 9, 1).date(),
         vah=3020.0,
@@ -140,9 +190,17 @@ def test_long_reacceptance_entry_sets_trade_info_and_volume() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     breakout = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
@@ -163,8 +221,8 @@ def test_long_reacceptance_entry_sets_trade_info_and_volume() -> None:
 
 
 def test_short_reacceptance_entry_sets_trade_info() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(take_profit_mode="poc", min_breakout_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(take_profit_mode="poc", min_breakout_ticks=2))
     state.extra["value_area_levels"] = ValueAreaLevels(
         date=datetime(2025, 9, 1).date(),
         vah=3020.0,
@@ -174,9 +232,17 @@ def test_short_reacceptance_entry_sets_trade_info() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3015.0, low=3015.0, close=3015.0, open=3015.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3015.0,
+        low=3015.0,
+        close=3015.0,
+        open=3015.0,
+        profile={},
+        range_profile={},
     )
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3015, 3023, 3015, 3022))
@@ -190,8 +256,8 @@ def test_short_reacceptance_entry_sets_trade_info() -> None:
 
 
 def test_kdj_threshold_filter_blocks_weak_reacceptance() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    config = ValueAreaReacceptanceParams(
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    config = ValueAreaReacceptanceBaselineParams(
         kline_period="1m", take_profit_mode="poc", min_breakout_ticks=2, kdj_long_max=45
     )
     state = _state(config)
@@ -204,9 +270,17 @@ def test_kdj_threshold_filter_blocks_weak_reacceptance() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
     col = generate_indicator_column_name(KDJ.name, KDJ.params, period="1m")
 
@@ -220,8 +294,8 @@ def test_kdj_threshold_filter_blocks_weak_reacceptance() -> None:
 
 
 def test_kdj_threshold_filter_allows_confirmed_reacceptance() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    config = ValueAreaReacceptanceParams(
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    config = ValueAreaReacceptanceBaselineParams(
         kline_period="1m", take_profit_mode="poc", min_breakout_ticks=2, kdj_long_max=45
     )
     state = _state(config)
@@ -234,9 +308,17 @@ def test_kdj_threshold_filter_allows_confirmed_reacceptance() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
     col = generate_indicator_column_name(KDJ.name, KDJ.params, period="1m")
 
@@ -250,8 +332,8 @@ def test_kdj_threshold_filter_allows_confirmed_reacceptance() -> None:
 
 
 def test_entry_blocked_without_valid_target() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(take_profit_mode="poc", min_breakout_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(take_profit_mode="poc", min_breakout_ticks=2))
     state.extra["value_area_levels"] = ValueAreaLevels(
         date=datetime(2025, 9, 1).date(),
         vah=3020.0,
@@ -261,9 +343,17 @@ def test_entry_blocked_without_valid_target() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
@@ -274,8 +364,10 @@ def test_entry_blocked_without_valid_target() -> None:
 
 
 def test_quality_filters_block_weak_reacceptance() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(take_profit_mode="poc", min_breakout_ticks=2, min_reaccept_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(
+        ValueAreaReacceptanceBaselineParams(take_profit_mode="poc", min_breakout_ticks=2, min_reaccept_ticks=2)
+    )
     state.extra["value_area_levels"] = ValueAreaLevels(
         date=datetime(2025, 9, 1).date(),
         vah=3020.0,
@@ -285,9 +377,17 @@ def test_quality_filters_block_weak_reacceptance() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
@@ -299,9 +399,9 @@ def test_quality_filters_block_weak_reacceptance() -> None:
 
 
 def test_quality_filters_block_long_breakout_stay_and_small_target() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
     state = _state(
-        ValueAreaReacceptanceParams(
+        ValueAreaReacceptanceBaselineParams(
             take_profit_mode="poc", min_breakout_ticks=2, max_breakout_bars=1, min_target_ticks=4
         )
     )
@@ -314,9 +414,17 @@ def test_quality_filters_block_long_breakout_stay_and_small_target() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
@@ -331,9 +439,9 @@ def test_quality_filters_block_long_breakout_stay_and_small_target() -> None:
 
 
 def test_quality_filters_block_by_actual_rr_against_stop_distance() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
     state = _state(
-        ValueAreaReacceptanceParams(
+        ValueAreaReacceptanceBaselineParams(
             take_profit_mode="poc",
             min_breakout_ticks=2,
             min_price_raw_rr=0.5,
@@ -350,9 +458,17 @@ def test_quality_filters_block_by_actual_rr_against_stop_distance() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 9, 30), 3005, 3006, 2997, 2998))
@@ -363,7 +479,7 @@ def test_quality_filters_block_by_actual_rr_against_stop_distance() -> None:
 
 
 def test_exit_long_by_take_profit() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
     state = _state()
     state.position = StrategyPosition(direction=TRADE_DIRECTION_LONG, entry_price=3001, volume=3)
     state.extra["value_area_trade"] = {
@@ -400,7 +516,13 @@ def test_exit_long_by_take_profit() -> None:
         "poc": 3010.0,
     }
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3005.0, low=3005.0, close=3005.0, open=3005.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3005.0,
+        low=3005.0,
+        close=3005.0,
+        open=3005.0,
+        profile={},
+        range_profile={},
     )
 
     signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3005, 3011, 3005, 3010))
@@ -415,7 +537,7 @@ def test_exit_long_by_take_profit() -> None:
 
 
 def test_exit_short_by_stop_loss() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
     state = _state()
     state.position = StrategyPosition(direction=TRADE_DIRECTION_SHORT, entry_price=3019, volume=2)
     state.extra["value_area_trade"] = {
@@ -452,7 +574,13 @@ def test_exit_short_by_stop_loss() -> None:
         "poc": 3010.0,
     }
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3020.0, low=3018.0, close=3020.0, open=3020.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3020.0,
+        low=3018.0,
+        close=3020.0,
+        open=3020.0,
+        profile={},
+        range_profile={},
     )
 
     signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3020, 3025, 3018, 3024))
@@ -467,8 +595,8 @@ def test_exit_short_by_stop_loss() -> None:
 
 
 def test_path_failure_exits_when_trade_does_not_progress() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(path_check_bars=1, min_path_progress_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(path_check_bars=1, min_path_progress_ticks=2))
     state.position = StrategyPosition(direction=TRADE_DIRECTION_LONG, entry_price=3001, volume=3)
     state.extra["value_area_holding_bars"] = 1
     state.extra["value_area_trade"] = {
@@ -505,7 +633,13 @@ def test_path_failure_exits_when_trade_does_not_progress() -> None:
         "poc": 3010.0,
     }
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3001.0, low=3000.0, close=3001.0, open=3001.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3001.0,
+        low=3000.0,
+        close=3001.0,
+        open=3001.0,
+        profile={},
+        range_profile={},
     )
 
     signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3001, 3002, 3000, 3001))
@@ -521,8 +655,8 @@ def test_path_failure_exits_when_trade_does_not_progress() -> None:
 
 
 def test_path_failure_allows_trade_with_enough_progress() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(path_check_bars=1, min_path_progress_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(path_check_bars=1, min_path_progress_ticks=2))
     state.position = StrategyPosition(direction=TRADE_DIRECTION_SHORT, entry_price=3019, volume=2)
     state.extra["value_area_holding_bars"] = 1
     state.extra["value_area_trade"] = {
@@ -559,7 +693,13 @@ def test_path_failure_allows_trade_with_enough_progress() -> None:
         "poc": 3010.0,
     }
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3019.0, low=3019.0, close=3019.0, open=3019.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3019.0,
+        low=3019.0,
+        close=3019.0,
+        open=3019.0,
+        profile={},
+        range_profile={},
     )
 
     signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3019, 3020, 3016, 3018))
@@ -569,8 +709,8 @@ def test_path_failure_allows_trade_with_enough_progress() -> None:
 
 
 def test_mfe_pullback_exits_after_enough_progress_and_reversal() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
-    state = _state(ValueAreaReacceptanceParams(mfe_pullback_min_progress_ticks=4, mfe_pullback_ticks=2))
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
+    state = _state(ValueAreaReacceptanceBaselineParams(mfe_pullback_min_progress_ticks=4, mfe_pullback_ticks=2))
     state.position = StrategyPosition(direction=TRADE_DIRECTION_LONG, entry_price=3001, volume=3)
     state.extra["value_area_trade"] = {
         "side": "long",
@@ -606,7 +746,13 @@ def test_mfe_pullback_exits_after_enough_progress_and_reversal() -> None:
         "poc": 3010.0,
     }
     state.extra["value_area_current_session"] = CurrentSession(
-        date=datetime(2025, 9, 2).date(), high=3001.0, low=3001.0, close=3001.0, open=3001.0, profile={}
+        date=datetime(2025, 9, 2).date(),
+        high=3001.0,
+        low=3001.0,
+        close=3001.0,
+        open=3001.0,
+        profile={},
+        range_profile={},
     )
 
     signal = strategy.on_bar(state, _ctx(datetime(2025, 9, 2, 10, 0), 3001, 3006, 3002, 3003))
@@ -618,7 +764,7 @@ def test_mfe_pullback_exits_after_enough_progress_and_reversal() -> None:
 
 
 def test_target_modes_and_helpers() -> None:
-    strategy = ValueAreaReacceptanceStrategyCore()
+    strategy = ValueAreaReacceptanceBaselineStrategyCore()
     prev = ValueAreaLevels(
         date=datetime(2025, 9, 1).date(),
         vah=3020.0,
@@ -628,54 +774,64 @@ def test_target_modes_and_helpers() -> None:
         low=2990.0,
         close=3012.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
 
     assert (
-        strategy._raw_target_price("long", 3001, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite"))
+        strategy._raw_target_price(
+            "long", 3001, 5, prev, ValueAreaReacceptanceBaselineParams(take_profit_mode="opposite")
+        )
         == 3020
     )
     assert (
-        strategy._raw_target_price("short", 3019, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="opposite"))
+        strategy._raw_target_price(
+            "short", 3019, 5, prev, ValueAreaReacceptanceBaselineParams(take_profit_mode="opposite")
+        )
         == 3000
     )
     assert (
         strategy._raw_target_price(
-            "short", 3019, 5, prev, ValueAreaReacceptanceParams(take_profit_mode="r", take_profit_r=2)
+            "short", 3019, 5, prev, ValueAreaReacceptanceBaselineParams(take_profit_mode="r", take_profit_r=2)
         )
         == 3009
     )
     assert (
-        strategy._execution_target_price("long", 3001, 3010, ValueAreaReacceptanceParams(target_band_ticks=1)) == 3009
+        strategy._execution_target_price("long", 3001, 3010, ValueAreaReacceptanceBaselineParams(target_band_ticks=1))
+        == 3009
     )
     assert (
-        strategy._execution_target_price("short", 3019, 3010, ValueAreaReacceptanceParams(target_band_ticks=1)) == 3011
+        strategy._execution_target_price("short", 3019, 3010, ValueAreaReacceptanceBaselineParams(target_band_ticks=1))
+        == 3011
     )
     assert (
-        strategy._execution_target_price("long", 3001, 3010, ValueAreaReacceptanceParams(target_distance_ratio=0.8))
+        strategy._execution_target_price(
+            "long", 3001, 3010, ValueAreaReacceptanceBaselineParams(target_distance_ratio=0.8)
+        )
         == 3008.2
     )
     assert strategy._target_is_valid("long", 3001, 3002)
     assert not strategy._target_is_valid("long", 3001, 3000)
-    assert ValueAreaReacceptanceStrategyCore._parse_time("09:30").hour == 9
-    assert ValueAreaReacceptanceStrategyCore._optional_float(3) == 3.0
-    assert ValueAreaReacceptanceStrategyCore._optional_float("3") is None
-    assert ValueAreaReacceptanceStrategyCore._distance_bucket(5.9) == "lt6"
-    assert ValueAreaReacceptanceStrategyCore._distance_bucket(7.9) == "6_8"
-    assert ValueAreaReacceptanceStrategyCore._distance_bucket(11.9) == "8_12"
-    assert ValueAreaReacceptanceStrategyCore._distance_bucket(12) == "ge12"
-    assert ValueAreaReacceptanceStrategyCore._rr_bucket(0.4) == "lt0_5"
-    assert ValueAreaReacceptanceStrategyCore._rr_bucket(0.9) == "0_5_1"
-    assert ValueAreaReacceptanceStrategyCore._rr_bucket(1.4) == "1_1_5"
-    assert ValueAreaReacceptanceStrategyCore._rr_bucket(1.5) == "ge1_5"
-    assert ValueAreaReacceptanceStrategyCore._volatility_bucket(0.4) == "lt0_5"
-    assert ValueAreaReacceptanceStrategyCore._volatility_bucket(0.9) == "0_5_1"
-    assert ValueAreaReacceptanceStrategyCore._volatility_bucket(1.4) == "1_1_5"
-    assert ValueAreaReacceptanceStrategyCore._volatility_bucket(1.5) == "ge1_5"
-    assert ValueAreaReacceptanceStrategyCore._value_area_location(3021, prev) == "above"
-    assert ValueAreaReacceptanceStrategyCore._value_area_location(3010, prev) == "inside"
-    assert ValueAreaReacceptanceStrategyCore._value_area_location(2999, prev) == "below"
-    assert ValueAreaReacceptanceStrategyCore._open_close_poc_relation(3008, prev) == "above_to_below"
-    assert ValueAreaReacceptanceStrategyCore._open_close_poc_relation(3012, prev) == "same_above"
+    assert ValueAreaReacceptanceBaselineStrategyCore._parse_time("09:30").hour == 9
+    assert ValueAreaReacceptanceBaselineStrategyCore._optional_float(3) == 3.0
+    assert ValueAreaReacceptanceBaselineStrategyCore._optional_float("3") is None
+    assert ValueAreaReacceptanceBaselineStrategyCore._distance_bucket(5.9) == "lt6"
+    assert ValueAreaReacceptanceBaselineStrategyCore._distance_bucket(7.9) == "6_8"
+    assert ValueAreaReacceptanceBaselineStrategyCore._distance_bucket(11.9) == "8_12"
+    assert ValueAreaReacceptanceBaselineStrategyCore._distance_bucket(12) == "ge12"
+    assert ValueAreaReacceptanceBaselineStrategyCore._rr_bucket(0.4) == "lt0_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._rr_bucket(0.9) == "0_5_1"
+    assert ValueAreaReacceptanceBaselineStrategyCore._rr_bucket(1.4) == "1_1_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._rr_bucket(1.5) == "ge1_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._volatility_bucket(0.4) == "lt0_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._volatility_bucket(0.9) == "0_5_1"
+    assert ValueAreaReacceptanceBaselineStrategyCore._volatility_bucket(1.4) == "1_1_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._volatility_bucket(1.5) == "ge1_5"
+    assert ValueAreaReacceptanceBaselineStrategyCore._value_area_location(3021, prev) == "above"
+    assert ValueAreaReacceptanceBaselineStrategyCore._value_area_location(3010, prev) == "inside"
+    assert ValueAreaReacceptanceBaselineStrategyCore._value_area_location(2999, prev) == "below"
+    assert ValueAreaReacceptanceBaselineStrategyCore._open_close_poc_relation(3008, prev) == "above_to_below"
+    assert ValueAreaReacceptanceBaselineStrategyCore._open_close_poc_relation(3012, prev) == "same_above"
     older = ValueAreaLevels(
         date=datetime(2025, 8, 31).date(),
         vah=3018.0,
@@ -685,21 +841,23 @@ def test_target_modes_and_helpers() -> None:
         low=2998.0,
         close=3010.0,
         open=3008.0,
+        profile={},
+        range_profile={},
     )
-    assert ValueAreaReacceptanceStrategyCore._value_area_overlap_ratio(prev, older) == 0.8
-    assert ValueAreaReacceptanceStrategyCore._persistence_bucket(1) == "1d"
-    assert ValueAreaReacceptanceStrategyCore._persistence_bucket(2) == "2d"
-    assert ValueAreaReacceptanceStrategyCore._persistence_bucket(3) == "3d_plus"
-    assert ValueAreaReacceptanceStrategyCore._overlap_bucket(0.4) == "low"
-    assert ValueAreaReacceptanceStrategyCore._overlap_bucket(0.7) == "mid"
-    assert ValueAreaReacceptanceStrategyCore._overlap_bucket(0.8) == "high"
-    assert ValueAreaReacceptanceStrategyCore._poc_stability_bucket(True, 3) == "stable"
-    assert ValueAreaReacceptanceStrategyCore._poc_stability_bucket(False, 6) == "mild_drift"
-    assert ValueAreaReacceptanceStrategyCore._poc_stability_bucket(False, 8) == "drift"
+    assert ValueAreaReacceptanceBaselineStrategyCore._value_area_overlap_ratio(prev, older) == 0.8
+    assert ValueAreaReacceptanceBaselineStrategyCore._persistence_bucket(1) == "1d"
+    assert ValueAreaReacceptanceBaselineStrategyCore._persistence_bucket(2) == "2d"
+    assert ValueAreaReacceptanceBaselineStrategyCore._persistence_bucket(3) == "3d_plus"
+    assert ValueAreaReacceptanceBaselineStrategyCore._overlap_bucket(0.4) == "low"
+    assert ValueAreaReacceptanceBaselineStrategyCore._overlap_bucket(0.7) == "mid"
+    assert ValueAreaReacceptanceBaselineStrategyCore._overlap_bucket(0.8) == "high"
+    assert ValueAreaReacceptanceBaselineStrategyCore._poc_stability_bucket(True, 3) == "stable"
+    assert ValueAreaReacceptanceBaselineStrategyCore._poc_stability_bucket(False, 6) == "mild_drift"
+    assert ValueAreaReacceptanceBaselineStrategyCore._poc_stability_bucket(False, 8) == "drift"
 
 
 def test_rolling_window_value_info_uses_5m_profile_windows() -> None:
-    config = ValueAreaReacceptanceParams(price_tick=1.0, profile_mode="close", rolling_context_bars=2)
+    config = ValueAreaReacceptanceBaselineParams(price_tick=1.0, profile_mode="close", rolling_context_bars=2)
     bars = [
         _bar(datetime(2025, 9, 2, 9, 0), 3000, 3001, 2999, 3000, 100),
         _bar(datetime(2025, 9, 2, 9, 5), 3000, 3006, 2999, 3005, 300),
@@ -708,7 +866,7 @@ def test_rolling_window_value_info_uses_5m_profile_windows() -> None:
     ]
     ctx = _ctx_with_multi(datetime(2025, 9, 2, 9, 15), 3010, 3012, 3008, 3011, bars)
 
-    info = ValueAreaReacceptanceStrategyCore._window_value_info(ctx, config)
+    info = ValueAreaReacceptanceBaselineStrategyCore._window_value_info(ctx, config)
 
     assert info["available"]
     assert info["label"] == "roll2"
@@ -718,11 +876,11 @@ def test_rolling_window_value_info_uses_5m_profile_windows() -> None:
 
 
 def test_volume_zero_when_risk_or_margin_invalid() -> None:
-    state = _state(ValueAreaReacceptanceParams(max_position_ratio=0.0))
+    state = _state(ValueAreaReacceptanceBaselineParams(max_position_ratio=0.0))
 
-    assert ValueAreaReacceptanceStrategyCore._calc_volume(state, 3000, 0, state.strategy_config) == 0
-    assert ValueAreaReacceptanceStrategyCore._calc_volume(state, 3000, 5, state.strategy_config) == 0
+    assert ValueAreaReacceptanceBaselineStrategyCore._calc_volume(state, 3000, 0, state.strategy_config) == 0
+    assert ValueAreaReacceptanceBaselineStrategyCore._calc_volume(state, 3000, 5, state.strategy_config) == 0
 
 
 def test_on_fill_noop() -> None:
-    ValueAreaReacceptanceStrategyCore().on_fill(Fill())
+    ValueAreaReacceptanceBaselineStrategyCore().on_fill(Fill())

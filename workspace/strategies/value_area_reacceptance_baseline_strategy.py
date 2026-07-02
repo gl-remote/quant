@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# 文件级元信息：
+# - 创建背景：R29 扩样确认当前 VA reacceptance 实盘候选规则未通过泛化验证，但仍需保留其结构事件和历史回测口径作为基准。
+# - 用途：作为 value_area_reacceptance_baseline 策略，承载旧 VA reacceptance 规则、诊断字段和随机基准复验的结构参照。
+# - 注意事项：该文件不再代表当前候选交易策略；新增 VA 回归/continuation 研究应新建独立策略，不继续在此叠加主线逻辑。
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time
 from typing import Any, Literal, TypedDict, cast, override
@@ -26,7 +30,7 @@ class TargetPlan:
 
 
 @dataclass
-class ValueAreaReacceptanceParams:
+class ValueAreaReacceptanceBaselineParams:
     kline_period: str = "5m"
     context_period: str = ""
     context_lookback_bars: int = 24
@@ -182,12 +186,12 @@ class TradeInfo(TypedDict):
     close_range_poc_divergence_bucket: str
 
 
-class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
-    name: str = "value_area_reacceptance"
-    VERSION: str = f"{CORE_VERSION}-value-area-reacceptance-r1"
+class ValueAreaReacceptanceBaselineStrategyCore(Strategy[ValueAreaReacceptanceBaselineParams]):
+    name: str = "value_area_reacceptance_baseline"
+    VERSION: str = f"{CORE_VERSION}-value-area-reacceptance-baseline-r1"
 
     @override
-    def data_requirements(self, config: ValueAreaReacceptanceParams) -> DataRequirements | None:
+    def data_requirements(self, config: ValueAreaReacceptanceBaselineParams) -> DataRequirements | None:
         lookback_bars = max(
             1,
             config.rolling_context_bars * 2,
@@ -206,7 +210,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @override
     @placeholder_diagnostics
-    def on_bar(self, state: State[ValueAreaReacceptanceParams], ctx: BarContext) -> Signal:
+    def on_bar(self, state: State[ValueAreaReacceptanceBaselineParams], ctx: BarContext) -> Signal:
         config = state.strategy_config
         self._ensure_session(state, ctx, config)
 
@@ -223,9 +227,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     def _entry_signal(
         self,
-        state: State[ValueAreaReacceptanceParams],
+        state: State[ValueAreaReacceptanceBaselineParams],
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> Signal:
         if not self._can_enter(state, ctx, config):
             self._track_breakout(state, ctx, config)
@@ -252,9 +256,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     def _build_entry_signal(
         self,
-        state: State[ValueAreaReacceptanceParams],
+        state: State[ValueAreaReacceptanceBaselineParams],
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         side: Literal["long", "short"],
         breakout_extreme: float,
         prev: ValueAreaLevels,
@@ -380,9 +384,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     def _exit_signal(
         self,
-        state: State[ValueAreaReacceptanceParams],
+        state: State[ValueAreaReacceptanceBaselineParams],
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> Signal:
         trade = self._trade_info(state)
         if trade is None:
@@ -464,7 +468,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return signal
 
     def _track_breakout(
-        self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+        self,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        ctx: BarContext,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> None:
         prev = self._prev_levels(state)
         if prev is None:
@@ -486,7 +493,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         entry: float,
         prev: ValueAreaLevels,
         breakout_bars: int,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> bool:
         if config.max_breakout_bars > 0 and breakout_bars > config.max_breakout_bars:
             return False
@@ -504,7 +511,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         entry: float,
         strict_distance: float,
         prev: ValueAreaLevels,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         is_reentry: bool = False,
     ) -> TargetPlan:
         source = self._target_source(config, is_reentry)
@@ -513,7 +520,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return TargetPlan(source=source, raw_price=raw_price, execution_price=execution_price)
 
     @staticmethod
-    def _target_source(config: ValueAreaReacceptanceParams, is_reentry: bool) -> TargetSource:
+    def _target_source(config: ValueAreaReacceptanceBaselineParams, is_reentry: bool) -> TargetSource:
         if is_reentry and config.reentry_take_profit_r > 0:
             return "reentry_r"
         return config.take_profit_mode
@@ -524,7 +531,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         entry: float,
         strict_distance: float,
         prev: ValueAreaLevels,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         source: TargetSource | None = None,
     ) -> float:
         if source is None:
@@ -544,7 +551,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         side: Literal["long", "short"],
         entry: float,
         raw_target: float,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         source: TargetSource | None = None,
     ) -> float:
         if source is None:
@@ -563,11 +570,11 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return target > entry if side == "long" else target < entry
 
     @staticmethod
-    def _uses_kdj_filter(config: ValueAreaReacceptanceParams) -> bool:
+    def _uses_kdj_filter(config: ValueAreaReacceptanceBaselineParams) -> bool:
         return config.kdj_long_max > 0 or config.kdj_short_min > 0
 
     @staticmethod
-    def _current_kdj(ctx: BarContext, config: ValueAreaReacceptanceParams) -> float | None:
+    def _current_kdj(ctx: BarContext, config: ValueAreaReacceptanceBaselineParams) -> float | None:
         view = ctx.multi.get(config.kline_period)
         if view is None:
             return None
@@ -581,7 +588,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         self,
         side: Literal["long", "short"],
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> bool:
         if not self._uses_kdj_filter(config):
             return True
@@ -595,14 +602,14 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return True
 
     @staticmethod
-    def _atr_stop_distance(ctx: BarContext, config: ValueAreaReacceptanceParams) -> float:
+    def _atr_stop_distance(ctx: BarContext, config: ValueAreaReacceptanceBaselineParams) -> float:
         if config.stop_atr_bars <= 0 or config.stop_atr_multiplier <= 0:
             return 0.0
-        atr = ValueAreaReacceptanceStrategyCore._atr(ctx, config, config.stop_atr_bars)
+        atr = ValueAreaReacceptanceBaselineStrategyCore._atr(ctx, config, config.stop_atr_bars)
         return atr * config.stop_atr_multiplier if atr is not None else 0.0
 
     @staticmethod
-    def _atr(ctx: BarContext, config: ValueAreaReacceptanceParams, bars_count: int) -> float | None:
+    def _atr(ctx: BarContext, config: ValueAreaReacceptanceBaselineParams, bars_count: int) -> float | None:
         if bars_count <= 0:
             return None
         view = ctx.multi.get(config.kline_period)
@@ -628,7 +635,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @classmethod
     def _stop_atr_ratio(
-        cls, ctx: BarContext, config: ValueAreaReacceptanceParams, stop_distance: float
+        cls, ctx: BarContext, config: ValueAreaReacceptanceBaselineParams, stop_distance: float
     ) -> float | None:
         if config.stop_atr_ratio_bars <= 0:
             return None
@@ -641,7 +648,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     def _stop_atr_ratio_filter_ok(
         cls,
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         stop_distance: float,
     ) -> bool:
         ratio = cls._stop_atr_ratio(ctx, config, stop_distance)
@@ -659,10 +666,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @staticmethod
     def _calc_volume(
-        state: State[ValueAreaReacceptanceParams],
+        state: State[ValueAreaReacceptanceBaselineParams],
         entry: float,
         stop_distance: float,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> int:
         risk_value = state.capital * config.risk_per_trade
         risk_per_lot = stop_distance * state.contract_size
@@ -675,7 +682,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return max(0, min(risk_volume, margin_volume))
 
     def _update_path_progress(
-        self, state: State[ValueAreaReacceptanceParams], trade: TradeInfo, high: float, low: float
+        self, state: State[ValueAreaReacceptanceBaselineParams], trade: TradeInfo, high: float, low: float
     ) -> float:
         if trade["side"] == "long":
             progress = max(0.0, high - trade["entry_price"])
@@ -688,7 +695,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     @staticmethod
     def _mfe_pullback_failed(
         trade: TradeInfo,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         path_progress: float,
         close: float,
     ) -> bool:
@@ -705,7 +712,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return pullback >= config.mfe_pullback_ticks * config.price_tick
 
     def _path_check_failed(
-        self, state: State[ValueAreaReacceptanceParams], config: ValueAreaReacceptanceParams, path_progress: float
+        self,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        config: ValueAreaReacceptanceBaselineParams,
+        path_progress: float,
     ) -> bool:
         if config.path_check_bars <= 0:
             return False
@@ -714,7 +724,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return path_progress < config.min_path_progress_ticks * config.price_tick
 
     def _can_enter(
-        self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+        self,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        ctx: BarContext,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> bool:
         bar_time = ctx.bar.datetime.time()
         return (
@@ -727,9 +740,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @staticmethod
     def _cooldown_elapsed(
-        state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+        state: State[ValueAreaReacceptanceBaselineParams], ctx: BarContext, config: ValueAreaReacceptanceBaselineParams
     ) -> bool:
-        if config.reentry_cooldown_minutes <= 0 or ValueAreaReacceptanceStrategyCore._trade_count(state) == 0:
+        if config.reentry_cooldown_minutes <= 0 or ValueAreaReacceptanceBaselineStrategyCore._trade_count(state) == 0:
             return True
         value = state.extra.get("value_area_last_exit_time")
         if not isinstance(value, datetime):
@@ -738,8 +751,8 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     def _reentry_allowed(
         self,
-        state: State[ValueAreaReacceptanceParams],
-        config: ValueAreaReacceptanceParams,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        config: ValueAreaReacceptanceBaselineParams,
         side: Literal["long", "short"],
     ) -> bool:
         if self._trade_count(state) == 0:
@@ -749,18 +762,20 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return self._last_exit_side_allowed(state, side) and self._last_exit_reason_allowed(state, config)
 
     @staticmethod
-    def _has_reentry_exit_condition(config: ValueAreaReacceptanceParams) -> bool:
+    def _has_reentry_exit_condition(config: ValueAreaReacceptanceBaselineParams) -> bool:
         return (
             config.reentry_requires_prev_stop_same_direction or config.reentry_requires_prev_take_profit_same_direction
         )
 
     @staticmethod
-    def _last_exit_side_allowed(state: State[ValueAreaReacceptanceParams], side: Literal["long", "short"]) -> bool:
+    def _last_exit_side_allowed(
+        state: State[ValueAreaReacceptanceBaselineParams], side: Literal["long", "short"]
+    ) -> bool:
         return state.extra.get("value_area_last_exit_side") == side
 
     @staticmethod
     def _last_exit_reason_allowed(
-        state: State[ValueAreaReacceptanceParams], config: ValueAreaReacceptanceParams
+        state: State[ValueAreaReacceptanceBaselineParams], config: ValueAreaReacceptanceBaselineParams
     ) -> bool:
         allowed_reasons: set[str] = set()
         if config.reentry_requires_prev_stop_same_direction:
@@ -770,7 +785,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return state.extra.get("value_area_last_exit_reason") in allowed_reasons
 
     def _ensure_session(
-        self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+        self,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        ctx: BarContext,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> None:
         bar = ctx.bar
         session = bar.datetime.date()
@@ -805,7 +823,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         state.extra.pop("value_area_last_exit_time", None)
 
     def _update_current_session(
-        self, state: State[ValueAreaReacceptanceParams], ctx: BarContext, config: ValueAreaReacceptanceParams
+        self,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        ctx: BarContext,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> None:
         current = self._current_session(state)
         if current is None:
@@ -831,7 +852,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         high: float,
         close: float,
         volume: float,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> None:
         if volume <= 0:
             return
@@ -854,7 +875,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
             profile[price] = profile.get(price, 0.0) + volume_per_bucket
 
     @classmethod
-    def _build_value_area_levels(cls, session: CurrentSession, config: ValueAreaReacceptanceParams) -> ValueAreaLevels:
+    def _build_value_area_levels(
+        cls, session: CurrentSession, config: ValueAreaReacceptanceBaselineParams
+    ) -> ValueAreaLevels:
         profile = session["profile"]
         if not profile:
             return ValueAreaLevels(
@@ -906,45 +929,45 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         )
 
     @staticmethod
-    def _clear_trade_if_flat(state: State[ValueAreaReacceptanceParams]) -> None:
+    def _clear_trade_if_flat(state: State[ValueAreaReacceptanceBaselineParams]) -> None:
         state.extra.pop("value_area_trade", None)
         state.extra["value_area_holding_bars"] = 0
         state.extra["value_area_path_best_progress"] = 0.0
 
     @staticmethod
-    def _update_holding_bars(state: State[ValueAreaReacceptanceParams], signal: Signal) -> None:
+    def _update_holding_bars(state: State[ValueAreaReacceptanceBaselineParams], signal: Signal) -> None:
         if state.position.direction:
-            state.extra["value_area_holding_bars"] = ValueAreaReacceptanceStrategyCore._holding_bars(state) + 1
+            state.extra["value_area_holding_bars"] = ValueAreaReacceptanceBaselineStrategyCore._holding_bars(state) + 1
         if signal.action:
             state.extra["value_area_holding_bars"] = 0
 
     @staticmethod
-    def _holding_bars(state: State[ValueAreaReacceptanceParams]) -> int:
+    def _holding_bars(state: State[ValueAreaReacceptanceBaselineParams]) -> int:
         value = state.extra.get("value_area_holding_bars", 0)
         return int(value) if isinstance(value, int | float) else 0
 
     @staticmethod
-    def _trade_count(state: State[ValueAreaReacceptanceParams]) -> int:
+    def _trade_count(state: State[ValueAreaReacceptanceBaselineParams]) -> int:
         value = state.extra.get("value_area_trade_count", 0)
         return int(value) if isinstance(value, int | float) else 0
 
     @staticmethod
-    def _prev_levels(state: State[ValueAreaReacceptanceParams]) -> ValueAreaLevels | None:
+    def _prev_levels(state: State[ValueAreaReacceptanceBaselineParams]) -> ValueAreaLevels | None:
         value = state.extra.get("value_area_levels")
         return cast(ValueAreaLevels, cast(object, value)) if isinstance(value, dict) else None
 
     @staticmethod
-    def _current_session(state: State[ValueAreaReacceptanceParams]) -> CurrentSession | None:
+    def _current_session(state: State[ValueAreaReacceptanceBaselineParams]) -> CurrentSession | None:
         value = state.extra.get("value_area_current_session")
         return cast(CurrentSession, cast(object, value)) if isinstance(value, dict) else None
 
     @staticmethod
-    def _value_area_history(state: State[ValueAreaReacceptanceParams]) -> list[ValueAreaLevels]:
+    def _value_area_history(state: State[ValueAreaReacceptanceBaselineParams]) -> list[ValueAreaLevels]:
         value = state.extra.get("value_area_history")
         return cast(list[ValueAreaLevels], cast(object, value)) if isinstance(value, list) else []
 
     @staticmethod
-    def _trade_info(state: State[ValueAreaReacceptanceParams]) -> TradeInfo | None:
+    def _trade_info(state: State[ValueAreaReacceptanceBaselineParams]) -> TradeInfo | None:
         value = state.extra.get("value_area_trade")
         return cast(TradeInfo, cast(object, value)) if isinstance(value, dict) else None
 
@@ -953,12 +976,12 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return float(value) if isinstance(value, int | float) else None
 
     @staticmethod
-    def _int_extra(state: State[ValueAreaReacceptanceParams], key: str) -> int:
+    def _int_extra(state: State[ValueAreaReacceptanceBaselineParams], key: str) -> int:
         value = state.extra.get(key, 0)
         return int(value) if isinstance(value, int | float) else 0
 
     @staticmethod
-    def _float_extra(state: State[ValueAreaReacceptanceParams], key: str) -> float:
+    def _float_extra(state: State[ValueAreaReacceptanceBaselineParams], key: str) -> float:
         value = state.extra.get(key, 0.0)
         return float(value) if isinstance(value, int | float) else 0.0
 
@@ -994,7 +1017,10 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @classmethod
     def _persistent_value_info(
-        cls, state: State[ValueAreaReacceptanceParams], prev: ValueAreaLevels, config: ValueAreaReacceptanceParams
+        cls,
+        state: State[ValueAreaReacceptanceBaselineParams],
+        prev: ValueAreaLevels,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> PersistentValueInfo:
         history = cls._value_area_history(state)
         days = 1
@@ -1053,7 +1079,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return "drift"
 
     @classmethod
-    def _window_value_info(cls, ctx: BarContext, config: ValueAreaReacceptanceParams) -> WindowValueInfo:
+    def _window_value_info(cls, ctx: BarContext, config: ValueAreaReacceptanceBaselineParams) -> WindowValueInfo:
         if config.rolling_context_bars > 0:
             return cls._rolling_window_value_info(ctx, config)
         if not config.context_period:
@@ -1098,7 +1124,9 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         )
 
     @classmethod
-    def _rolling_window_value_info(cls, ctx: BarContext, config: ValueAreaReacceptanceParams) -> WindowValueInfo:
+    def _rolling_window_value_info(
+        cls, ctx: BarContext, config: ValueAreaReacceptanceBaselineParams
+    ) -> WindowValueInfo:
         view = ctx.multi.get(config.kline_period)
         if view is None:
             return cls._empty_window_value_info(cls._rolling_context_label(config))
@@ -1129,12 +1157,12 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         )
 
     @staticmethod
-    def _rolling_context_label(config: ValueAreaReacceptanceParams) -> str:
+    def _rolling_context_label(config: ValueAreaReacceptanceBaselineParams) -> str:
         return f"roll{config.rolling_context_bars}"
 
     @classmethod
     def _build_value_area_levels_from_bars(
-        cls, bars: list[Bar], config: ValueAreaReacceptanceParams
+        cls, bars: list[Bar], config: ValueAreaReacceptanceBaselineParams
     ) -> ValueAreaLevels:
         first = bars[0]
         session = CurrentSession(
@@ -1241,7 +1269,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         ctx: BarContext,
         prev: ValueAreaLevels,
         entry: float,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
     ) -> PocQualityInfo:
         va_width = max(prev["vah"] - prev["val"], 0.0)
         poc_pct = (prev["poc"] - prev["val"]) / va_width if va_width > 0 else 0.0
@@ -1285,7 +1313,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
 
     @classmethod
     def _profile_local_band(
-        cls, poc: float, prev: ValueAreaLevels, config: ValueAreaReacceptanceParams
+        cls, poc: float, prev: ValueAreaLevels, config: ValueAreaReacceptanceBaselineParams
     ) -> tuple[float, float]:
         profile = prev.get("profile", {})
         if not profile or poc not in profile:
@@ -1300,7 +1328,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return low, high
 
     @classmethod
-    def _profile_high_volume_components(cls, prev: ValueAreaLevels, config: ValueAreaReacceptanceParams) -> int:
+    def _profile_high_volume_components(cls, prev: ValueAreaLevels, config: ValueAreaReacceptanceBaselineParams) -> int:
         profile = prev.get("profile", {})
         if not profile:
             return 0
@@ -1320,7 +1348,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
     def _recent_profile(
         cls,
         ctx: BarContext,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         *,
         mode: ProfileMode,
     ) -> dict[float, float]:
@@ -1341,7 +1369,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return profile
 
     @classmethod
-    def _recent_close_median(cls, ctx: BarContext, config: ValueAreaReacceptanceParams) -> float:
+    def _recent_close_median(cls, ctx: BarContext, config: ValueAreaReacceptanceBaselineParams) -> float:
         view = ctx.multi.get(config.kline_period)
         if view is None:
             return ctx.bar.close
@@ -1411,7 +1439,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         volume: int,
         poc_quality: PocQualityInfo,
         prev: ValueAreaLevels,
-        config: ValueAreaReacceptanceParams,
+        config: ValueAreaReacceptanceBaselineParams,
         kdj_value: float | None,
     ) -> None:
         would_filter_edge_or_away = (
@@ -1420,7 +1448,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         signal.alpha = AlphaDiagnostics(
             fields={
                 "direction_hypothesis": side,
-                "entry_reason": "value_area_reacceptance",
+                "entry_reason": "value_area_reacceptance_baseline",
                 "consensus_zone_type": "previous_day_value_area",
                 "structure_source": "close_profile",
                 "entry_boundary": entry,
@@ -1494,7 +1522,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         signal.alpha = AlphaDiagnostics(
             fields={
                 "direction_hypothesis": trade["side"],
-                "entry_reason": "value_area_reacceptance_exit",
+                "entry_reason": "value_area_reacceptance_baseline_exit",
                 "strict_failure_boundary": trade["strict_failure"],
                 "expected_profit_boundary": trade["target_price"],
             }
@@ -1551,7 +1579,7 @@ class ValueAreaReacceptanceStrategyCore(Strategy[ValueAreaReacceptanceParams]):
         return cls._parse_time(start) <= current <= cls._parse_time(end)
 
     @classmethod
-    def _is_force_flat_time(cls, current: time, config: ValueAreaReacceptanceParams) -> bool:
+    def _is_force_flat_time(cls, current: time, config: ValueAreaReacceptanceBaselineParams) -> bool:
         return current >= cls._parse_time(config.force_flat_time)
 
     @override

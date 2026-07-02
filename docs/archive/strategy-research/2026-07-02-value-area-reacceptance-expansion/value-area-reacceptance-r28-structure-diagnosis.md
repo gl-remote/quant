@@ -1,7 +1,7 @@
 # value_area_reacceptance R28：结构拆解与失效归因（压缩版）
 
-> 类型：Workbench / 结构诊断摘要  
-> 状态：进行中  
+> 类型：Archive / 结构诊断摘要  
+> 状态：已完成 / 形成 reentry target 正交化与 continuation 线索  
 > 日期：2026-07-01  
 > 前置记录：[R27 扩样复验](./value-area-reacceptance-r27-expanded-sample.md)
 
@@ -310,7 +310,7 @@ exclude_stop_atr_ratio_high
 
 位置：
 
-- [value_area_reacceptance_strategy.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/value_area_reacceptance_strategy.py)
+- [value_area_reacceptance_baseline_strategy.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/value_area_reacceptance_baseline_strategy.py)
 
 辅助诊断脚本：
 
