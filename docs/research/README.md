@@ -39,7 +39,8 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 活跃 / R29 扩样未通过 / R30 结构分支验证 | [themes/value-area-reacceptance/](./themes/value-area-reacceptance/README.md) |
+| value_area_reacceptance | Stage B v2 已完成 / feature-only 降级 / 主策略暂停 | [themes/value-area-reacceptance/](./themes/value-area-reacceptance/README.md) |
+| value_area_rolling_reacceptance | 草案 / 尚未启动实施 | [themes/value-area-rolling-reacceptance/](./themes/value-area-rolling-reacceptance/README.md) |
 
 主题文件承载该主线的完整现状：
 

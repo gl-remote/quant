@@ -1,9 +1,10 @@
-# value-area-reacceptance · 无状态每 bar rolling 版本提案
+# value-area-rolling-reacceptance · 主题草案
 
-> 类型：Workbench / 未来重构提案（尚未采纳）
-> 状态：设想固化 · 暂不实施
-> 前提：等当前 `value_area_multi_attempt_poc_reversion` 策略在 §11.4 首轮
-> 默认参数下把 R30 空间完全挖掘（feature-only 归档后再评估是否重构）
+> 类型：Theme / 草案（尚未启动实施）
+> 状态：仅设想已成文 · 主题目录未完全初始化 · 触发条件见 §6
+> 前提：等 `value-area-reacceptance` 主题的 R30 空间完全挖掘、
+> feature-only 结论稳定归档后，再评估是否启动本主题
+> 关联主题：[../value-area-reacceptance/README.md](../value-area-reacceptance/README.md)
 > 创建时间：2026-07-03
 
 ## 1. 动机
