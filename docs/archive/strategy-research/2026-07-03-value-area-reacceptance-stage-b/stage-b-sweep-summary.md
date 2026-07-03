@@ -1,6 +1,6 @@
 # Stage B sweep summary — n_profile × Ω_pattern
 
-> Source: `scripts/ai_tmp/stage_b_sweep.py`
+> Source: `raw-workbench/stage_b_sweep.py`（本目录内）
 > Fixed: R0 only, D_near+D_far, TP_fixed, direction_mode=to_poc, λ=1.2, n_step=48
 > Cells: mean(total_return) · sum(trades) · mean(win_rate) · mean(rgr) (n=samples)
 

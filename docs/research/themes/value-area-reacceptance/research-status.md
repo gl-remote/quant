@@ -9,7 +9,7 @@
 > 参数选择：[parameter-selection-spec.md](parameter-selection-spec.md)
 > 工程实现细节：[implementation-notes.md](implementation-notes.md)
 > 全局研究入口：[../../strategy-current.md](../../strategy-current.md)
-> Stage B 结果：[../../../workbench/stage-b-sweep-summary.md](../../../workbench/stage-b-sweep-summary.md)
+> Stage B 归档：[../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/](../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md)
 > 当前归档：[R29 扩样与随机基准复验](../../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
 > 前置归档：[R28 结构诊断](../../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
 

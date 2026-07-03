@@ -180,7 +180,7 @@ C3_s(t) := A_s(t) >= 1 ∧ Z_s^-(t) = False
 
 前置条件（**已满足**）：
 - ✓ 前置主题 `value-area-reacceptance` 冻结（README 已更新为"已冻结"）
-- ✓ Stage B v2/v3 结论稳定（[workbench summary](../../../workbench/stage-b-sweep-summary.md)）
+- ✓ Stage B v2/v3 结论稳定（[Stage B 归档](../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md)）
 - ✓ 建模路径决策：B（rolling window），A/C 已排除，理由见 §1.3
 
 阶段规划：
