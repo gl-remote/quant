@@ -29,7 +29,7 @@ def _make_args(**overrides):
         "no_search": False,
         "dump_indicators": False,
         "strategy_params": None,
-        "no_report": False,
+        "build_report": False,
         "env": "backtest",
         "config": None,
     }
@@ -131,18 +131,21 @@ def test_no_report_flag_flows_into_request() -> None:
     subparsers = parser.add_subparsers(dest="command")
     register(subparsers)
 
-    args = parser.parse_args(["backtest", "--strategy", "ma", "--no-report"])
-    assert args.no_report is True
+    # 默认不构建报告
+    args = parser.parse_args(["backtest", "--strategy", "ma"])
+    assert args.build_report is False
+    assert _build_search_request(_make_args()).no_report is True
+    assert _build_walk_forward_request(_make_args()).no_report is True
 
-    search_req = _build_search_request(_make_args(no_report=True))
-    assert search_req.no_report is True
+    # 显式开启 --build-report 才构建
+    args = parser.parse_args(["backtest", "--strategy", "ma", "--build-report"])
+    assert args.build_report is True
 
-    wf_req = _build_walk_forward_request(_make_args(no_report=True))
-    assert wf_req.no_report is True
+    search_req = _build_search_request(_make_args(build_report=True))
+    assert search_req.no_report is False
 
-    # 默认关闭
-    assert _build_search_request(_make_args()).no_report is False
-    assert _build_walk_forward_request(_make_args()).no_report is False
+    wf_req = _build_walk_forward_request(_make_args(build_report=True))
+    assert wf_req.no_report is False
 
 
 def test_validate_rejects_strategy_params_for_walk_forward():

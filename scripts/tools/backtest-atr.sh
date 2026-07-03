@@ -42,7 +42,8 @@ if "$ROOT_DIR/run.sh" backtest \
     --trials "$TRIALS" \
     --early-stop-patience "$EARLY_STOP_PATIENCE" \
     --capital 100000 \
-    --contract-size 10 "$@"; then
+    --contract-size 10 \
+    --build-report "$@"; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"
