@@ -67,7 +67,7 @@ class ValueAreaMultiAttemptPocReversionParams:
     # θ_exec
     target_fraction: float = 0.8  # α
     failure_buffer_ticks: int = 1  # β
-    stop_widen_multiplier: float = 1.0  # λ
+    stop_widen_multiplier: float = 1.2  # λ（默认 >1 让 strict_failure_close 与 stop_loss 拉开）
     stop_atr_bars: int = 0
     stop_atr_multiplier: float = 0.0
     rr_min: float = 0.8

@@ -88,6 +88,31 @@
 - trade_clearings 清算口径 vs vnpy BacktestResult 口径的选择与切换。
 ```
 
+#### 2.7.1 vnpy fill-on-next-bar 惯例（Stage A 校核发现，2026-07-03）
+
+vnpy BacktestingEngine 采用"bar 收盘信号 → 下一根 bar 开盘成交"模型：
+
+```text
+strategy.on_bar(bar_t)       fires Signal at time(bar_t)
+engine fills at              time(bar_{t+1})   (next bar's open time)
+backtest_trades.datetime     = time(bar_{t+1})
+signal 时间 (bar 收盘)         = time(bar_t)
+```
+
+结论：
+
+```text
+1. backtest_trades.datetime 与 backtest_trades.decision_payload.execution.exit_reason
+   触发时点相差一根 bar；跨会话（日盘 14:55 → 夜盘 21:00）时时间跳跃可达数小时。
+2. 归因分析按"信号时间"分层的口径必须用 payload.execution.entry_bar_idx
+   或 payload.execution.holding_bars 派生，而不是 backtest_trades.datetime。
+3. 策略层 holding_bars = idx(t_exit_signal) - idx(t_entry_signal)（信号 bar 索引之差）
+   与引擎侧 fill 时间无关，是正确的持仓时长度量。
+4. 报告里出现 force_flat 交易 datetime = 夜盘时间点属于正常现象，不是策略 bug。
+```
+
+处置：本项目 R30 及后续 vnpy 引擎回测统一遵循此惯例；跨引擎（tqsdk）验证时若成交模型不同，需另开一节记录差异。
+
 ### 2.8 参数与配置
 
 ```text

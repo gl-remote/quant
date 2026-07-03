@@ -897,7 +897,7 @@ N_max = 3
 cooldown ∈ {1, optionally 0}   (unit: bars)
 trade_start_time / last_entry_time / force_flat_time := per-instrument session schedule
 β = 1
-λ = 1.0
+λ = 1.2
 stop_atr_bars = 0
 stop_atr_multiplier = 0
 rr_min = 0.8
