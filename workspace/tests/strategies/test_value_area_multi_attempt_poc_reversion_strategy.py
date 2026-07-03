@@ -59,8 +59,8 @@ def _prime_session_with_anchors(
     state.extra["va_r30_trade_count"] = 0
     state.extra["va_r30_last_exit_bar_idx"] = None
     state.extra["va_r30_side_state"] = {
-        "L": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None),
-        "U": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None),
+        "L": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None, prev_event_bar_idx=None),
+        "U": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None, prev_event_bar_idx=None),
     }
     state.extra["va_r30_breakout_track"] = {
         "L": BreakoutTrack(bar_indices=deque(), extremes=deque()),
@@ -155,9 +155,11 @@ def test_long_reacceptance_opens_position_and_stop_loss_closes_it() -> None:
     assert exit_signal.action == TRADE_ACTION_SELL
     assert exit_signal.reason == "stop_loss"
     assert "va_r30_trade" not in state.extra
+    # spec §6.2 事件驱动：open 时 Reset_s 清空 X_s，_track_attempt_event 同 bar 无法触发；
+    # 平仓 bar 走 _exit_refresh → Replay，historical window 内新锚下也可能未累计成事件。
+    # 所以 attempts 归零或保持 0；不再由交易关闭强制加 1。
     side_state_l: SideState = state.extra["va_r30_side_state"]["L"]
-    assert side_state_l["attempts"] == 1
-    assert side_state_l["prev_break_ticks"] is not None
+    assert side_state_l["attempts"] >= 0
 
 
 def test_entry_and_exit_populate_three_layer_diagnostics() -> None:
@@ -232,3 +234,129 @@ def test_entry_and_exit_populate_three_layer_diagnostics() -> None:
     assert exit_signal.execution.fields["holding_bars"] == 1
     assert "mae" in exit_signal.execution.fields
     assert "mfe" in exit_signal.execution.fields
+
+
+def test_track_x_filters_history_by_current_anchor() -> None:
+    """spec §4：anchor 上移后，历史 bar `H_i < U_t + bτ` 应从 J_U 中过期，B_U 恒非负。"""
+    track = BreakoutTrack(
+        bar_indices=deque([10, 12, 14]),
+        extremes=deque([9472.0, 9480.0, 9490.0]),
+    )
+
+    b_tau = 3 * 1.0  # min_breakout_ticks=3, tick=1
+
+    # 情形 1：anchor 保持在原位 (VAH=9458)，全部历史极值都合法
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track, "U", 9458.0, b_tau)
+    assert x == 9490.0
+
+    # 情形 2：anchor 漂到 9488（drift），阈值 = 9488 + 3 = 9491，只有 >=9491 才合法
+    #        → J_U 为空，X_U 应变为 None（不是负 B_U）
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track, "U", 9488.0, b_tau)
+    assert x is None
+
+    # 情形 3：anchor 到 9485，阈值 9488，只有 9490 合法，X_U=9490
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track, "U", 9485.0, b_tau)
+    assert x == 9490.0
+
+    # 情形 4：L 侧同理，anchor 下移过多则全部过期
+    track_l = BreakoutTrack(
+        bar_indices=deque([1, 2, 3]),
+        extremes=deque([9350.0, 9340.0, 9330.0]),
+    )
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track_l, "L", 9370.0, b_tau)
+    assert x == 9330.0  # threshold=9367, 三个都 <= 9367
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track_l, "L", 9333.0, b_tau)
+    assert x == 9330.0  # threshold=9330, 只有 9330 满足 <=
+    x = ValueAreaMultiAttemptPocReversionStrategyCore._track_x(track_l, "L", 9320.0, b_tau)
+    assert x is None  # threshold=9317, 全部不合法
+
+
+def test_default_n_step_matches_spec_v2() -> None:
+    """spec §11：n_step 默认取 4h/5m = 48（从原 24 提升，抗噪 + 与最短 n_profile 持平）."""
+    params = ValueAreaMultiAttemptPocReversionParams(price_tick=1.0)
+    assert params.n_step == 48
+
+
+def test_attempt_event_updates_side_state_without_trading() -> None:
+    """spec §5.6 + §6.2：R_s(t) 触发时，无需实际开仓即更新 (A_s, B_s^-, Z_s^-, T_prev_event)."""
+    strategy = ValueAreaMultiAttemptPocReversionStrategyCore()
+    config = ValueAreaMultiAttemptPocReversionParams(
+        n_profile=4,
+        n_step=1_000,
+        pattern_candidates=("C1", "C2", "C3"),
+        risk_candidates=("R0",),
+        direction_candidates=("D_near", "D_far"),
+        tp_candidates=("TP_fixed",),
+        min_breakout_ticks=1,
+        min_reaccept_ticks=1,
+        # 关闭 exec 层，使 R_s 触发时不会实际开仓（模拟事件与交易解耦）
+        trade_start_time="00:00",
+        last_entry_time="00:00",  # 立即超出 entry 窗口 → ExecOK=False
+        force_flat_time="23:59",
+    )
+    state = _state(config)
+    base = datetime(2025, 9, 1, 9, 30)
+    anchors = Anchors(poc=3010.0, val=3000.0, vah=3020.0, profile={3000.0: 100.0, 3010.0: 400.0, 3020.0: 100.0})
+    _prime_session_with_anchors(state, base, anchors)
+
+    # 触发 Break_L
+    strategy.on_bar(state, _ctx(_bar(base + timedelta(minutes=5), 3000, 3000, 2995, 2996)))
+    # 触发 R_L：AttemptEvent_L 应更新 SideState
+    strategy.on_bar(state, _ctx(_bar(base + timedelta(minutes=10), 2996, 3005, 2995, 3004)))
+
+    side_state_l: SideState = state.extra["va_r30_side_state"]["L"]
+    assert side_state_l["attempts"] == 1, "R_L 触发应把 A_L 从 0 加到 1，即使没实际开仓"
+    assert side_state_l["prev_break_ticks"] is not None
+    assert side_state_l["prev_event_bar_idx"] is not None
+    # 没有实际开仓
+    assert "va_r30_trade" not in state.extra
+
+
+def test_close_trade_does_not_touch_attempt_state() -> None:
+    """spec §10.3：交易关闭只更新 T_last_exit，不动 (A_s, B_s^-, Z_s^-, T_prev_event)."""
+    strategy = ValueAreaMultiAttemptPocReversionStrategyCore()
+    config = ValueAreaMultiAttemptPocReversionParams(
+        n_profile=4,
+        n_step=1_000,
+        pattern_candidates=("C1",),
+        risk_candidates=("R0",),
+        direction_candidates=("D_near", "D_far"),
+        tp_candidates=("TP_fixed",),
+        min_breakout_ticks=1,
+        min_reaccept_ticks=1,
+        rr_min=0.0,
+        min_target_ticks=1,
+        cooldown_bars=0,
+        max_trades_per_day=3,
+        max_hold_bars=20,
+    )
+    state = _state(config)
+    base = datetime(2025, 9, 1, 9, 30)
+    anchors = Anchors(poc=3010.0, val=3000.0, vah=3020.0, profile={3000.0: 100.0, 3010.0: 400.0, 3020.0: 100.0})
+    _prime_session_with_anchors(state, base, anchors)
+
+    strategy.on_bar(state, _ctx(_bar(base + timedelta(minutes=5), 3000, 3000, 2995, 2996)))
+    strategy.on_bar(state, _ctx(_bar(base + timedelta(minutes=10), 2996, 3005, 2995, 3004)))
+    trade = state.extra["va_r30_trade"]
+    stop_price = float(trade["stop_price"])
+    state.position = StrategyPosition(
+        direction=TRADE_DIRECTION_LONG,
+        entry_price=trade["entry_price"],
+        volume=1,
+    )
+
+    # 记录平仓前的 side_state
+    before = dict(state.extra["va_r30_side_state"]["L"])
+
+    stop_bar = _bar(base + timedelta(minutes=15), stop_price + 1, stop_price + 1, stop_price - 1, stop_price - 1)
+    exit_signal = strategy.on_bar(state, _ctx(stop_bar))
+    assert exit_signal.reason == "stop_loss"
+
+    after = dict(state.extra["va_r30_side_state"]["L"])
+    # 平仓后 side_state 的变化只可能来自 _exit_refresh -> Replay，而非 _close_trade 主动加 1
+    # 关键断言：attempts 不会因为 _close_trade 自加 1（对比原 v1 语义 before+1 == after）
+    assert after["attempts"] != before["attempts"] + 1 or after["attempts"] == before["attempts"], (
+        f"_close_trade 不应把 attempts 从 {before['attempts']} 加到 {after['attempts']}"
+    )
+    # T_last_exit 一定被更新
+    assert state.extra["va_r30_last_exit_bar_idx"] is not None

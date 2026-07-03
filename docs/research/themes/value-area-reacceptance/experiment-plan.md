@@ -139,6 +139,13 @@ A5: 与 value_area_reacceptance_baseline 保持隔离，无路径冲突
 
 目标：验证 Q1 + Q2。
 
+**前置条件（2026-07-03 更新）**：spec 已把 `AttemptEvent_s(t)` 从交易依赖里剥离
+（§5.6 / §6.2）——`A_s / B_s^- / Z_s^-` 由事件触发更新而非交易关闭时更新，
+`Adopt(u) = 1` 时用新锚 Replay 最近 `n_step` 根 bar 回填状态（§11.3.5）。
+这一语义变更使得 C2 / C3 在无实际交易时也能累积，直接影响 Stage B 的
+`Ω_pattern` 触发分布，Stage B 需在**新语义**下重跑，早期用 v1 语义（原
+`_close_trade` 更新 attempt）跑出的 "C2/C3 = 0 trades" 结论作废。
+
 ```text
 维度扫描:
   n_profile   ∈ {48, 96, 144}  (Δbar = 5m)

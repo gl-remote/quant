@@ -46,7 +46,7 @@ class ValueAreaMultiAttemptPocReversionParams:
     # spec §11 首轮候选：n_profile ∈ {4h, 8h, 12h}/Δbar；Δbar=5m 时为 {48, 96, 144}。
     # 这里选最长候选 12h 作为默认；扫描时由回测层覆盖。
     n_profile: int = 144  # 12h / 5m
-    n_step: int = 24  # 2h / 5m
+    n_step: int = 48  # 4h / 5m —— 与最短 n_profile 候选（4h）持平，5m bar 下比 24 更抗噪
 
     # θ_signal
     direction_mode: DirectionMode = "to_poc"
@@ -106,11 +106,15 @@ class BreakoutTrack(TypedDict):
 
 
 class SideState(TypedDict):
-    """spec §5 状态变量：单侧 session 级 (A_s, B_s^-, Z_s^-)."""
+    """spec §6.1 状态变量：单侧 session 级 (A_s, B_s^-, Z_s^-, T_prev_event).
 
-    attempts: int
-    prev_break_ticks: float | None
-    prev_poc_tested: bool | None
+    全部由 §6.2 的 `AttemptEvent_s` 触发驱动，与是否实际下单**无关**。
+    """
+
+    attempts: int  # A_s
+    prev_break_ticks: float | None  # B_s^-
+    prev_poc_tested: bool | None  # Z_s^-
+    prev_event_bar_idx: int | None  # T_prev_event
 
 
 class TradeInfo(TypedDict):
@@ -179,6 +183,10 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         else:
             signal = self._entry_signal(state, ctx, config)
 
+        # spec §6.2：bar t 结束后（entry/exit 判定已完成）更新 AttemptEvent 侧状态；
+        # 若本 bar 已开仓则 Reset_s=1（§11.2）在 _try_open 内清空 X_s，此处对该侧再判定为 no-op。
+        self._track_attempt_event(state, ctx, config)
+
         self._advance_bar_index(state)
         return signal
 
@@ -204,8 +212,8 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         state.extra["va_r30_trade_count"] = 0
         state.extra["va_r30_last_exit_bar_idx"] = None
         state.extra["va_r30_side_state"] = {
-            "L": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None),
-            "U": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None),
+            "L": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None, prev_event_bar_idx=None),
+            "U": SideState(attempts=0, prev_break_ticks=None, prev_poc_tested=None, prev_event_bar_idx=None),
         }
         # §10.2：新 session 首根 bar 上 Reset_s=1，历史突破清空
         state.extra["va_r30_breakout_track"] = {
@@ -244,7 +252,7 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         state: State[ValueAreaMultiAttemptPocReversionParams],
         config: ValueAreaMultiAttemptPocReversionParams,
     ) -> None:
-        """InitEvent(t)：session 内首次可用 bar 上刷新一次."""
+        """InitEvent(t)：session 内首次可用 bar 上刷新一次；恒 Adopt（§11.3.3）."""
         if state.extra.get("va_r30_anchors") is not None:
             return
         anchors = self._compute_anchors(state, config)
@@ -254,13 +262,18 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         state.extra["va_r30_anchors"] = anchors
         state.extra["va_r30_last_refresh_bar_idx"] = cur_idx
         state.extra["va_r30_next_tick_refresh_bar_idx"] = cur_idx + config.n_step
+        # §11.3.4：Adopt=1 时 Reset_s=1（清空 X_s / J_s）+ Replay 用新锚重放最近 n_step 根 bar。
+        # Init 时 bar_history 只有当前一根 bar，Replay 无历史可放，等价于清零 attempt 状态。
+        self._reset_side_track(state, "L")
+        self._reset_side_track(state, "U")
+        self._replay_attempt_events(state, config, anchors)
 
     def _maybe_tick_refresh(
         self,
         state: State[ValueAreaMultiAttemptPocReversionParams],
         config: ValueAreaMultiAttemptPocReversionParams,
     ) -> None:
-        """TickEvent(t)：累计 n_step 根 bar 触发；仅空仓时采用（Adopt 规则）."""
+        """TickEvent(t)：累计 n_step 根 bar 触发；仅空仓时采用（Adopt 规则 §11.3.3）."""
         next_idx = state.extra.get("va_r30_next_tick_refresh_bar_idx")
         if next_idx is None:
             return
@@ -275,13 +288,17 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
             return
         state.extra["va_r30_anchors"] = anchors
         state.extra["va_r30_last_refresh_bar_idx"] = cur_idx
+        # §11.3.4：Adopt=1 时 Reset_s + Replay
+        self._reset_side_track(state, "L")
+        self._reset_side_track(state, "U")
+        self._replay_attempt_events(state, config, anchors)
 
     def _exit_refresh(
         self,
         state: State[ValueAreaMultiAttemptPocReversionParams],
         config: ValueAreaMultiAttemptPocReversionParams,
     ) -> None:
-        """ExitEvent(t)：平仓刷新，恒 Adopt."""
+        """ExitEvent(t)：平仓刷新，恒 Adopt（§11.3.3）."""
         anchors = self._compute_anchors(state, config)
         if anchors is None:
             return
@@ -289,6 +306,10 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         state.extra["va_r30_anchors"] = anchors
         state.extra["va_r30_last_refresh_bar_idx"] = cur_idx
         state.extra["va_r30_next_tick_refresh_bar_idx"] = cur_idx + config.n_step
+        # §11.3.4：Adopt=1 时 Reset_s + Replay
+        self._reset_side_track(state, "L")
+        self._reset_side_track(state, "U")
+        self._replay_attempt_events(state, config, anchors)
 
     def _compute_anchors(
         self,
@@ -409,10 +430,235 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
             track["extremes"].popleft()
 
     @staticmethod
-    def _track_x(track: BreakoutTrack, side: Side) -> float | None:
+    def _track_x(
+        track: BreakoutTrack,
+        side: Side,
+        anchor: float,
+        b_tau: float,
+    ) -> float | None:
+        """按 spec §4 的 `Break_s^*(i | t)` 用当前锚复核历史极值。
+
+        对 L 侧只保留 `L_i <= D_t - bτ` 的历史极值，取最小；对 U 侧只保留
+        `H_i >= U_t + bτ` 的，取最大。anchor drift 后旧突破自动过期，
+        `B_s(t) = T(X_s − U_t)` 因此恒非负。
+        """
         if not track["extremes"]:
             return None
-        return min(track["extremes"]) if side == "L" else max(track["extremes"])
+        if side == "L":
+            threshold = anchor - b_tau
+            valid = [e for e in track["extremes"] if e <= threshold]
+            return min(valid) if valid else None
+        threshold = anchor + b_tau
+        valid = [e for e in track["extremes"] if e >= threshold]
+        return max(valid) if valid else None
+
+    def _track_attempt_event(
+        self,
+        state: State[ValueAreaMultiAttemptPocReversionParams],
+        ctx: BarContext,
+        config: ValueAreaMultiAttemptPocReversionParams,
+    ) -> None:
+        """spec §5.6 + §6.2：bar t 收盘后判定 AttemptEvent_s(t) := R_s(t)，
+        触发时更新 (A_s, B_s^-, Z_s^-, T_prev_event)。
+
+        与交易解耦：无论是否开仓，只要 R_s(t) 成立就更新事件层状态。
+        当同一 bar 上双侧都触发时，两侧各自独立更新。
+        """
+        anchors = state.extra.get("va_r30_anchors")
+        if anchors is None:
+            return
+        anchors_t = cast(Anchors, anchors)
+        tracks = cast(dict[str, BreakoutTrack], state.extra["va_r30_breakout_track"])
+        side_states = cast(dict[str, SideState], state.extra["va_r30_side_state"])
+        tick = config.price_tick
+        r_tau = config.min_reaccept_ticks * tick
+        b_tau = config.min_breakout_ticks * tick
+
+        for side in ("L", "U"):
+            anchor_price = anchors_t["val"] if side == "L" else anchors_t["vah"]
+            x_s = self._track_x(tracks[side], side, anchor_price, b_tau)
+            if x_s is None:
+                continue
+            if side == "L":
+                if not (ctx.bar.close >= anchors_t["val"] + r_tau):
+                    continue
+            else:
+                if not (ctx.bar.close <= anchors_t["vah"] - r_tau):
+                    continue
+            # R_s(t) 已成立 → AttemptEvent_s(t) = 1
+            b_ticks = self._break_ticks(side, x_s, anchors_t, tick)
+            side_state = side_states[side]
+            side_state["prev_poc_tested"] = self._touch_poc_since(
+                state,
+                config,
+                since_bar_idx=side_state["prev_event_bar_idx"],
+                q=+1 if side == "L" else -1,
+            )
+            side_state["prev_break_ticks"] = b_ticks
+            side_state["attempts"] += 1
+            side_state["prev_event_bar_idx"] = self._current_bar_idx(state)
+
+    def _touch_poc_since(
+        self,
+        state: State[ValueAreaMultiAttemptPocReversionParams],
+        config: ValueAreaMultiAttemptPocReversionParams,
+        *,
+        since_bar_idx: int | None,
+        q: int,
+    ) -> bool:
+        """spec §5.7 + §6.2 TouchPOC_q(t0, t1)：在 (since, current] 内检测是否触碰 POC。
+
+        起点为 T_prev_event（若存在）或 t_ref(t)（当前 Adopt 时刻，见 §11.3.3）；
+        session_start 只在没有任何 Adopt 时作为兜底。本函数用当前锚 P_t 记账。
+        """
+        anchors = state.extra.get("va_r30_anchors")
+        if anchors is None:
+            return False
+        poc = cast(Anchors, anchors)["poc"]
+        delta = config.poc_touch_tolerance_ticks * config.price_tick
+        history: deque[Bar] | None = state.extra.get("va_r30_bar_history")
+        if not history:
+            return False
+        cur_idx = self._current_bar_idx(state)
+        # fallback 优先级：T_prev_event → t_ref(当前 Adopt) → 0
+        if since_bar_idx is not None:
+            first_idx = since_bar_idx + 1
+        else:
+            last_refresh_idx = state.extra.get("va_r30_last_refresh_bar_idx")
+            first_idx = int(last_refresh_idx) if last_refresh_idx is not None else 0
+        # history 里最后一根 bar 对应 cur_idx，倒序推进
+        n = len(history)
+        for offset, bar in enumerate(reversed(history)):
+            bar_idx = cur_idx - offset
+            if bar_idx < first_idx:
+                break
+            if q == +1:
+                if bar.high - (poc - delta) >= 0:
+                    return True
+            else:
+                if bar.low - (poc + delta) <= 0:
+                    return True
+            if offset + 1 >= n:
+                break
+        return False
+
+    def _replay_attempt_events(
+        self,
+        state: State[ValueAreaMultiAttemptPocReversionParams],
+        config: ValueAreaMultiAttemptPocReversionParams,
+        anchors: Anchors,
+    ) -> None:
+        """spec §11.3.5 Replay procedure：Adopt 时用新锚在最近 n_step 根 bar 上重放
+        AttemptEvent，预填 (A_s, B_s^-, Z_s^-, T_prev_event) 供后续 C1/C2/C3 判定。
+
+        对每一侧独立执行。窗口起点：max(cur_idx - n_step, session_start_idx)。
+        窗口内的 bar_history 用新锚重新判定 Break_s^*(i | u) 与 R_s(i; u)，
+        每识别一次 breakout + reacceptance 组合，就更新一次事件层状态。
+        """
+        history: deque[Bar] | None = state.extra.get("va_r30_bar_history")
+        if not history:
+            return
+        side_states = cast(dict[str, SideState], state.extra["va_r30_side_state"])
+        # 每一侧清零后再重放（Adopt 语义：旧锚累积无效）
+        for side in ("L", "U"):
+            side_states[side] = SideState(
+                attempts=0,
+                prev_break_ticks=None,
+                prev_poc_tested=None,
+                prev_event_bar_idx=None,
+            )
+        state.extra["va_r30_side_state"] = side_states
+
+        cur_idx = self._current_bar_idx(state)
+        n_step = config.n_step
+        n_hist = len(history)
+        # bar_history 里最后一根 bar 对应 cur_idx（在 on_bar 里已 append）
+        # 追溯窗口：[cur_idx - n_step, cur_idx - 1]，映射到 history 就是
+        # 除最后一根外，倒数 min(n_step, n_hist - 1) 根。
+        replay_len = min(n_step, n_hist - 1)
+        if replay_len <= 0:
+            return
+        replay_bars: list[tuple[int, Bar]] = []
+        # history 是 deque，右端最新；跳过右端（当前 bar），取剩余的最后 replay_len 根，按时间升序
+        for i, bar in enumerate(list(history)[-(replay_len + 1) : -1]):
+            bar_idx = cur_idx - replay_len + i
+            replay_bars.append((bar_idx, bar))
+
+        tick = config.price_tick
+        b_tau = config.min_breakout_ticks * tick
+        r_tau = config.min_reaccept_ticks * tick
+        delta = config.poc_touch_tolerance_ticks * tick
+        vah = anchors["vah"]
+        val = anchors["val"]
+        poc = anchors["poc"]
+
+        for side in ("L", "U"):
+            side_state = side_states[side]
+            breakout_seen = False
+            breakout_extreme: float | None = None
+            # spec §11.3.5：touch_start_bar 初始为 replay 窗口起点前一根，
+            # 覆盖整个 replay 前缀。后续事件把它前移到该事件的 bar_idx。
+            replay_start_idx = replay_bars[0][0]
+            touch_start_idx: int = replay_start_idx - 1
+
+            for bar_idx, bar in replay_bars:
+                # (1) Break_s^*(i | u) 用新锚复核
+                is_break = (bar.low <= val - b_tau) if side == "L" else (bar.high >= vah + b_tau)
+                if is_break:
+                    if not breakout_seen:
+                        breakout_seen = True
+                        breakout_extreme = bar.low if side == "L" else bar.high
+                    else:
+                        assert breakout_extreme is not None
+                        breakout_extreme = (
+                            min(breakout_extreme, bar.low) if side == "L" else max(breakout_extreme, bar.high)
+                        )
+                # (2) R_s(i; u) 用新锚
+                r_i = breakout_seen and (
+                    (side == "L" and bar.close >= val + r_tau) or (side == "U" and bar.close <= vah - r_tau)
+                )
+                if r_i:
+                    assert breakout_extreme is not None
+                    # spec §11.3.5：TouchPOC 起点为 touch_start_idx（首事件=replay_start-1，
+                    # 后续事件=上一个 event 的 bar_idx）。用新锚 P_u 记账。
+                    q = +1 if side == "L" else -1
+                    z_touched = self._replay_touch_poc(
+                        replay_bars,
+                        touch_start_idx,
+                        bar_idx,
+                        poc,
+                        delta,
+                        q,
+                    )
+                    b_ticks = (val - breakout_extreme) / tick if side == "L" else (breakout_extreme - vah) / tick
+                    side_state["prev_poc_tested"] = z_touched
+                    side_state["prev_break_ticks"] = b_ticks
+                    side_state["attempts"] += 1
+                    side_state["prev_event_bar_idx"] = bar_idx
+                    breakout_seen = False
+                    breakout_extreme = None
+                    touch_start_idx = bar_idx
+
+    @staticmethod
+    def _replay_touch_poc(
+        replay_bars: list[tuple[int, Bar]],
+        since_idx: int,
+        upto_idx: int,
+        poc: float,
+        delta: float,
+        q: int,
+    ) -> bool:
+        """spec §5.7 在 replay 窗口上用新锚 P_u 记账 TouchPOC(since_idx, upto_idx]。"""
+        for bar_idx, bar in replay_bars:
+            if bar_idx <= since_idx:
+                continue
+            if bar_idx > upto_idx:
+                break
+            if q == +1 and bar.high - (poc - delta) >= 0:
+                return True
+            if q == -1 and bar.low - (poc + delta) <= 0:
+                return True
+        return False
 
     def _reset_side_track(
         self,
@@ -440,9 +686,11 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         tracks = cast(dict[str, BreakoutTrack], state.extra["va_r30_breakout_track"])
         tick = config.price_tick
         r = config.min_reaccept_ticks
+        b_tau = config.min_breakout_ticks * tick
 
         for side in ("L", "U"):
-            x_s = self._track_x(tracks[side], side)
+            anchor_price = anchors_t["val"] if side == "L" else anchors_t["vah"]
+            x_s = self._track_x(tracks[side], side, anchor_price, b_tau)
             if x_s is None:
                 continue
             if side == "L":
@@ -952,11 +1200,11 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         config: ValueAreaMultiAttemptPocReversionParams,
         info: TradeInfo,
     ) -> None:
-        """spec §9.3：交易关闭后回填 A_s / B_s^- / Z_s^- / T_last_exit + ExitEvent 刷新."""
-        side_state = cast(dict[str, SideState], state.extra["va_r30_side_state"])[info["side"]]
-        side_state["attempts"] += 1
-        side_state["prev_break_ticks"] = info["entry_break_ticks"]
-        side_state["prev_poc_tested"] = bool(state.extra.get("va_r30_poc_touched", False))
+        """spec §10.3：交易关闭后只更新 T_last_exit（跨侧共享的交易调度状态）。
+
+        `(A_s, B_s^-, Z_s^-, T_prev_event)` 由 §6.2 的 AttemptEvent 独立驱动，
+        与交易解耦，因此不在此处更新。ExitEvent 触发一次 profile 刷新（§11.3）。
+        """
         state.extra["va_r30_last_exit_bar_idx"] = self._current_bar_idx(state)
         state.extra.pop("va_r30_trade", None)
         state.extra.pop("va_r30_poc_touched", None)
