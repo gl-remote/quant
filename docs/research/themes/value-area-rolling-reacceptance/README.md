@@ -151,7 +151,121 @@ C3_s(t) := A_s(t) >= 1 ∧ Z_s^-(t) = False
    有明确复用价值；
 3. Stage C 需要在 1m 数据上验证结构信号，当前 5m spec 不足以覆盖。
 
-## 7. 参考
+## 7. 理论依据：为什么 rolling 反而更贴合 "POC 是跳变量" 的直觉
+
+一个反直觉的结论：**即使我们相信 POC / VA 是分段稳定的跳变量，当前
+discrete 刷新也不是正确建模，rolling 反而更贴合**。本节展开这个论证。
+
+### 7.1 POC 是跳变量的两种叙事
+
+**叙事 A（订单簿 / order-flow 视角）**：POC 是"人为堆单、大量交易堆积"
+的产物。堆完了不动，直到有人搬走或补充新单，才跳到下一个位置。
+- 对应数学模型：**跳跃过程（jump process）**，Poisson jump / Hawkes 过程
+- POC 在 `[t_k, t_{k+1}]` 内恒定于 `θ_k`；在跳变时刻 `t_{k+1}` 瞬间跳到
+  `θ_{k+1}`
+
+**叙事 B（能量-释放视角）**：POC 是市场积攒动能的位置，VA 边界是能量
+释放。积攒一段时间，能量在 VA 释放后 POC 转移到新位置。
+- 对应数学模型：**regime switching**（Hamilton 1989 / hidden Markov）
+- 存在离散状态 `s_t ∈ {1, 2, ...}`，每个状态对应一个 θ_s，状态切换
+  驱动 POC 跳变
+
+两种叙事都指向"POC 是随机离散变量，持续一段时间，变一下，再持续一段
+时间"。这个假设是有金融微观结构文献支持的：Kyle (1985)、Glosten-Milgrom
+(1985)、Easley-O'Hara (1987) 讨论的 informed trader / order flow /
+equilibrium price shifts 全都是**离散跳变**的，不是布朗运动。
+
+### 7.2 从 jump 假设出发，重新审视 n_profile 敏感性
+
+Stage B 观察到 `n_profile = 4h vs 8h vs 12h` 结果差异极大（同 group、
+同 pattern set，ret_mean 可以差 1-2 个百分点）。乍看这是"POC 不稳定"的
+反证，但按 jump 假设重新解释：
+
+- `n = 4h` 短窗口 → 窗口内**大概率只覆盖 1 个 regime** → 估当前 regime
+  的 θ_k，精度低但"跟得上跳变"
+- `n = 12h` 长窗口 → 窗口内**可能横跨 2-3 个 regime** → 估的 θ 是多个
+  regime 的"混合分布"中心
+- **两者估的本来就不是同一个东西**（当前 regime vs 混合分布），差异大
+  完全合理
+
+**结论**：jump 假设跟数据完全 compatible，不构成反证。
+
+### 7.3 但 discrete 刷新 ≠ jump process 的正确建模
+
+关键点：**"POC 是跳变的"不等于"我们的 discrete 刷新是正确建模"**。
+
+看当前 discrete 刷新做的事：
+- 每 n_step 采一次样，得到 θ_k
+- 隐含假设：θ 在 `[t_k, t_{k+1}]` 稳定 = θ_k
+- 隐含假设：**跳变时刻 τ 对齐 n_step 采样时钟**
+
+问题：**跳变时刻 τ 是不可预测的**，不会好心地对齐我们的采样时钟。
+
+- 若 τ 恰好落在两次采样之间 `t_k < τ < t_{k+1}`，从 τ 到 t_{k+1} 这段
+  时间 **我们用旧 θ_k 判定信号，是错的**
+- 平均延迟期望 `E[延迟] = n_step / 2`
+- n_step = 4h 意味着**平均 2h 的信号用旧锚判定**
+
+处理 jump process 的**正确方式**是 change-point detection：不按时钟
+刷新，而是**检测到跳变时立即刷新**。经典算法：
+- CUSUM (Page 1954)
+- Bayesian Online Change Point Detection (Adams & MacKay 2007)
+- Adaptive filtering / Kalman with regime switch prior
+
+### 7.4 Rolling 是 jump process 下的"隐式 change-point detection"
+
+Rolling window 恰恰是不显式建模跳变但**隐式追踪**的做法：
+
+- 跳变发生后，rolling window 每 bar 把最老一根挤出、最新一根挤入
+- 大约 n_profile 根 bar 内，`θ_t` 从 `θ_{k-1}` 自动过渡到 `θ_k`
+- 相当于 **"detection + estimation" 一体化**，不需要写显式 detector
+
+理论支持：jump-diffusion 的 nonparametric 估计（Aït-Sahalia 2004、
+Mancini 2009 的 realized variance / jump activity estimator）主流方
+法就是 **rolling window + smoothing / thresholding**。
+
+### 7.5 三种方案在 jump 假设下的正确性排序
+
+| 方案 | 对 jump process 的建模 | 工程成本 | 排名 |
+|---|---|---|---|
+| A. Discrete + change-point detector | **理论最贴合** | 高（CUSUM/BOCPD）| 最好 |
+| B. Rolling window | **隐式检测**，跳变时窗口过渡 | 低 | 次好 |
+| C. Discrete 定时刷新（**现状**）| 假设 τ 对齐采样时钟（错） | 中 | **最差** |
+
+C 是"把时间轴 discretize"的偷懒做法，**既没 A 的显式检测，也没 B 的
+连续追踪**。它成立的前提是"跳变周期 = n_step 的整数倍"，这是最强假设，
+经验上不成立。
+
+### 7.6 Rolling window 抖动担忧的化解
+
+对 rolling window 的常见担忧是"θ 抖动"。在 jump 假设下这个担忧可拆解：
+
+- **regime 稳定期**内：window 里全是同一 θ 的样本，rolling 估计 `θ̂_t`
+  抖动只来自 `1/N` 采样噪声，n_profile 大（144/288）时抖动小
+- **regime 过渡期**（跳变后 n_profile 根 bar 内）：window 混合了新旧
+  regime，`θ̂_t` 呈现过渡态斜坡。这是**正确反映了"我们对新 regime
+  的确信度还没到 100%"**，不是 bug，是特性
+
+若仍觉过渡期斜坡不可接受，有两种平滑手段：
+
+- **B+ (debouncing)**：锚必须持续变化 k 根 bar 才采纳到策略层，滤除
+  单 bar 毛刺跳变
+- **B++ (EWMA)**：`profile_ewm_t = α · new_bar + (1-α) · profile_ewm_{t-1}`。
+  Kalman filter 特例；对"underlying θ 慢漂移 + 观测噪声"模型是**最优
+  线性估计器**。是"跳变模型"与"平滑模型"的折中
+
+### 7.7 一句话
+
+**"POC 是跳变量"这个直觉是对的，但它并不是 discrete 刷新的理由；恰恰
+相反，它是切换到 rolling 的理由**——因为 rolling 是不知道跳变时刻的
+情况下，最简单的"隐式 change-point detection"实现。当前 discrete 刷
+新（方案 C）在 jump 假设下反而是最差的近似。
+
+真正贴合 jump 假设的极致方案是 A（显式 change-point detection），但
+工程复杂度过高；B 是理论次优 + 工程最简的**帕累托最优点**，因此本主题
+选择 B（可选加 debouncing 或 EWMA 平滑）。
+
+## 8. 参考
 
 - 布林带 rolling 突破再接受：mid / upper / lower 每 bar rolling，
   breakout / reaccept 每 bar 用当时锚判定，无跨 bar 状态。是本提案的
@@ -159,3 +273,11 @@ C3_s(t) := A_s(t) >= 1 ∧ Z_s^-(t) = False
 - 当前 spec 的 Replay 机制（§11.3.5）是"想吃 rolling 的直觉，但被离散
   刷新 + 跨 bar 状态设计束缚"的折中产物；rolling 版本让这个 workaround
   自然消失。
+- Kyle 1985 / Glosten-Milgrom 1985：市场微观结构里 order flow-driven
+  equilibrium price 的经典 jump 模型。
+- Hamilton 1989 / Dahlhaus 1997：regime switching 与 locally stationary
+  processes 的正统框架，正是"POC 分段稳定"直觉的数学化。
+- Page 1954 CUSUM / Adams & MacKay 2007 BOCPD：change-point detection
+  经典算法，对应 §7.5 方案 A 的显式实现路径（本主题暂不采纳）。
+- Aït-Sahalia 2004 / Mancini 2009：jump-diffusion 的 nonparametric
+  rolling estimator，是 §7.4 隐式追踪思路的文献依据。
