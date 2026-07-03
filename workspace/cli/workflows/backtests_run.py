@@ -85,6 +85,7 @@ class VnpySearchRequest:
     dump_indicators: bool = False
     early_stop_patience: int | None = None
     strategy_param_overrides: dict[str, Any] | None = None
+    no_report: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,6 +99,7 @@ class VnpyWalkForwardRequest:
     pattern: str | None
     start: str | None
     end: str | None
+    no_report: bool = False
     # 阶段 7 在此扩展窗口参数
 
 
@@ -163,7 +165,7 @@ class BacktestRunWorkflow:
         engine.set_run_id(run_id)
 
         log_helper = RunLogHelper()
-        finalizer = RunFinalizer(self._dm, log_helper)
+        finalizer = RunFinalizer(self._dm, log_helper, skip_report_build=req.no_report)
         log_helper.attach(run_id)
 
         try:
@@ -210,7 +212,7 @@ class BacktestRunWorkflow:
         engine.set_run_id(run_id)
 
         log_helper = RunLogHelper()
-        finalizer = RunFinalizer(self._dm, log_helper)
+        finalizer = RunFinalizer(self._dm, log_helper, skip_report_build=req.no_report)
         log_helper.attach(run_id)
 
         try:

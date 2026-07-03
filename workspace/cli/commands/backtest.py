@@ -125,6 +125,11 @@ def register(subparsers: Any) -> None:
         default=None,
         help="策略参数 JSON 覆盖，优先级高于配置文件，例如 '{\"stop_widen_multiplier\":1.5}'（仅 vnpy 生效）",
     )
+    p.add_argument(
+        "--no-report",
+        action="store_true",
+        help="跳过 report 构建（前端 + JSON 数据导出），DB 与清算仍正常落地。批量扫参可省 10~30s/run。",
+    )
     add_environment_arguments(p)
 
 
@@ -208,6 +213,7 @@ def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
         no_search=bool(args.no_search),
         dump_indicators=bool(args.dump_indicators),
         strategy_param_overrides=_parse_strategy_params(args.strategy_params),
+        no_report=bool(args.no_report),
     )
 
 
@@ -220,6 +226,7 @@ def _build_walk_forward_request(args: argparse.Namespace) -> VnpyWalkForwardRequ
         pattern=args.pattern,
         start=args.start,
         end=args.end,
+        no_report=bool(args.no_report),
     )
 
 
