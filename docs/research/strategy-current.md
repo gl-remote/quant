@@ -34,7 +34,7 @@ R30 多次 VA 回归测试 / continuation 分支拆分。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 活跃 / R30 结构分支验证 | [value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance | 活跃 / R30 结构分支验证 | [themes/value-area-reacceptance/](./themes/value-area-reacceptance/README.md) |
 
 ## 3. 当前基础设施
 
@@ -147,7 +147,7 @@ random baseline percentile
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
-| value_area_reacceptance 主题状态 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance 主题状态 | [themes/value-area-reacceptance/](./themes/value-area-reacceptance/README.md) |
 | R29 扩样与随机基准复验 | [value-area-reacceptance-r29-expanded-validation.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
 | R28 结构诊断 | [value-area-reacceptance-r28-structure-diagnosis.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
 | R27 扩样复验 | [value-area-reacceptance-r27-expanded-sample.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
@@ -160,7 +160,7 @@ random baseline percentile
 
 ```text
 1. 先读本文件；
-2. 再读 themes/value-area-reacceptance.md；
+2. 再读 themes/value-area-reacceptance/README.md（会导向 current.md/spec.md/plan.md/parameter-selection-spec.md）；
 3. 需要 R27-R29 细节时读 docs/archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/；
 4. 不要继续调旧 baseline 参数；
 5. 下一步围绕 R30 多次 VA 回归 / continuation 分支验证；

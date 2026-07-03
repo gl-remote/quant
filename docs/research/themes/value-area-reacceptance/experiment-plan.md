@@ -1,11 +1,14 @@
 # value_area_reacceptance 多次 POC 回归研究计划
 
-> 类型：Workbench / 下阶段研究计划
+> 类型：Theme / 下阶段研究计划
 > 状态：草案 / 待实现与验证
 > 最近更新：2026-07-02
-> 前置结论：[R29 扩样与随机基准复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
-> 数学规格：[value-area-reacceptance-multi-attempt-poc-reversion-spec.md](value-area-reacceptance-multi-attempt-poc-reversion-spec.md)
-> 当前研究入口：[strategy-current.md](../research/strategy-current.md)
+> 前置结论：[R29 扩样与随机基准复验](../../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+> 数学规格：[strategy-math-spec.md](strategy-math-spec.md)
+> 参数选择：[parameter-selection-spec.md](parameter-selection-spec.md)
+> 工程实现细节：[implementation-notes.md](implementation-notes.md)
+> 主题入口：[README.md](README.md)
+> 当前研究入口：[../../strategy-current.md](../../strategy-current.md)
 
 ## 1. 研究目标
 
@@ -33,7 +36,7 @@ Q4: close-profile 与 range-profile 的 POC 定义是否影响泛化？
 策略定义以数学规格为准：
 
 ```text
-spec := value-area-reacceptance-multi-attempt-poc-reversion-spec.md
+spec := docs/research/themes/value-area-reacceptance/strategy-math-spec.md
 ```
 
 若实现或实验发现规格缺失，先更新规格，再继续实现或回测。
