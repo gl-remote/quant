@@ -303,12 +303,15 @@ i_start(t)  := max(i_reset(t), i_sig(t))
 J_s(t)      := {i ∈ I_all | i_start(t) <= idx(i) <= idx(t), Break_s^*(i | t)}
 Exists_s(t) := 1[J_s(t) ≠ ∅]
 
-X_L(t) := min{L_i | i ∈ J_L(t)}, if Exists_L(t) = 1
-X_U(t) := max{H_i | i ∈ J_U(t)}, if Exists_U(t) = 1
-X_s(t) := undefined,             if Exists_s(t) = 0
+i*_s(t) := max{ idx(i) : i ∈ J_s(t) },   if Exists_s(t) = 1     # 最近一次同侧 breakout bar 的索引
+X_L(t)  := L_{i*_L(t)},                  if Exists_L(t) = 1
+X_U(t)  := H_{i*_U(t)},                  if Exists_U(t) = 1
+X_s(t)  := undefined,                    if Exists_s(t) = 0
 ```
 
-即 `X_s(t)` 的历史窗口以 bar 条数为度量，起点取「上次 `Reset_s` 之后一根 bar」与「bar `t` 之前 `n_step` 条 bar 起点」两者较近者，终点为 `t`。
+即 `X_s(t)` 记录**信号窗口内最近一次同侧突破 bar 的极值**（不是窗口累积极值）。取"最近一次"而非"最强一次"是为了让 C2（§7.1）能反映"最近一次突破弱于上一次" 的直觉——若用累积极值，一旦窗口内出现过强突破，后续弱突破无法降低 `X_s`，`B_s` 恒等于历史最强，C2 恒为假。
+
+历史窗口以 bar 条数为度量，起点取「上次 `Reset_s` 之后一根 bar」与「bar `t` 之前 `n_step` 条 bar 起点」两者较近者，终点为 `t`。
 
 **Reset 触发时窗口起点**：当 `Reset_s(u) = 1`（§11.2）时，`τ_s(t) = u` for all `t >= u`，从而 `i_reset(t) = idx(u) + 1`。特别地，在 `t = u` 那根 bar 上 `i_reset(u) = idx(u) + 1 > idx(u)`，导致 `J_s(u) = ∅`、`X_s(u)` = undefined。在 `u < t < u + n_step` 期间，`i_reset(t) > i_sig(t)`，信号窗口由 `i_reset` 主导；`t >= u + n_step` 之后，`i_sig` 才重新主导。
 
@@ -887,7 +890,7 @@ Replay(u; s):
 
     replay_start         := max(idx(u) - n_step, idx(session_start))
     breakout_seen        := False
-    breakout_extreme     := undefined         # max H (side U) or min L (side L) so far since last event
+    breakout_extreme     := undefined         # H_i (side U) or L_i (side L) of the most recent breakout bar since last event
     touch_start_bar      := idx(replay_start) - 1
                                               # TouchPOC 起点：初始为 replay 窗口起点前一根
                                               # （首个事件的 TouchPOC 覆盖整个 replay 前缀）
@@ -895,11 +898,8 @@ Replay(u; s):
     for i in ascending order of idx from replay_start to idx(u) - 1:
         # (1) Break_s^*(i | u) 用新锚复核（同一根 bar 既是首次 breakout 又满足 R_s 的情况在 (2) 里会被正确处理）
         if Break_s^*(i | u) holds:
-            if not breakout_seen:
-                breakout_extreme := H_i if s = U else L_i
-            else:
-                breakout_extreme := max(breakout_extreme, H_i) if s = U else min(breakout_extreme, L_i)
-            breakout_seen := True
+            breakout_seen    := True
+            breakout_extreme := H_i if s = U else L_i         # spec §5.2: 最近一次 breakout bar 的极值，覆盖前值
 
         # (2) 判定 R_s(i; u)：breakout_seen 承担了 §5.5 中 Exists_s(i | u) = 1 的角色
         R_i_new := breakout_seen ∧ (

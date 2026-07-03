@@ -436,21 +436,25 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
         anchor: float,
         b_tau: float,
     ) -> float | None:
-        """按 spec §4 的 `Break_s^*(i | t)` 用当前锚复核历史极值。
+        """按 spec §5.2 + §5.3 返回信号窗口内**最近一次**同侧突破 bar 的极值。
 
-        对 L 侧只保留 `L_i <= D_t - bτ` 的历史极值，取最小；对 U 侧只保留
-        `H_i >= U_t + bτ` 的，取最大。anchor drift 后旧突破自动过期，
-        `B_s(t) = T(X_s − U_t)` 因此恒非负。
+        `Break_s^*(i | t)` 用当前锚复核：对 L 侧只保留 `L_i <= D_t - bτ` 的
+        历史极值；对 U 侧只保留 `H_i >= U_t + bτ` 的。取最近（时间最新）
+        通过过滤的那一根 bar 的极值。取"最近一次"而非"最强一次"是为了让
+        C2（§7.1 "这次突破弱于上次"）语义可分辨——若取窗口 max/min，一旦
+        出现极强突破就会锁死 X_s，后续弱突破无法降低 B_s，C2 恒为假。
+
+        anchor drift 后旧突破自动过期，`B_s(t) = T(|X_s − anchor|)` 因此恒非负。
         """
         if not track["extremes"]:
             return None
-        if side == "L":
-            threshold = anchor - b_tau
-            valid = [e for e in track["extremes"] if e <= threshold]
-            return min(valid) if valid else None
-        threshold = anchor + b_tau
-        valid = [e for e in track["extremes"] if e >= threshold]
-        return max(valid) if valid else None
+        threshold = anchor - b_tau if side == "L" else anchor + b_tau
+        for extreme in reversed(track["extremes"]):
+            if side == "L" and extreme <= threshold:
+                return extreme
+            if side == "U" and extreme >= threshold:
+                return extreme
+        return None
 
     def _track_attempt_event(
         self,
@@ -605,14 +609,10 @@ class ValueAreaMultiAttemptPocReversionStrategyCore(Strategy[ValueAreaMultiAttem
                 # (1) Break_s^*(i | u) 用新锚复核
                 is_break = (bar.low <= val - b_tau) if side == "L" else (bar.high >= vah + b_tau)
                 if is_break:
-                    if not breakout_seen:
-                        breakout_seen = True
-                        breakout_extreme = bar.low if side == "L" else bar.high
-                    else:
-                        assert breakout_extreme is not None
-                        breakout_extreme = (
-                            min(breakout_extreme, bar.low) if side == "L" else max(breakout_extreme, bar.high)
-                        )
+                    breakout_seen = True
+                    # spec §5.2：X_s 取信号窗口内**最近一次** breakout bar 的极值。
+                    # 无条件覆盖前值，让 R_s 判定用最近一次的极值。
+                    breakout_extreme = bar.low if side == "L" else bar.high
                 # (2) R_s(i; u) 用新锚
                 r_i = breakout_seen and (
                     (side == "L" and bar.close >= val + r_tau) or (side == "U" and bar.close <= vah - r_tau)
