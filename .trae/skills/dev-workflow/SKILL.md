@@ -48,7 +48,7 @@ description: "Runs branch, commit, archive, merge, and push workflow. Invoke whe
    - 这个 hash 在开分支时即可记录，不等到提交后再补。
 5. 文档元数据写入边界：
    - roadmap 默认只维护阶段目标、评价标准和候选方向。
-   - 具体实验方向、开发分支、开分支 hash、参数对照和中间结果写入 `docs/workbench/`。
+   - 具体实验方向、开发分支、开分支 hash、参数对照和中间结果写入 `docs/workbench/`（**顶层唯一位置**，禁止在主题目录 `docs/research/themes/<name>/` 下建 `workbench/` 子目录，详见 `quant-research-layout`）。
    - 不要把实验过程和开发分支信息直接写入 roadmap，除非用户明确要求 roadmap 记录流程约束。
 6. 如果没有关联 roadmap / workbench 文档，不主动创建文档；只在最终回复中说明开发分支和相关 hash。
 7. 开发完成并提交后，回填 `实现提交 hash`。
