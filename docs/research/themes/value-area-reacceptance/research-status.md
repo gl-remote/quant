@@ -1,7 +1,7 @@
 # value_area_reacceptance 主题当前研究进度
 
 > 类型：Theme / 主题当前状态
-> 状态：活跃 / R29 扩样未通过 / 进入 R30 多次 POC 回归 spec 阶段
+> 状态：Stage B v2 已完成 / feature-only 降级 / 主策略暂停
 > 最近更新：2026-07-03
 > 主题入口：[README.md](README.md)
 > 数学规格：[strategy-math-spec.md](strategy-math-spec.md)
@@ -9,31 +9,45 @@
 > 参数选择：[parameter-selection-spec.md](parameter-selection-spec.md)
 > 工程实现细节：[implementation-notes.md](implementation-notes.md)
 > 全局研究入口：[../../strategy-current.md](../../strategy-current.md)
+> Stage B 结果：[../../../workbench/stage-b-sweep-summary.md](../../../workbench/stage-b-sweep-summary.md)
 > 当前归档：[R29 扩样与随机基准复验](../../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
 > 前置归档：[R28 结构诊断](../../../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
 
 ## 1. 主题一句话结论
 
 ```text
-value_area_reacceptance 已经不作为单一固定策略推进，
-拆成两条结构线继续验证：
-1. VA 边界 → POC 的多次回归测试（主线，R30 spec 已成文）；
-2. failed reacceptance / continuation 对照线（对照）。
+value_area_reacceptance 主策略在 Stage B v2（事件驱动 AttemptEvent）下
+双 Q 判据仍未同时达标：
+- Q_return（Group_P 均值提升）：C3 @ n_profile=144 达标（ret_mean +1.10）；
+- Q_generalize（Group_M 泛化）：未达标（Group_M 只 2/8 profitable，5/8 无 trade）。
 
-旧 value_area_reacceptance 实现已降级为 value_area_reacceptance_baseline，
-只用于复现 R27-R29 历史规则与随机基准对照。
+结论：走 feature-only 降级路径。
+- C3（次次尝试且未触碰 POC，n_profile=12h）作为独立 feature 保留；
+- 主策略暂停作为独立开仓策略，降级为 baseline-only；
+- C2 因 spec §5.2 X_s 极值化的语义必然，恒不触发（不是 bug，是形式条件）。
 ```
 
 边界：
 
 ```text
-1. R28 DCE.p 四样本不能再视为已验证主线；
-2. R29 失败不能直接否定 VA reacceptance 事件；
-3. seq1/seq2/seq3 不再机械混成一套 reentry 逻辑；
-4. R30 先按 strategy-math-spec.md 定义验证结构条件，不先调 stop/target。
+1. C3 在 n_profile=4h/8h 上不稳定，只在 12h 档有实质经济意义；
+2. Group_M 上 C3 表现由 m2501 单样本主导（+10.50 独占 87% 贡献），concentration risk 高；
+3. C2 若要有意义需要修 spec §5.2（把 X_s 从极值降级为最近一次 breakout bar high），
+   属于策略语义变更，暂不推进；
+4. R29 主要失败样本中 p2505 / p2601 在 C3 @ n=144 上大幅翻身，
+   但 p2501 / p2605 仍负——不能视为整组翻身。
 ```
 
-## 2. 当前工件
+## 2. 未决问题
+
+| 问题 | 现状 | 后续处理 |
+| --- | --- | --- |
+| C2 恒不触发（spec §5.2 X_s 极值化）| 已定性，非 bug | 如果 feature-only 层需要 C2，独立开 issue 讨论"X_s 是否降级为 last breakout high" |
+| Group_M m2501 concentration risk | 数据观察 | feature-only 使用者需自行控制单样本权重 |
+| n_profile=4h/8h C3 不稳定 | 观察 | feature-only 层默认 12h |
+| B_s 负值 anchor drift | 已通过 `Break_s^*(i | t)` 当前锚复核修复 | 保留 spec §5.3 定义 |
+
+## 3. 当前工件
 
 | 目的 | 文档 |
 | --- | --- |
@@ -65,16 +79,16 @@ scripts/analysis/value_area_random_baseline_compare.py
 
 注意：runner 的 `total_net_pnl` 使用 vnpy BacktestResult 口径，只能做同一 runner 内相对比较，不和 trade_clearings 清算口径混算。
 
-## 3. 已完成阶段结论
+## 4. 已完成阶段结论
 
-### 3.1 R27 扩样后的降级
+### 4.1 R27 扩样后的降级
 
 ```text
 旧 m/SR + 1m + A4_ratio_80 + actual RR=0.8 + min_reaccept_ticks=2/3 外推失败；
 旧 m/SR 单笔 POC 回归线不再作为主候选。
 ```
 
-### 3.2 R28 结构诊断
+### 4.2 R28 结构诊断
 
 ```text
 DCE.p 四样本内：
@@ -85,7 +99,7 @@ DCE.p 四样本内：
 - reentry target 1.0R~1.35R 构成样本内平台，继续细调会过拟合。
 ```
 
-### 3.3 R29 扩样与随机基准
+### 4.3 R29 扩样与随机基准
 
 ```text
 固定 R28 后的保守候选未通过扩样：
@@ -100,7 +114,7 @@ DCE.p 四样本内：
 - 问题更可能在环境过滤、风险空间、交易序列或退出兑现层。
 ```
 
-## 4. R30 当前主规则（详见 strategy-math-spec.md）
+## 5. R30 当前主规则（详见 strategy-math-spec.md）
 
 R30 将旧的“上一笔 stop_loss / 亏损后才 reentry”改成结构状态判断，并将开仓与出场拆成正交候选组：
 
@@ -128,7 +142,7 @@ continuation：direction_mode = away_from_poc
 必须单独统计，不与 VA 回归主线合并评估。
 ```
 
-## 5. R30 小矩阵（详见 experiment-plan.md）
+## 6. R30 小矩阵（详见 experiment-plan.md）
 
 | 组合 | 方向分支 | 开仓条件 | 目的 |
 | --- | --- | --- | --- |
@@ -152,7 +166,7 @@ by_environment
 random baseline percentile
 ```
 
-## 6. 当前不建议继续的方向
+## 7. 当前不建议继续的方向
 
 | 方向 | 当前处理 | 原因 |
 | --- | --- | --- |
@@ -163,19 +177,22 @@ random baseline percentile
 | ATR / volatility normalization 入主规则 | 暂缓 | 可能有助于泛化，但不应先混入主效应 |
 | range-profile 替换 close-profile | 暂缓 | 当前主问题不是 profile 定义替换 |
 
-## 7. 下一阶段待验证
+## 8. 下一阶段待验证
 
 ```text
-1. 按 strategy-math-spec.md 实现 multi_attempt_poc_reversion 策略；
-2. 单样本 smoke test：核对 entry/stop/target/exit/state reset/refresh；
-3. 固定 R29 样本与首轮默认参数，跑 Ω_pattern × Ω_risk × Ω_direction × Ω_tp 小矩阵；
-4. 分别输出 C1 / C2_only / C3_only / C23 及 overlap 的 POC touch rate、pnl、stop_loss 占比；
-5. 用 value_area_random_baseline 做同 runner 随机对照；
-6. 汇总首轮观察后回填到 parameter-selection-spec.md，进入参数选择阶段；
-7. 若 VA 回归主线失败而 continuation 对照更好，continuation 独立成下一条策略线。
+1. Stage B v2 结论归档：workbench 稳定结论压缩后归档到
+   docs/archive/strategy-research/<date>-value-area-reacceptance-stage-b/；
+2. C3 作为独立 feature 提取：暴露 C3 事件时点、B_s 序列、Z_s^- 序列
+   给下游 feature 消费者（feature-only 层），不再作为独立开仓策略；
+3. C2 恒不触发的 spec 语义决策：如果未来 feature-only 层需要 C2，
+   独立开 issue 讨论"X_s 是否降级为 last breakout high"；
+4. Group_M concentration risk：m2501 独占 87% 贡献，
+   feature-only 使用者需自行做样本权重管理，主题层不再兜底；
+5. continuation 对照线（direction_mode=away_from_poc）作为独立后续，
+   不与本主题主线合并评估。
 ```
 
-## 8. 关联文档
+## 9. 关联文档
 
 | 目的 | 文档 |
 | --- | --- |
