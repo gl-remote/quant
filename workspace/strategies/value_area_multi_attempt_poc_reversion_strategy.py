@@ -43,7 +43,9 @@ class ValueAreaMultiAttemptPocReversionParams:
     poc_mode: PocMode = "close"
     va_mode: VaMode = "greedy_from_poc"
     value_area_ratio: float = 0.7
-    n_profile: int = 288  # 24h / 5m
+    # spec §11 首轮候选：n_profile ∈ {4h, 8h, 12h}/Δbar；Δbar=5m 时为 {48, 96, 144}。
+    # 这里选最长候选 12h 作为默认；扫描时由回测层覆盖。
+    n_profile: int = 144  # 12h / 5m
     n_step: int = 24  # 2h / 5m
 
     # θ_signal

@@ -873,7 +873,7 @@ RefreshEvent(u) = 1, Adopt(u) = 0      => (P_t, D_t, U_t) unchanged for all t
 
 刷新与执行冷却（`CooldownOK`）、突破跟踪（`X_s`）、交易计数彼此独立；平仓后能否立即再入场仍由 §7 的 `CooldownOK` 决定，与刷新调度无关。
 
-首轮参数取 `n_profile = 24h/Δbar, n_step = 2h/Δbar`。
+首轮参数取 `n_profile ∈ {4h, 8h, 12h} / Δbar, n_step = 2h/Δbar`；对每个 `n_profile` 候选独立评估。
 
 ## 11. 首轮默认候选
 
@@ -881,7 +881,7 @@ RefreshEvent(u) = 1, Adopt(u) = 0      => (P_t, D_t, U_t) unchanged for all t
 poc_mode = close
 va_mode = greedy_from_poc
 ρ = 0.7
-n_profile = 24h / Δbar     (e.g. 288 when Δbar = 5m)
+n_profile ∈ {4h, 8h, 12h} / Δbar     (e.g. {48, 96, 144} when Δbar = 5m)
 n_step    = 2h  / Δbar     (e.g. 24  when Δbar = 5m)
 direction_mode = to_poc
 b = 1
@@ -911,4 +911,4 @@ n_fast ∈ {3, 6}             (bars)
 n_fast_hold ∈ {0, 1}        (bars)
 ```
 
-配对矩阵按 `Ω_pattern × Ω_risk × Ω_direction × Ω_tp` 全枚举；`R0` 组合下 `rr_raw_min` 取值不影响结果，可归并为单点；`Ω_direction = {D_near, D_far}` 组合下方向类过滤为常真，可用于对照；`Ω_tp` 中未涉及的候选参数（`η_arm/η_retrace/n_fast/η_fast/n_fast_hold`）在对应候选不出现时归并为单点。
+配对矩阵按 `Ω_pattern × Ω_risk × Ω_direction × Ω_tp` 全枚举；`n_profile ∈ {4h, 8h, 12h} / Δbar` 作为正交扫描维度，与四维候选矩阵独立组合，用于评估 profile 窗口长度对结构锚稳定性的影响；`R0` 组合下 `rr_raw_min` 取值不影响结果，可归并为单点；`Ω_direction = {D_near, D_far}` 组合下方向类过滤为常真，可用于对照；`Ω_tp` 中未涉及的候选参数（`η_arm/η_retrace/n_fast/η_fast/n_fast_hold`）在对应候选不出现时归并为单点。
