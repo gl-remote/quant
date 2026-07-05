@@ -3,7 +3,7 @@
 > 类型：Design / 已实现设计记录
 > 状态：已实现
 > 完成日期：2026-06-25
-> 关联代码：[strategy\_aspects/risk](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/risk)、[strategy\_aspects/direction](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/direction)、[primitives.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/primitives.py)
+> 关联代码：`workspace/strategies/strategy_aspects/risk`、`workspace/strategies/strategy_aspects/direction`、`workspace/strategies/strategy_aspects/primitives.py`
 > 关联缺陷：DEF-S05（信号优先级由 if/elif 顺序隐式定义）
 
 ***
@@ -65,7 +65,7 @@
 
 ## 3. 目标数据结构
 
-挂载到现有 [StrategyAspects](file:///Users/gaolei/Documents/src/quant/workspace/strategies/strategy_aspects/primitives.py)，新增 `risk`（与 `direction` 平级），采用**多层分桶结构**与 `direction` 对齐。
+挂载到现有 `workspace/strategies/strategy_aspects/primitives.py`（StrategyAspects），新增 `risk`（与 `direction` 平级），采用**多层分桶结构**与 `direction` 对齐。
 
 ```python
 @dataclass(frozen=True)

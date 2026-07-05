@@ -34,7 +34,7 @@ uv run python main.py --help
 
 ```text
 Traceback (most recent call last):
-  File "/Users/gaolei/Library/Mobile Documents/com~apple~CloudDocs/Documents/src/quant/main.py", line 17, in <module>
+  File ".../quant/main.py", line 17, in <module>
     from cli.main import main
 ModuleNotFoundError: No module named 'cli'
 ```

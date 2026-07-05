@@ -478,4 +478,4 @@ cls.__direction_keys__ = {
 
 ### 后续
 
-- [risk-aspects-advisory-refactor.md](file:///Users/gaolei/Documents/src/quant/docs/archive/aspects/risk-aspects-advisory-refactor.md) — 风控切面建议化重构（已完成）
+- risk-aspects-advisory-refactor.md（`docs/archive/aspects/risk-aspects-advisory-refactor.md`）— 风控切面建议化重构（已完成）

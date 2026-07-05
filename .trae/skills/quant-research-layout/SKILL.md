@@ -139,7 +139,7 @@ AI 看到命名引用时按上表映射立即调 `Read` / `LS`。不需要打开
 
 ### 命名引用与 archive 顶层索引的关系
 
-archive 顶层索引 [`docs/archive/strategy-research/README.md`](file:///Users/gaolei/Documents/src/quant/docs/archive/strategy-research/README.md) 的"家族 slug"列即 `family:` 前缀的解析源；"日期"列即 `archive:` 前缀日期段的解析源；两者共同构成命名引用的**权威索引表**。
+archive 顶层索引 [`docs/archive/strategy-research/README.md`](../../archive/strategy-research/README.md) 的"家族 slug"列即 `family:` 前缀的解析源；"日期"列即 `archive:` 前缀日期段的解析源；两者共同构成命名引用的**权威索引表**。
 
 ## 关键发现清单（research-status.md 内节）
 
