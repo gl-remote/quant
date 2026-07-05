@@ -58,19 +58,36 @@
 
 ### 0.6 统计口径
 
+**判据分两类，仓位维度必用类 II，其他维度可选**：
+
+**类 I · 单笔期望**（适用于 stop / target / time-exit 维度）：
 - 期望净值（ATR/笔）作为主要判据；
-- **配对差值检验**（同一批 no_trigger 事件下多结构评估配对）；
+- 配对差值检验（同一批 no_trigger 事件下多结构评估配对）；
 - Bootstrap 5000 次 + Cluster bootstrap（按 contract 聚类）；
 - 单侧假设 H1: structure_variant > baseline，p<0.05 且 cluster CI 排除 0 为显著；
 - 单板块 n<300 时结论标注"信度不足"，不作硬决策依据。
+
+**类 II · 组合风险调整**（仓位维度必用，其他维度可选补充）：
+- **组合 Sharpe**（跨品种加权后的年化夏普比）；
+- **Sortino**（下行波动率替代 std，捕捉负偏效应）；
+- **最大回撤 / MDD**（组合层面）；
+- **几何均值收益**（对应 volatility drag 效应）；
+- 权重方案：按变体规则实际分配的仓位（如 P1 用 1/ATR × k 分配）；
+- 显著性：bootstrap 5000 次组合层面 Sharpe/MDD 分布，比较配对差值 CI。
+
+**为什么仓位维度需要类 II**：仓位变体本质上是**跨品种资金分配规则**的改变，
+单笔期望（ATR/笔口径）已经把 ATR 从 pnl 里除掉，看不到仓位分配的效果。
+必须回到组合层面（未归一 pnl 或 pnl_currency）才能捕捉波动率归一化、
+几何均值 vs 算术均值差异、Sharpe 提升等真实 alpha 来源。
 
 ### 0.7 判据分档
 
 | 判决 | 条件 |
 |------|------|
-| ✅ 有独立 alpha | 至少 1 个结构变体在 ≥2 baseline 下显著优于对照，跨板块方向一致 |
+| ✅ 有独立 alpha (mean) | 至少 1 个结构变体在 ≥2 baseline 下 mean 差值显著优于对照，跨板块方向一致 |
+| ✅ 有独立 alpha (risk-adjusted) | 至少 1 个结构变体在 ≥2 baseline 下 Sharpe/Sortino 显著提升或 MDD 显著降低，mean 不显著变差 |
 | ⚠️ 部分有 alpha | 某结构变体在特定板块/周期显著，其他不显著 → 收窄边界继续 |
-| ❌ 无独立 alpha | 全部结构变体在所有 baseline 下都不显著优于对照 → 阶段冻结 |
+| ❌ 无独立 alpha | 全部结构变体在所有 baseline 下 mean 和 risk-adjusted 指标都不显著优于对照 → 阶段冻结 |
 
 ## 阶段 1 · 单结构维度扫描（Gatekeeper）
 
@@ -78,9 +95,49 @@
 
 **方法**：固定其他维度为 baseline_A，逐个改变一个维度：
 
+### 术语澄清（三层概念）
+
+本 plan 涉及三层 "baseline / 变体" 概念，避免混淆：
+
+| 层 | 名称 | 数量 | 用途 |
+|----|------|------|------|
+| L1 | 入场 baseline | 1 (`no_trigger`) | 事件源，所有实验共用（§0.1）|
+| L2 | 标准结构 baseline | 3 (`baseline_A/B/C`) | **判决对照物**，变体 vs 它们做配对差值检验（§0.4）|
+| L3 | 结构变体候选 | 每子阶段 4-6 个（P0-P4, T0-T5, ...）| 待检验的假设，变化 L2 中的一个维度 |
+
+各子阶段表格里的 `P0 (baseline_A)` / `T0 (baseline_A)` 等行表示
+**"该变体等价于 baseline_A"的自检复现点**，不是新 baseline。
+
+每个 L3 变体的判决流程：
+
+```text
+1. 在同一批 no_trigger 事件（L1）上跑变体，得到 pnl 序列；
+2. 与 baseline_A/B/C（L2）的 pnl 序列配对；
+3. 计算配对差值 cluster CI；
+4. 至少 2 个 baseline 下差值显著优于对照 → 该变体通过。
+```
+
 ### 阶段 1a · 仓位维度
 
-| 变体 ID | position_sizing | 说明 |
+**为什么仓位维度可能有独立 alpha**（回应"仓位是纯风控"的主流认知）：
+
+主流认知说仓位是头寸大小的线性变换，不改变 pnl 分布形状，因此不产生
+alpha。这个说法对**单品种、算术均值口径**成立，但忽略了三类效应：
+
+1. **Volatility drag（几何均值 vs 算术均值）**：即使算术期望为 0，仓位越大长期几何均值越负。高波动率品种大仓 → 大回撤 → 组合层面几何均值受拖累。1/ATR 反向仓位可通过降低高波品种仓位缓解拖累。
+
+2. **跨品种风险分配**：等 lot 下不同品种的账户金额风险差异极大（如螺纹每 lot 波动 ~300 元/日 vs 玉米 ~30 元/日），组合 pnl 被高波品种主导。波动率反向仓位让每笔金额风险相当，Sharpe / Sortino 可显著改善（即使 mean 不变）。
+
+3. **分布不对称的 Kelly 优化**：不同品种的 no_trigger baseline pnl 分布偏度不同，const 仓位不匹配任何品种的最优 Kelly 分数。按分布特征动态调整可能提升组合几何均值。
+
+**因此本子阶段必须用类 II（组合风险调整）判据**（§0.6），单看 ATR/笔期望
+会漏掉真正的仓位 alpha。
+
+**关键提醒**：仓位变体只在 **P0 与 baseline_A 完全等价**（自检点），
+其他变体（P1-P4）的期望净值 ATR/笔 可能与 baseline_A 差异不大 —— **这
+不是失败信号**，因为仓位 alpha 主要在组合风险调整维度。
+
+| structure_variant_id | position_sizing | 说明 |
 |--------|----------------|------|
 | P0 (baseline_A) | const 1.0 lot | 固定单位 |
 | P1 | 1/ATR × k | 波动率反向：低波动品种大仓 |
@@ -92,7 +149,7 @@
 
 ### 阶段 1b · 时间退出维度
 
-| 变体 ID | timeout_bar (5m) | partial_exit | 说明 |
+| structure_variant_id | timeout_bar (5m) | partial_exit | 说明 |
 |--------|-----------------|--------------|------|
 | T0 (baseline_A) | 80 | none | 到时按 close 平仓 |
 | T1 | 40 | none | 短时长 |
@@ -103,7 +160,7 @@
 
 ### 阶段 1c · 止损维度
 
-| 变体 ID | stop_atr | trailing | tiered | 说明 |
+| structure_variant_id | stop_atr | trailing | tiered | 说明 |
 |--------|---------|---------|--------|------|
 | S0 (baseline_A) | 1.5 | off | off | 固定 stop |
 | S1 | 0.5 | off | off | 紧 stop |
@@ -117,7 +174,7 @@
 
 ### 阶段 1d · 止盈维度
 
-| 变体 ID | target | partial | 说明 |
+| structure_variant_id | target | partial | 说明 |
 |--------|-------|---------|------|
 | E0 (baseline_A) | PrevClose | none | 固定目标 |
 | E1 | none (仅 timeout) | none | 无目标，依赖时间 |
