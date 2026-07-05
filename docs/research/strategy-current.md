@@ -1,27 +1,23 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：value_area_rolling_reacceptance 于 2026-07-05 冻结（假设完全证伪）· value_area_reacceptance 仍处 feature-only 降级
+> 状态：**无活跃主题**（value_area 家族全部冻结）
 > 最近更新：2026-07-05
-> 当前归档：[value_area_rolling_reacceptance Freeze](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
-> 前置归档：[R29 扩样与随机基准复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+> 最近归档：[value_area_rolling_reacceptance Freeze](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
+> 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
 
 ## 1. 当前一句话结论
 
 ```text
-value_area_rolling_reacceptance 主题于 2026-07-05 冻结：
+value_area 家族两个主题全部冻结：
+- value_area_reacceptance（2026-07-03）：Stage B v2 双 Q 判据未同时达标 →
+  feature-only 降级 / 主策略暂停。
+- value_area_rolling_reacceptance（2026-07-05）：Stage 1 / 1.5 / 4 / 4b
+  完整实验链证伪 POC 特殊性（fixed + rolling）、reacceptance 触发器特殊性、
+  4+ ATR 距离档独立 edge → 主题假设完全崩塌。
 
-Stage 1 / 1.5 / 4 / 4b 完整实验链（20 品种 × 70 合约 × 5m/15m 双周期）证伪：
-1. POC 独特引力（fixed & rolling 双版本）；
-2. Reacceptance 触发器特殊性；
-3. 4+ ATR 距离档本身 mean-reversion edge。
-
-主题假设链完全崩塌，与前主题 value_area_reacceptance 相同命运。
-
-当前研究重心：无活跃主题；下一主题需另立立题，并遵循 freeze-summary §8.2
-的方法论前置约束（ATR 归一化 / 期望净值 / 多层对照 / cluster bootstrap / 
-跨周期验证）。
+当前无活跃策略主题。下一主题需另立立题。
 ```
 
 边界：
@@ -29,9 +25,9 @@ Stage 1 / 1.5 / 4 / 4b 完整实验链（20 品种 × 70 合约 × 5m/15m 双周
 ```text
 1. value_area_reacceptance_baseline 只保留为历史 baseline，不再作为候选策略；
 2. value_area_random_baseline 作为长期随机入场基准保留；
-3. 上一主题 value_area_reacceptance 保持 feature-only 降级状态；
-4. 本次冻结不否定 VA reacceptance 事件的信息量（作为 feature 依然可用），但
-   否定"VA reacceptance + rolling POC + 距离档" 作为独立策略的可行性。
+3. 前主题 C3 特征仍可作为 feature 供下游主题引用（Group_M concentration risk 高，需在目标品种上重验）；
+4. 主题冻结不否定 VA reacceptance 事件的信息量，但否定
+   "VA reacceptance / POC / rolling POC / 4+ ATR 距离档" 作为独立策略的可行性。
 ```
 
 ## 2. 当前主题
@@ -41,6 +37,10 @@ Stage 1 / 1.5 / 4 / 4b 完整实验链（20 品种 × 70 合约 × 5m/15m 双周
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
 
+家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md)
+
+**活跃主题目录**：`docs/research/themes/` 当前为空。
+
 ## 3. 当前基础设施
 
 当前保留的 active 策略代码：
@@ -48,7 +48,7 @@ Stage 1 / 1.5 / 4 / 4b 完整实验链（20 品种 × 70 合约 × 5m/15m 双周
 ```text
 value_area_reacceptance_baseline
 - 旧 value_area_reacceptance 实现的 baseline 版本；
-- 用于复现 R27-R29 旧规则、结构诊断、随机基准对照；
+- 用于历史复现（R27-R29 旧规则、结构诊断、随机基准对照）；
 - 不再代表当前候选交易策略。
 
 value_area_random_baseline
@@ -65,111 +65,60 @@ scripts/analysis/value_area_random_baseline_compare.py
 
 注意：该 runner 输出使用 vnpy BacktestResult 口径，只做同一 runner 下相对比较，不替代 trade_clearings 清算口径。
 
-## 4. 最近关键结论
+## 4. 关键归档结论（历史备忘）
 
-### 4.1 R27 外推降级
+以下均为已完成阶段的结论，进入 archive；本节仅列关键要点便于快速定位。
 
-```text
-旧 m/SR + 1m + A4_ratio_80 单笔 POC 回归候选外推失败；
-不能继续把旧 m/SR 线作为主候选硬调。
-```
+| 阶段 | 结论 | 归档 |
+| --- | --- | --- |
+| R27 外推降级 | 旧 m/SR + 1m + A4_ratio_80 单笔 POC 回归候选外推失败 | [2026-07-02](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
+| R28 结构诊断 | DCE.p 四样本内收益主要来自第 2 笔，第 1 笔更像 VA reacceptance | [2026-07-02](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
+| R29 扩样 + 随机基准复验 | 固定规则不通过外推；但结构仍优于随机基准 → 触发 Stage B | [2026-07-02](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
+| Stage B v2 双 Q | Q_return 通过（C3 @ n=144 ret_mean +1.10）/ Q_generalize 未通过（Group_M 5/8 无 trade）→ feature-only 降级 | [2026-07-03](../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
+| Rolling Stage 1 / 1.5 / 4 / 4b | 20 品种 × 70 合约 × 5m/15m 双周期证伪主题全部核心假设 → 主题冻结 | [2026-07-05](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
 
-### 4.2 R28 结构诊断
+## 5. 下一步
 
-```text
-DCE.p 四样本内，放开每日最多 3 笔后，收益主要来自第 2 笔；
-第 1 笔更像 VA reacceptance / 价值回归；
-第 2/3 笔可能更接近 failed-probe continuation / retry。
-```
-
-### 4.3 R29 扩样与随机基准
+**当前无活跃主题。** 下一主题需要用户/策略研究者主动立题。立题时的方法论前置约束（继承自 value-area 家族的教训）：
 
 ```text
-固定 R28 后的保守候选扩样未通过；
-R28 DCE.p 四样本优势不能外推到更早 DCE.p 历史；
-DCE.m 明显失败，DCE.c/cs 信号不足或弱负；
-DCE.y 有 seq2 局部线索，但整体不过关。
-
-随机入场复验显示：
-旧 DCE.p 失败样本上，结构仍优于 same-direction/random-direction 随机基准；
-因此问题更可能在市场环境、风险空间、交易序列或退出兑现层，不能简单判定 VA reacceptance 是无信息噪声。
+1. 距离/大小/时间统一 ATR 归一化；
+2. 判据用期望净值（成本后），不用 reach_rate 单指标；
+3. 结构 × 距离档二维联合优化，不能单结构定论；
+4. 多锚点 + 多触发器 + no_trigger baseline 三层对照；
+5. 配对差异检验（同一批事件配对），避免未配对样本假象；
+6. Cluster bootstrap 检验事件非独立性；
+7. 跨周期验证（至少 5m + 15m）作为稳健性硬门槛；
+8. 立题前先说明为什么本次假设不落入 value-area 家族已证伪的四条中。
 ```
 
-## 5. R30 候选研究方向
+详见 [themes-frozen/value-area/README.md #共同教训](./themes-frozen/value-area/README.md)。
 
-R30 不继续无约束调参，先验证结构分支：
-
-```text
-A. VA 回归主线
-   - 只做 VA 边界 → POC 更近方向；
-   - 将多次交易统一解释为多次 VA → POC 回归测试；
-   - 开仓候选条件：首次测试 POC / 当前突破 VA 距离弱于上次 / 上次 POC 未充分测试。
-
-B. continuation 对照线
-   - 做远离 POC 的方向；
-   - 只作为 failed reacceptance / continuation 候选；
-   - 不与 VA 回归线混在同一组收益结论里评估。
-```
-
-核心观测指标：
-
-```text
-POC touch rate
-entry_to_poc_ticks
-breakout_ticks
-breakout_ticks_delta
-by_condition pnl
-B2/B3 overlap pnl
-stop_loss 占比
-by_environment：strong_trend / trend_bias / non_strong_trend
-random baseline percentile
-```
-
-## 6. 当前不建议继续的方向
-
-```text
-1. 不继续在旧 value_area_reacceptance_baseline 上叠加新交易逻辑；
-2. 不继续围绕 reentry_take_profit_r=1.3/1.35 做小样本精调；
-3. 不把 R28 DCE.p 四样本视为已验证主线；
-4. 不把 seq1/seq2/seq3 混成同一策略的钱；
-5. 不把强趋势标签直接作为最终过滤条件，先做结构归因；
-6. 不用随机 baseline 的绝对 pnl 替代清算口径，只做同 runner 相对比较。
-```
-
-## 7. 下一步优先级
-
-```text
-1. 新建 R30 workbench 文档；
-2. 实现 VA 多次回归状态：同侧突破距离、POC 是否充分测试、attempt_count；
-3. 分别验证 A1/A2 与 B1/B2/B3 条件组合；
-4. 用 R29 固定样本先做小矩阵，不先调 stop/target；
-5. 每组输出 POC touch rate、breakout_ticks_delta、stop_loss 占比和 by_condition pnl；
-6. 用 value_area_random_baseline 复验结构是否仍优于随机。
-```
-
-## 8. 文档地图
+## 6. 文档地图
 
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
-| value_area_reacceptance 主题状态 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
-| R29 扩样与随机基准复验 | [value-area-reacceptance-r29-expanded-validation.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
-| R28 结构诊断 | [value-area-reacceptance-r28-structure-diagnosis.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
-| R27 扩样复验 | [value-area-reacceptance-r27-expanded-sample.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
-| POC / VA 质量诊断阶段归档 | [value_area_reacceptance POC / VA 质量诊断阶段归档](../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
+| value_area 家族总结 | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
+| value_area_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
+| value_area_rolling_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
+| Rolling 冻结摘要 | [freeze-summary.md](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| Stage B 归档 | [stage-b-sweep-summary.md](../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
+| R29 扩样 + 随机基准 | [r29-expanded-validation.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
+| POC / VA 质量诊断阶段归档 | [quality-summary.md](../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
 | 长期框架 | [strategy-research-framework.md](../roadmap/strategy-research-framework.md) |
 
-## 9. 给 AI 的工作规则
+## 7. 给 AI 的工作规则
 
 后续 AI 接手时：
 
 ```text
-1. 先读本文件；
-2. 再读 themes-frozen/value-area/value-area-reacceptance/README.md（会导向 current.md/spec.md/plan.md/parameter-selection-spec.md）；
-3. 需要 R27-R29 细节时读 docs/archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/；
-4. 不要继续调旧 baseline 参数；
-5. 下一步围绕 R30 多次 VA 回归 / continuation 分支验证；
-6. 新实验过程写入 docs/workbench；
-7. 阶段稳定后再归档到 docs/archive；
-8. 若发现数据周期、成交配对、成本口径问题，先写 docs/issues 并暂停受影响实验。
+1. 先读本文件确认没有活跃主题；
+2. 若要立新主题，先阅读 themes-frozen/value-area/README.md 的共同教训与方法论约束；
+3. 需要历史 R27-R29 / Stage B / Rolling Stage 1-4b 细节时读对应 archive 目录；
+4. 不要继续调旧 baseline 参数（value_area_reacceptance_baseline 只作历史复现工具）；
+5. 不要在冻结主题目录下增加新实验（应立新主题，写入 docs/workbench/）；
+6. 新实验过程写入 docs/workbench；阶段稳定后再归档到 docs/archive；
+7. 若发现数据周期、成交配对、成本口径问题，先写 docs/issues 并暂停受影响实验；
+8. 立新主题时严格遵循 §5 的八条方法论前置约束，尤其是"多层对照"和"跨周期验证"。
 ```
