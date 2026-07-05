@@ -3,8 +3,8 @@
 > 类型：Archive / 策略实验摘要
 > 状态：已完成 / 未通过（feature-only 降级）
 > 归档时间：2026-07-03
-> 主题入口：[../../../research/themes/value-area-reacceptance/](../../../research/themes/value-area-reacceptance/README.md)
-> 后继主题：[../../../research/themes/value-area-rolling-reacceptance/](../../../research/themes/value-area-rolling-reacceptance/README.md)
+> 主题入口：[../../../research/themes-frozen/value-area/value-area-reacceptance/](../../../research/themes-frozen/value-area/value-area-reacceptance/README.md)
+> 后继主题：[../../../research/themes-frozen/value-area/value-area-rolling-reacceptance/](../../../research/themes-frozen/value-area/value-area-rolling-reacceptance/README.md)
 > 开发分支：`experiment/value-area-multi-attempt-poc-reversion`
 
 ## 内容
@@ -17,7 +17,7 @@
 
 ## 阅读顺序
 
-1. 先读 [主题 README §1](../../../research/themes/value-area-reacceptance/README.md)
+1. 先读 [主题 README §1](../../../research/themes-frozen/value-area/value-area-reacceptance/README.md)
    看整体冻结决策（3 层证据）
 2. 再读 [stage-b-sweep-summary.md](stage-b-sweep-summary.md) 看 Stage B
    完整数据表与语义演进
@@ -35,5 +35,5 @@
 
 ## 关联
 
-- [前主题 research-status](../../../research/themes/value-area-reacceptance/research-status.md)
-- [前主题 strategy-math-spec](../../../research/themes/value-area-reacceptance/strategy-math-spec.md)
+- [前主题 research-status](../../../research/themes-frozen/value-area/value-area-reacceptance/research-status.md)
+- [前主题 strategy-math-spec](../../../research/themes-frozen/value-area/value-area-reacceptance/strategy-math-spec.md)

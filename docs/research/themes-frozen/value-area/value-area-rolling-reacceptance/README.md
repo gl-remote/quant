@@ -1,10 +1,33 @@
 # value-area-rolling-reacceptance · 主题
 
-> 类型：Theme / 已启动实施
-> 状态：主题目录初始化中 · README 已成文 · spec/plan/code 待编写
+> 类型：Theme / **已冻结（Frozen 2026-07-05）**
+> 状态：**主题假设完全证伪，不再作为独立策略推进**
 > 前置主题：[../value-area-reacceptance/README.md](../value-area-reacceptance/README.md)（已冻结）
 > 创建时间：2026-07-03
-> 最近更新：2026-07-03
+> 冻结时间：2026-07-05
+> 结论文档：[research-status.md](research-status.md)
+> 归档：[../../../../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md](../../../../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
+
+## 冻结摘要（2026-07-05）
+
+主题于 2026-07-03 立题，2026-07-05 冻结。Stage 1 / 1.5 / 4 / 4b 完整实验
+链条（20 品种 × 70 合约 × 5m/15m 双周期）证伪了主题的全部核心假设：
+
+1. **POC 特殊性证伪**（Stage 1.5-A5/A5b）：跨 7 种前日锚点距离-到达率函数
+   完全重合；POC 相对 PrevClose 等锚点无独立价值
+2. **Rolling POC 独立价值证伪**（Stage 4 显著性检验）：配对差值 -0.137,
+   p=0.646；cluster bootstrap CI 跨 0
+3. **Reacceptance 触发器特殊性证伪**（Stage 4b）：vs no_trigger baseline
+   差值 +0.019 (5m) / -0.088 (15m)，p 均不显著
+4. **4+ ATR 距离档本身无 edge**（Stage 4b）：no_trigger baseline 期望 ≈ 0
+
+详见 [research-status.md](research-status.md) 与
+[freeze-summary.md](../../../../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)。
+
+**以下 §1-§8 为立题时的动机推演，冻结后仅作历史记录保留，其中的策略假设
+已全部证伪，请勿再作为策略依据。**
+
+---
 
 ## 1. 动机与建模选择
 
@@ -180,7 +203,7 @@ C3_s(t) := A_s(t) >= 1 ∧ Z_s^-(t) = False
 
 前置条件（**已满足**）：
 - ✓ 前置主题 `value-area-reacceptance` 冻结（README 已更新为"已冻结"）
-- ✓ Stage B v2/v3 结论稳定（[Stage B 归档](../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md)）
+- ✓ Stage B v2/v3 结论稳定（[Stage B 归档](../../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md)）
 - ✓ 建模路径决策：B（rolling window），A/C 已排除，理由见 §1.3
 
 阶段规划：

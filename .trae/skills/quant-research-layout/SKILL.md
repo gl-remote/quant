@@ -27,7 +27,9 @@ description: "Rules for quant research document layout: theme directory, workben
 | 目录 | 用途 | 允许放什么 | 禁止放什么 |
 |---|---|---|---|
 | `docs/roadmap/` | 阶段规划、评价标准 | 阶段目标、候选方向、评价指标 | 具体实验方向、分支 hash、参数对照、中间结果 |
-| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/` | 具体实验流水 |
+| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/`、`themes-frozen/<family>/<theme-name>/` | 具体实验流水 |
+| `docs/research/themes/` | **活跃**策略主题（研究中 / 待启动 / 阶段性暂停但可能恢复） | 见"主题目录布局" | 已冻结的主题 |
+| `docs/research/themes-frozen/` | **已冻结**策略主题（假设证伪 / feature-only 降级 / 主策略不再作为独立候选） | 按家族聚合的冻结主题目录、家族级 README | 活跃研究、任何仍在推进的实验 |
 | `docs/workbench/` | 当前研究中的实验流水 | 实验问题、临时参数对照、中间结果、临时结论 | 长期规格、策略契约 |
 | `docs/issues/` | 底层框架问题 | 引擎 / 数据管道 / CLI / 成本口径等非策略问题 | 策略结论 |
 | `docs/archive/strategy-research/` | 已完成阶段的压缩摘要 | 核心问题、实验定义、固定参数、关键结果、结论 | 过程性计划、过期工具限制 |
@@ -91,6 +93,83 @@ docs/research/themes/<theme-name>/
    - 主题目录内部互引：直接文件名，无相对前缀。
 6. 更新 `docs/research/strategy-current.md`、`docs/research/README.md`、archive 中的历史文档，把旧路径指向新的主题 README。
 7. 全库 `grep` 一次旧文件名，确认无孤立引用。
+
+## 主题冻结与家族聚合流程
+
+### 何时冻结主题
+
+一个主题满足以下**任意一条**后，应从 `docs/research/themes/` 迁到
+`docs/research/themes-frozen/<family>/<theme-name>/`：
+
+- **假设完全证伪**：核心假设链在多层对照下被独立证伪（例如
+  `value-area-rolling-reacceptance`：POC 特殊性 / rolling 独立价值 /
+  reacceptance 触发器 / 距离档 edge 均被证伪）；
+- **feature-only 降级 + 主策略暂停**：主策略不再作为独立候选，只保留 feature
+  语义供其他主题引用（例如 `value-area-reacceptance`）；
+- **主策略退役 ≥ 一个季度且无恢复计划**。
+
+**不冻结**的场景：仍在广度扫描 / 参数调整 / 换周期换品种验证的主题——保留在
+`themes/`，通过 `research-status.md` 反映当前状态即可。
+
+### 家族聚合规则
+
+多个"共享核心假设 / 前后置继承关系 / 命名共前缀"的冻结主题应聚合到一个家族目录：
+
+```text
+docs/research/themes-frozen/<family>/
+├── README.md                        # 家族级总结：关系图、共同教训、方法论遗产
+├── <theme-name-1>/                  # 家族成员（保持原主题目录布局）
+│   └── ...
+└── <theme-name-2>/
+    └── ...
+```
+
+**家族命名**：kebab-case，取共同 slug 前缀（例如 `value-area`、`breakout`、
+`trend-pullback`）。单主题冻结时，若可预见未来同家族其他主题也会冻结，也可
+直接建家族目录，只放一个成员。
+
+**家族级 README 必须包含**：
+
+- 成员主题列表 + 各自冻结原因；
+- 成员之间的继承关系或差异；
+- 共同教训与方法论遗产（每个主题不重复写，家族层统一登记）；
+- 引用规则（是否允许后续主题引用某成员的 feature / 方法 / 数据）。
+
+### 冻结迁移流程
+
+**冻结单个主题**（首次进入 themes-frozen）：
+
+1. 决定家族：若已有家族目录则复用；否则新建 `themes-frozen/<family>/`；
+2. `git mv docs/research/themes/<theme-name> docs/research/themes-frozen/<family>/<theme-name>`；
+3. 修正该主题目录内所有文件的相对路径：
+   - → `docs/archive/**`：从 `../../../archive/...` 改为 `../../../../archive/...`（多一层 `..`）；
+   - → `docs/research/**`（同层）：从 `../../...` 改为 `../../../...`；
+   - 主题目录内部互引：不变。
+4. 主题 `README.md` 顶部标记 `Frozen <date>`，`research-status.md` 结论段落
+   给出冻结原因与保留资产；
+5. 更新 `docs/research/README.md` 与 `docs/research/strategy-current.md`：
+   路径改为 `themes-frozen/<family>/<theme-name>/`，状态改为"已冻结"；
+6. 更新反向引用的 archive 文档中的主题路径；
+7. 全库 `grep` 旧路径 `themes/<theme-name>`，把仍应指向主题目录的引用改到
+   新路径（archive 内部指向已归档 workbench 的除外）。
+
+**新增家族成员**（家族目录已存在）：
+
+- 复用上面 2-7 步；
+- 更新家族 README 的成员列表 + 关系图 + 共同教训段。
+
+### 冻结主题的写作纪律
+
+- 冻结主题目录**只读**：不再修改 `strategy-math-spec.md` /
+  `experiment-plan.md` / `parameter-selection-spec.md` /
+  `implementation-notes.md`；仅允许更新 `research-status.md` 的"下一步"段落
+  以反映家族层决策变化。
+- 冻结主题**不建 workbench**：若发现新观察需要验证，属于**立新主题**的
+  范畴，不能污染已冻结主题的目录。
+- 冻结主题被引用的**唯一入口**是主题 `README.md`（顶部标 Frozen）或家族
+  `README.md`；后续主题不得直接跳过 README 引用某内部文件。
+- 冻结主题的**代码资产已在归档时随 archive 保存副本**（`raw-scripts/` 等）；
+  themes-frozen 目录只保留文档，不再放代码。
 
 ## Workbench 写法
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 # 文件级元信息：
 # - 创建背景：R30 主线策略 value_area_multi_attempt_poc_reversion 需要一份严格按照
-#   docs/research/themes/value-area-reacceptance/strategy-math-spec.md 的可运行实现，
+#   docs/research/themes-frozen/value-area/value-area-reacceptance/strategy-math-spec.md 的可运行实现，
 #   用于跑首轮 Ω_pattern × Ω_risk × Ω_direction × Ω_tp 小矩阵。
 # - 用途：实现 spec §1–§10 定义的 profile 滚动刷新、突破跟踪、四维正交入场候选、
 #   三类止盈候选，以及 stop_loss > strict_failure_close > TP_fixed > TP_soft >
