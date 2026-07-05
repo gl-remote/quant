@@ -1,23 +1,24 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**无活跃主题**（value_area 家族全部冻结）
+> 状态：**structural-shaping-alpha 立题（2026-07-05）** · value-area 家族全部冻结
 > 最近更新：2026-07-05
-> 最近归档：[value_area_rolling_reacceptance Freeze](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
+> 当前主题：[structural-shaping-alpha](./themes/structural-shaping-alpha/README.md)
 > 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
 
 ## 1. 当前一句话结论
 
 ```text
-value_area 家族两个主题全部冻结：
-- value_area_reacceptance（2026-07-03）：Stage B v2 双 Q 判据未同时达标 →
-  feature-only 降级 / 主策略暂停。
-- value_area_rolling_reacceptance（2026-07-05）：Stage 1 / 1.5 / 4 / 4b
-  完整实验链证伪 POC 特殊性（fixed + rolling）、reacceptance 触发器特殊性、
-  4+ ATR 距离档独立 edge → 主题假设完全崩塌。
+value_area 家族两个主题于 2026-07-03 / 2026-07-05 先后冻结，
+主题假设链完全崩塌（POC / rolling POC / reacceptance / 距离档均被证伪）。
 
-当前无活跃策略主题。下一主题需另立立题。
+2026-07-05 立新主题 structural-shaping-alpha：
+研究"结构塑形本身（仓位 / 时间退出 / 止损 / 止盈）是否具有独立 alpha"，
+从 value-area 家族的副产品观察出发，检验一个正交的命题：
+alpha 可能主要来自结构塑形，而非入场信号。
+
+当前处于假设生成期，阶段 1（gatekeeper）广度扫描待启动。
 ```
 
 边界：
@@ -34,12 +35,13 @@ value_area 家族两个主题全部冻结：
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
+| **structural-shaping-alpha** | **活跃（立题 2026-07-05）** · 阶段 1 待启动 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
 
 家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md)
 
-**活跃主题目录**：`docs/research/themes/` 当前为空。
+**活跃主题目录**：`docs/research/themes/structural-shaping-alpha/`
 
 ## 3. 当前基础设施
 
@@ -79,7 +81,11 @@ scripts/analysis/value_area_random_baseline_compare.py
 
 ## 5. 下一步
 
-**当前无活跃主题。** 下一主题需要用户/策略研究者主动立题。立题时的方法论前置约束（继承自 value-area 家族的教训）：
+**当前主题**：[structural-shaping-alpha](./themes/structural-shaping-alpha/README.md)（阶段 1 · Gatekeeper 广度扫描待启动）
+
+阶段 1 分四个子维度并行扫描（仓位 / 时间退出 / 止损 / 止盈），任何一个通过（相对标准结构 baseline 显著优于），即进入阶段 2；全部不通过则主题冻结。详见 [experiment-plan.md](./themes/structural-shaping-alpha/experiment-plan.md)。
+
+**立题时的方法论前置约束**（继承自 value-area 家族教训，任何新主题必须遵守）：
 
 ```text
 1. 距离/大小/时间统一 ATR 归一化；
@@ -99,6 +105,7 @@ scripts/analysis/value_area_random_baseline_compare.py
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
+| **structural-shaping-alpha 主题（活跃）**| [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area 家族总结 | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
 | value_area_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
@@ -113,12 +120,13 @@ scripts/analysis/value_area_random_baseline_compare.py
 后续 AI 接手时：
 
 ```text
-1. 先读本文件确认没有活跃主题；
-2. 若要立新主题，先阅读 themes-frozen/value-area/README.md 的共同教训与方法论约束；
-3. 需要历史 R27-R29 / Stage B / Rolling Stage 1-4b 细节时读对应 archive 目录；
-4. 不要继续调旧 baseline 参数（value_area_reacceptance_baseline 只作历史复现工具）；
-5. 不要在冻结主题目录下增加新实验（应立新主题，写入 docs/workbench/）；
-6. 新实验过程写入 docs/workbench；阶段稳定后再归档到 docs/archive；
-7. 若发现数据周期、成交配对、成本口径问题，先写 docs/issues 并暂停受影响实验；
-8. 立新主题时严格遵循 §5 的八条方法论前置约束，尤其是"多层对照"和"跨周期验证"。
+1. 先读本文件确认当前活跃主题为 structural-shaping-alpha；
+2. 读 themes/structural-shaping-alpha/README.md 与 experiment-plan.md 了解阶段进度；
+3. 遵守 §5 的八条方法论前置约束，尤其是"多层对照"和"跨周期验证"；
+4. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
+5. 不要继续调旧 baseline 参数（value_area_reacceptance_baseline 只作历史复现工具）；
+6. 不要在冻结主题目录（themes-frozen/*/）下增加新实验；
+7. 新实验过程写入 docs/workbench/structural-shaping-alpha-stage<N>-<topic>.md；
+   阶段稳定后再归档到 docs/archive；
+8. 若发现数据周期、成交配对、成本口径问题，先写 docs/issues 并暂停受影响实验。
 ```
