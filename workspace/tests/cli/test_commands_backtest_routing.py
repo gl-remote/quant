@@ -29,6 +29,7 @@ def _make_args(**overrides):
         "no_search": False,
         "dump_indicators": False,
         "strategy_params": None,
+        "build_report": False,
         "env": "backtest",
         "config": None,
     }
@@ -121,6 +122,30 @@ def test_register_accepts_single_mode_and_strategy_params() -> None:
 
     assert args.mode == "single"
     assert args.strategy_params == '{"sma_short":5}'
+
+
+def test_no_report_flag_flows_into_request() -> None:
+    from cli.commands.backtest import _build_search_request, _build_walk_forward_request, register
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    register(subparsers)
+
+    # 默认不构建报告
+    args = parser.parse_args(["backtest", "--strategy", "ma"])
+    assert args.build_report is False
+    assert _build_search_request(_make_args()).no_report is True
+    assert _build_walk_forward_request(_make_args()).no_report is True
+
+    # 显式开启 --build-report 才构建
+    args = parser.parse_args(["backtest", "--strategy", "ma", "--build-report"])
+    assert args.build_report is True
+
+    search_req = _build_search_request(_make_args(build_report=True))
+    assert search_req.no_report is False
+
+    wf_req = _build_walk_forward_request(_make_args(build_report=True))
+    assert wf_req.no_report is False
 
 
 def test_validate_rejects_strategy_params_for_walk_forward():

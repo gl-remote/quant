@@ -39,7 +39,10 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| value_area_reacceptance | 活跃 / R29 扩样未通过 / R30 结构分支验证 | [themes/value-area-reacceptance.md](./themes/value-area-reacceptance.md) |
+| value_area_reacceptance | 已冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
+| value_area_rolling_reacceptance | **已冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) · [freeze-summary](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+
+家族目录：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 
 主题文件承载该主线的完整现状：
 
@@ -70,6 +73,7 @@ R29 扩样未通过，不能继续把 R28 DCE.p 四样本视为已验证主线�
 
 当前归档：
 
+- [Stage B v2/v3 sweep（feature-only 降级决策）](../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md)
 - [R29 扩样与随机基准复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
 - [R28 value_area_reacceptance 结构诊断](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
 - [R27 扩样复验](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md)
@@ -94,7 +98,7 @@ R29 扩样未通过，不能继续把 R28 DCE.p 四样本视为已验证主线�
 
 ```text
 1. 先读 docs/research/strategy-current.md；
-2. 再读当前主题文件 docs/research/themes/value-area-reacceptance.md；
+2. 再读当前主题目录 docs/research/themes-frozen/value-area/value-area-reacceptance/README.md（会导向 current.md/spec.md/plan.md/parameter-selection-spec.md）；
 3. 需要 R27-R29 实验细节时读 docs/archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/；
 4. 只有需要查旧阶段过程时，才进入 archive raw-workbench；
 5. 不要继续在旧 baseline 上调 reentry_take_profit_r；

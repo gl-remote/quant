@@ -1,11 +1,20 @@
 ---
 name: "dev-workflow"
-description: "Runs the quant dev branch workflow. Invoke when starting work, committing, archiving research, merging to dev, or pushing quant changes."
+description: "Runs branch, commit, archive, merge, and push workflow. Invoke when starting work, committing, archiving, merging, or pushing."
 ---
 
 # Dev Workflow
 
 用于本 quant 项目的固定开发、提交、归档、合并和推送流程。
+
+本 skill 只负责 Git 与开发流程边界：开分支、提交、归档、合并、push、安全门禁。
+
+相关职责：
+
+- 项目环境、代码风格、符号和路径规则：使用 `quant-project`。
+- 策略实现前数学规格：使用 `quant-strategy-spec`。
+- 研究文档内容边界：使用 `quant-research-docs`。
+- CLI 命令、回测、报告、导出和验证命令：使用 `quant-cli`。
 
 ## 触发条件
 
@@ -39,7 +48,7 @@ description: "Runs the quant dev branch workflow. Invoke when starting work, com
    - 这个 hash 在开分支时即可记录，不等到提交后再补。
 5. 文档元数据写入边界：
    - roadmap 默认只维护阶段目标、评价标准和候选方向。
-   - 具体实验方向、开发分支、开分支 hash、参数对照和中间结果写入 `docs/workbench/`。
+   - 具体实验方向、开发分支、开分支 hash、参数对照和中间结果写入 `docs/workbench/`（**顶层唯一位置**，禁止在主题目录 `docs/research/themes/<name>/` 下建 `workbench/` 子目录，详见 `quant-research-layout`）。
    - 不要把实验过程和开发分支信息直接写入 roadmap，除非用户明确要求 roadmap 记录流程约束。
 6. 如果没有关联 roadmap / workbench 文档，不主动创建文档；只在最终回复中说明开发分支和相关 hash。
 7. 开发完成并提交后，回填 `实现提交 hash`。
@@ -158,54 +167,3 @@ description: "Runs the quant dev branch workflow. Invoke when starting work, com
 - 合并流程中不要自动 rebase 开发分支；需要改写历史时必须由用户明确要求。
 - 文档文件通常不在 pre-commit 域 hook 覆盖范围内；提交时若 hook 提醒 docs 未覆盖，需人工确认链接和内容边界即可，不要为了 docs 强行补测试。
 
-## 源文件创建规则
-
-创建任何新的源文件时，必须在尽可能靠近文件头的位置添加文件级别注释块，作为源代码级别的元信息。
-
-要求：
-
-- 适用范围：`.py`、`.ts`、`.tsx`、`.js`、`.sh`、`.sql` 等源代码/脚本文件；普通研究文档和 README 不适用。
-- 位置：放在 shebang、encoding 声明、future import 等语言强制头部内容之后，常规 import / 业务代码之前。
-- 内容必须说明：
-  - 创建背景：为什么需要新增这个文件；
-  - 用途：这个文件在项目中的职责；
-  - 关键注意事项：运行口径、依赖假设、实验性质、是否长期保留、不要误用的边界。
-- 注释块是文件级元信息，不替代函数/类文档，也不要写成变更日志。
-- 内容要简洁，避免过程性流水账；如果文件是临时实验脚本，必须明确临时性和清理/归档边界。
-
-Python 示例：
-
-```python
-"""
-文件级元信息：
-- 创建背景：用于补充 R30 VA 回归分支验证，避免复用 CLI 报告链路造成批量实验过慢。
-- 用途：执行轻量回测并输出结构诊断指标。
-- 注意事项：仅用于同一 runner 下的相对比较，不直接替代清算口径结果。
-"""
-```
-
-TypeScript 示例：
-
-```ts
-/**
- * 文件级元信息：
- * - 创建背景：为回测报告新增结构诊断展示入口。
- * - 用途：渲染结构诊断指标表格。
- * - 注意事项：只消费已生成的 report JSON，不在前端重新计算交易指标。
- */
-```
-
-## 项目约束
-
-- 本项目位于 `quant/`。
-- Python 命令必须使用 `uv run`。
-- 常用验证命令：
-  - `ruff check workspace/ scripts/ main.py`
-  - `ruff format --check workspace/ scripts/ main.py`
-  - `uv run mypy workspace/cli workspace/common workspace/config workspace/data workspace/backtest workspace/strategies workspace/report`
-  - `uv run pytest workspace/tests/ workspace/packages/python-contracts/tests/ --tb=short`
-- 针对局部 CLI 改动，可用：
-  - `ruff check workspace/cli/commands/backtest.py workspace/cli/workflows/backtests_run.py workspace/tests/cli/test_commands_backtest_routing.py`
-  - `ruff format --check workspace/cli/commands/backtest.py workspace/cli/workflows/backtests_run.py workspace/tests/cli/test_commands_backtest_routing.py`
-  - `uv run pytest workspace/tests/cli/test_commands_backtest_routing.py --tb=short`
-  - `uv run mypy workspace/cli`

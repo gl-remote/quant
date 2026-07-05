@@ -504,6 +504,9 @@ class VnpyBacktestEngine:
             # ── 步骤 5: 解析 vnpy 输出 ─────────
             daily_results = engine.calculate_result()
             statistics = engine.calculate_statistics()
+            # vnpy 会在无回撤时给 rgr_ratio / return_drawdown_ratio 输出爆炸假值，
+            # 统一在此守护，避免下游归因被污染。
+            _sanitize_no_drawdown_ratios(statistics)
 
             # ── 步骤 6: 解析与格式化原始成交记录 ────
             formatted_trades = self._parse_trades(engine, symbol)
@@ -826,3 +829,18 @@ def _override_blown_up_stats(
     statistics["sharpe_ratio"] = daily_return_mean / return_std * (annual_days**0.5) if return_std > 0 else 0.0
     max_ddpercent = statistics.get("max_ddpercent", 0) or 0
     statistics["return_drawdown_ratio"] = -total_return / max_ddpercent if max_ddpercent else 0.0
+    _sanitize_no_drawdown_ratios(statistics)
+
+
+def _sanitize_no_drawdown_ratios(statistics: dict[str, Any]) -> None:
+    """无回撤（max_ddpercent == 0）时把风险调整比率归零。
+
+    vnpy 内部 `calc_rgr_ratio` 在 `max_ddpercent == 0`（全赢无回撤）时分母失守，
+    会返回 1e4 ~ 1e5 量级的假比率；`return_drawdown_ratio` 也会随之爆炸。
+    这里对两个指标做统一守护，让归因排序不再被爆炸值污染。适用于所有产出
+    statistics 的路径（正常回测 + 爆仓补算）。
+    """
+    max_ddpercent = statistics.get("max_ddpercent")
+    if max_ddpercent is None or max_ddpercent == 0:
+        statistics["rgr_ratio"] = 0.0
+        statistics["return_drawdown_ratio"] = 0.0

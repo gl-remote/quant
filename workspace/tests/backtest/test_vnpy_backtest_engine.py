@@ -198,6 +198,44 @@ def test_all_profit_sequence_keeps_positive_signs_and_day_counts():
     assert stats["return_drawdown_ratio"] == 0.0
 
 
+def test_rgr_ratio_sanitized_when_no_drawdown():
+    """vnpy calc_rgr_ratio 在 max_ddpercent==0 时会返回上万量级的假值，
+    _override_blown_up_stats 应将其归零，与 return_drawdown_ratio 行为一致。"""
+    capital = 100_000.0
+    daily = _make_daily([10_000, 5_000, 8_000, 7_000])
+    stats: dict = {"rgr_ratio": 74240.66}  # 模拟 vnpy 返回的爆炸值
+
+    _override_blown_up_stats(stats, daily, capital)
+
+    assert stats["max_ddpercent"] == 0.0
+    assert stats["rgr_ratio"] == 0.0
+
+
+def test_sanitize_no_drawdown_ratios_zeroes_both_ratios():
+    """无回撤路径下 rgr_ratio 与 return_drawdown_ratio 都要归零。"""
+    from backtest.vnpy_backtest_engine import _sanitize_no_drawdown_ratios
+
+    stats: dict = {
+        "max_ddpercent": 0.0,
+        "rgr_ratio": 173634.14,  # 现实 sweep 中观察到的爆炸值
+        "return_drawdown_ratio": 999.0,
+    }
+    _sanitize_no_drawdown_ratios(stats)
+    assert stats["rgr_ratio"] == 0.0
+    assert stats["return_drawdown_ratio"] == 0.0
+
+    stats = {"max_ddpercent": None, "rgr_ratio": 5.0, "return_drawdown_ratio": 3.0}
+    _sanitize_no_drawdown_ratios(stats)
+    assert stats["rgr_ratio"] == 0.0
+    assert stats["return_drawdown_ratio"] == 0.0
+
+    # 有回撤时不动
+    stats = {"max_ddpercent": -5.5, "rgr_ratio": 1.8, "return_drawdown_ratio": 2.1}
+    _sanitize_no_drawdown_ratios(stats)
+    assert stats["rgr_ratio"] == 1.8
+    assert stats["return_drawdown_ratio"] == 2.1
+
+
 def test_all_loss_sequence_keeps_negative_signs_and_day_counts():
     capital = 100_000.0
     daily = _make_daily([-10_000, -5_000, -8_000, -7_000])

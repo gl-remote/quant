@@ -125,6 +125,12 @@ def register(subparsers: Any) -> None:
         default=None,
         help="策略参数 JSON 覆盖，优先级高于配置文件，例如 '{\"stop_widen_multiplier\":1.5}'（仅 vnpy 生效）",
     )
+    p.add_argument(
+        "--build-report",
+        action="store_true",
+        help="构建可视化报告（前端 + JSON 数据导出）；默认关闭以节省批量扫参耗时，"
+        "需要看板时显式开启，或事后调用 `main.py report --build`。",
+    )
     add_environment_arguments(p)
 
 
@@ -208,6 +214,7 @@ def _build_search_request(args: argparse.Namespace) -> VnpySearchRequest:
         no_search=bool(args.no_search),
         dump_indicators=bool(args.dump_indicators),
         strategy_param_overrides=_parse_strategy_params(args.strategy_params),
+        no_report=not bool(args.build_report),
     )
 
 
@@ -220,6 +227,7 @@ def _build_walk_forward_request(args: argparse.Namespace) -> VnpyWalkForwardRequ
         pattern=args.pattern,
         start=args.start,
         end=args.end,
+        no_report=not bool(args.build_report),
     )
 
 

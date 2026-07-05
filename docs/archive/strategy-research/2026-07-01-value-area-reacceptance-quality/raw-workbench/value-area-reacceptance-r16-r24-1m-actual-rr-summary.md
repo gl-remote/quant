@@ -3,7 +3,7 @@
 > 类型：Workbench / 当日实验重整记录
 > 状态：已归档
 > 日期：2026-07-01
-> 当前主题：[value-area-reacceptance.md](../../../research/themes/value-area-reacceptance.md)
+> 当前主题：[value-area-reacceptance/README.md](../../../research/themes-frozen/value-area/value-area-reacceptance/README.md)
 > 所属归档：[value_area_reacceptance POC / VA 质量诊断阶段归档](../value-area-reacceptance-quality-summary.md)
 
 ## 1. 为什么重整
