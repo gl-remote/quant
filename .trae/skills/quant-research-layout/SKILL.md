@@ -293,27 +293,29 @@ docs/workbench/<name>.md
 1. **压缩 workbench 内容**到 archive 目录（按上面"归档写法"的保留/删除清单）；
 2. **移动 workbench 文件** `git mv docs/workbench/<name>.md docs/archive/strategy-research/<archive-batch>/<name>.md`；
 3. **修正 archive 内部相对链接**（roadmap / issues / 主题 README）；
-4. **反向更新所有相关活跃主题的 `archive-references.md`**（见下节流程）；
+4. **只更新归档主题自己的 `archive-references.md`**（O(1) 动作）：
+   - 归档批次天然属于某个"归档主题"（workbench 文件本来就是该主题的产物）；
+   - 归档者只在**该主题**的 `archive-references.md` 里追加一条自登记条目，
+     关系类型通常是"继承 / 阶段归档"；
+   - **不扫描其他主题**——跨主题反向登记走 pull 模式（见下节）。
 5. **修正原主题目录内引用了这些 workbench 路径的文档**（换成 archive 路径）——特别是 `research-status.md` 中"关键发现清单"的**证据链接**必须从 workbench 路径改指 archive 路径；
 6. **提交前 `grep` 一次旧 workbench 路径**，确认无孤立引用。
 
 **任一步骤缺失都视为"归档未完成"**，不允许合并到长期分支。
 
-### 反向更新 archive-references.md 的流程（步骤 4 展开）
+**注意：步骤 4 是 O(1) 而非 O(N)**——归档者不承担枚举全库主题、判断相关性的责任。跨主题反向引用由**下游主题维护者按需拉取**（见下节）。
 
-归档者在移动完成后，**必须**执行下列扫描：
+### 跨主题反向登记（Pull 模式，非归档者的责任）
 
-1. **枚举所有活跃主题**：`ls docs/research/themes/` 得到全部活跃主题 slug；
-2. **对每个主题**打开 `docs/research/themes/<theme>/archive-references.md`，判断该批次是否与本主题相关：
-   - 检查是否**继承**了该批次的方法论 / 数据 / 代码；
-   - 检查是否将该批次作为**反例 / 铺垫**；
-   - 检查该批次的研究主体是否与本主题假设正交、互补或颠倒；
-3. **相关则追加一条记录**（关系类型 + 一句话说明），按 archive-references.md 写法的示例条目格式；
-4. **不相关则跳过**——但若**明显不相关**（如 low-validation-cost 与 structural-shaping 无交集），可选地追加到主题的"未列入本清单的 archive"节，避免下次归档时重复判断。
+archive 的反向索引由**下游主题维护者主动拉取**，而不是归档者广播推送。触发时机：
 
-**若归档者自己不熟悉某活跃主题**：在归档 commit message 里 `@` 该主题维护者，
-或在归档 PR 描述里列出"需 X/Y/Z 主题维护者确认反向索引"清单，
-不能仅仅"等主题维护者自己发现"。
+- **主题立题时**：主题维护者在创建 `archive-references.md` 时，主动扫描已存在的 archive，登记与本主题相关的批次；
+- **主题实际引用某 archive 时**：无论是在 KF 清单的证据链接、experiment-plan 的方法论继承、还是 spec 的公式参考中，**只要主题内文档实际引用某 archive**，就在同一次 commit 中把该 archive 登记到 `archive-references.md`；
+- **家族聚合时**：主题冻结进入 `themes-frozen/<family>/` 时，家族维护者把该主题的 archive-references 中的方法论 / 反例条目提炼到家族 README。
+
+**判定原则**：**引用触发登记，不引用不登记**。这样 archive-references.md 只包含"真正被本主题读取过的 archive"，避免预防性登记膨胀。
+
+**归档时的最小提示（可选）**：归档者可以在归档 commit message 里加一行"可能相关的主题：X/Y/Z"作为提示，但**不强制**下游主题维护者立即登记——他们在下一次实际引用时登记即可。
 
 ## archive-references.md 写法
 
@@ -322,10 +324,16 @@ docs/workbench/<name>.md
 
 ### 何时创建 / 更新
 
-- **主题立题时**：即使初始为空，也要创建占位（列出预期继承的家族与 archive 批次）；
-- **每次归档新批次到 `docs/archive/strategy-research/<archive-batch>/`** 且该批次与本主题相关：追加一条记录（该动作由**归档者**在归档原子步骤 4 完成，见 `## Archive 写法 § 归档动作的原子步骤`；主题维护者审阅归档 commit 时复核）；
-- **发现旧 archive 批次与当前主题有继承 / 反例 / 数据 / 代码复用关系**：追加一条记录；
+采用 **pull 模式**——引用触发登记，不引用不登记。具体时机：
+
+- **主题立题时**：创建 `archive-references.md`，扫描已存在的 archive，登记与本主题相关的批次（一次性动作）；
+- **归档主题自己产生新 archive 批次时**：归档原子步骤 4 追加一条自登记条目（O(1)，见 `## Archive 写法 § 归档动作的原子步骤`）；
+- **主题内任何文档实际引用某 archive 时**（KF 清单证据 / experiment-plan 方法论继承 / spec 公式参考）：在同一次 commit 中登记该 archive 到 `archive-references.md`；
 - **关系类型变化**（如原本作为"反例"引用，后续升级为"数据复用"）：更新条目。
+
+**不做**的：
+- 归档者**不广播**给其他主题（跨主题反向登记走 pull 模式）；
+- 不做**预防性登记**（可能被引用但暂未引用的 archive 不登记）。
 
 ### 必备内容
 
