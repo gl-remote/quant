@@ -190,6 +190,7 @@ value-area 家族失败于此假设的反面——一直在找入场 alpha，但
 | 主题入口 | 本文件 |
 | 当前研究状态 | [research-status.md](research-status.md) |
 | 实验计划 | [experiment-plan.md](experiment-plan.md) |
+| Archive 引用清单 | [archive-references.md](archive-references.md) |
 | 数学规格 | 尚未撰写（阶段 1 通过后按 quant-math-spec 补） |
 | 参数选择规格 | 尚未撰写（阶段 2 通过后补） |
 | 工程实现细节 | 尚未撰写（进入 S0-S6 后补） |
