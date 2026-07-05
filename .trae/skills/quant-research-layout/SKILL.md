@@ -56,7 +56,7 @@ docs/research/themes/<theme-name>/
 | 文档 | 回答 | 谁改 | 什么时候改 |
 |---|---|---|---|
 | README.md | 主题目录索引与阅读顺序 | 主题维护者 | 目录成员变化时 |
-| research-status.md | 主题当下的一句话结论、边界、下一步 | 策略研究者 | 结论变化时 |
+| research-status.md | 主题当下的一句话结论、边界、下一步、**关键发现清单** | 策略研究者 | 结论变化时 / 每次得到关键发现时 |
 | strategy-math-spec.md | 策略"是什么"（数学契约） | 策略研究者 | 行为变更前 |
 | experiment-plan.md | "怎么验证"（候选矩阵、验证顺序、判据） | 策略研究者 | 实验路径变化时 |
 | parameter-selection-spec.md | "怎么选参数"（分层、判据、流程、回填格式） | 策略研究者 | 实验后 |
@@ -69,7 +69,7 @@ docs/research/themes/<theme-name>/
 - 若 `implementation-notes.md` 中的某项工程决定影响了语义，先回改 `strategy-math-spec.md`，再更新 `implementation-notes.md`。
 - 若 `parameter-selection-spec.md` 需要一个 spec 未定义的参数，先在 `strategy-math-spec.md` 补声明。
 - `experiment-plan.md` 与 `parameter-selection-spec.md` 都可以引用 spec，但不能复述完整策略公式。
-- `research-status.md` 只承载"结论、边界、下一步"，不承载策略公式，不承载实验流水，不承载工程细节。
+- `research-status.md` 只承载"结论、边界、下一步、关键发现清单"，不承载策略公式，不承载实验流水，不承载工程细节。
 - 主题目录中的文档**不允许**依赖 workbench 中的临时文件；workbench 的稳定结论必须归档到 archive，主题目录再引用 archive。
 - **workbench 目录只有一个，位于 `docs/workbench/`**（顶层）。**禁止**在主题目录（`docs/research/themes/<theme-name>/`）下再建 `workbench/` 子目录。所有实验流水、临时报告、driver 输出统一写到 `docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`（大主题内多份文件时才建子目录，且该子目录必须直属 `docs/workbench/`）。
 
@@ -78,6 +78,62 @@ docs/research/themes/<theme-name>/
 - 主题目录名 = 策略主题 slug（kebab-case，如 `value-area-reacceptance`）。
 - 目录内文件名固定为上表六个，作用一目了然，禁止使用过于泛化的 `spec.md / plan.md / current.md`。
 - 若主题需要额外辅助文档（数据字段词表、诊断字段清单等），也放同目录并在 README 的"文档地图"中登记。
+
+## 关键发现清单（research-status.md 内节）
+
+主题活跃期产生的**每一条重要结论**都必须登记到 `research-status.md`
+的"关键发现清单"节，作为**主题内唯一入口**。规则如下。
+
+### 什么算"关键发现"
+
+必须登记的三类：
+
+1. **策略行为级**：某维度 / 参数 / 结构变体被确认**有 alpha** 或**无 alpha**
+   （无论证实还是证伪都要记）；
+2. **方法论级**：某判据 / 采样 / 统计方法被确认**必需 / 无效 / 有伪影**
+   （例如"cluster bootstrap 不可省"、"PrevClose 价格锚点会引入 DirRandom 偏置"）；
+3. **假设证伪级**：主题原假设或子假设被独立证据链证伪（进入冻结候选）。
+
+不登记：
+- workbench 中一次性的临时观察（应留在 workbench）；
+- 单一实验的中间数字（应留在 workbench / archive 的实验报告）；
+- 参数微调结果（应写入 `parameter-selection-spec.md`）。
+
+### 条目格式（每条 ≤ 5 行）
+
+```markdown
+### KF-<序号> · <一句话结论>
+- 类型：策略行为 / 方法论 / 假设证伪（选一或多）
+- 状态：已证实 / 已证伪 / 边界待定
+- 证据：链接到 archive 批次 或 workbench 文件（必需，链接必须可点）
+- 影响：对 strategy-math-spec / experiment-plan / 后续主题的具体影响
+- 日期：YYYY-MM-DD
+```
+
+序号跨阶段单调递增，冻结时保留完整历史（不重编号）。
+
+### 与其他文档的关系
+
+| 目标文档 | 关系 |
+|---------|------|
+| workbench | 关键发现的**证据源**——workbench 是原始报告，清单只做提炼与索引 |
+| archive | 归档后清单条目的"证据"链接从 workbench 路径改指 archive 路径 |
+| strategy-math-spec | 若发现修改策略行为，先由发现驱动改 spec，再在清单"影响"段登记 spec 版本变化 |
+| 家族 README（冻结时）| 主题冻结后，清单中**跨主题共通**的方法论 / 证伪结论必须提炼到家族级 README 的"共同教训"段（清单本身随主题一起 git mv 到 themes-frozen） |
+| freeze-summary.md（冻结时）| 归档批次的 `freeze-summary.md` 必须列出"关键发现清单"的所有条目（或直接引用清单），避免归档丢失 |
+
+### 更新时机
+
+- **每次实验得到明确的支持 / 证伪证据**（不是每个中间数字）：追加或更新条目；
+- **发现方法论必需或有伪影**：追加"方法论"类条目；
+- **主题冻结时**：清单不删除；清单中的"待定/边界"条目若未收敛，需在冻结时降级为"未解决观察"（在家族 README 中登记）。
+
+### 禁忌
+
+- 关键发现清单**不承载完整策略公式**（那是 spec 的职责）；
+- **不承载参数分层规则**（那是 parameter-selection-spec 的职责）；
+- **不承载实验流水与原始数字**（那是 workbench / archive 的职责）；
+- **禁止孤儿条目**（无证据链接）——任何未指向 archive / workbench 的条目视为无效。
 
 ## 主题目录初始化流程
 
@@ -149,10 +205,15 @@ docs/research/themes-frozen/<family>/
    - 主题目录内部互引：不变。
 4. 主题 `README.md` 顶部标记 `Frozen <date>`，`research-status.md` 结论段落
    给出冻结原因与保留资产；
-5. 更新 `docs/research/README.md` 与 `docs/research/strategy-current.md`：
+5. **搬运"关键发现清单"**：
+   - `research-status.md` 中的关键发现清单**原样保留**（历史不删）；
+   - 归档批次 `freeze-summary.md` 必须列出全部条目（或引用清单）；
+   - 清单中**跨主题共通**的方法论 / 证伪结论提炼到家族 README 的"共同教训"段；
+   - 清单中未收敛的"边界待定"条目降级为家族 README 的"未解决观察"。
+6. 更新 `docs/research/README.md` 与 `docs/research/strategy-current.md`：
    路径改为 `themes-frozen/<family>/<theme-name>/`，状态改为"已冻结"；
-6. 更新反向引用的 archive 文档中的主题路径；
-7. 全库 `grep` 旧路径 `themes/<theme-name>`，把仍应指向主题目录的引用改到
+7. 更新反向引用的 archive 文档中的主题路径；
+8. 全库 `grep` 旧路径 `themes/<theme-name>`，把仍应指向主题目录的引用改到
    新路径（archive 内部指向已归档 workbench 的除外）。
 
 **新增家族成员**（家族目录已存在）：
@@ -233,7 +294,7 @@ docs/workbench/<name>.md
 2. **移动 workbench 文件** `git mv docs/workbench/<name>.md docs/archive/strategy-research/<archive-batch>/<name>.md`；
 3. **修正 archive 内部相对链接**（roadmap / issues / 主题 README）；
 4. **反向更新所有相关活跃主题的 `archive-references.md`**（见下节流程）；
-5. **修正原主题目录内引用了这些 workbench 路径的文档**（换成 archive 路径）；
+5. **修正原主题目录内引用了这些 workbench 路径的文档**（换成 archive 路径）——特别是 `research-status.md` 中"关键发现清单"的**证据链接**必须从 workbench 路径改指 archive 路径；
 6. **提交前 `grep` 一次旧 workbench 路径**，确认无孤立引用。
 
 **任一步骤缺失都视为"归档未完成"**，不允许合并到长期分支。

@@ -38,6 +38,22 @@
 
 判据细节见 [experiment-plan.md](experiment-plan.md)。
 
+## 关键发现清单
+
+主题重要结论的唯一入口。格式与更新规则见
+[`quant-research-layout` skill § 关键发现清单](../../../../.trae/skills/quant-research-layout/SKILL.md)。
+
+_立题阶段尚无实验结论，占位。首次实验后按下列格式追加条目：_
+
+```markdown
+### KF-1 · <一句话结论>
+- 类型：策略行为 / 方法论 / 假设证伪
+- 状态：已证实 / 已证伪 / 边界待定
+- 证据：[workbench 或 archive 链接]
+- 影响：对 strategy-math-spec / experiment-plan / 后续主题的具体影响
+- 日期：YYYY-MM-DD
+```
+
 ## 立题日期
 
 **2026-07-05**
