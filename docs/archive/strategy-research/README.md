@@ -12,15 +12,20 @@
 | 2026-07-03 | value-area | value-area-reacceptance stage-b sweep，主题降级 feature-only | ❌ 证伪 |
 | 2026-07-02 | value-area | value-area-reacceptance 扩样与结构诊断（R27-R29） | ❌ 证伪 |
 | 2026-07-01 | value-area | value-area reacceptance quality 分层与形状 bucket 分析（R1-R26） | ❌ 证伪 |
-| 2026-06-29 | structural-alpha | 结构入口随机 baseline 阶段最终报告 + value-area 深化 R1-R4 | 🧪 方法论 · ❌ 证伪 |
-| 2026-06-27 | low-validation-cost | 低验证成本策略批次（breakout / retest / pullback / bollinger） | ❌ 证伪 |
+| 2026-06-29 | structural-alpha | 结构入口 vs 随机 baseline 双对照；VA reacceptance 确立为下一阶段主线；IB / 流动性 / 低波入口降级 | 🧪 方法论 · ⚠️ 分流 · 🔁 转主线 |
+| 2026-06-27 | low-validation-cost | 低验证成本区间判据体系建立；具体候选（布林带 / 前 N 高低点 / 趋势回踩）成本后未通过 | ❌ 证伪 · 🧪 方法论 |
 | 2026-06-26 | indicator-baseline | MA 正期望值 + ATR 调参基线 | 🧪 方法论 |
 
 ## 结论标签约定
 
 - ✅ 通过：假设被证实、后续可作为策略候选或核心组件；
 - ❌ 证伪：核心假设失败或主题降级，作为反例记录；
-- 🧪 方法论：无论结论如何，产出的判据 / 采样 / 统计工具对后续主题有长期价值。
+- 🧪 方法论：无论结论如何，产出的判据 / 采样 / 统计工具对后续主题有长期价值；
+- ⚠️ 分流：部分方向通过 + 部分方向降级/暂停（混合结论，不宜单打 ✅ 或 ❌）；
+- 🔁 转主线：本批次结论直接指向下一阶段的新主线（含"某某深化"或"改由 X 主线继续"）。
+
+标签**可组合使用**（如 `🧪 方法论 · ⚠️ 分流 · 🔁 转主线`）；顺序无硬性要求，
+但建议按"结论强度 → 遗产 → 元信息"排列。
 
 ## 使用方式
 
