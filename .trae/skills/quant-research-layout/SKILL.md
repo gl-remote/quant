@@ -299,7 +299,8 @@ docs/workbench/<name>.md
      关系类型通常是"继承 / 阶段归档"；
    - **不扫描其他主题**——跨主题反向登记走 pull 模式（见下节）。
 5. **修正原主题目录内引用了这些 workbench 路径的文档**（换成 archive 路径）——特别是 `research-status.md` 中"关键发现清单"的**证据链接**必须从 workbench 路径改指 archive 路径；
-6. **提交前 `grep` 一次旧 workbench 路径**，确认无孤立引用。
+6. **提交前 `grep` 一次旧 workbench 路径**，确认无孤立引用；
+7. **若顶层索引 `docs/archive/strategy-research/README.md` 已存在**：追加一行本批次记录（日期 / 家族 / topic / 结论标签，O(1)）；不存在但批次数达到 ≥10 阈值时，本次归档一并创建索引。
 
 **任一步骤缺失都视为"归档未完成"**，不允许合并到长期分支。
 
@@ -309,13 +310,48 @@ docs/workbench/<name>.md
 
 archive 的反向索引由**下游主题维护者主动拉取**，而不是归档者广播推送。触发时机：
 
-- **主题立题时**：主题维护者在创建 `archive-references.md` 时，主动扫描已存在的 archive，登记与本主题相关的批次；
+- **主题立题时**：主题维护者在创建 `archive-references.md` 时，扫描已存在的 archive；**采用截断策略**避免随 archive 目录规模线性增长（见下节）；
 - **主题实际引用某 archive 时**：无论是在 KF 清单的证据链接、experiment-plan 的方法论继承、还是 spec 的公式参考中，**只要主题内文档实际引用某 archive**，就在同一次 commit 中把该 archive 登记到 `archive-references.md`；
 - **家族聚合时**：主题冻结进入 `themes-frozen/<family>/` 时，家族维护者把该主题的 archive-references 中的方法论 / 反例条目提炼到家族 README。
 
 **判定原则**：**引用触发登记，不引用不登记**。这样 archive-references.md 只包含"真正被本主题读取过的 archive"，避免预防性登记膨胀。
 
 **归档时的最小提示（可选）**：归档者可以在归档 commit message 里加一行"可能相关的主题：X/Y/Z"作为提示，但**不强制**下游主题维护者立即登记——他们在下一次实际引用时登记即可。
+
+### 立题扫描 archive 的截断策略
+
+`docs/archive/strategy-research/` 是**时间前缀 + 家族 slug** 的自然索引
+（`YYYY-MM-DD-<slug>/`），立题时**不需要**逐个打开旧批次的 summary，
+按下列三重截断阅读即可：
+
+1. **家族截断（首要）**：先按 slug 前缀匹配同家族（如新主题属于
+   `structural-*`，先看所有 `*structural*` 批次），家族内的 archive
+   必读；
+2. **时间截断（次要）**：跨家族批次只看**近 3 个月**（按目录名日期前缀
+   排序倒序，超出窗口的跳过）；更早的跨家族 archive **不主动登记**，
+   走 pull 模式（真被引用时再登记）；
+3. **索引先读**：优先阅读顶层索引 `docs/archive/strategy-research/README.md`
+   （批次 → 家族 → topic → 一句话结论）而不是逐个打开 summary；
+   索引不存在时使用 `ls docs/archive/strategy-research/ | tail -20`
+   查看最近 20 个批次名，按名字判断相关性再决定是否深读。
+
+**渐进登记原则**：立题扫描后 archive-references 只包含"高相关性 + 家族
+内的 + 近期的"批次；主题推进过程中若发现远期或跨家族的 archive 与本
+主题相关，pull 模式即时登记即可。**不追求立题时 archive-references
+的"完备性"**——它是动态索引，不是静态目录快照。
+
+### 顶层索引 README.md（archive 目录）
+
+**当 `docs/archive/strategy-research/` 批次数 ≥ 10 时必须建立**，减少后续
+立题扫描成本：
+
+- 路径：`docs/archive/strategy-research/README.md`；
+- 内容：**每行一个批次**，含 `日期 | 家族 slug | topic 一句话 | 结论标签
+  (✅ 通过 / ❌ 证伪 / 🧪 方法论)`；
+- 归档原子步骤新增：**批次数达到阈值后**，每次归档必须同步在顶层索引
+  追加一行（O(1)），保持索引与目录同步。
+
+批次数 < 10 时可省略该索引，立题者直接 `ls` 一遍即可。
 
 ## archive-references.md 写法
 
