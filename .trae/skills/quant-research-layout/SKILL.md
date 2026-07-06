@@ -316,7 +316,9 @@ docs/research/themes-frozen/<family>/
 
 ## Archive 写法
 
-归档前必须压缩，只保留未来有用的信息：
+**核心原则**：删废话、删弯路、删无价值信息。**不做"必须压缩多少"的硬性要求**——如果 workbench 内容已经足够精炼、无冗余、每一段都有长期价值，可以整段搬运不改动。压缩是手段，不是目的。
+
+**保留**（若存在且有长期价值）：
 
 - 核心问题；
 - 实验定义；
@@ -326,13 +328,16 @@ docs/research/themes-frozen/<family>/
 - 对后续研究有用的信息；
 - 必要复现备注。
 
-删除：
+**删除**（若存在）：
 
-- 过程性计划；
-- 重复判断标准；
-- 过期工具限制；
+- 过程性计划、被推翻的中间假设；
+- 重复的判断标准（skill / spec 已写清一次即可）；
+- 过期工具限制、已修复的框架 issue 复述；
 - 不存在策略的可执行命令；
+- 走过又放弃的弯路描述（若不构成 KF 或方法论证据，删）；
 - 不再有长期价值的中间描述。
+
+**判据**：**"未来读者需要它做出决策吗？"** 需要则保留，不需要则删。判断困难时倾向保留，宁可稍冗余不要丢失证据链。
 
 归档路径：
 
@@ -354,7 +359,7 @@ docs/workbench/<name>.md
 
 一次归档批次到 `docs/archive/strategy-research/<archive-batch>/` **不是**单纯的移动动作，它包含以下**原子步骤，缺一不可**：
 
-1. **压缩 workbench 内容**到 archive 目录（按上面"归档写法"的保留/删除清单）；
+1. **审阅 workbench 内容**：按上面"删除清单"清理废话/弯路/无价值信息；若已足够精炼可跳过压缩，直接搬运；
 2. **移动 workbench 文件** `git mv docs/workbench/<name>.md docs/archive/strategy-research/<archive-batch>/<name>.md`；
 3. **修正 archive 内部相对链接**（roadmap / issues / 主题 README）；
 4. **只更新归档主题自己的 `archive-references.md`**（O(1) 动作）：

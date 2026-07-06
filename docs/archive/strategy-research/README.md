@@ -8,6 +8,7 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
+| 2026-07-06 | structural-shaping-alpha | 结构塑形阶段 1：DirRandom 下无独立 alpha 证伪；产出 9 条 KF + First-Passage Designer 工具遗产 | ❌ 证伪 · 🧪 方法论 |
 | 2026-07-05 | value-area | value-area-rolling-reacceptance 主题冻结：POC 特殊性 / rolling 独立价值 / reacceptance 触发器 / 距离档 edge 全部证伪 | ❌ 证伪 · 🧪 方法论 |
 | 2026-07-03 | value-area | value-area-reacceptance stage-b sweep，主题降级 feature-only | ❌ 证伪 |
 | 2026-07-02 | value-area | value-area-reacceptance 扩样与结构诊断（R27-R29） | ❌ 证伪 |

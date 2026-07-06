@@ -24,6 +24,15 @@
 
 ## Archive 目录清单
 
+### archive:2026-07-06-structural-shaping-alpha-stage1
+- 关系类型：阶段归档（自登记）
+- 说明：本主题阶段 1 gatekeeper 完整归档批次。含
+  `stage1-gatekeeper-report.md`（原 workbench）·
+  `first-passage-lookup-tables.md`（首达定理对照表）·
+  `raw-scripts/`（3 份 runner 副本）。9 条 KF + First-Passage Designer
+  工具在本批次内定型；主题不冻结（阶段 2 待外部触发）。
+- 相关文件：archive:2026-07-06-structural-shaping-alpha-stage1#stage-summary
+
 ### archive:2026-06-29-structural-alpha-random-baseline
 - 关系类型：方法论遗产 + 铺垫
 - 说明：确立"random 入场 baseline + no_trigger baseline"的双对照范式，

@@ -83,6 +83,32 @@ description: "Quantitative strategy research methodology: validation order, evid
 - 成本后仍然有正期望才可继续进入样本外验证。
 - 成本后消失的信号，可降级为质量标签或放弃。
 
+### 5.1 成本模型选择（跨品种硬约束）
+
+- **跨品种 gatekeeper 判决必须用每合约真实成本**：单边成本 = 佣金
+  （按 entry 价估）+ 滑点（`size × tick × slip_tick`），按每笔
+  entry_atr 换算为 ATR，随事件/合约/波动率变化。查表源
+  `workspace/common/contract_specs.py`。
+- **扁平 ATR 成本模型（如 0.05 ATR/单边）已知会跨品种系统性低估**：
+  5m 期货实测扁平 0.05 vs 真实平均 0.225 单边，**低估 4.5 倍**；
+  跨品种跨度从豆油 0.043 到螺纹 0.405（9 倍差）。仅可用于快速原型
+  / 历史 baseline 对比 / debug，**不得作为最终判决口径**。
+- **paired diff 判据在两种成本模型下等价**（同 event 双向抵消），
+  但**绝对 mean 判决必须走真实成本**——扁平成本下 mean 翻正的结论
+  在真实成本下常常消失（见 structural-shaping-alpha 主题 §8.7 KF-5）。
+- Runner 层面：所有跨品种 no-signal / gatekeeper 类脚本，默认启用
+  真实成本，扁平模式必须显式命名为 `--flat-cost-debug` 类开关。
+
+### 5.2 显著性诊断护栏（避免 alpha 误判）
+
+- **"少输"型 paired 显著性 ≠ 独立 alpha**：如观察到 paired diff CI
+  排除 0 但 combo mean 仍<0，先做"绝对损益尺度归因"复核——紧止损/短
+  距离档天然会缩小每笔绝对损益方差，让 paired diff CI 变窄，但这不
+  改变期望方向，只是"更少的负数"（见 KF-4）。**必须做二维拆分**
+  （单独变距离 vs 单独变时间/其他因子），确认显著性不是尺度伪影。
+- **"1 ATR 强回归带"引发的 SCALE 稳健性对照，必须与 realistic-cost
+  对照双向配套**——两条一起才干净，任一单独走都可能得到错判决。
+
 ## 6. 样本外验证
 
 **需要品种维度和时间维度两个方向的样本外验证。**
