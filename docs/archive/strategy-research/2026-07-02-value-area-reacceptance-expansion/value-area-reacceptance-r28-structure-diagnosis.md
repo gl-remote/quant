@@ -310,11 +310,11 @@ exclude_stop_atr_ratio_high
 
 位置：
 
-- [value_area_reacceptance_baseline_strategy.py](file:///Users/gaolei/Documents/src/quant/workspace/strategies/value_area_reacceptance_baseline_strategy.py)
+- `workspace/strategies/value_area_reacceptance_baseline_strategy.py`
 
 辅助诊断脚本：
 
-- [value_area_reacceptance_structure_diagnosis.py](file:///Users/gaolei/Documents/src/quant/scripts/analysis/value_area_reacceptance_structure_diagnosis.py)
+- `scripts/analysis/value_area_reacceptance_structure_diagnosis.py`
 
 ### 7.2 作废回测
 

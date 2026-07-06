@@ -47,7 +47,8 @@ docs/research/themes/<theme-name>/
 ├── strategy-math-spec.md        # 数学规格（由 quant-math-spec 约束）
 ├── experiment-plan.md           # 实验计划（候选矩阵 / 验证顺序 / 判定标准）
 ├── parameter-selection-spec.md  # 参数选择规格（分层 / 判据 / 流程）
-└── implementation-notes.md      # 工程实现细节（数据结构 / 缓存 / 桥接 / 性能）
+├── implementation-notes.md      # 工程实现细节（数据结构 / 缓存 / 桥接 / 性能）
+└── archive-references.md        # 与本主题相关的 archive 目录索引与关系说明
 ```
 
 ### 文件分工（严禁越界）
@@ -55,11 +56,12 @@ docs/research/themes/<theme-name>/
 | 文档 | 回答 | 谁改 | 什么时候改 |
 |---|---|---|---|
 | README.md | 主题目录索引与阅读顺序 | 主题维护者 | 目录成员变化时 |
-| research-status.md | 主题当下的一句话结论、边界、下一步 | 策略研究者 | 结论变化时 |
+| research-status.md | 主题当下的一句话结论、边界、下一步、**关键发现清单** | 策略研究者 | 结论变化时 / 每次得到关键发现时 |
 | strategy-math-spec.md | 策略"是什么"（数学契约） | 策略研究者 | 行为变更前 |
 | experiment-plan.md | "怎么验证"（候选矩阵、验证顺序、判据） | 策略研究者 | 实验路径变化时 |
 | parameter-selection-spec.md | "怎么选参数"（分层、判据、流程、回填格式） | 策略研究者 | 实验后 |
 | implementation-notes.md | "怎么实现"（工程细节、优化选择、性能数据） | 实现者 | 实现开始 / 完成时 |
+| archive-references.md | 与本主题相关的 archive 目录清单及关系（继承 / 反例 / 数据 / 代码复用） | 主题维护者 | 立题时 / 每次归档新增批次 / 引用/继承关系变化时 |
 
 ### 跨文档硬约束
 
@@ -67,7 +69,7 @@ docs/research/themes/<theme-name>/
 - 若 `implementation-notes.md` 中的某项工程决定影响了语义，先回改 `strategy-math-spec.md`，再更新 `implementation-notes.md`。
 - 若 `parameter-selection-spec.md` 需要一个 spec 未定义的参数，先在 `strategy-math-spec.md` 补声明。
 - `experiment-plan.md` 与 `parameter-selection-spec.md` 都可以引用 spec，但不能复述完整策略公式。
-- `research-status.md` 只承载"结论、边界、下一步"，不承载策略公式，不承载实验流水，不承载工程细节。
+- `research-status.md` 只承载"结论、边界、下一步、关键发现清单"，不承载策略公式，不承载实验流水，不承载工程细节。
 - 主题目录中的文档**不允许**依赖 workbench 中的临时文件；workbench 的稳定结论必须归档到 archive，主题目录再引用 archive。
 - **workbench 目录只有一个，位于 `docs/workbench/`**（顶层）。**禁止**在主题目录（`docs/research/themes/<theme-name>/`）下再建 `workbench/` 子目录。所有实验流水、临时报告、driver 输出统一写到 `docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`（大主题内多份文件时才建子目录，且该子目录必须直属 `docs/workbench/`）。
 
@@ -76,6 +78,125 @@ docs/research/themes/<theme-name>/
 - 主题目录名 = 策略主题 slug（kebab-case，如 `value-area-reacceptance`）。
 - 目录内文件名固定为上表六个，作用一目了然，禁止使用过于泛化的 `spec.md / plan.md / current.md`。
 - 若主题需要额外辅助文档（数据字段词表、诊断字段清单等），也放同目录并在 README 的"文档地图"中登记。
+
+### 命名唯一性硬约束（命名引用协议的基础）
+
+- **主题 slug 全局唯一**：`docs/research/themes/*` 与 `docs/research/themes-frozen/*/*` 合并后不得出现同名 slug。
+- **archive 批次目录名全局唯一**（自然满足：日期前缀 + slug）。
+- **workbench 文件名 / 主题内多文件时的子目录名全局唯一**：`docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`。
+- **family slug 全局唯一**：`themes-frozen/<family>/` 家族名不得与主题 slug 冲突。
+- **issue 文件名全局唯一**：`docs/issues/<slug>.md`。
+
+**立题 / 建家族 / 归档新批次前**：`grep -r "<候选 slug>" docs/research docs/archive docs/workbench` 一次，确认无重名。发现冲突时 slug 加限定后缀（如 `value-area-reacceptance-2`）而不是复用。
+
+## 命名引用协议（Named Reference Protocol）
+
+**跨文档引用一律用命名标签，不写路径**。这是解决路径耦合与迁移膨胀的核心规则。
+
+### 标签前缀 → 位置的映射（权威表）
+
+| 前缀 | 语法 | 解析位置 | 说明 |
+|------|------|---------|------|
+| `archive:` | `archive:<name>` | `docs/archive/strategy-research/<name>/` | `<name>` 是完整批次目录名（含日期前缀） |
+| `archive:` | `archive:<name>#<file-stem>` | `docs/archive/strategy-research/<name>/<file-stem>.md` | 指向批次内某具体报告 |
+| `theme:` | `theme:<slug>` | `docs/research/themes/<slug>/` **或** `docs/research/themes-frozen/<family>/<slug>/`（自动判定，活跃优先） | 主题目录本身 |
+| `theme:` | `theme:<slug>#<file-stem>` | 上述目录下 `<file-stem>.md` | 主题内某文档 |
+| `family:` | `family:<slug>` | `docs/research/themes-frozen/<slug>/` | 家族目录 |
+| `workbench:` | `workbench:<name>` | `docs/workbench/<name>.md` **或** `docs/workbench/<theme-slug>/<name>.md`（后者若首段等于某 theme-slug） | workbench 报告 |
+| `kf:` | `kf:<theme-slug>#KF-<N>` | 主题 `research-status.md` 中 KF-N 条目 | 关键发现锚点 |
+| `issue:` | `issue:<slug>` | `docs/issues/<slug>.md` | 底层框架 issue |
+| `roadmap:` | `roadmap:<slug>` | `docs/roadmap/<slug>.md` | 路线图文档 |
+
+### 引用格式（不用 markdown 链接语法）
+
+```markdown
+- 证据：archive:2026-07-05-value-area-rolling-reacceptance-freeze
+- 反例：theme:value-area-rolling-reacceptance
+- 方法论继承：archive:2026-07-05-value-area-rolling-reacceptance-freeze#freeze-summary
+- 相关 KF：kf:structural-shaping-alpha#KF-1
+```
+
+**禁止**：
+- `[label](../../../archive/...)` 相对路径链接；
+- `[label](file:///Users/.../docs/...)` 绝对路径链接；
+- 裸文件名如 `见 gatekeeper.md`；
+- 除本 skill 权威表以外的自造前缀。
+
+**例外（允许保留 markdown 链接）**：
+- 外部 URL（学术论文、工具官网等）；
+- 主题目录**内部**的六份长期文档互引（如 [research-status.md](research-status.md)——同目录相对路径极短且永久稳定，用不用命名引用无实质差别）；
+- 已存在的历史 markdown 链接**不做被动 sweep**——新增引用按新规则即可，旧引用等自然演化替换。
+
+### 迁移零成本
+
+- **workbench → archive**：`kf:` 里的 `archive:` 引用不变；只需 `workbench:` 引用改为 `archive:`；
+- **themes → themes-frozen**：`theme:` / `archive:` / `kf:` 全部**不动**（解析规则自动切换活跃/冻结）；
+- **家族合并/重命名**：`family:` 若变名需要 sweep，但只是一处标签串改，不涉及路径深度。
+
+### AI 读取协定
+
+AI 看到命名引用时按上表映射立即调 `Read` / `LS`。不需要打开当前文档所在目录做相对路径心算。
+
+### 命名引用与 archive 顶层索引的关系
+
+archive 顶层索引 [`docs/archive/strategy-research/README.md`](../../archive/strategy-research/README.md) 的"家族 slug"列即 `family:` 前缀的解析源；"日期"列即 `archive:` 前缀日期段的解析源；两者共同构成命名引用的**权威索引表**。
+
+## 关键发现清单（research-status.md 内节）
+
+主题活跃期产生的**每一条重要结论**都必须登记到 `research-status.md`
+的"关键发现清单"节，作为**主题内唯一入口**。规则如下。
+
+### 什么算"关键发现"
+
+必须登记的三类：
+
+1. **策略行为级**：某维度 / 参数 / 结构变体被确认**有 alpha** 或**无 alpha**
+   （无论证实还是证伪都要记）；
+2. **方法论级**：某判据 / 采样 / 统计方法被确认**必需 / 无效 / 有伪影**
+   （例如"cluster bootstrap 不可省"、"PrevClose 价格锚点会引入 DirRandom 偏置"）；
+3. **假设证伪级**：主题原假设或子假设被独立证据链证伪（进入冻结候选）。
+
+不登记：
+- workbench 中一次性的临时观察（应留在 workbench）；
+- 单一实验的中间数字（应留在 workbench / archive 的实验报告）；
+- 参数微调结果（应写入 `parameter-selection-spec.md`）。
+
+### 条目格式（每条 ≤ 5 行）
+
+```markdown
+### KF-<序号> · <一句话结论>
+- 类型：策略行为 / 方法论 / 假设证伪（选一或多）
+- 状态：已证实 / 已证伪 / 边界待定
+- 证据：archive:<batch-name> 或 workbench:<name>（必需，走命名引用协议）
+- 影响：对 strategy-math-spec / experiment-plan / 后续主题的具体影响
+- 日期：YYYY-MM-DD
+```
+
+序号跨阶段单调递增，冻结时保留完整历史（不重编号）。**证据字段必须用命名引用**（`archive:` / `workbench:` / `theme:` / `issue:`），禁止用相对路径或绝对路径链接——这样归档 / 冻结 / 家族迁移时 KF 条目**零改动**。
+
+### 与其他文档的关系
+
+| 目标文档 | 关系 |
+|---------|------|
+| workbench | 关键发现的**证据源**——workbench 是原始报告，清单只做提炼与索引 |
+| archive | 归档后清单条目的"证据"链接从 workbench 路径改指 archive 路径 |
+| strategy-math-spec | 若发现修改策略行为，先由发现驱动改 spec，再在清单"影响"段登记 spec 版本变化 |
+| 家族 README（冻结时）| 主题冻结后，清单中**跨主题共通**的方法论 / 证伪结论必须提炼到家族级 README 的"共同教训"段（清单本身随主题一起 git mv 到 themes-frozen） |
+| freeze-summary.md（冻结时）| 归档批次的 `freeze-summary.md` 必须列出"关键发现清单"的所有条目（或直接引用清单），避免归档丢失 |
+
+### 更新时机
+
+- **每次实验得到明确的支持 / 证伪证据**（不是每个中间数字）：追加或更新条目；
+- **发现方法论必需或有伪影**：追加"方法论"类条目；
+- **主题冻结时**：清单不删除；清单中的"待定/边界"条目若未收敛，需在冻结时降级为"未解决观察"（在家族 README 中登记）。
+
+### 禁忌
+
+- 关键发现清单**不承载完整策略公式**（那是 spec 的职责）；
+- **不承载参数分层规则**（那是 parameter-selection-spec 的职责）；
+- **不承载实验流水与原始数字**（那是 workbench / archive 的职责）；
+- **禁止孤儿条目**（无证据引用）——任何未指向 archive / workbench / issue 的条目视为无效；
+- **禁止在证据字段用相对/绝对路径**——必须用命名引用（`archive:` / `workbench:` / `issue:` / `kf:`），否则归档/冻结时会级联更新。
 
 ## 主题目录初始化流程
 
@@ -141,16 +262,22 @@ docs/research/themes-frozen/<family>/
 
 1. 决定家族：若已有家族目录则复用；否则新建 `themes-frozen/<family>/`；
 2. `git mv docs/research/themes/<theme-name> docs/research/themes-frozen/<family>/<theme-name>`；
-3. 修正该主题目录内所有文件的相对路径：
+3. 修正该主题目录内所有文件的**历史 markdown 相对路径链接**：
    - → `docs/archive/**`：从 `../../../archive/...` 改为 `../../../../archive/...`（多一层 `..`）；
    - → `docs/research/**`（同层）：从 `../../...` 改为 `../../../...`；
    - 主题目录内部互引：不变。
+   - **命名引用（`archive:` / `theme:` / `kf:` / `family:` / `issue:` / `roadmap:` / `workbench:`）零改动**——迁移后解析规则自动切换活跃/冻结。
 4. 主题 `README.md` 顶部标记 `Frozen <date>`，`research-status.md` 结论段落
    给出冻结原因与保留资产；
-5. 更新 `docs/research/README.md` 与 `docs/research/strategy-current.md`：
+5. **搬运"关键发现清单"**：
+   - `research-status.md` 中的关键发现清单**原样保留**（历史不删）；
+   - 归档批次 `freeze-summary.md` 必须列出全部条目（或引用清单）；
+   - 清单中**跨主题共通**的方法论 / 证伪结论提炼到家族 README 的"共同教训"段；
+   - 清单中未收敛的"边界待定"条目降级为家族 README 的"未解决观察"。
+6. 更新 `docs/research/README.md` 与 `docs/research/strategy-current.md`：
    路径改为 `themes-frozen/<family>/<theme-name>/`，状态改为"已冻结"；
-6. 更新反向引用的 archive 文档中的主题路径；
-7. 全库 `grep` 旧路径 `themes/<theme-name>`，把仍应指向主题目录的引用改到
+7. 更新反向引用的 archive 文档中的主题路径；
+8. 全库 `grep` 旧路径 `themes/<theme-name>`，把仍应指向主题目录的引用改到
    新路径（archive 内部指向已归档 workbench 的除外）。
 
 **新增家族成员**（家族目录已存在）：
@@ -189,7 +316,9 @@ docs/research/themes-frozen/<family>/
 
 ## Archive 写法
 
-归档前必须压缩，只保留未来有用的信息：
+**核心原则**：删废话、删弯路、删无价值信息。**不做"必须压缩多少"的硬性要求**——如果 workbench 内容已经足够精炼、无冗余、每一段都有长期价值，可以整段搬运不改动。压缩是手段，不是目的。
+
+**保留**（若存在且有长期价值）：
 
 - 核心问题；
 - 实验定义；
@@ -199,13 +328,16 @@ docs/research/themes-frozen/<family>/
 - 对后续研究有用的信息；
 - 必要复现备注。
 
-删除：
+**删除**（若存在）：
 
-- 过程性计划；
-- 重复判断标准；
-- 过期工具限制；
+- 过程性计划、被推翻的中间假设；
+- 重复的判断标准（skill / spec 已写清一次即可）；
+- 过期工具限制、已修复的框架 issue 复述；
 - 不存在策略的可执行命令；
+- 走过又放弃的弯路描述（若不构成 KF 或方法论证据，删）；
 - 不再有长期价值的中间描述。
+
+**判据**：**"未来读者需要它做出决策吗？"** 需要则保留，不需要则删。判断困难时倾向保留，宁可稍冗余不要丢失证据链。
 
 归档路径：
 
@@ -222,6 +354,117 @@ docs/workbench/<name>.md
 - issue → archive：`../archive/strategy-research/<archive-batch>/...`
 
 若主题目录里的某份文件（例如 `research-status.md`）引用 archive，档路径用 `../../../archive/...`。
+
+### 归档动作的原子步骤（必须一次完成）
+
+一次归档批次到 `docs/archive/strategy-research/<archive-batch>/` **不是**单纯的移动动作，它包含以下**原子步骤，缺一不可**：
+
+1. **审阅 workbench 内容**：按上面"删除清单"清理废话/弯路/无价值信息；若已足够精炼可跳过压缩，直接搬运；
+2. **移动 workbench 文件** `git mv docs/workbench/<name>.md docs/archive/strategy-research/<archive-batch>/<name>.md`；
+3. **修正 archive 内部相对链接**（roadmap / issues / 主题 README）；
+4. **只更新归档主题自己的 `archive-references.md`**（O(1) 动作）：
+   - 归档批次天然属于某个"归档主题"（workbench 文件本来就是该主题的产物）；
+   - 归档者只在**该主题**的 `archive-references.md` 里追加一条自登记条目，
+     关系类型通常是"继承 / 阶段归档"；
+   - **不扫描其他主题**——跨主题反向登记走 pull 模式（见下节）。
+5. **修正原主题目录内引用了这些 workbench 路径的文档**：
+   - **命名引用**（`workbench:<name>`）改为 `archive:<batch>/<name>` 或 `archive:<batch>#<file-stem>`——一次全库替换即可，无 KF 数级联；
+   - **历史 markdown 相对路径链接**（若存在）仍需 sed 更新——建议一并升级为命名引用以避免下次归档再改；
+6. **提交前 `grep` 一次旧 workbench 路径 + 旧 `workbench:` 标签**，确认无孤立引用；
+7. **若顶层索引 `docs/archive/strategy-research/README.md` 已存在**：追加一行本批次记录（日期 / 家族 / topic / 结论标签，O(1)）；不存在但批次数达到 ≥10 阈值时，本次归档一并创建索引。
+
+**任一步骤缺失都视为"归档未完成"**，不允许合并到长期分支。
+
+**注意：步骤 4 是 O(1) 而非 O(N)**——归档者不承担枚举全库主题、判断相关性的责任。跨主题反向引用由**下游主题维护者按需拉取**（见下节）。
+
+### 跨主题反向登记（Pull 模式，非归档者的责任）
+
+archive 的反向索引由**下游主题维护者主动拉取**，而不是归档者广播推送。触发时机：
+
+- **主题立题时**：主题维护者在创建 `archive-references.md` 时，扫描已存在的 archive；**采用截断策略**避免随 archive 目录规模线性增长（见下节）；
+- **主题实际引用某 archive 时**：无论是在 KF 清单的证据链接、experiment-plan 的方法论继承、还是 spec 的公式参考中，**只要主题内文档实际引用某 archive**，就在同一次 commit 中把该 archive 登记到 `archive-references.md`；
+- **家族聚合时**：主题冻结进入 `themes-frozen/<family>/` 时，家族维护者把该主题的 archive-references 中的方法论 / 反例条目提炼到家族 README。
+
+**判定原则**：**引用触发登记，不引用不登记**。这样 archive-references.md 只包含"真正被本主题读取过的 archive"，避免预防性登记膨胀。
+
+**归档时的最小提示（可选）**：归档者可以在归档 commit message 里加一行"可能相关的主题：X/Y/Z"作为提示，但**不强制**下游主题维护者立即登记——他们在下一次实际引用时登记即可。
+
+### 立题扫描 archive 的截断策略
+
+`docs/archive/strategy-research/` 是**时间前缀 + 家族 slug** 的自然索引
+（`YYYY-MM-DD-<slug>/`），立题时**不需要**逐个打开旧批次的 summary，
+按下列三重截断阅读即可：
+
+1. **家族截断（首要）**：先按 slug 前缀匹配同家族（如新主题属于
+   `structural-*`，先看所有 `*structural*` 批次），家族内的 archive
+   必读；
+2. **时间截断（次要）**：跨家族批次只看**近 2 周**（按目录名日期前缀
+   排序倒序，超出窗口的跳过）；更早的跨家族 archive **不主动登记**，
+   走 pull 模式（真被引用时再登记）；
+3. **索引先读**：优先阅读顶层索引 `docs/archive/strategy-research/README.md`
+   （批次 → 家族 → topic → 一句话结论）而不是逐个打开 summary；
+   索引不存在时使用 `ls docs/archive/strategy-research/ | tail -20`
+   查看最近 20 个批次名，按名字判断相关性再决定是否深读。
+
+**渐进登记原则**：立题扫描后 archive-references 只包含"高相关性 + 家族
+内的 + 近期的"批次；主题推进过程中若发现远期或跨家族的 archive 与本
+主题相关，pull 模式即时登记即可。**不追求立题时 archive-references
+的"完备性"**——它是动态索引，不是静态目录快照。
+
+### 顶层索引 README.md（archive 目录）
+
+**当 `docs/archive/strategy-research/` 批次数 ≥ 10 时必须建立**，减少后续
+立题扫描成本：
+
+- 路径：`docs/archive/strategy-research/README.md`；
+- 内容：**每行一个批次**，含 `日期 | 家族 slug | topic 一句话 | 结论标签
+  (✅ 通过 / ❌ 证伪 / 🧪 方法论 / ⚠️ 分流 / 🔁 转主线，可组合)`；
+- 归档原子步骤新增：**批次数达到阈值后**，每次归档必须同步在顶层索引
+  追加一行（O(1)），保持索引与目录同步。
+
+批次数 < 10 时可省略该索引，立题者直接 `ls` 一遍即可。
+
+## archive-references.md 写法
+
+每个活跃主题目录**必须**有一份 `archive-references.md`，用于回答：
+"`docs/archive/strategy-research/` 中哪些目录与本主题相关，各自是什么关系？"
+
+### 何时创建 / 更新
+
+采用 **pull 模式**——引用触发登记，不引用不登记。具体时机：
+
+- **主题立题时**：创建 `archive-references.md`，扫描已存在的 archive，登记与本主题相关的批次（一次性动作）；
+- **归档主题自己产生新 archive 批次时**：归档原子步骤 4 追加一条自登记条目（O(1)，见 `## Archive 写法 § 归档动作的原子步骤`）；
+- **主题内任何文档实际引用某 archive 时**（KF 清单证据 / experiment-plan 方法论继承 / spec 公式参考）：在同一次 commit 中登记该 archive 到 `archive-references.md`；
+- **关系类型变化**（如原本作为"反例"引用，后续升级为"数据复用"）：更新条目。
+
+**不做**的：
+- 归档者**不广播**给其他主题（跨主题反向登记走 pull 模式）；
+- 不做**预防性登记**（可能被引用但暂未引用的 archive 不登记）。
+
+### 必备内容
+
+- **archive 目录清单**：每条记录包含 (1) `archive:<batch-name>` 命名引用（**唯一定位方式**，禁止用路径），(2) 关系类型（继承 / 反例 / 数据复用 / 代码复用 / 方法论遗产），(3) 一句话说明"这个 archive 对本主题意味着什么"；
+- **关系说明**：为什么这个 archive 值得被本主题引用？它证伪 / 支撑 / 铺垫了本主题的哪个假设？
+- **禁忌**：archive-references.md 不承载策略公式、不承载实验流水、不承载归档内容的完整复述——它只是**索引 + 关系标签**。
+
+### 示例条目
+
+```markdown
+### archive:2026-07-05-value-area-rolling-reacceptance-freeze
+- 关系类型：反例 + 方法论遗产
+- 说明：value-area 家族最终证伪批次；本主题继承其 ATR 归一化、期望净值、
+  cluster bootstrap、多层对照四大方法论约束，但假设正交（结构塑形独立 alpha
+  vs 触发器均值回归），不复用其结论。
+- 相关文件：archive:2026-07-05-value-area-rolling-reacceptance-freeze#freeze-summary
+```
+
+### 与 archive 反向索引的关系
+
+- archive 本身不维护"哪些主题引用我"的反向清单；由每个主题的
+  `archive-references.md` 单向登记；
+- 家族级 README（`themes-frozen/<family>/README.md`）也可以在"方法论遗产"
+  段引用 archive，但**主题级 archive-references.md 仍是主索引**。
 
 ## Issues 工作流
 

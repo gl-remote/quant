@@ -189,7 +189,7 @@ class MACrossParams:
 - bridge 仅产出 `fills`，无账户净值序列（daily/equity），前端 run 视图核心曲线接进去是空的。
 - 逐笔 `pnl`/`commission` 当前为占位值（见 `_persist_tq_backtest_result`），需补真实逐笔盈亏。
 - `RunFinalizer` 会触发 `build_frontend` 全量重建，单标的/`--gui` 场景的收尾时机需单独处理。
-**结论**：机械搬运（建 run / 接 persister / finalizer）不难，但需先补 bridge 数据缺口，否则只是接空壳。详细方案见 [backtest-refactor-plan.md 阶段 10](file:///Users/gaolei/Documents/src/quant/docs/archive/backtest/backtest-refactor-plan.md#L1506-L1534)。
+**结论**：机械搬运（建 run / 接 persister / finalizer）不难，但需先补 bridge 数据缺口，否则只是接空壳。详细方案见 `docs/archive/backtest/backtest-refactor-plan.md` 阶段 10。
 
 ---
 

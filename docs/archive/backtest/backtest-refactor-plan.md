@@ -154,7 +154,7 @@ output/r{run_id}/data/trades.json
 - 完成日期：2026-06-19
 - 主要改动：
   1. 基线记录与文档对齐：修订基线检查项中 `optuna.json` 字段清单，使之与当前实现一致（保持现有前端 JSON 契约不变）。
-  2. 修复并行回测 0 成交（遗留问题 1）：调整 [`DataFeed.create()`](file:///Users/gaolei/Documents/src/quant/strategies/runtime/data_feed.py#L619-L692)，把硬编码的 `source_period = "1m"` 改为按 `requirements` 推断的最小周期，使其与 `apply_requirements` 的 base 推断逻辑一致；并行路径 [`_init_worker`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L43-L101) 的预热缓存与 vnpy bar 推进对齐，策略恢复正常发信号。
+  2. 修复并行回测 0 成交（遗留问题 1）：调整 [`DataFeed.create()`](strategies/runtime/data_feed.py#L619-L692)，把硬编码的 `source_period = "1m"` 改为按 `requirements` 推断的最小周期，使其与 `apply_requirements` 的 base 推断逻辑一致；并行路径 [`_init_worker`](backtest/parallel.py#L43-L101) 的预热缓存与 vnpy bar 推进对齐，策略恢复正常发信号。
 - 影响文件：
   - 代码：
     - `strategies/runtime/data_feed.py`：`DataFeed.create()` 不再硬编码 1m，改为按 reqs 推断最小周期；移除未使用的 `PeriodRequirements` import。
@@ -174,12 +174,12 @@ output/r{run_id}/data/trades.json
 - 前端验证：通过；参数优化页 trial_value 显示正常正值，收益曲线/交易记录有数据。
 - 遗留问题：
   1. **无成交记录（业务问题）** ✅ **已修复**：3 个 trial 全部 `best_value=-999.0`，`equity.json`/`trades.json` 为空。该问题原本计划在阶段 0.5 之前单独修复或准备非空 fixture，本次基线阶段已直接定位并修复。
-     - **2026-06-19 已修复**：根因为 [`DataFeed.create()`](file:///Users/gaolei/Documents/src/quant/strategies/runtime/data_feed.py#L619-L692) 硬编码 `source_period = "1m"` 并强行注入 1m 周期，与并行路径 [`_init_worker`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L43-L101) 预热缓存（按策略实际 reqs 推断 base=5m）冲突；`set_cached_feed` 缓存键不区分 base_period，导致缓存命中后返回 base 不一致的 feed，策略在子进程中几乎不发信号、trial 仅 130ms 完成。修复方式：把 `DataFeed.create()` 改为按 `requirements` 推断的最小周期作为 base（与 `apply_requirements` 推断逻辑一致），不再硬编码 1m。验证结果：search 模式 `best_value` 从 `-999.0` 恢复为 ≈2.31，trial 时长从 130ms 恢复为分钟级。影响范围：vnpy 串行 / 并行批量回测，TqSdk 路径不受影响（独立 bridge）。
-     - **新遗留（独立任务）**：[`tqsdk_bridge._subscribe_klines / _init_period_data`](file:///Users/gaolei/Documents/src/quant/strategies/bridges/tqsdk_bridge.py#L341-L395) 仍硬编码 `source_period = "1m"`，应改为按策略 reqs 推断；同时 `DataFeed.create()` 与 `_init_period_data()` 的函数 docstring 应明确标注其适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。该问题独立于本次重构主线，留待后续单独处理。
+     - **2026-06-19 已修复**：根因为 [`DataFeed.create()`](strategies/runtime/data_feed.py#L619-L692) 硬编码 `source_period = "1m"` 并强行注入 1m 周期，与并行路径 [`_init_worker`](backtest/parallel.py#L43-L101) 预热缓存（按策略实际 reqs 推断 base=5m）冲突；`set_cached_feed` 缓存键不区分 base_period，导致缓存命中后返回 base 不一致的 feed，策略在子进程中几乎不发信号、trial 仅 130ms 完成。修复方式：把 `DataFeed.create()` 改为按 `requirements` 推断的最小周期作为 base（与 `apply_requirements` 推断逻辑一致），不再硬编码 1m。验证结果：search 模式 `best_value` 从 `-999.0` 恢复为 ≈2.31，trial 时长从 130ms 恢复为分钟级。影响范围：vnpy 串行 / 并行批量回测，TqSdk 路径不受影响（独立 bridge）。
+     - **新遗留（独立任务）**：[`tqsdk_bridge._subscribe_klines / _init_period_data`](strategies/bridges/tqsdk_bridge.py#L341-L395) 仍硬编码 `source_period = "1m"`，应改为按策略 reqs 推断；同时 `DataFeed.create()` 与 `_init_period_data()` 的函数 docstring 应明确标注其适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。该问题独立于本次重构主线，留待后续单独处理。
   2. **logs.json 不完整**：报告构建阶段的日志未进入 `logs.json`，初步判断 `RunLogService` 在 finalize 流程中过早 detach。该问题归入 [阶段 2 RunLogService + RunFinalizer](#阶段-2抽出-runlogservice-和-runfinalizer) 解决，阶段 0 只做记录。
   3. **run.log 中 `%`-style 格式串未展开**：`report.builder` 等模块的日志参数（如 `%d`、`%s`、`%.1f`）原样写入文件，logger handler 未展开 args。该问题独立于本计划其他阶段，可在阶段 2 一并处理。
   4. **optuna.json 字段差异**：文档原列的 `trial_nums` / `trial_values` 顶层字段在当前实现中并不存在，trial 序号与目标值嵌套在 `optimization_history.series[].data` 中。本次提交已将基线检查项调整为与现状一致，遵循"保持现有前端 JSON 契约不变"原则。是否将 `trial_nums` / `trial_values` 提升为顶层扁平字段属于**契约扩展提案**，应单独评估、不混入本次的模块边界重构；如确有需要，建议在阶段 6 之后另起小节，明确兼容期与前端迁移路径。
-  5. **`total_trades` 字段在某些边界情况下与实际 `fills` 数不一致**：默认参数下 `DCE.m2603` 出现 `fills=47, total_trades=0`，根因是 [`backtest/vnpy_backtest_engine.py#L126`](file:///Users/gaolei/Documents/src/quant/backtest/vnpy_backtest_engine.py#L126) 优先从 vnpy `calculate_statistics()` 返回的 `total_trade_count` 取数；当 daily_results 不足或某些边界条件下 vnpy 不输出该字段时，统计取到 0，但实际 trades 已生成。该问题独立于本次模块边界重构，建议在阶段 7（Walk-Forward 强类型化）或阶段 8（拆 report query）前后单独修复，思路：以 `_calculate_trade_stats` 中已可用的 `closed_trades` 数（或 `len(formatted_trades) / 2`）作为 fallback 来源；同时阶段 0.5 的契约测试应额外校验 `total_trades` 与 `trades.json` 实际条目数的一致性，作为护栏。
+  5. **`total_trades` 字段在某些边界情况下与实际 `fills` 数不一致**：默认参数下 `DCE.m2603` 出现 `fills=47, total_trades=0`，根因是 [`backtest/vnpy_backtest_engine.py#L126`](backtest/vnpy_backtest_engine.py#L126) 优先从 vnpy `calculate_statistics()` 返回的 `total_trade_count` 取数；当 daily_results 不足或某些边界条件下 vnpy 不输出该字段时，统计取到 0，但实际 trades 已生成。该问题独立于本次模块边界重构，建议在阶段 7（Walk-Forward 强类型化）或阶段 8（拆 report query）前后单独修复，思路：以 `_calculate_trade_stats` 中已可用的 `closed_trades` 数（或 `len(formatted_trades) / 2`）作为 fallback 来源；同时阶段 0.5 的契约测试应额外校验 `total_trades` 与 `trades.json` 实际条目数的一致性，作为护栏。
 
 ## 阶段 0.5：建立最小 JSON 契约测试
 
@@ -671,7 +671,7 @@ def cmd_backtest(args):
 #### B. 已识别但留待后续阶段
 
 1. **`_run_batch_backtest` 旧版的 try/except/finally 变量作用域 bug（已通过搬迁规避）**
-   - 原 [`_run_batch_backtest`](file:///Users/gaolei/Documents/src/quant/cli/commands/backtest.py) 中 `run_id` / `finalizer` / `log_helper` 都在 try 块内定义，若 `_prepare_backtest_config` / `_load_datasets` 等前置步骤抛错，except 块引用 `finalizer.finish_failed(run_id, ...)` 会再抛 `UnboundLocalError`。本次搬迁后，前置步骤 `_prepare_backtest_config` / `_load_datasets` 移出 try/except，进入 try 之前已确保 engine、run_id、log_helper、finalizer 都已就绪，从作用域上消除了该 bug。
+   - 原 [`_run_batch_backtest`](cli/commands/backtest.py) 中 `run_id` / `finalizer` / `log_helper` 都在 try 块内定义，若 `_prepare_backtest_config` / `_load_datasets` 等前置步骤抛错，except 块引用 `finalizer.finish_failed(run_id, ...)` 会再抛 `UnboundLocalError`。本次搬迁后，前置步骤 `_prepare_backtest_config` / `_load_datasets` 移出 try/except，进入 try 之前已确保 engine、run_id、log_helper、finalizer 都已就绪，从作用域上消除了该 bug。
 2. **`_persist_tq_backtest_result` 写入 `engine_config={"type": "tqsdk", "gui": False}` 永远是 False**
    - 原代码硬编码，没有从 args 读取实际 gui 标志。本次搬迁未修（保持搬迁不改语义原则），归阶段 10 处理。
 3. **TqSdk 路径数据一致性**：阶段 0 / 阶段 2 已发现 `total_trades` 与 `fills` 不一致问题，搬迁后 vnpy 单标的回测在前端报告中再次复现（示例：bt=10/11，`total_trades=0` 但 `fills=125`），与阶段 7 待评估任务清单第 2 条吻合，仍归阶段 7 前后修复。
@@ -1124,13 +1124,13 @@ Optuna 相关逻辑散落在：
 
 此外，**`OptunaOptimizer` 与 `ParallelBacktestOptimizer` 之间存在两处重复代码**：
 
-1. **`_create_grid_space` 各写一遍**：[`optimizer.py#L143-L162`](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L143-L162) 与 [`parallel.py#L230-L247`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L230-L247) 逻辑完全一样（遍历 search_space → 按 type 生成值列表）。
-2. **storage 标准化三份重复**：`sqlite:///` 前缀校验 + `os.path.abspath` + `os.makedirs` 的代码在 `OptunaOptimizer.optimize()`（[L213-L219](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L213-L219)）、`ParallelBacktestOptimizer.optimize()`（[L259-L266](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L259-L266)）各写一遍，workbench 路径也可能有第三份。
+1. **`_create_grid_space` 各写一遍**：[`optimizer.py#L143-L162`](backtest/optimizer.py#L143-L162) 与 [`parallel.py#L230-L247`](backtest/parallel.py#L230-L247) 逻辑完全一样（遍历 search_space → 按 type 生成值列表）。
+2. **storage 标准化三份重复**：`sqlite:///` 前缀校验 + `os.path.abspath` + `os.makedirs` 的代码在 `OptunaOptimizer.optimize()`（[L213-L219](backtest/optimizer.py#L213-L219)）、`ParallelBacktestOptimizer.optimize()`（[L259-L266](backtest/parallel.py#L259-L266)）各写一遍，workbench 路径也可能有第三份。
 
 另外，**`SearchResult` 转换有两处**：
 
-- [`optimizer.py#L349-L356`](file:///Users/gaolei/Documents/src/quant/backtest/optimizer.py#L349-L356) `run_param_search` 内 `OptunaResult` → `SearchResult`
-- [`parallel.py#L474-L481`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L474-L481) `run_param_search_parallel` 内同样的转换
+- [`optimizer.py#L349-L356`](backtest/optimizer.py#L349-L356) `run_param_search` 内 `OptunaResult` → `SearchResult`
+- [`parallel.py#L474-L481`](backtest/parallel.py#L474-L481) `run_param_search_parallel` 内同样的转换
 
 转换逻辑几乎一样，但各自独立。
 
@@ -1472,15 +1472,15 @@ data/report_queries.py
 
 此前有 4 处捕获异常后软着陆继续跑，掩盖了真实失败：
 
-1. [`vnpy_backtest_engine._run_backtest`](file:///Users/gaolei/Documents/src/quant/backtest/vnpy_backtest_engine.py#L414)：
+1. [`vnpy_backtest_engine._run_backtest`](backtest/vnpy_backtest_engine.py#L414)：
    单回测异常被 catch 后塞 `error` 进结果继续 → 改为直接上抛。
-2. [`parallel._execute_trial`](file:///Users/gaolei/Documents/src/quant/backtest/parallel.py#L96)：
+2. [`parallel._execute_trial`](backtest/parallel.py#L96)：
    子进程 trial 异常被 catch 返回 `success=False` → 改为上抛，经
    `future.result()` 在主进程重新抛出。
-3. [`persister`](file:///Users/gaolei/Documents/src/quant/backtest/persister.py#L48) 的
+3. [`persister`](backtest/persister.py#L48) 的
    `_persist_daily` / `_persist_trades` / `_validate_consistency`：写入失败仅打日志 →
    改为上抛（"数据不一致"业务告警仍保留 warning，不中断）。
-4. [`backtests_run._do_vnpy_search`](file:///Users/gaolei/Documents/src/quant/cli/workflows/backtests_run.py#L391)：
+4. [`backtests_run._do_vnpy_search`](cli/workflows/backtests_run.py#L391)：
    持久化整体失败被 catch 后 `all_ids=[]` 继续收尾 → 改为上抛。
 
 ### 顺带修复（fail-fast 暴露的测试缺陷）
@@ -1510,7 +1510,7 @@ data/report_queries.py
 
 ## 阶段 10：统一单标的 TqSdk 和批量 vn.py run 生命周期
 
-> **已移出回测重构主线**（决策于 2026-06-23）：本阶段属于生命周期/基础设施统一，非当前核心任务；且 TqSdk 单标的现已写库（`backtests`/`backtest_trades`，`report --id N` 可查），不阻塞主线。已迁移至 [`engineering-roadmap.md` 后续周期第 7 项](file:///Users/gaolei/Documents/src/quant/docs/roadmap/engineering-roadmap.md)，待 bridge 数据缺口（账户净值序列、真实逐笔 pnl）补齐后再评估。以下内容保留作为后续实施参考。
+> **已移出回测重构主线**（决策于 2026-06-23）：本阶段属于生命周期/基础设施统一，非当前核心任务；且 TqSdk 单标的现已写库（`backtests`/`backtest_trades`，`report --id N` 可查），不阻塞主线。已迁移至 [`engineering-roadmap.md` 后续周期第 7 项](docs/roadmap/engineering-roadmap.md)，待 bridge 数据缺口（账户净值序列、真实逐笔 pnl）补齐后再评估。以下内容保留作为后续实施参考。
 
 ### 目标
 
@@ -1532,7 +1532,7 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 - TqSdk 路径也使用 `RunFinalizer`。
 - TqSdk 路径也通过阶段 4 的 `BacktestResultPersister` / `WalkForwardPersister` 持久化（`_persist_tq_backtest_result` 整体接入持久化服务）。
 - TqSdk 路径也生成前端 JSON。
-- 顺带处理"待评估任务清单"第 1 条：修复 [`tqsdk_bridge._subscribe_klines / _init_period_data`](file:///Users/gaolei/Documents/src/quant/strategies/bridges/tqsdk_bridge.py#L341-L395) 硬编码 `source_period = "1m"`，改为按策略 reqs 推断最小周期；同时统一 `DataFeed.create()` 与 `_init_period_data()` 的 docstring，标注各自适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。
+- 顺带处理"待评估任务清单"第 1 条：修复 [`tqsdk_bridge._subscribe_klines / _init_period_data`](strategies/bridges/tqsdk_bridge.py#L341-L395) 硬编码 `source_period = "1m"`，改为按策略 reqs 推断最小周期；同时统一 `DataFeed.create()` 与 `_init_period_data()` 的 docstring，标注各自适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。
 
 ### 验收标准
 
@@ -1603,17 +1603,17 @@ TqSdk 单标的路径和 vn.py 批量路径不完全一致：
 ### 真实问题（有明确技术缺陷，建议修）
 
 1. **tqsdk_bridge 硬编码 `source_period = "1m"`**
-   - 位置：[`tqsdk_bridge._subscribe_klines / _init_period_data`](file:///Users/gaolei/Documents/src/quant/strategies/bridges/tqsdk_bridge.py#L341-L395)
+   - 位置：[`tqsdk_bridge._subscribe_klines / _init_period_data`](strategies/bridges/tqsdk_bridge.py#L341-L395)
    - 与阶段 0 已修复的 `DataFeed.create()` 同源（硬编码 1m，应按策略 reqs 推断最小周期），但在 TqSdk 单标的路径上仍未修。
    - 建议落点：**阶段 10（统一 TqSdk 生命周期）**，顺带统一 `DataFeed.create()` 与 `_init_period_data()` 的 docstring，标注各自适用场景（vnpy 批量回测 vs TqSdk 单标的回测/test/live）。
 
 2. **`total_trades` 与实际 `fills` 数不一致**
-   - 位置：[`backtest/vnpy_backtest_engine.py#L126`](file:///Users/gaolei/Documents/src/quant/backtest/vnpy_backtest_engine.py#L126)
+   - 位置：[`backtest/vnpy_backtest_engine.py#L126`](backtest/vnpy_backtest_engine.py#L126)
    - 现象：默认参数下 `DCE.m2603` 出现 `fills=47, total_trades=0`。根因是优先取 vnpy `calculate_statistics()` 的 `total_trade_count`，边界条件下该字段为 0 但实际已有成交。
    - 建议落点：**阶段 7（Walk-Forward 强类型化）前后**。修复思路：以 `_calculate_trade_stats` 的 `closed_trades` 数（或 `len(formatted_trades) / 2`）作为 fallback；同时在阶段 0.5 契约测试中增加 `total_trades` 与 `trades.json` 条目数一致性校验作为护栏。
 
 3. **OptunaCharts.tsx 前端代码质量问题**
-   - 位置：[`OptunaCharts.tsx`](file:///Users/gaolei/Documents/src/quant/report/web/src/components/charts/OptunaCharts.tsx#L79-L91)
+   - 位置：[`OptunaCharts.tsx`](report/web/src/components/charts/OptunaCharts.tsx#L79-L91)
    - 两处：(a) 第 79/87 行有 `console.log` 调试残留；(b) 第 80-81 行在 render 阶段直接调用 `setXParam`/`setYParam`，是 React 反模式，应改用惰性初始化或 `useEffect`。
    - 建议落点：前端独立小任务，不挂后端重构主线。
 
