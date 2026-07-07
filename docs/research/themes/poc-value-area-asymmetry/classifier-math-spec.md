@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
 > 类型：Theme / 分类器数学规格
-> 状态：**v1（2026-07-07）· 阶段 3 收尾后定稿 · 阶段 4 起冻结**
+> 状态：**v1.1（2026-07-07）· 阶段 3 收尾后定稿 · v1.1 修正 Sharpe 口径 · 阶段 4 起冻结**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)（v5）
@@ -399,37 +399,44 @@ M_stable := { (s, t) ∈ M : transition_flag(s, t) = 0 }
 M_trans  := { (s, t) ∈ M : transition_flag(s, t) = 1 }
 ```
 
-### 7.3 10 档评级映射（阶段 3 §12.9 冻结）
+### 7.3 10 档评级映射（阶段 3 §12.9 冻结 · v8 修正 Sharpe/IR 口径）
 
-| Tier ID | 集合 | 综合评级 | Bonf | 反事实 | Sharpe | 品种保留 |
-|---------|------|:-------:|:----:|:------:|:-----:|:------:|
-| `LP_all` | LP | **A+** | ✅ | ✅ | +14.1 | 100% |
-| `LP_stable` | LP ∩ stable | **B**（n 少）| ❌ | ✅ | +8.9 | 100% |
-| `LP_trans` | LP ∩ trans | **A** | ✅ | ✅ | +11.0 | 100% |
-| `LL_stable` | LL ∩ stable | **A+** ⭐ | ✅ | ✅ | +14.9 | 90% |
-| `LL_trans` | LL ∩ trans | **B+** | ✅ 边缘 | ✅ | +9.3 | 82% |
-| `SP_stable` | SP ∩ stable | **A** | ✅ | ✅ | +11.4 | 100% |
-| `SP_trans` | SP ∩ trans | **C** | ❌ | ✅ | +6.0 | 83% |
-| `SL_stable` | SL ∩ stable | **A** | ✅ | ✅ | +12.9 | 100% |
-| `SL_trans` | SL ∩ trans | **B-** | ❌ 边缘 | ✅ | +8.1 | 88% |
-| `SC_stable` | SC ∩ stable | **A** | ✅ | ✅ | +11.3 | 100% |
-| `SC_trans` | SC ∩ trans | **C+** | ❌ | ✅ | +6.8 | 86% |
+**⚠️ 修正说明**（对应 workbench §12.3 v8）：v1 初稿 Sharpe 数据用错误口径
+`sqrt(yearly_events)` 而非 `sqrt(252)` 年化 · 虚高约 10 倍 · 已作废。
+本表 Sharpe = **按 event_time 日期聚合每日累计 bps · sqrt(252) 年化 · gross 版**。
+评级判据改为以**单笔 IR** 作为分类器质量代理（Sharpe 仅参考）。
+
+| Tier ID | 集合 | 综合评级 | Bonf | 反事实 | 单笔 IR | Sharpe (gross) | 品种保留 |
+|---------|------|:-------:|:----:|:------:|:------:|:-------------:|:------:|
+| `LP_all` | LP | **A+** | ✅ | ✅ | **+0.577** | +1.59 | 100% |
+| `LP_stable` | LP ∩ stable | **B**（n=52 少）| ❌ | ✅ | **+0.603** | +1.06 | 100% |
+| `LP_trans` | LP ∩ trans | **A** | ✅ | ✅ | +0.563 | +1.22 | 100% |
+| `LL_stable` | LL ∩ stable | **A+** ⭐ | ✅ | ✅ | +0.478 | **+1.48** | 90% |
+| `LL_trans` | LL ∩ trans | **B+** | ✅ 边缘 | ✅ | +0.298 | +1.03 | 82% |
+| `SP_stable` | SP ∩ stable | **A** | ✅ | ✅ | +0.407 | +1.20 | 100% |
+| `SP_trans` | SP ∩ trans | **C** | ❌ | ✅ | +0.292 | +1.09 | 83% |
+| `SL_stable` | SL ∩ stable | **A** | ✅ | ✅ | +0.370 | +1.40 | 100% |
+| `SL_trans` | SL ∩ trans | **B-** | ❌ 边缘 | ✅ | +0.226 | +1.20 | 88% |
+| `SC_stable` | SC ∩ stable | **A** | ✅ | ✅ | +0.349 | +1.24 | 100% |
+| `SC_trans` | SC ∩ trans | **C+** | ❌ | ✅ | +0.235 | +1.02 | 86% |
 
 **评级判据**：
 ```text
 tier(id) :=
-    "A+"     if Bonf_pass ∧ CF_pass ∧ Sharpe > 14 ∧ symbol_retain ≥ 0.90
-    "A"      if Bonf_pass ∧ CF_pass ∧ Sharpe > 10 ∧ symbol_retain ≥ 0.90
-    "B+"     if Bonf_edge ∧ CF_pass ∧ Sharpe > 8
-    "B"      if CF_pass ∧ Sharpe > 8 (Bonf 因 n 少 fail)
-    "B-"     if CF_pass ∧ Sharpe > 6 (Bonf edge fail)
-    "C+"     if Bonf_fail ∧ CF_pass ∧ Sharpe > 6
-    "C"      if Bonf_fail ∧ CF_pass ∧ Sharpe > 5
+    "A+"     if Bonf_pass ∧ CF_pass ∧ IR_per_trade > 0.45 ∧ symbol_retain ≥ 0.90
+    "A"      if Bonf_pass ∧ CF_pass ∧ IR_per_trade > 0.30 ∧ symbol_retain ≥ 0.90
+    "B+"     if Bonf_edge ∧ CF_pass ∧ IR_per_trade > 0.25
+    "B"      if CF_pass ∧ IR_per_trade > 0.30 (Bonf 因 n 少 fail)
+    "B-"     if CF_pass ∧ IR_per_trade > 0.20 (Bonf edge fail)
+    "C+"     if Bonf_fail ∧ CF_pass ∧ IR_per_trade > 0.22
+    "C"      if Bonf_fail ∧ CF_pass ∧ IR_per_trade > 0.18
     "None"   otherwise
 ```
 
 **注**：Bonferroni 判据 `p < 0.05 / 8 = 0.00625`（family size = 8 · 见 阶段 3 §12.1）。
 反事实判据 `p_vs_random < 0.001`（见 阶段 3 §12.5）。
+Sharpe (gross) 仅供参考 · **未包含仓位管理 / 组合协方差 / 具体入场出场规则 / 交易成本**。
+net-15bps 版 Sharpe 见 workbench §12.3。
 
 ### 7.4 白名单
 
