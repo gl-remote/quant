@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
 > 类型：Theme / 分类器数学规格
-> 状态：**v1.1（2026-07-07）· 阶段 3 收尾后定稿 · v1.1 修正 Sharpe 口径 · 阶段 4 起冻结**
+> 状态：**v1.2（2026-07-08）· §5.1a 加采样精度冻结约束 · v1.1 修正 Sharpe 口径 · 阶段 4 起冻结**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)（v5）
@@ -181,6 +181,32 @@ signed_skew_rank(s, t) :=
 signed_skew_rank(s, t) :=
     |{ u ∈ E_s^prev(t, K) | A3_skew(u) < A3_skew(t) }| / |E_s^prev(t, K)|
 ```
+
+### 5.1a 独立采样单位与冻结约束（KF-22）
+
+**表面 vs 实际**：
+- **表面**：rolling 100 events 每个合约 · rank 有 100 个观察
+- **实际**：`A3_skew` 是**日级变量**（同一交易日所有 event 共享 W1 · 因此 A3_skew 相同）·
+  独立采样单位是**"合约-日期"**（约每合约 60 独立日）· 100 events ≈ **约 10 独立日**
+
+**这意味着**：
+- 同一交易日内所有 event 的 `signed_skew_rank` 完全相同
+- 触发条件在**日级触发** · event 级只是"入场时机采样"
+- 有效独立观察数远小于 event 总数
+
+**冻结约束**（阶段 3 workbench §12.12 论证）：
+
+- **rank 单位固定为 per-contract**：**禁止** cross-contract 池化 · **禁止**
+  用 (品种前缀 / 交易所 / 全池) 计算 rank
+- **禁止贝叶斯 shrinkage**：即使把其他合约作为先验也会破坏尾部信号
+- **依据**：prefix 池化实验中 · 空头 4/5 档 Bonferroni 从 ✅ 降级到 ❌ ·
+  因跨合约尾部 (p05, p95) 极差 0.5-0.7 · 池化会稀释极端触发的品种特异性
+- **Bootstrap 单位**：必须按 **(contract, date)** cluster · 而非 (contract)
+- **表述规范**：文档中报告样本量时 · 应同时给出 event 数和独立日数（例如
+  "n_events=142 · n_indep_days≈14"）
+
+**核心原则**："数据边界不可造假 · 承认样本量 · 用正确 bootstrap 揭露真实
+不确定性 · 不用池化 / shrinkage 制造虚假显著性"（KF-poc-va-22 · 跨主题方法论）。
 
 ### 5.2 ATR Rank
 
