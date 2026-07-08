@@ -1,0 +1,296 @@
+{
+  "timestamp": "20260706_160437",
+  "cost_per_trade_atr": 0.05,
+  "sampling_stride": 20,
+  "atr_period": 14,
+  "seed": 20260706,
+  "bootstrap_iter": 5000,
+  "symbols": [
+    {
+      "sector": "black",
+      "symbol": "rb2601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2605",
+      "bars": 3880,
+      "events": 194
+    },
+    {
+      "sector": "black",
+      "symbol": "i2601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "black",
+      "symbol": "i2509",
+      "bars": 4323,
+      "events": 216
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2601",
+      "bars": 5572,
+      "events": 278
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2509",
+      "bars": 5811,
+      "events": 290
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2601",
+      "bars": 5572,
+      "events": 278
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2509",
+      "bars": 5811,
+      "events": 290
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2512",
+      "bars": 6624,
+      "events": 331
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2509",
+      "bars": 6927,
+      "events": 346
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA509",
+      "bars": 5743,
+      "events": 287
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2605",
+      "bars": 3880,
+      "events": 194
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2605",
+      "bars": 3880,
+      "events": 194
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR605",
+      "bars": 5907,
+      "events": 281
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF601",
+      "bars": 4156,
+      "events": 208
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF509",
+      "bars": 5743,
+      "events": 287
+    }
+  ],
+  "combos": [
+    {
+      "key": "A",
+      "label": "教科书 R:R=2:1 + EOD",
+      "n": 4922,
+      "mean_net_atr": -0.11640145759992987,
+      "median_net_atr": -1.5999999999999366,
+      "win_rate": 0.3632669646485169,
+      "mean_exit_bars": 9.96485168630638,
+      "sharpe": -0.06186952983530546,
+      "sortino": -0.273939459351568,
+      "paired_diff_vs_E_mean": 0.011036926578039334,
+      "paired_diff_vs_E_ci_lo": -0.012486361108618019,
+      "paired_diff_vs_E_ci_hi": 0.03411991859269888,
+      "paired_diff_vs_E_p_gt_0": 0.18120000000000003,
+      "verdict": "risk_pass",
+      "exit_reasons": {
+        "stop": 2660,
+        "eod": 1090,
+        "take": 1158,
+        "data_end": 14
+      }
+    },
+    {
+      "key": "B",
+      "label": "紧止损短线 R:R=2:1",
+      "n": 4922,
+      "mean_net_atr": -0.0646528579525437,
+      "median_net_atr": -0.599999999999966,
+      "win_rate": 0.3569687119057294,
+      "mean_exit_bars": 2.055465258025193,
+      "sharpe": -0.08998985410660841,
+      "sortino": -5.109042698371051,
+      "paired_diff_vs_E_mean": 0.062158491511529135,
+      "paired_diff_vs_E_ci_lo": 0.018462660941382398,
+      "paired_diff_vs_E_ci_hi": 0.10314414156374413,
+      "paired_diff_vs_E_p_gt_0": 0.0021999999999999797,
+      "verdict": "no_edge",
+      "exit_reasons": {
+        "stop": 3162,
+        "take": 1752,
+        "data_end": 7,
+        "time_exit": 1
+      }
+    },
+    {
+      "key": "C",
+      "label": "宽止损波段 R:R=3:1",
+      "n": 4922,
+      "mean_net_atr": -0.06924651523953741,
+      "median_net_atr": -2.599999999999977,
+      "win_rate": 0.2769199512393336,
+      "mean_exit_bars": 41.7157659488013,
+      "sharpe": -0.01650271217861279,
+      "sortino": -0.3240208285582362,
+      "paired_diff_vs_E_mean": 0.05735008296991605,
+      "paired_diff_vs_E_ci_lo": -0.04578563328072425,
+      "paired_diff_vs_E_ci_hi": 0.15408006475645275,
+      "paired_diff_vs_E_p_gt_0": 0.1362,
+      "verdict": "risk_pass",
+      "exit_reasons": {
+        "stop": 3518,
+        "take": 1107,
+        "time_exit": 249,
+        "data_end": 48
+      }
+    },
+    {
+      "key": "D",
+      "label": "波动率目标 + breakeven trailing 无止盈",
+      "n": 4922,
+      "mean_net_atr": -0.22081124484838213,
+      "median_net_atr": -1.0999999999998495,
+      "win_rate": 0.049776513612352705,
+      "mean_exit_bars": 9.992685900040634,
+      "sharpe": -0.08873333210296241,
+      "sortino": -0.44254269511791333,
+      "paired_diff_vs_E_mean": -0.09408878252455716,
+      "paired_diff_vs_E_ci_lo": -0.16398572281292503,
+      "paired_diff_vs_E_ci_hi": -0.022020550575378668,
+      "paired_diff_vs_E_p_gt_0": 0.9944,
+      "verdict": "risk_pass",
+      "exit_reasons": {
+        "stop": 2482,
+        "breakeven": 2191,
+        "time_exit": 235,
+        "data_end": 14
+      }
+    },
+    {
+      "key": "E",
+      "label": "基准（固定 lot / ATR 止损止盈）",
+      "n": 4922,
+      "mean_net_atr": -0.12734842422121556,
+      "median_net_atr": -1.5999999999999523,
+      "win_rate": 0.42096708655018283,
+      "mean_exit_bars": 9.072328321820399,
+      "sharpe": -0.07383514583984274,
+      "sortino": -1.8872291015519616,
+      "paired_diff_vs_E_mean": null,
+      "paired_diff_vs_E_ci_lo": null,
+      "paired_diff_vs_E_ci_hi": null,
+      "paired_diff_vs_E_p_gt_0": null,
+      "verdict": "baseline",
+      "exit_reasons": {
+        "stop": 2840,
+        "take": 2061,
+        "data_end": 15,
+        "time_exit": 6
+      }
+    },
+    {
+      "key": "F",
+      "label": "教科书 + breakeven trailing",
+      "n": 4922,
+      "mean_net_atr": -0.3012173078645351,
+      "median_net_atr": -0.1,
+      "win_rate": 0.13774888256806175,
+      "mean_exit_bars": 7.035757822023568,
+      "sharpe": -0.2079419504149464,
+      "sortino": -0.40243126822995867,
+      "paired_diff_vs_E_mean": -0.17365336788024419,
+      "paired_diff_vs_E_ci_lo": -0.20706200500561125,
+      "paired_diff_vs_E_ci_hi": -0.1379936959922124,
+      "paired_diff_vs_E_p_gt_0": 1.0,
+      "verdict": "risk_pass",
+      "exit_reasons": {
+        "stop": 2000,
+        "breakeven": 2238,
+        "take": 668,
+        "data_end": 13,
+        "time_exit": 3
+      }
+    },
+    {
+      "key": "D2",
+      "label": "波动率目标 v2（MFE≥2 armed / 缓冲 0.5 / 止盈 3.0）",
+      "n": 4922,
+      "mean_net_atr": -0.17285391317003,
+      "median_net_atr": -1.0999999999999717,
+      "win_rate": 0.33746444534741976,
+      "mean_exit_bars": 7.378707842340512,
+      "sharpe": -0.11627929481504125,
+      "sortino": -5.204768158728222,
+      "paired_diff_vs_E_mean": -0.04569826177977984,
+      "paired_diff_vs_E_ci_lo": -0.07845871114392049,
+      "paired_diff_vs_E_ci_hi": -0.014847687986560474,
+      "paired_diff_vs_E_p_gt_0": 0.9986,
+      "verdict": "no_edge",
+      "exit_reasons": {
+        "stop": 3254,
+        "breakeven": 825,
+        "take": 825,
+        "data_end": 14,
+        "time_exit": 4
+      }
+    }
+  ],
+  "F_vs_A": {
+    "mean": -0.18541939019761738,
+    "ci_lo": -0.2251484444170421,
+    "ci_hi": -0.14350215695254806,
+    "p_gt_0": 1.0
+  },
+  "gate_pass": true,
+  "csv_path": "/Users/gaolei/Documents/src/quant/project_data/research/structural_shaping_gatekeeper/structural_shaping_gatekeeper_20260706_160437.csv"
+}
