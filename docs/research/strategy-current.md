@@ -59,10 +59,10 @@ value_area_random_baseline
 - 用于判断结构入口是否优于随机。
 ```
 
-轻量比较 runner：
+轻量比较 runner（已归档）：
 
 ```text
-scripts/analysis/value_area_random_baseline_compare.py
+docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-scripts/value_area_random_baseline_compare.py
 ```
 
 注意：该 runner 输出使用 vnpy BacktestResult 口径，只做同一 runner 下相对比较，不替代 trade_clearings 清算口径。

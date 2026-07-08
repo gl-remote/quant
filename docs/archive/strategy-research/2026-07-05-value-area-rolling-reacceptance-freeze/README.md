@@ -7,6 +7,7 @@
 - [freeze-summary.md](freeze-summary.md) — 压缩版主题结论
 - [raw-workbench/](raw-workbench/) — 原始实验流水
 - [raw-scripts/](raw-scripts/) — 分析脚本
+- [raw-outputs/](raw-outputs/) — 原始实验输出报告（stage1~stage4b_15m，原 project_data/analysis/）
 - 主题目录：[docs/research/themes-frozen/value-area/value-area-rolling-reacceptance/](../../../research/themes-frozen/value-area/value-area-rolling-reacceptance/README.md)
 
 ## 一句话

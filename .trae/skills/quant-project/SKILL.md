@@ -50,7 +50,7 @@ quant/
 │   ├── issues/             # 实验中发现的底层框架问题
 │   └── archive/            # 已稳定、可长期引用的归档文档
 ├── scripts/
-│   ├── ai_tmp/             # AI 编写的临时脚本，如一次性 debug / 探查脚本
+│   ├── ai_tmp/             # AI 编写的临时脚本，如一次性 debug / 探查脚本。对应数据输出目录：project_data/ai_tmp/
 │   ├── analysis/           # 简单数据分析工具，从 csv / 输出数据快速得到结论
 │   ├── test/               # 测试自动化内部模块，由 scripts/test.sh source
 │   ├── test.sh             # 测试自动化统一入口，pre-commit / CI / 人工命令共用
@@ -91,6 +91,7 @@ CLI 固定参数回测：
 - Caches：`project_data/cache/`
 - Profile：`project_data/profiles/`
 - Coverage：`project_data/coverage/`
+- **AI 临时数据**：`project_data/ai_tmp/`（scripts/ai_tmp/ 脚本的默认输出目录；归档主题批次时，连同对应脚本一起迁入归档目录的 raw-outputs/）
 
 统一路径函数在 `workspace/data/output_paths.py` 与 `workspace/report/output_paths.py`。业务代码不要硬编码本地数据子路径。
 

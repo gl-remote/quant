@@ -1,0 +1,39 @@
+[app]
+mode = "backtest"
+
+[environment]
+name = "backtest"
+debug = true
+
+[data]
+environment = "backtest"
+database_path = "project_data/database/backtest/quant.db"
+
+[optimizer]
+enabled = false
+
+[[strategies]]
+name = "ma"
+enabled = true
+sma_short = 30
+sma_long = 90
+stop_loss_ratio = 0.04
+take_profit_ratio = 0.10
+position_ratio = 0.1
+kline_period = 1
+atr_period = 14
+atr_stop_loss_multiplier = 2.5
+atr_take_profit_multiplier = 4.0
+kdj_oversold = 30
+kdj_overbought = 70
+kdj_pullback_long = 45
+kdj_pullback_short = 55
+trailing_activation_atr = 2.0
+trailing_drawdown_ratio = 0.3
+signal_profile = "trend_macd"
+exit_on_reverse_signal = true
+reverse_confirm_bars = 0
+min_hold_bars = 240
+max_hold_bars = 720
+entry_cooldown_bars = 0
+trend_gap_atr = 0.0

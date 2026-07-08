@@ -1,0 +1,32 @@
+[app]
+mode = "backtest"
+
+[environment]
+name = "backtest"
+debug = true
+
+[data]
+environment = "backtest"
+database_path = "project_data/database/backtest/quant.db"
+
+[optimizer]
+enabled = false
+
+[[strategies]]
+name = "ma"
+enabled = true
+sma_short = 3
+sma_long = 10
+stop_loss_ratio = 0.3
+take_profit_ratio = 0.5
+position_ratio = 1.0
+kline_period = 1
+atr_period = 14
+atr_stop_loss_multiplier = 5.0
+atr_take_profit_multiplier = 5.0
+kdj_oversold = 30
+kdj_overbought = 70
+trailing_activation_atr = 0.1
+trailing_drawdown_ratio = 0.5
+signal_profile = "sma_only"
+exit_on_reverse_signal = true

@@ -13,15 +13,24 @@ Part V.1（v1 范围）：
 - §4.1 μ_implied 反算
 
 用法：
+    # 默认：生成 5 张对照表（数学恒等式 + 校准）
     python scripts/ai_tmp/first_passage_designer.py
 
-输出：
+    # Query 模式：给定 K_S 反解 K_T 与 T 推荐区间
+    python scripts/ai_tmp/first_passage_designer.py query --K_S 2.5 --sigma 1.0 --cost 0.225
+
+输出（tables 模式）：
 - docs/workbench/first-passage-lookup-tables.md（5 张对照表）
 - project_data/research/first_passage_lookup/tables_{1..5}_<timestamp>.csv
+
+输出（query 模式）：
+- 终端直接打印扫描结果
+- 若 --out 指定，写入 markdown 快照
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import math
 from dataclasses import dataclass, field
@@ -773,5 +782,192 @@ def main():
     print(f"CSV 数据已写入：{OUT_DIR}/tables_*_{TIMESTAMP}.csv")
 
 
+# ============================================================
+# Query 模式 · 给定 K_S 反解 K_T 与 T 推荐区间
+# ============================================================
+
+
+def query_recommendation(
+    K_S: float,
+    sigma: float,
+    c: float,
+    bar_minutes: int = 5,
+    nu_over_sigma_grid: Optional[list[float]] = None,
+    K_T_grid: Optional[list[float]] = None,
+    T_grid_bars: Optional[list[int]] = None,
+) -> str:
+    """给定 K_S/σ/c，扫描 K_T × ν/σ 并输出推荐区间.
+
+    Returns:
+        markdown-formatted report text.
+    """
+    if nu_over_sigma_grid is None:
+        nu_over_sigma_grid = [0.0, 0.2, 0.3, 0.5]
+    if K_T_grid is None:
+        K_T_grid = [K_S * r for r in [0.6, 1.0, 1.4, 2.0, 3.0, 4.0, 6.0]]
+    if T_grid_bars is None:
+        T_grid_bars = [40, 80, 160, 320]
+
+    def bars_to_hours(bars: float) -> float:
+        return bars * bar_minutes / 60.0
+
+    parts: list[str] = []
+    p = parts.append
+
+    p("=" * 100)
+    p(f"Query · K_S={K_S} ATR · σ={sigma} ATR/√bar · c={c} (single-side) · bar={bar_minutes}min")
+    p("=" * 100)
+
+    # Part 1 · K_T 扫描（K_T × ν/σ）
+    p("")
+    p("## Part 1 · K_T × ν/σ 敏感性")
+    for nu_over_sigma in nu_over_sigma_grid:
+        nu = nu_over_sigma * sigma
+        lam = 2.0 * nu / (sigma * sigma)
+        p("")
+        p(f"### ν/σ = {nu_over_sigma}  (λ = {lam:+.3f})")
+        p("")
+        p(f"{'K_T':>6} {'R:R':>6} {'P_win':>7} {'E[gross]':>10} {'E[net]':>10} "
+          f"{'E[τ] bar':>10} {'E[τ] hour':>10} {'Kelly f*':>10}")
+        for K_T in K_T_grid:
+            p_win = p_win_infty(lam, K_S, K_T)
+            e_gross = e_gross_infty(lam, K_S, K_T)
+            e_net = e_net_infty(lam, K_S, K_T, c)
+            e_tau = e_tau_infty(lam, K_S, K_T, sigma)
+            kelly = e_net / (K_S * K_T) if K_S * K_T > 0 else 0.0
+            rr = K_T / K_S
+            e_tau_hours = bars_to_hours(e_tau) if 0 < e_tau < 1e5 else -1.0
+            p(f"{K_T:>6.2f} {rr:>5.2f}:1 {p_win:>7.3f} {e_gross:>+10.3f} "
+              f"{e_net:>+10.3f} {e_tau:>10.2f} {e_tau_hours:>10.2f} {kelly:>+10.4f}")
+
+    # Part 2 · K_T^min（凯利正 edge 门槛）
+    p("")
+    p("## Part 2 · K_T^min（凯利正 edge 门槛 · E[net] > 0）")
+    p("")
+    p(f"{'ν/σ':>8} {'λ':>8} {'K_T^min ATR':>15} {'R:R at K_T^min':>18} {'状态':>18}")
+    for nu_over_sigma in nu_over_sigma_grid:
+        nu = nu_over_sigma * sigma
+        lam = 2.0 * nu / (sigma * sigma)
+
+        def f(k_t: float, _lam: float = lam) -> float:
+            return e_net_infty(_lam, K_S, k_t, c)
+
+        f_lo, f_hi = f(0.1), f(50.0)
+        if f_lo > 0:
+            status = "任意 K_T 均可"
+            k_t_min = 0.1
+        elif f_hi < 0:
+            status = "❌ 空集（不可行）"
+            k_t_min = float("inf")
+        else:
+            try:
+                k_t_min = brentq(f, 0.1, 50.0, xtol=1e-6)
+                status = "✓ 有解"
+            except ValueError:
+                k_t_min = float("inf")
+                status = "❌ 空集"
+        rr = k_t_min / K_S if k_t_min < float("inf") else float("inf")
+        k_t_min_str = f"{k_t_min:.2f}" if k_t_min < float("inf") else "∞"
+        rr_str = f"{rr:.2f}:1" if rr < float("inf") else "∞"
+        p(f"{nu_over_sigma:>8.2f} {lam:>+8.3f} {k_t_min_str:>15} {rr_str:>18} {status:>18}")
+
+    # Part 3 · 最小退出时间 T（假设 ν/σ=0.3 主推荐）
+    p("")
+    p("## Part 3 · 最小退出时间 T（假设 ν/σ=0.3 · 建议 T ≥ 3 × E[τ]）")
+    p("")
+    p(f"{'K_T':>6} {'E[τ] bar':>10} {'T_min 3×E[τ] bar':>18} {'T_min 小时':>12} {'T* bar':>10}")
+    nu_main = 0.3 * sigma
+    lam_main = 2.0 * nu_main / (sigma * sigma)
+    for K_T in K_T_grid:
+        e_tau = e_tau_infty(lam_main, K_S, K_T, sigma)
+        t_min = 3.0 * e_tau
+        t_min_hours = bars_to_hours(t_min)
+        t_star_val = t_star(K_S, K_T, sigma)
+        p(f"{K_T:>6.2f} {e_tau:>10.2f} {t_min:>18.2f} {t_min_hours:>12.2f} {t_star_val:>10.2f}")
+
+    # Part 4 · 综合推荐（ν/σ=0.3）
+    p("")
+    p("## Part 4 · 综合推荐档位（假设 ν/σ=0.3）")
+    p("")
+    # 生成 5 档：保守/中位/推荐/激进/tail
+    candidates = [
+        ("保守", K_S * 1.0, 40),
+        ("中位", K_S * 1.4, 80),
+        ("推荐", K_S * 2.0, 80),
+        ("激进", K_S * 3.0, 160),
+        ("tail", K_S * 4.0, 320),
+    ]
+    p(f"{'档位':>6} {'K_T':>6} {'R:R':>6} {'T bar':>7} {'T hour':>8} "
+      f"{'P_win':>7} {'E[net]':>9} {'E[τ] hour':>10} {'Kelly f*':>10}")
+    for label, K_T, T_bars in candidates:
+        p_win = p_win_infty(lam_main, K_S, K_T)
+        e_net = e_net_infty(lam_main, K_S, K_T, c)
+        e_tau = e_tau_infty(lam_main, K_S, K_T, sigma)
+        kelly = e_net / (K_S * K_T) if K_S * K_T > 0 else 0.0
+        rr = K_T / K_S
+        T_hours = bars_to_hours(T_bars)
+        e_tau_hours = bars_to_hours(e_tau)
+        p(f"{label:>6} {K_T:>6.2f} {rr:>5.2f}:1 {T_bars:>7} {T_hours:>7.1f}h "
+          f"{p_win:>7.3f} {e_net:>+9.3f} {e_tau_hours:>9.2f}h {kelly:>+10.4f}")
+
+    # Part 5 · 无 alpha 场景（ν/σ=0，作为 KF-1 印证）
+    p("")
+    p("## Part 5 · 无 alpha 场景（ν/σ=0 · KF-1 印证）")
+    p("")
+    p("所有 K_T 在 ν/σ=0 下:")
+    p(f"  E[gross] ≡ 0（首达定理恒等式）")
+    p(f"  E[net] ≡ -2c = {-2 * c:+.3f} ATR/笔")
+    p("  结论：K_T 不影响期望，选择只影响分布形态")
+    p("")
+    p(f"{'K_T':>6} {'R:R':>6} {'P_win':>7} {'输的时候':>10} {'赢的时候':>10} {'\"输型\" σ':>10}")
+    for K_T in K_T_grid:
+        p_win = p_win_infty(0.0, K_S, K_T)
+        lose_amount = K_S + 2 * c
+        win_amount = K_T - 2 * c
+        variance = p_win * (win_amount ** 2) + (1 - p_win) * (lose_amount ** 2)
+        std = variance ** 0.5
+        rr = K_T / K_S
+        p(f"{K_T:>6.2f} {rr:>5.2f}:1 {p_win:>7.3f} {-lose_amount:>+10.3f} "
+          f"{+win_amount:>+10.3f} {std:>10.3f}")
+
+    p("")
+    p("=" * 100)
+    return "\n".join(parts)
+
+
+def _cli():
+    parser = argparse.ArgumentParser(
+        description="First-Passage Designer · 分布形态设计器（v1）",
+    )
+    subparsers = parser.add_subparsers(dest="mode", help="运行模式（默认 tables）")
+
+    # query 模式
+    q = subparsers.add_parser("query", help="给定 K_S 反解 K_T 与 T 推荐区间")
+    q.add_argument("--K_S", type=float, required=True, help="止损距离（ATR 单位）")
+    q.add_argument("--sigma", type=float, default=1.0, help="波动率（ATR/√bar，5m 典型 1.0）")
+    q.add_argument("--cost", type=float, default=0.225, help="单边成本（ATR）· realistic 0.225 / flat 0.05")
+    q.add_argument("--bar-minutes", type=int, default=5, help="bar 时长（分钟，用于时间单位换算）")
+    q.add_argument("--out", type=str, default=None, help="可选 · 输出 markdown 快照路径")
+
+    args = parser.parse_args()
+
+    if args.mode == "query":
+        text = query_recommendation(
+            K_S=args.K_S,
+            sigma=args.sigma,
+            c=args.cost,
+            bar_minutes=args.bar_minutes,
+        )
+        print(text)
+        if args.out:
+            out_path = Path(args.out)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(text, encoding="utf-8")
+            print(f"\n→ 快照已写入 {out_path}")
+    else:
+        # 默认 tables 模式
+        main()
+
+
 if __name__ == "__main__":
-    main()
+    _cli()

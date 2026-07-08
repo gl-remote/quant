@@ -26,10 +26,16 @@
 ├── stage-summary.md                     ← 阶段 1 判决 + 9 条 KF 索引
 ├── stage1-gatekeeper-report.md          ← 原 workbench:structural-shaping-alpha-gatekeeper
 ├── first-passage-lookup-tables.md       ← 工具对照表（原 workbench）
-└── raw-scripts/
-    ├── structural_shaping_gatekeeper.py     ← 5m 阶段 1 runner（含 A-N combo）
-    ├── structural_shaping_gatekeeper_15m.py ← 15m 跨周期复核 runner
-    └── first_passage_designer.py            ← First-Passage Designer v1 实现
+├── raw-scripts/
+│   ├── structural_shaping_gatekeeper.py        ← 5m 阶段 1 runner（含 A-N combo）
+│   ├── structural_shaping_gatekeeper_15m.py    ← 15m 跨周期复核 runner
+│   ├── first_passage_designer.py               ← First-Passage Designer v1 + query 模式（增强版，含 tables/query 双子命令）
+│   ├── barrier_geometry_baseline.py            ← §8.2 barrier 几何 baseline（三档 K 距离 + ν 漂移基线）
+│   ├── compare_cost_models.py                  ← flat vs real-cost 模型跨 SCALE 对比（mean_net_atr / paired_diff_vs_E）
+│   └── regime_split_er.py                      ← §8.5 regime 拆分 ER 诊断（Trend × Vol × regime 切换下期望收益结构）
+└── raw-outputs/
+    ├── gatekeeper-results/                        ← gatekeeper 37 个原始输出（原 project_data/research/structural_shaping_gatekeeper/）
+    └── first-passage-lookup/                        ← First-Passage Designer 5 张对照表 16 个 CSV（原 project_data/research/first_passage_lookup/）
 ```
 
 ## 主要方法论遗产（进入 kf:structural-shaping-alpha#KF-1..9）

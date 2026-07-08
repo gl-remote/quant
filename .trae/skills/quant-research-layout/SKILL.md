@@ -18,7 +18,7 @@ description: "Rules for quant research document layout: theme directory, workben
 - 新建一个策略主题目录；
 - 修改主题目录内除 `strategy-math-spec.md` 之外的任意文档；
 - 判断某段内容应放到 workbench / theme / archive / issues 中哪个位置；
-- 把 workbench 中的实验记录归档；
+- **归档主题研究成果**：以当前 git 分支相对基线（master/main）的 ALL 差异文件为归档范围，识别并归档与主题相关的 workbench / 临时脚本 / 临时策略 / 数据产出（不仅是未提交的 workbench 文件）；
 - 发现底层框架问题需要开 issue；
 - 修 roadmap 或 research 目录索引文件。
 
@@ -316,7 +316,26 @@ docs/research/themes-frozen/<family>/
 
 ## Archive 写法
 
-**核心原则**：删废话、删弯路、删无价值信息。**不做"必须压缩多少"的硬性要求**——如果 workbench 内容已经足够精炼、无冗余、每一段都有长期价值，可以整段搬运不改动。压缩是手段，不是目的。
+**归档范围定义（核心原则 ⭐⭐⭐）**：
+
+一次归档批次的范围是**当前 git 分支中，与本次归档主题 slug 相关的 ALL 文件**，而不仅是 workbench 文件。归档前必须先做"分支差异枚举"，识别以下几类文件：
+
+| 类别 | 路径模式（按主题 slug / 关键词匹配） | 归档后位置 |
+|:---|:---|:---|
+| workbench 实验流水 | `docs/workbench/<theme-slug>-*.md` 或 `docs/workbench/<theme-slug>/` | `<batch>/` 根目录（压缩版）+ `<batch>/raw-workbench/`（原始版，若需保留多份） |
+| 临时分析脚本 | `scripts/ai_tmp/*<theme-slug>*` · 或分支中新增/修改且仅服务于该主题的脚本 | `<batch>/raw-scripts/` |
+| 临时策略代码 | `workspace/strategies/*<theme-slug>*` · 分支中新增且未进入长期策略目录的临时策略 | `<batch>/raw-strategies/` |
+| 临时中间数据 | `project_data/logs/<theme-slug>*/` 下由本次实验产生的 parquet / csv / 图像（大文件不移动，只在 README 登记路径） | **不移动文件本身**，只在 `<batch>/README.md` 登记绝对路径和文件 hash / 行数 |
+| 主题目录长期文档（experiment-plan / research-status 等） | 不归档，保留在 `docs/research/themes/<theme-slug>/` | — |
+| 框架 issue | `docs/issues/` 不移动，archive 只做命名引用 | — |
+
+**识别方法**：
+- `git diff --name-only <base-branch>...HEAD` 枚举本分支相对基线（通常 master / main）的所有差异文件
+- 按主题 slug / 关键词（如 `poc-va` / `value-area` / `<experiment-plan 中定义的主题标签>`）过滤
+- 对边界模糊的文件（共用脚本）· 判断"没有该主题就不会存在/修改该文件" → 归档；否则保留
+- 数据文件（>10MB）一律不搬运，只登记路径
+
+**压缩原则**：删废话、删弯路、删无价值信息。**不做"必须压缩多少"的硬性要求**——如果内容已经足够精炼、无冗余、每一段都有长期价值，可以整段搬运不改动。压缩是手段，不是目的。
 
 **保留**（若存在且有长期价值）：
 
@@ -342,9 +361,16 @@ docs/research/themes-frozen/<family>/
 归档路径：
 
 ```text
-docs/workbench/<name>.md
--> docs/archive/strategy-research/<archive-batch>/<name>.md
+（分支相关文件）
+  docs/workbench/<name>.md
+    -> <archive-batch>/<compressed-name>.md （压缩版，根目录）
+    -> <archive-batch>/raw-workbench/<name>.md （原始版，多文件时）
+  scripts/ai_tmp/*<theme>*        -> <archive-batch>/raw-scripts/
+  workspace/strategies/*<theme>*  -> <archive-batch>/raw-strategies/
+  （数据文件不搬运，只登记）
 ```
+
+`<archive-batch>` = `docs/archive/strategy-research/<YYYY-MM-DD>-<slug>/`
 
 移动后修正相对链接：
 
@@ -357,21 +383,32 @@ docs/workbench/<name>.md
 
 ### 归档动作的原子步骤（必须一次完成）
 
-一次归档批次到 `docs/archive/strategy-research/<archive-batch>/` **不是**单纯的移动动作，它包含以下**原子步骤，缺一不可**：
+一次归档批次到 `docs/archive/strategy-research/<archive-batch>/` **不是**单纯的移动 workbench 动作，它包含以下**原子步骤，缺一不可**：
 
-1. **审阅 workbench 内容**：按上面"删除清单"清理废话/弯路/无价值信息；若已足够精炼可跳过压缩，直接搬运；
-2. **移动 workbench 文件** `git mv docs/workbench/<name>.md docs/archive/strategy-research/<archive-batch>/<name>.md`；
-3. **修正 archive 内部相对链接**（roadmap / issues / 主题 README）；
-4. **只更新归档主题自己的 `archive-references.md`**（O(1) 动作）：
-   - 归档批次天然属于某个"归档主题"（workbench 文件本来就是该主题的产物）；
+1. **Step 0 · 枚举归档范围（分支差异扫描）**：
+   - `git diff --name-only <base-branch>...HEAD` 得到本分支相对基线的 ALL 改动文件；
+   - 按主题 slug / 关键词过滤，建立候选清单（workbench + 脚本 + 策略 + 数据产出）；
+   - 对每个文件做"是否专属于本主题"判断，确定最终归档文件清单；
+   - 对数据文件（>10MB 或 parquet/npy 二进制）· 决定"只登记不搬运"并记录路径 + md5/行数。
+2. **Step 1 · 审阅 ALL 归档范围文件内容**：
+   - workbench 按"删除清单"清理废话/弯路/无价值信息；已足够精炼可跳过压缩直接搬运；
+   - 临时脚本和策略 · 检查是否有外部依赖需要记录在 README 的复现备注。
+3. **Step 2 · 移动/拷贝文件到批次子目录**：
+   - `git mv docs/workbench/<name>.md <archive-batch>/<compressed-name>.md`（压缩版放根目录）；
+   - 若归档文件数 ≥ 3（多 workbench / 多脚本）· 建 `raw-workbench/` `raw-scripts/` `raw-strategies/` 三个子目录存放原始版；
+   - 共用脚本（非专属）不移动，在 README 注明引用路径。
+4. **Step 3 · 修正 archive 内部相对链接**（roadmap / issues / 主题 README）· 将 markdown 相对路径链接升级为命名引用。
+5. **Step 4 · 只更新归档主题自己的 `archive-references.md`**（O(1) 动作）：
+   - 归档批次天然属于某个"归档主题"（枚举文件时已识别）；
    - 归档者只在**该主题**的 `archive-references.md` 里追加一条自登记条目，
-     关系类型通常是"继承 / 阶段归档"；
+     关系类型通常是"继承 / 阶段归档 / 主题冻结"；
    - **不扫描其他主题**——跨主题反向登记走 pull 模式（见下节）。
-5. **修正原主题目录内引用了这些 workbench 路径的文档**：
-   - **命名引用**（`workbench:<name>`）改为 `archive:<batch>/<name>` 或 `archive:<batch>#<file-stem>`——一次全库替换即可，无 KF 数级联；
-   - **历史 markdown 相对路径链接**（若存在）仍需 sed 更新——建议一并升级为命名引用以避免下次归档再改；
-6. **提交前 `grep` 一次旧 workbench 路径 + 旧 `workbench:` 标签**，确认无孤立引用；
-7. **若顶层索引 `docs/archive/strategy-research/README.md` 已存在**：追加一行本批次记录（日期 / 家族 / topic / 结论标签，O(1)）；不存在但批次数达到 ≥10 阈值时，本次归档一并创建索引。
+6. **Step 5 · 修正原主题目录内引用了被归档路径的文档**：
+   - **命名引用**（`workbench:<name>`）改为 `archive:<batch>#<file-stem>`——一次全库替换即可，无 KF 数级联；
+   - **历史 markdown 相对路径链接**（若存在）仍需更新——建议一并升级为命名引用以避免下次归档再改；
+   - 检查脚本/策略被删后：文档中不能留下直接可执行但实际不存在的 `--strategy <name>` 或脚本路径。
+7. **Step 6 · 提交前 `grep` 一次旧路径 + 旧 `workbench:` 标签 + 已删除脚本/策略名**，确认无孤立引用。
+8. **Step 7 · 若顶层索引 `docs/archive/strategy-research/README.md` 已存在**：追加一行本批次记录（日期 / 家族 / topic / 结论标签，O(1)）；不存在但批次数达到 ≥10 阈值时，本次归档一并创建索引。
 
 **任一步骤缺失都视为"归档未完成"**，不允许合并到长期分支。
 
