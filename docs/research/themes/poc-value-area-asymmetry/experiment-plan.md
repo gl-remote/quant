@@ -1,12 +1,12 @@
 # poc-value-area-asymmetry · 实验计划
 
 > 类型：Experiment Plan
-> 状态：**v8（2026-07-08）· 阶段 1+2+3+4 全部完成 · 分类器 v3.0 冻结 · 10 互斥 tier · 主题主动性研究暂停**
+> 状态：**v9.1（2026-07-08 收尾）· ✅ 阶段 1+2+3+4 全部完成 · 分类器 v4.0 冻结（6 类合并版）· 阶段 4 三维深化后合并降级 · KF-25 ~ KF-29 定型**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
-> 阶段 1 详细流水：[docs/workbench/poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）
-> 阶段 2 详细流水：[docs/workbench/poc-value-area-asymmetry-stage2-guardrails.md](../../../workbench/poc-value-area-asymmetry-stage2-guardrails.md)（v4）
-> 阶段 3 详细流水:[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v11）
+> 阶段 1 详细流水：archive:2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）
+> 阶段 2 详细流水：archive:2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）
+> 阶段 3 详细流水：archive:2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）
 
 本计划检验"POC 两侧 value area 不对称是否携带信息量"的命题。阶段 1+2+3
 已完成 · **主题定位为"交易背景分类器"** · 阶段 3 产出 10 tier 体系但**存在
@@ -19,11 +19,11 @@
 
 ### 0.1 时间尺度
 
-| 用途 | 周期 | 说明 |
-|------|------|------|
-| **交易 / 事件时钟 / 未来收益窗口** | **1h** | 5m ≈ 全随机游走，跳过；从 1h 起测 |
-| **profile 构建原始数据** | **5m** | 保留 volume 分布分辨率 |
-| **阶段 2 跨周期护栏** | 30m + 1h · 1h + 2h | 同物理时长跨采样一致性（防 KF-7 伪影） |
+| 用途                     | 周期                 | 说明                     |
+| ---------------------- | ------------------ | ---------------------- |
+| **交易 / 事件时钟 / 未来收益窗口** | **1h**             | 5m ≈ 全随机游走，跳过；从 1h 起测  |
+| **profile 构建原始数据**     | **5m**             | 保留 volume 分布分辨率        |
+| **阶段 2 跨周期护栏**         | 30m + 1h · 1h + 2h | 同物理时长跨采样一致性（防 KF-7 伪影） |
 
 ### 0.2 Profile 构建窗口（阶段 1 已锁定 W1）
 
@@ -40,7 +40,8 @@ t-1 结束的 profile。
 ### 0.3 不对称度量（阶段 1 已锁定 A3）
 
 四档度量 A1（volume 比）/ A2（距离比）/ A3（profile skew）/ A4（重心距离比）
-中，**A3_skew 唯一在 A/B/C 三层证据链上一致通过**：
+中，**A3\_skew 唯一在 A/B/C 三层证据链上一致通过**：
+
 - 独立方向信号（洞察 E · cluster CI 排 0）
 - 与 ATR 正交（洞察 I · Spearman |ρ| < 0.05）
 - 段内配对下 DN 事件有独立增量（洞察 H · shuffle p=0.004）
@@ -73,6 +74,7 @@ r_{t,N} = log(close_{t+N} / close_t)
 ### 0.5 品种覆盖
 
 **阶段 1**：实际用 19 合约（原 10 品种 × 主力 + 9 个诊断扩充）
+
 - 原 10：rb2601, i2601, cu2601, al2601, sc2512, TA601, m2601, p2601, SR601, CF601
 - 扩 9：c2601, y2601, cs2601, ag2601, hc2510, MA601, OI601, RM601, FG601
 
@@ -90,15 +92,17 @@ r_{t,N} = log(close_{t+N} / close_t)
 ### 0.7 统计口径
 
 **阶段 1 · 信息量层**（已完成）：
+
 - Spearman IC（pooled + per-symbol）· cluster bootstrap（按 contract 聚类）5000 次
 - 段内配对 t 检验 + Shuffle 检验（洞察 H）
 - Bonferroni 校正（family=48/240）
 - k×σ 阈值下 cluster CI 判据（洞察 E/K）
 
 **阶段 2 起 · 交易层**：
+
 - 沿用 structural-shaping-alpha experiment-plan §0.5 类 I / II 判据
 - 期望净值 + paired 检验 + cluster bootstrap + realistic-cost
-- 反算 ν_implied 必须显著 > 0（KF-9 硬约束）
+- 反算 ν\_implied 必须显著 > 0（KF-9 硬约束）
 - 跨周期护栏（KF-7 硬约束）
 
 ### 0.8 主题定位（阶段 2 收尾后明确 · 阶段 3/4 遵循）
@@ -127,7 +131,7 @@ r_{t,N} = log(close_{t+N} / close_t)
 **KF-8 账户闸门的适用性**：需在阶段 4 具体入场规则出现后才能真正评估
 （阶段 3 只做"背景分类器"层面的初步频率与幅度分布估算）。
 
----
+***
 
 ## 阶段 1 · 测量 + 信息量（✅ 已完成 · 2026-07-07）
 
@@ -140,11 +144,11 @@ r_{t,N} = log(close_{t+N} / close_t)
 
 **主线**（严格无未来函数版本 · cluster bootstrap 5000 次）：
 
-| 触发条件 | n | mean bps | hit | 95% CI | p_two |
-|---------|---|---------|-----|--------|-------|
-| **DN 单层**（A3_skew ≤ -1.5×σ_roll · dedup_8h）| 464 | +29.4 | 55.8% | [+8.7, +52.3] | 0.005 |
-| **DN + 低日线 ATR_10** | 283 | +39.8 | 61.1% | [+9.3, +70.8] | 0.007 |
-| **DN + 涨段 + 低日线 ATR_10** ⭐ | 133 | **+56.9** | **64%** | [+14.0, +121.2] | **0.002** |
+| 触发条件                                           | n   | mean bps  | hit     | 95% CI           | p\_two    |
+| ---------------------------------------------- | --- | --------- | ------- | ---------------- | --------- |
+| **DN 单层**（A3\_skew ≤ -1.5×σ\_roll · dedup\_8h） | 464 | +29.4     | 55.8%   | \[+8.7, +52.3]   | 0.005     |
+| **DN + 低日线 ATR\_10**                           | 283 | +39.8     | 61.1%   | \[+9.3, +70.8]   | 0.007     |
+| **DN + 涨段 + 低日线 ATR\_10** ⭐                    | 133 | **+56.9** | **64%** | \[+14.0, +121.2] | **0.002** |
 
 **信号叠加**：每加一层 filter 增益 8-17 bps · 每层都独立 CI 排 0。
 
@@ -169,35 +173,38 @@ r_{t,N} = log(close_{t+N} / close_t)
 
 ### 1.4 输出
 
-- workbench：[poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）
+- workbench：archive:2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage1/`（14 个 CSV）
-- 复现脚本：`scripts/ai_tmp/poc_va_asymmetry_*.py`（12+ 脚本）
+- 复现脚本：已归档至 archive:2026-07-08-poc-va-asymmetry 的 `raw-scripts/`（12+ 脚本 · 见批次 README §脚本归档清单）
 
----
+***
 
-## 阶段 2 · 跨周期护栏 + ν_implied · 样本外扩展 · 网格搜索（✅ 已完成 · 2026-07-07）
+## 阶段 2 · 跨周期护栏 + ν\_implied · 样本外扩展 · 网格搜索（✅ 已完成 · 2026-07-07）
 
-**触发条件**：阶段 1 已通过（✅）· 主线信号锁定为 **DN + 涨段 + 低日线 ATR_10**。
+**触发条件**：阶段 1 已通过（✅）· 主线信号锁定为 **DN + 涨段 + 低日线 ATR\_10**。
 
-**结论**：**严格闭环 · 4 主线全数通过 Bonferroni + ν_implied + 跨周期护栏 · 100% 品种保留度**。
+**结论**：**严格闭环 · 4 主线全数通过 Bonferroni + ν\_implied + 跨周期护栏 · 100% 品种保留度**。
 
 ### 2.1 阶段 2 起点（基于阶段 1 严格无未来函数三档位）
 
-| 档位 | 触发 | 阶段 1 结果 |
-|------|------|------------|
-| 主线 | DN + 涨段（trend rank ≥ 67% · rolling 20 日）+ 低 ATR（rank ≤ 50%）| +57 bps · p=0.002 |
-| 单层 filter | DN + 低 ATR | +40 bps · p=0.007 |
-| 单层 base | DN 单独（A3_skew ≤ -1.5×σ_roll100）| +29 bps · p=0.005 |
+| 档位        | 触发                                                          | 阶段 1 结果           |
+| --------- | ----------------------------------------------------------- | ----------------- |
+| 主线        | DN + 涨段（trend rank ≥ 67% · rolling 20 日）+ 低 ATR（rank ≤ 50%） | +57 bps · p=0.002 |
+| 单层 filter | DN + 低 ATR                                                  | +40 bps · p=0.007 |
+| 单层 base   | DN 单独（A3\_skew ≤ -1.5×σ\_roll100）                           | +29 bps · p=0.005 |
 
 ### 2.2 三大硬门槛（全过）· 三大补充洞察
 
 **门槛 1 · 跨周期护栏（KF-7）**：✅
+
 - 15m/30m/1h/2h 四时钟 · 相邻周期 CI 全排 0
 
-**门槛 2 · ν_implied 反算（KF-9）**：✅
-- ν = μ - σ²/2 = +56.1 bps · CI [+13.5, +120] · p=0.002
+**门槛 2 · ν\_implied 反算（KF-9）**：✅
+
+- ν = μ - σ²/2 = +56.1 bps · CI \[+13.5, +120] · p=0.002
 
 **门槛 3 · 样本外扩展（44 合约多年历史）**：✅
+
 - 主线 CI 排 0（+25 bps · hit 68.5%）· 但 DN 单层塌陷 · 品种保留 57.1%
 
 **补充洞察 L · 触发时段衰减**：无显著衰减 · 全天可挂单
@@ -208,6 +215,7 @@ r_{t,N} = log(close_{t+N} / close_t)
 ### 2.3 阶段 2 最终定型四大主线（阶段 3 起冻结）
 
 **多头首选（精选事件）**：
+
 ```
 IF signed_skew_rank_rolling100 ≤ 0.10
    AND daily_atr_10_bps_rolling20d_rank ≤ 0.70
@@ -218,6 +226,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +44.5 · 100% 品种保留度
 ```
 
 **多头宽松（放宽 skew · 高触发率）**：
+
 ```
 IF signed_skew_rank_rolling100 ≤ 0.30
    AND daily_atr_10_bps_rolling20d_rank ≤ 0.70
@@ -228,6 +237,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +39.1
 ```
 
 **空头首选（崩盘前奏）**：
+
 ```
 IF signed_skew_rank_rolling100 ≥ 0.70
    AND daily_atr_10_bps_rolling20d_rank > 0.80
@@ -238,6 +248,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +39.4 · 100% 品种保留度
 ```
 
 **空头宽松（放宽 atr · 高触发率）**：
+
 ```
 IF signed_skew_rank_rolling100 ≥ 0.70
    AND daily_atr_10_bps_rolling20d_rank > 0.50
@@ -249,11 +260,11 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 
 ### 2.4 输出
 
-- workbench：[poc-value-area-asymmetry-stage2-guardrails.md](../../../workbench/poc-value-area-asymmetry-stage2-guardrails.md)（v4）✅
+- workbench：archive:2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage2/`（15+ CSV）
-- KF 定型：15 条（`KF-poc-va-01` ~ `KF-poc-va-15`）· 见 research-status.md
+- KF 定型：15 条（`KF-poc-va-01` \~ `KF-poc-va-15`）· 见 research-status.md
 
----
+***
 
 ## 阶段 3 · 背景分类器稳健性深度检验（✅ 已完成 · 2026-07-07）
 
@@ -267,53 +278,61 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 
 ### 3.1 阶段 3 五大任务完成情况
 
-| 任务 | 判据 | 结果 |
-|------|------|------|
-| 1 · 分品种深挖 | ≥80% 品种保留 edge | ✅ 4/4 主线（平均 95.4%）|
-| 2 · 3-way ATR 制度 | ≥2 主线依赖性成立 | ✅ 3/4（多头宽松除外）+ 深挖发现洞察 P |
-| 3 · Regime transition 衰减 | <20% 或明确使用边界 | ✅ 1/4 全过 · 3/4 明确使用边界 + 后置实验发现洞察 T |
-| 4 · 收益分布刻画 | 输出使用说明书 | ✅ workbench §3（多头 3 机制）+ §5（洞察 Q · 空头单机制）|
-| 5 · 触发互斥性 | 嵌套 + 互斥明确 | ✅ 首选⊂宽松嵌套 · 多空完全互斥 |
+| 任务                       | 判据             | 结果                                        |
+| ------------------------ | -------------- | ----------------------------------------- |
+| 1 · 分品种深挖                | ≥80% 品种保留 edge | ✅ 4/4 主线（平均 95.4%）                        |
+| 2 · 3-way ATR 制度         | ≥2 主线依赖性成立     | ✅ 3/4（多头宽松除外）+ 深挖发现洞察 P                   |
+| 3 · Regime transition 衰减 | <20% 或明确使用边界   | ✅ 1/4 全过 · 3/4 明确使用边界 + 后置实验发现洞察 T        |
+| 4 · 收益分布刻画               | 输出使用说明书        | ✅ workbench §3（多头 3 机制）+ §5（洞察 Q · 空头单机制） |
+| 5 · 触发互斥性                | 嵌套 + 互斥明确      | ✅ 首选⊂宽松嵌套 · 多空完全互斥                        |
 
-### 3.2 阶段 3 六大核心洞察（KF-16 ~ KF-21）
+### 3.2 阶段 3 六大核心洞察（KF-16 \~ KF-21）
 
 **洞察 P · 3 种多头反弹机制**（⭐⭐⭐）
+
 - 低 ATR：日常均值回归（8h · payoff 1.46）
 - 中 ATR：震荡后秩序恢复（8h · 尖峰厚尾 kurt=12）
 - 高 ATR：恐慌 V 反弹（4h 完成 118% · 后期回吐）
 - **阶段 4 可拆成 3 个多头子策略 · 持仓期自适应**
 
 **洞察 Q · 空头单机制 vs 多头多机制**（⭐⭐⭐）
+
 - 空头只有"崩盘前奏"1 种机制 · **必须高 ATR**
 - 低 ATR 空头 8h 反转 -152% · 中 ATR 弱信号
 - **建议空头收敛为 atr≥0.67 单一档位**
 
 **洞察 R · Regime transition 信号衰减**（⭐⭐⭐）
+
 - 46% 事件在过渡期 · 多头首选衰减仅 11%
 - **通用规律**：filter 严格度和 regime 稳定 filter 的价值反向
 
 **洞察 S · ATR × Trend 正交**（⭐⭐⭐）
-- atr_rank 与 trend_rank r=+0.003（完全独立）
+
+- atr\_rank 与 trend\_rank r=+0.003（完全独立）
 - ATR = 强度 · Trend = 方向 · **联合筛选是核心 filter 架构**
 - 否定"高 ATR = 跌段"直觉（高 ATR 涨跌对称）
 
 **洞察 T · 空头宽松的救赎 · Regime 稳定 filter**（⭐⭐⭐）
+
 - 空头宽松 + regime 稳定 → +36 bps · 增益 31.6%
 - 多头首选加 regime filter 增益仅 7.5% · 不值得
 - **阶段 4 分主线定制 regime 处理**
 
 **洞察 U · 稳定 vs 转换 · 空头 horizon 曲线差异**（⭐⭐⭐）
+
 - 空头首选：稳定日 8-12h 峰 +67 → +70 · 转换日 4h 峰 +32 · 12h 归零
 - **严格 t-test 修正**：mean 层面差异仅空头宽松显著
 - **阶段 4 空头出场策略必须分**：稳定日追踪止损 · 转换日目标止盈 4h
 
 **KF-22 · 采样精度边界 · "数据边界不可造假"**（⭐⭐⭐ 跨主题方法论）
+
 - 严格 date-cluster bootstrap · A 级 5 主线全部保留 · 多头首选·稳定升级 B→A
 - prefix 池化反证：空头 4/5 档 Bonferroni 降级 · **不能通过池化补精度**
 - 冻结：rank 单位 = per-contract · bootstrap 单位 = (contract, date)
 - 详见 workbench §12.12
 
 **KF-23 · 分位 × ATR 制度信号地图**（⭐⭐⭐ 分类器细化 · 阶段 4 起点）
+
 - 12 格深度诊断 · **多头 5 稳定甜蜜点 + 空头 3 反常甜蜜点**
 - **段3·ATR低**（skew∈(0.19,0.25] · atr≤0.33）：mean **+85 · hit 83%** · 100% 品种保留
 - **段4·ATR高**（skew∈(0.25,0.30] · atr>0.67）：新机制 · 高 ATR 波动率反弹
@@ -321,11 +340,11 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 - 教训：**"过拟合" vs "制度依赖" 辨析** · 必须拆分制度维度再判决
 - 详见 workbench §13
 
-### 3.3 阶段 3 分类器 7 层严格性验证（workbench §12 · A~G）
+### 3.3 阶段 3 分类器 7 层严格性验证（workbench §12 · A\~G）
 
 **A · Bonferroni**（family=8 · p<0.00625）：稳定期 4/5 · 转换期 2/5 通过
 **B · 稳定 vs 转换差异**：仅空头宽松 p=0.024 显著（其余 mean 层面不显著）
-**C · 分类器性能**（v8 修正后）：年化 Sharpe gross +1.06 ~ +1.48 · net-15bps +0.77 ~ +1.10 · 单笔 IR +0.35 ~ +0.60（旧 +8~+15 是错误口径 · 已作废）
+**C · 分类器性能**（v8 修正后）：年化 Sharpe gross +1.06 \~ +1.48 · net-15bps +0.77 \~ +1.10 · 单笔 IR +0.35 \~ +0.60（旧 +8\~+15 是错误口径 · 已作废）
 **D · 品种保留率**：稳定期 90-100% · 转换期 82-100%
 **E · 反事实基准**：5 组合 p=0.0000（**明确不是随机噪声**）
 **F · 组合独立性**：空头 3 主线 Jaccard 0.65-0.86（本质同一信号）
@@ -334,6 +353,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 ### 3.4 阶段 3 分类器"评级白名单"（阶段 4 起点）
 
 **A 级 · 可直接用于阶段 4 或其他策略**（5 档 · Sharpe/IR 数据 v8 修正版）：
+
 1. **多头宽松·稳定**（性价比之王 · gross Sharpe +1.48 · net +1.10 · 触发 60/合约/年）⭐
 2. **多头首选·全**（最强单笔 · IR 0.577 · gross Sharpe +1.59 · net +1.18）
 3. **多头首选·转换**（Bonferroni ✅ · Sharpe +1.22 · IR 0.56）
@@ -341,170 +361,265 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 5. **空头宽松·稳定**（gross Sharpe +1.40 · net +0.89 · 触发 77/合约/年 · 高频空头）
 
 **B 级 · 可用但需谨慎**（3 档）：
+
 - 多头首选·稳定（n=52 少 · Bonferroni fail · 待扩样本外）
 - 多头宽松·转换（Bonferroni p=0.0056 · 边缘）
 - 空头宽松·转换（Bonferroni fail · 但洞察 T 有 mean 差异证据）
 
 **C 级 · 暂不用**（2 档）：
+
 - 空头首选·转换（Bonferroni fail · p=0.032）
 - 空头收敛·转换（Bonferroni fail · p=0.014）
 
 ### 3.5 输出
 
-- workbench：[poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v7）✅
+- workbench：archive:2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage3/`（15+ CSV）
-- KF 定型：新增 6 条（`KF-poc-va-16` ~ `KF-poc-va-21`）· 累计 21 条 · 见 research-status.md
-- 分类器代码规范化：待阶段 4 起做（提取 `workspace/common/poc_va_classifier.py`）
+- KF 定型：新增 6 条（`KF-poc-va-16` \~ `KF-poc-va-21`）· 累计 21 条 · 见 research-status.md
+- 分类器代码规范化：已提取为 `workspace/strategies/classifiers/poc_va.py`（方案A · classifiers 子目录）
 
----
+***
 
-## 阶段 4 · 互斥分类器 v3.0 验证与冻结（✅ 已完成 2026-07-08）
+## 阶段 4 · 分位×ATR×Trend 格深化验证（进行中 · 2026-07-08）
 
-**触发**：阶段 3 通过（✅）· 10 tier 严格证据链完整 · **但 tier 之间存在嵌套 · 不满足分类器互斥性定义**。
+**触发**：阶段 3 通过（✅）· KF-23 已发现分位×制度信号地图有多个候选甜蜜点
+（多头段3·ATR低 mean +85 · 空头段4·ATR高 mean +138 · 段2·ATR低 mean +60 等）·
+但 12 格仅完成初步描述性诊断 · **未完整跑 7 层严格性验证** · 阶段 4 补齐这
+个遗漏 · **并额外拓展 trend 平稳期作为对照**。
 
-**目标**：**把 10 tier 拆成互斥类别 · 每类独立通过完整严格性验证 · 冻结分类器 v3.0 契约**。
+**目标**：**完整验证 KF-23 的分位×ATR×Trend 三维信号地图 · 每格独立通过 4 硬门槛
+严格性验证 · 得到"分位×制度×趋势"级细粒度分类器**。
 
-**结论**：**完全通过 · 分类器 v3.0 冻结 · 10 互斥 tier · A 级 6 档 + A- 级 3 档 · 多空双向覆盖**。
+**说明**：本阶段做**三维深化 · skew × ATR × trend**：
 
-### 4.1 Step 1 · 定义互斥类别 + 数据扩容（✅）
+- skew 4 段（多空各 4 段）
+- ATR 3 档（低/中/高）
+- **trend 3 档（涨/平/跌）** ⭐ 新加平稳期
+- 5 主线互斥（LP\_only/LL\_only/SP\_only/SC\_only/SL\_only）粗版验证作为**过渡步骤**已完成
+  （commit `0eccf72`）· 其结论作为过渡版本 · **最终契约以三维深化结果为准**。
 
-**互斥类别定义**（从 5 主线嵌套 → 5 主线互斥 · 方案 γ）：
+### 4.1 三维互斥定义
+
+**多头方向**（skew ∈ \[0, 0.30]）· 4 skew 段 × 3 ATR 档 × 3 trend 档 = 36 格：
 
 ```
-多头（skew ≤ 0.30 ∧ atr ≤ 0.70 ∧ trend ≥ 0.75）:
-  LP_only:  skew ∈ [0, 0.10]                (原 LP)
-  LL_only:  skew ∈ (0.10, 0.30]             (原 LL \ LP)
+skew 分段（KF-23 阶段 3 §13）:
+  段1: [0.00, 0.09]     -- 极端底厚（原 LP 严格）
+  段2: (0.09, 0.19]     -- 前低拉锯（LL 中段）
+  段3: (0.19, 0.25]     -- 未跌破前低（KF-23 甜蜜点）
+  段4: (0.25, 0.30]     -- 稀释区（低 ATR 无 alpha · 高 ATR 反弹机制）
 
-多头（skew ≤ 0.30 ∧ atr > 0.70 ∧ trend ≥ 0.75）:
-  LP_wide:  skew ∈ [0, 0.10] · atr ∈ (0.70, 1.0]
-  LL_wide:  skew ∈ (0.10, 0.30] · atr ∈ (0.70, 1.0]
+× ATR 制度:
+  低: atr_rank ≤ 0.33
+  中: 0.33 < atr_rank < 0.67
+  高: atr_rank ≥ 0.67
 
-空头（skew ≥ 0.70 ∧ trend ≤ 0.20）:
-  SP_only:  atr > 0.80                       (原 SP)
-  SC_only:  atr ∈ (0.67, 0.80]               (原 SC \ SP)
-  SL_only:  atr ∈ (0.50, 0.67]               (原 SL \ SC)
+× Trend 制度:
+  涨（up）:  trend_rank ≥ 0.75
+  平（flat）: 0.20 < trend_rank < 0.75    ⭐ 新增平稳期
+  跌（down）: trend_rank ≤ 0.20
 
-× 稳定/转换 = 10 互斥 tier + "未分类"
+= 36 格 × 2 (stable/trans) = 72 tier
 ```
 
-**数据扩容**：**143 合约 · 36625 events · 20 品种前缀**（阶段 3 是 44 合约）·
-跨越 2015-2026 · 涵盖金融/贵金属/化工/黑色/农产品/有色多品类。
+**空头方向**（skew ∈ \[0.60, 1]）· 4 skew 段 × 3 ATR 档 × 3 trend 档 = 36 格：
 
-### 4.2 Step 2 · 7 层严格性验证（✅）
+```
+skew 分段（KF-23 阶段 3 §13 探索使用）:
+  段1: [0.91, 1]        -- 极端创新高（原 SP 严格）
+  段2: (0.81, 0.91]     -- 前高拉锯
+  段3: (0.70, 0.81]     -- 未及前高
+  段4: (0.60, 0.70]     -- 弱顶厚（原 SL 部分）
 
-对每个互斥类别独立跑 7 层验证 · **L5 品保降级为观察**（原 ≥ 80% 阈值下降为
-≥ 60% · 因扩样本后单品种 n 减少 · 严格保留 80% 会误伤真实信号）：
+× ATR 制度: 同上 3 档
 
-| 层 | 判据 | 阈值 |
-|----|------|------|
-| L1 · 样本量 | n_events / n_indep_days | ≥ 30 / ≥ 10 |
-| L2 · CI（严格 date-cluster）| 95% CI 排 0 | 是 |
-| L3 · Bonferroni | family size = 15 · p < 0.0033 | 是 |
-| L4 · 反事实 | vs 随机触发 · p < 0.001 | 是 |
-| L5 · 品种保留率 | 单前缀 mean > 0 比例 | ≥ 60%（观察）|
-| L6 · 单笔 IR | mean / std | ≥ 0.30 |
-| L7 · 时间稳定性 | 前后半分 mean 差 / 全 mean | ≤ 50% |
+× Trend 制度: 同上 3 档
+  涨（up）:  trend_rank ≥ 0.75    ⭐ 新增（原来空头只用 trend≤0.20 跌段）
+  平（flat）: 0.20 < trend_rank < 0.75    ⭐ 新增平稳期
+  跌（down）: trend_rank ≤ 0.20（原来空头唯一档）
 
-**结果**：**6 个 A 级 tier + 3 个 A- 级 tier**（详见 workbench §2 与 research-status
-KF-24 前置节）。
+= 36 格 × 2 = 72 tier
+```
 
-### 4.3 Step 3 · 判决 + 分档（✅）
+**合计 144 tier + "未分类"**（多头 36 + 空头 36 · × stable/trans）。
 
-- **A 级**（7/7 通过）：6 个 · LP_only·稳定 · LL_only·稳定 · LP_wide·稳定 ·
-  SP_only·稳定 · SC_only·稳定 · SL_only·稳定
-- **A- 级**（6/7 通过 · 或转换期变体）：3 个 · LP_only·转换 · LL_wide·稳定 ·
-  SC_only·转换
-- **未分类**：其余 tier ≤ 4/7 通过 · 不进入分类器输出（`tier = None`）
+**多头/空头 trend 覆盖差异**：
 
-**分类器 v3.0 契约冻结**。
+- 阶段 3 之前 · 多头**只用 trend≥0.75（涨段）** · 空头**只用 trend≤0.20（跌段）**
+- 阶段 4 现在**双向都覆盖 3 trend 档** · 探索"涨段做空 · 跌段做多 · 平稳期双向"是否有独立 alpha
+- 平稳期（flat）尤其未被之前深挖 · **是本阶段的探索重点**
 
-### 4.4 Step 4 · 契约更新（✅）
+**多重比较校正策略（v9.1 修订）**：
 
-- **classifier-math-spec.md**：v2.0 → v3.0 · `ClassifierOutput.tier: str | None`
-  单值输出 · §7 触发条件改为互斥集合定义 · §10.3 互斥性数学证明
-- **parameter-selection-spec.md**：§1 只留 10 互斥类别评级表 · 删除嵌套关系
-  与去重规则章节
-- **workbench**：`docs/workbench/poc-value-area-asymmetry-stage4-classifier-v3.md`
-  记录 Step 1-3 完整证据链
-- **research-status.md**：新增 KF-24 · A 级白名单更新为 6+3 · 阶段 4 完成节
-- **experiment-plan.md**：本文件 · 版本 v7 → v8
+原 v9 用 family=144 的 Bonferroni（α=0.000347 · 3.58σ）· 存在两个问题：
 
-### 4.5 阶段 4 判决
+1. **假设违反**：Bonferroni 要求 144 个检验完全独立 · 但本主题 144 tier 是
+   **结构性切片**（相邻 skew 段相关 · full/stable/trans 嵌套）· 真实独立检验
+   数远小于 144 · 惩罚过重
+2. **前后阶段不一致**：阶段 3 用 family=8（α=0.00625 · 2.5σ）· 阶段 4 突然
+   跳到 3.58σ · 只是把 5 主线切细 · 精细化 ≠ 新独立发现
 
-**完全通过**：
-- ✅ **6 个 A 级 tier + 3 个 A- 级 tier**（远超"至少 3 类通过 A 级"门槛）
-- ✅ **多空双向覆盖**（多头 3 A 级 + 1 A- 级 · 空头 3 A 级 + 2 A- 级）
-- ✅ **分类器契约 v3.0 已冻结** · workbench 归档待做
+**改为 FDR (Benjamini-Hochberg) 校正**（现代金融研究主流做法）：
 
-### 4.6 关键 KF
+- 控制假发现率 FDR ≤ 5% · 允许 ≤5% 假阳性 · 保留大部分真信号
+- 对 99 个 eligible 候选按 p_boot 升序 · 找 max{i : p(i) ≤ i/N × 0.05}
+- BH 阈值 = p(i\*) · 通过率随候选池质量自适应
+- 相比 Bonferroni · **对相关检验族更合理** · 允许"探索"与"验证"平衡
 
-**KF-24 · 品种异质性 · 下游策略层责任**（详见 research-status.md）
-- 143 合约 · 20 品种前缀 · 多空最优 tier 在品种间高度分散（多头 4 分散 ·
-  空头 3 分散）· 不存在通用参数
-- 分类器承诺"整体信号存在" · **品种筛选是下游策略层责任** · 不在本主题内
-- 3 大品种类型（A 金融贵金属 · B 化工建材黑色 · C 农产品有色主流）供下游参考
+**同时保留原始 p_boot 列**（供下游策略层按需筛严）：
 
-### 4.7 主题状态更新
+- 若某策略需要更保守 · 可再用 α=0.01 或 α=0.001 二次筛选
+- 若某策略愿意接受更多探索 · 可放宽到 α=0.05
 
-- **主动性研究暂停 · 但不进 themes-frozen**（分类器持续可用 · 供其他主题引用）
-- 归档：`docs/archive/strategy-research/2026-07-08-poc-value-area-asymmetry-classifier-v3`（待做）
-- 12 格候选（KF-23）作为**"未来细化候选" · 留给下游主题深挖**
+**冻结说明**：
+
+- FDR 参数（α=0.05）在阶段 4 判决时冻结 · 数据回补后重跑 · **不重设 α**
+- 但**候选池 N 会随数据变**（回补后新候选可能纳入 · N 变化） · BH 是相对判据
+- family size（如需 Bonferroni 交叉验证）冻结为**独立决策单元数=方向×ATR×trend=18**
+  · α=0.0028 · 2.99σ · 作为 sanity check
+
+### 4.2 Step 1 · 数据扩容（✅ 已完成 · 可能需二次扩容）
+
+- 143 合约 · 36625 events · 20 品种前缀（涵盖金融/贵金属/化工/黑色/农产品/有色）
+- 时间跨度 2023-09 到 2026-06
+- 每格预估 n（假设均匀分布）= 250 · 但真实分布不均
+- 关键格（如空头段4·ATR高·trend flat）· n 可能 < 15 · 需 Step 3 回补
+
+### 4.3 Step 2 · 144 tier 描述性扫描（待做）
+
+**目的**：先看每 tier 的 n / mean / hit / std / 品种分布 · 识别显著格子。
+
+**动作**：
+
+- 用现有 36625 events · 应用完整三维拆分（多头 36 × 2 + 空头 36 × 2 = 144 tier）
+- 输出每 tier 的描述性指标
+- 判断样本量分布 · 找出需要回补数据的关键格子
+
+### 4.4 Step 3 · 144 tier 严格验证（待做）
+
+**判据 · 4 硬门槛 + 时稳警示（v9.1 修订）**：
+
+| 层                        | 判据                              | 阈值              |
+| ------------------------ | ------------------------------- | --------------- |
+| L1 · 样本量                 | n\_events / 独立日                 | ≥ 15 / ≥ 5      |
+| L2 · CI（严格 date-cluster） | 95% CI 排 0                      | 是               |
+| L3 · **FDR (BH)**        | 按 p_boot 升序 · FDR ≤ 5%          | 通过 BH 阈值        |
+| L4 · 反事实                 | vs 随机触发 · p<0.001               | 是               |
+| L5 · 品种保留                | 单前缀 mean>0 比例                   | 观察指标（下游策略层筛选依据） |
+| L6 · 单笔 IR               | mean / std                      | 观察指标            |
+| L7 · 时间稳定                | \|first-second\|/full           | ≤ 0.50          |
+| L3b · Bonferroni SC     | family=18 · α=0.0028（sanity check） | 观察指标·不硬拒        |
+
+**评级规则**：
+
+- **A 级**：L1-L4 全过 ∧ L7 时稳 ≤ 0.50
+- **A- 级**：L1-L4 全过 ∧ L7 警示
+- **未过**：任一硬门槛 fail
+
+### 4.5 Step 4 · 数据回补（视 Step 3 结果 · 可选）
+
+**触发条件**：Step 3 发现某"值得关注"的 tier（描述性 mean 强 · 但 n<15 或独立日<5）
+
+**动作**：
+
+- 从 tqsdk 补 40-80 合约的历史数据（\~20 分钟每 40 合约）
+- 优先补该 tier 高触发率的品种（例如空头段4 · CZCE.CF 主导 · 补 CF 历史合约）
+- 重跑 Step 2/3 · Bonferroni family 保持 144（新数据 → 更严格 · 不重设 family）
+
+**边界**：
+
+- 数据回补允许 · **不违反 KF-22**（扩合约而非池化）
+- 单次回补不超过 100 合约 · 避免"数据挖矿"
+- 补完后需保留旧的 Step 3 结果作对比 · 避免过拟合到新数据
+
+### 4.6 Step 5 · 判决（待做）
+
+- **通过条件**：至少 4 个 A 级 tier · 多空各覆盖至少 1 个方向
+- **边缘通过**：3 个 A 级 · 主题降级为"稀疏可用"
+- **失败**：< 3 个 A 级 · 分类器无严格证据 · 归为"探索性发现"
+
+### 4.7 Step 6 · 契约更新（待做）
+
+**若通过**：
+
+- classifier-math-spec.md 更新 tier 定义（144 格 · 或按实际通过数）
+- parameter-selection-spec.md 更新 A/A- 白名单
+- research-status.md 加 KF-25（若有新洞察 · 如"平稳期是否有独立 alpha"）
+- workbench 补 Step 2-5 完整证据链
+
+**若不通过**：
+
+- 保留 10 互斥版本（v3.0 · 已冻结 · commit `0eccf72`）作为可用备份
+- 三维深化留给未来主题 `poc-va-quantile-refinement`
 
 ### 4.8 明确排除的内容（不属于本主题）
 
 **阶段 4 明确不做**：
-- ❌ 入场时机（限价 vs 市价 · 追高 vs 回踩）
-- ❌ 出场规则（止损 / 止盈 / 追踪 / 时间衰减）
-- ❌ 仓位管理（Kelly / 定额 / ATR 归一化）
-- ❌ 交易成本精算（realistic-cost）
-- ❌ Sharpe / MDD / Calmar / 覆盖率
-- ❌ 与其他主题的组合验证（如 quality filter）
-- ❌ 12 格分位×制度深化验证
+
+- ❌ 入场时机 · 出场规则 · 仓位管理 · 交易成本精算 · Sharpe/MDD
+- ❌ 与其他主题的组合验证
 - ❌ 品种筛选（异质性诊断已给出品种类型 · 具体选择由下游策略层负责）
 
-**理由**：以上都属于**"完整策略"层面** · 需要跨主题组合才能有意义。本主题
-的产出是**分类器组件** · 不是策略。
+**理由**：以上都属于\*\*"完整策略"层面\*\* · 需要跨主题组合才能有意义。本主题
+的产出是**分位×制度×趋势细粒度分类器组件** · 不是策略。
 
-### 4.9 下游主题（阶段 4 已通过 · 分类器可被引用）
+### 4.9 主题状态
 
-**若下游立新主题** · 后续可立：
+**当前**（2026-07-08 · v9.1 收尾）：
+
+- ✅ Step 1 数据扩容完成（143 合约 · 36625 events）
+- ✅ Step 2 描述性扫描完成（144 tier · 99 candidates）
+- ✅ Step 3 严格验证完成 v9.1 FDR 校正版（20 A/A- 通过）
+- ✅ Step 3.5 **合并降级验证完成**（KF-29 · 6 类合并 · 9 A + 6 A-）
+- ✅ v4.0 契约冻结：**6 类合并版**（不是 144 tier）
+- 10 互斥过渡版本 v3.0（commit `0eccf72`）作诊断证据保留
+
+**v4.0 白名单（6 类）**：
+
+| 合并类 | 方向 | 定义 | 3-period 评级 |
+|:---:|:---:|:---|:---|
+| L_seg3_lowmid_up | 多 | skew ∈ (0.09, 0.30] · ATR ≤ 0.67 · trend ≥ 0.75 | A- / A / A- |
+| L_seg12_high_up  | 多 | skew ≤ 0.19 · ATR > 0.67 · trend ≥ 0.75 | A- / fail / A |
+| L_seg2_low_flat  | 多 | skew ∈ (0.09, 0.19] · ATR ≤ 0.33 · trend ∈ (0.20, 0.75) | A / fail / A- |
+| S_seg12_high_dn  | 空 | skew ≥ 0.81 · ATR > 0.67 · trend ≤ 0.20 | ⭐ **A / A / A** |
+| S_seg34_high_dn  | 空 | skew ∈ (0.60, 0.81] · ATR > 0.67 · trend ≤ 0.20 | A / A- / A- |
+| S_seg2_mid_dn    | 空 | skew ∈ (0.81, 0.91] · ATR ∈ (0.33, 0.67) · trend ≤ 0.20 | A / fail / A |
+
+### 4.10 下游主题
+
+**若阶段 4 全部完成后可立**：
 
 1. **`poc-va-shaping-composite`** — 分类器 + 结构塑形组合策略
-   - 引用本分类器 v3.0 + `structural-shaping-alpha` combo
-   - 有独立的 `strategy-math-spec.md`
-   - 承担入场/出场/仓位/cost 责任 · 品种筛选责任
-
-2. **`poc-va-quantile-refinement`** — 分位×制度细化研究
-   - 深挖 KF-23 的 12 格候选甜蜜点
-   - 若通过 · 反向升级本主题分类器 tier
-
+2. **`poc-va-symbol-refinement`** — 按品种类型分组参数（KF-24 遗留）
 3. **`poc-va-tail-asymmetry`** — VA 外 tail 独立信息假设（KF-01 遗留）
 
----
+***
 
 **任一阶段判决完成后，若无通过条件，冻结主题并归档 KF**。
 
 ## 时间线
 
-| 阶段 | 状态 | 计算量 | 备注 |
-|------|------|-------|------|
-| 阶段 1 · 测量 + IC | **✅ 已完成 2026-07-07** | 数十分钟脚本 + 数小时文档 | 主线锁定 · 12+ 洞察 · KF 8 条 |
-| 阶段 2 · 跨周期护栏 + ν_implied + 样本外 + 网格搜索 | **✅ 已完成 2026-07-07** | 分钟级到数十分钟 | 4 大主线定型 · Bonferroni 全过 · KF 15 条 |
-| 阶段 3 · 背景分类器稳健性深度检验 | **✅ 已完成 2026-07-07** | 数小时 | 5 大任务 · 6 大洞察 · 7 层严格证据链 · KF 23 条 · 10 tier 体系（含嵌套）|
-| 阶段 4 · 互斥分类器 v3.0 验证与冻结 | **✅ 已完成 2026-07-08** | 数小时 | 143 合约扩样本 · 10 互斥 tier · A 级 6 + A- 级 3 · 4 硬门槛严格性通过 · KF 24 条 · **分类器 v3.0 冻结** |
+| 阶段                                     | 状态                   | 计算量            | 备注                                                                |
+| -------------------------------------- | -------------------- | -------------- | ----------------------------------------------------------------- |
+| 阶段 1 · 测量 + IC                         | **✅ 已完成 2026-07-07** | 数十分钟脚本 + 数小时文档 | 主线锁定 · 12+ 洞察 · KF 8 条                                            |
+| 阶段 2 · 跨周期护栏 + ν\_implied + 样本外 + 网格搜索 | **✅ 已完成 2026-07-07** | 分钟级到数十分钟       | 4 大主线定型 · Bonferroni 全过 · KF 15 条                                 |
+| 阶段 3 · 背景分类器稳健性深度检验                    | **✅ 已完成 2026-07-07** | 数小时            | 5 大任务 · 6 大洞察 · 7 层严格证据链 · KF 23 条 · 10 tier 体系（含嵌套）              |
+| 阶段 4 · 分位×ATR×Trend 深化 + 合并降级 | **✅ 已完成 2026-07-08** | 数小时 | v9.1 三维 144 tier · FDR 校正 · 合并降级 · v4.0 分类器（6 类合并版）· KF-25 ~ KF-29 定型 |
 
----
+***
 
 ## 输出
 
-- 阶段 1：[docs/workbench/poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）✅
-- 阶段 2：[docs/workbench/poc-value-area-asymmetry-stage2-guardrails.md](../../../workbench/poc-value-area-asymmetry-stage2-guardrails.md)（v4）✅
-- 阶段 3：[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v11）✅
-- 阶段 4：`docs/workbench/poc-value-area-asymmetry-stage4-classifier-v3.md`（待建）
-- 主题稳定后归档到 `docs/archive/strategy-research/`
-- 分类器契约 v3.0 冻结后不再撰写 strategy-math-spec.md（本主题不承担完整策略）
+- 阶段 1：archive:2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）✅
+- 阶段 2：archive:2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
+- 阶段 3：archive:2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
+- 阶段 4：archive:2026-07-08-poc-va-asymmetry#stage4-classifier-v4（v2 · 已归档）✅
+- 阶段 4 摘要：archive:2026-07-08-poc-va-asymmetry#stage-summary ✅
+- 归档总 README（4 阶段 + 51 脚本清单 + 数据元信息）：archive:2026-07-08-poc-va-asymmetry
+- 分类器契约 v4.0：theme:poc-value-area-asymmetry#classifier-math-spec
+- 参数规格 v4.0：theme:poc-value-area-asymmetry#parameter-selection-spec
 
----
+***
 
 ## 关联主题
 
@@ -513,3 +628,4 @@ KF-24 前置节）。
   （KF-1 / KF-4 / KF-5 / KF-7 / KF-8 / KF-9 全部适用）
 - **上游 Roadmap**：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 - **衍生候选主题**（阶段 1 洞察 A）：`poc-va-tail-asymmetry` · VA 外 tail 携带信息假设
+

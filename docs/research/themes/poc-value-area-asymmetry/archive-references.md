@@ -24,6 +24,20 @@
 
 ## Archive 目录清单
 
+### archive:2026-07-08-poc-va-asymmetry
+- 关系类型：继承（自归档 · 本主题产物）
+- 说明：本主题**全阶段 1-4 合并归档批次**（从首次 commit 到当前 HEAD 的所有主题相关文件）。
+  - 阶段 1（v7 · 19 合约）：A3_skew DN 侧独立方向信号测量
+  - 阶段 2（v4 · 跨周期护栏 + ν_implied + OOS）：4 主线 Bonferroni 通过
+  - 阶段 3（v11 · 5/5 任务）：背景划分器 7 层严格性 + 12 格经济机制 · KF P~U
+  - 阶段 4（v9.1 · 143 合约）：三维 144 tier 深化 · FDR 校正 · 合并降级（KF-25~29）· v4.0 分类器契约冻结
+  - 专属临时脚本 51 个（分阶段搬入 raw-scripts/）
+- 相关文件：archive:2026-07-08-poc-va-asymmetry#stage1-measurement ·
+  archive:2026-07-08-poc-va-asymmetry#stage2-guardrails ·
+  archive:2026-07-08-poc-va-asymmetry#stage3-robustness ·
+  archive:2026-07-08-poc-va-asymmetry#stage-summary ·
+  archive:2026-07-08-poc-va-asymmetry#stage4-classifier-v4
+
 ### archive:2026-07-06-structural-shaping-alpha-stage1
 - 关系类型：方法论遗产 + 铺垫
 - 说明：本主题**方法论前置约束**完全继承本批次的 KF-1 / KF-4 / KF-5 /

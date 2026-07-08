@@ -30,6 +30,9 @@
 | `run_value_area_deepening_r2.py` | 价值区 `min_reaccept_ticks = 1/2/3` 多品种、同方向随机稳健性检查 |
 | `run_value_area_deepening_r3_diagnostics.py` | 价值区机制诊断，输出 MAE / MFE、亏损簇、exit reason、成本占比等 |
 | `run_value_area_deepening_r4_time_exit.py` | 价值区 time_exit / POC 兑现诊断，比较 `max_hold_bars = 6/12/18/24` |
+| `stage_a_trade_diagnostics.py`             | Stage A smoke 校核（DCE.p2601 5m），从 backtest_trades 抽 exit_reason 分布与 decision_payload_json 验证三层诊断占位 |
+| `value_area_random_baseline_compare.py`    | R29 多 seed 随机入场复验 runner，轻量运行 value_area_reacceptance_baseline 与 value_area_random_baseline 的同 runner 相对比较（vnpy BacktestResult 口径） |
+| `value_area_reacceptance_structure_diagnosis.py` | 价值区重新接受结构拆解诊断，按 ATR 倍率 / STOP_WIDEN / forward_bars 多维度输出结构胜率与 PnL 分解 |
 
 ## 3. 重要注意事项
 

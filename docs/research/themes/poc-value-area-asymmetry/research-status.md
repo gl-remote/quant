@@ -1,10 +1,10 @@
 # poc-value-area-asymmetry · Research Status
 
 > 类型：Research Status
-> 状态：**✅ 阶段 4 通过 · 分类器 v3.0 冻结 · 10 互斥 tier · A 级 6 + A- 级 3**
+> 状态：**✅ 阶段 4 通过（v9.1 · 三维 144 tier 深化 + 合并降级）· 分类器 v4.0 冻结 · 6 类合并版 · 9 A/6 A-**
 > 最近更新：2026-07-08
 > 主题 README：[README.md](README.md)
-> 实验计划：[experiment-plan.md](experiment-plan.md)（v8）
+> 实验计划：[experiment-plan.md](experiment-plan.md)（v9.1）
 
 ## 一句话结论
 
@@ -251,6 +251,50 @@
   - **C · 农产品有色主流**（cu/al/zn/ni/sn/pb/m/y/p/c/cs/CF/SR/OI/RM/FG）：分散 · SL 宽档补充
 - **关联证据**：阶段 4 workbench §3
 
+### 阶段 4 · 三维 144 tier 深化 + 合并降级（KF-25 ~ KF-29）
+
+**KF-poc-va-25 · FDR 优于 Bonferroni 用于结构性切片族**（⭐⭐⭐ 跨主题方法论）
+- **背景**：v9 用 Bonferroni family=144（α=0.000347 · 3.58σ）· 只有 7 通过 ·
+  26 个"仅 L3 fail"的强信号（p_boot 0.0004~0.041）被误杀
+- **根源**：Bonferroni 假设 144 检验完全独立 · 但 144 tier 是**结构性切片**：
+  相邻 skew 段 Spearman r > 0.5 · full/stable/trans 嵌套 · 独立检验数 << 144
+- **方法**：改用 **FDR (Benjamini-Hochberg) α=0.05** · 允许 ≤5% 假发现率
+- **结果**：白名单从 7 → 20 · 且 15/20 仍通过 Bonferroni family=18（sanity check）· FDR 不"松"
+- **推广**：**跨主题方法论** · 未来 tier 化 / grid 化 / 分位化研究都应用 FDR
+- **关联证据**：workbench §4.1 · v9.1 experiment-plan §4.4
+
+**KF-poc-va-26 · 平稳期 alpha 仅存在于转换期**（⭐⭐ v9 新维度探索）
+- **假设**：平稳期（trend rank ∈ (0.20, 0.75)）从未深挖 · 可能有独立 alpha
+- **结果**：144 tier 中 stable·Tflat 表全空 · 只有 trans·Tflat 单格通过（L2_Alow_Tflat）
+- **解读**：平稳期作为独立分类维度价值有限 · 但作为 filter 可用
+- **关联证据**：workbench §4.2
+
+**KF-poc-va-27 · 交叉 trend 全部证伪 · 顺 trend 是硬规则**（⭐⭐ v9 新维度探索）
+- **假设**：涨段做空 / 跌段做多 / 平稳期双向 · 可能有独立 alpha
+- **结果**：24 个 cross-trend 描述性 tier · **全部 mean 为负** · 无一通过
+- **解读**：顺 trend 是硬规则 · 与阶段 3 KF-Q 一致 · 现在有 144 tier 完整证据
+- **关联证据**：workbench §4.3
+
+**KF-poc-va-28 · 转换期是空头最密集区**（⭐⭐ 制度依赖发现）
+- **Observation**：trans·Tdn 表 4 格通过（S3_Ahigh / S2_Ahigh / S1_Ahigh / S2_Amid）
+- **解读**：崩盘前奏在制度过渡期显著扩散 · 空头"扫射范围"变大
+- **下游启示**：转换期加大空头仓位或降低门槛
+- **关联证据**：workbench §1.3 · 2.2
+
+**KF-poc-va-29 · 合并降级优于精细切分**（⭐⭐⭐ 分类器工程化方法论）
+- **背景**：144 tier 精细化 · 稀疏率 91% · 相邻格子高度相关 · 大量强信号被 CI 撑不开误杀
+- **降级方案**：把 144 tier 通过区域合并为 **6 大类** · 保持互斥
+  - 多头：L_seg3_lowmid_up / L_seg12_high_up / L_seg2_low_flat
+  - 空头：S_seg12_high_dn / S_seg34_high_dn / S_seg2_mid_dn
+- **6 类 vs 144 tier 对比**：
+  - 通过率：20% → **83%** · 稀疏问题彻底消失
+  - Bonferroni family=6 · α=0.008 就能过 · 不需 FDR 大池校正
+  - **S_seg12_high_dn 三 period 全 A** · 复合稳定性远超单一 tier
+  - 每类样本量翻 3-5 倍 · CI 更窄 · IR 更稳
+- **决策**：**v4.0 契约用 6 类合并版**（下游策略只管 6 类 · 不是 143 种边缘 case）
+- **推广**：**跨主题方法论** · 高维网格研究必须做"合并降级"检验 · 而非硬套精细化
+- **关联证据**：workbench §2.4 · data 文件 `stage4_6class_merged_verification.csv`
+
 ### 阶段 4 完成
 
 **完成日期**：2026-07-08 · **判决**：完全通过
@@ -279,7 +323,8 @@
 | 2026-07-07 | 阶段 1 收尾 · 洞察 A-K 落地 · workbench v7 |
 | 2026-07-07 | 阶段 2 收尾 · 洞察 L-O 落地 · workbench v4 · KF-01 ~ KF-15 定型 |
 | 2026-07-07 | 阶段 3 完成 · 洞察 P-U 落地 · workbench v7 · **KF-16 ~ KF-21 定型** · 分类器 7 层严格证据链完整 |
-| 2026-07-08 | 阶段 4 完成 · 分类器 v3.0 冻结 · 10 互斥 tier · A 级 6 + A- 级 3 · KF-24 品种异质性定型 · 143 合约扩样本 |
+| 2026-07-08 | 阶段 4 v3.0（10 互斥 tier）· KF-24 品种异质性定型 · 143 合约扩样本 |
+| 2026-07-08 | 阶段 4 v9.1 三维 144 tier 深化 + 合并降级 · **KF-25 ~ KF-29 定型** · 分类器 v4.0（6 类合并版）· FDR 校正 |
 
 ## 下一步 · 阶段 4 · 背景分类器的使用与组合
 

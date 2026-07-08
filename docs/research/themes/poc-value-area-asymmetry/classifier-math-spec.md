@@ -1,48 +1,56 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
 > 类型：Theme / 分类器数学规格（数学契约唯一源）
-> 状态：**v3.0（2026-07-08）· 互斥单值分类器 · 10 mutex tier · 阶段 4 冻结**
+> 状态：**v4.0（2026-07-08）· 阶段 4 v9.1 收尾 · 6 类合并版冻结 · KF-29 定型**
 > 主题 README：[README.md](README.md)
+> 参数选择与性能报告：`parameter-selection-spec.md`（阶段 4 完成后重建）
 > 研究状态：[research-status.md](research-status.md)
-> 参数选择与性能报告：[parameter-selection-spec.md](parameter-selection-spec.md)（一眼可读版）
 > 实验计划：[experiment-plan.md](experiment-plan.md)
-> 阶段 3 详细流水：workbench:poc-value-area-asymmetry-stage3-robustness
 
 ## 1. 目标与契约边界
 
 ### 1.1 分类器契约
 
-**本文件是"POC value area 不对称背景分类器"的唯一契约**。任何策略若使用
-本分类器输出的标签，其行为完全由本文件规格决定。
+**本文件是"POC value area 不对称背景分类器"的数学定义唯一源**。任何策略
+若使用本分类器输出的标签，其**计算方式**由本文件规格决定，**具体参数值**由
+`parameter-selection-spec.md` 决定。
 
-### 1.2 明确不包含的内容
+### 1.2 本文件承载
 
-- ❌ **入场规则**（触发时刻的具体订单类型、限价/市价、进场时机）
-- ❌ **出场规则**（时间止盈、追踪止损、条件出场）
-- ❌ **仓位管理**（Kelly、定额、波动率归一化）
-- ❌ **账户闸门**（单次风险、MDD、频率限制）
-- ❌ **交易成本**（佣金、滑点、冲击）
+- ✅ Bar 结构 · 事件时钟 · profile 构建 · A3_skew 度量的**数学定义**
+- ✅ rank 计算方式（`signed_skew_rank` · `atr_rank` · `trend_rank`）
+- ✅ 中间标签的**结构定义**（用符号化阈值）
+- ✅ Tier 集合的**结构定义**（tier ID · 互斥性约束）
+- ✅ Warmup 边界 · Leakage 约束 · 输出 API
+- ✅ 静态一致性检查
 
-以上属于完整策略层面，若阶段 4 通过则写入 `strategy-math-spec.md`
-并显式引用本分类器规格。
+### 1.3 本文件不承载
 
-### 1.3 分类器输出承诺
+- ❌ **具体阈值数值**（skew / atr / trend 分位边界）· 全部在 `parameter-selection-spec.md`
+- ❌ Tier 的性能指标（mean / IR / hit / 品种保留率）
+- ❌ 白名单分级（A / A- / 未过）
+- ❌ 机制假说 / 经济解读 / 使用建议
+- ❌ 入场规则 · 出场规则 · 仓位管理 · 账户闸门 · 交易成本
+
+以上属于完整策略层面，若阶段 4 通过则写入 `strategy-math-spec.md` 并显式
+引用本分类器规格。
+
+### 1.4 分类器输出承诺
 
 对每个事件时刻 `t`（每小时整点）· 每个合约 `s` · 分类器输出：
 
 ```text
 Classifier(s, t) := (
-  skew_label,           -- 偏度分类（中间态）
-  atr_regime,           -- 波动率制度（中间态）
-  trend_regime,         -- 趋势制度（中间态）
+  skew_label,           -- 偏度分类
+  atr_regime,           -- 波动率制度
+  trend_regime,         -- 趋势制度
   transition_flag,      -- regime 转换标记
-  tier: str | None,     -- 单值互斥 tier · 见 §7.3（10 类之一 或 None）
-  meta                  -- 完整原始数值
+  tier: str | None,     -- 单值互斥 tier (完整列表见 §7.3)
+  meta,                 -- 完整原始数值 (见 §9)
 )
 ```
 
-**每个 event 属于且仅属于一个 tier**（或 `tier = None` · 未分类）·
-不再是 `List[str]` · 输出严格单值 · 互斥定义见 §7。
+**互斥性**：每个 event 属于且仅属于一个 tier · 或未分类（`tier = None`）。
 
 ## 2. 基础对象与量纲
 
@@ -71,20 +79,20 @@ x_t := (O_t, H_t, L_t, C_t, V_t), t ∈ I_all
 ### 2.3 事件时钟
 
 ```text
-E := { t ∈ I_all | Δbar_trade divides time(t)  }
+E := { t ∈ I_all | Δbar_trade divides time(t) }
 ```
 
-即：所有 wall-clock 分钟位为 `:00:00` 的 bar 索引集合（1h 事件时钟）。
+即所有 wall-clock 分钟位为 `:00:00` 的 bar 索引集合（1h 事件时钟）。
 
-**注**：阶段 2 洞察 O 验证过跨周期一致（15m/30m/1h/2h 全过）· 本规格
-锁定 1h 为主分类器时钟。若阶段 4 需要 4h 时钟，另行分档。
+阶段 2 洞察 O 已验证跨周期一致（15m/30m/1h/2h 全过）· 本规格锁定 1h 为主
+分类器时钟。若阶段 4 或后续需要 4h 时钟 · 另行分档。
 
 ### 2.4 量纲约定
 
 ```text
 bar-count 量纲(idx(·)):     n_rolling_events, n_rolling_days, n_warmup_days
-wall-clock 量纲(time(·)):    event_time
-rank 量纲 (无量纲 [0, 1]):    signed_skew_rank, atr_rank, trend_rank
+wall-clock 量纲(time(·)):   event_time
+rank 量纲 (无量纲 [0, 1]):   signed_skew_rank, atr_rank, trend_rank
 bps 量纲 (1e4 · log return): mean, CI, hit-weighted return
 ```
 
@@ -92,8 +100,8 @@ bps 量纲 (1e4 · log return): mean, CI, hit-weighted return
 
 ### 3.1 Profile 窗口
 
-阶段 1 洞察 D 已锁定 W1 = 前一交易日整体 profile · **W2/W3/前 N 天窗口
-一律排除**。
+阶段 1 洞察 D 已锁定 W1 = 前一交易日整体 profile · W2/W3/前 N 天窗口一律
+排除。
 
 ```text
 W1(t) := { i ∈ I_all | i ∈ I_{d-1(t)}, Δbar(i) = Δbar_profile }
@@ -103,12 +111,12 @@ W1(t) := { i ∈ I_all | i ∈ I_{d-1(t)}, Δbar(i) = Δbar_profile }
 
 ### 3.2 Volume Profile 构造
 
-采用 **close-based bucketing**（阶段 1 洞察 A 已锁定）：
+采用 close-based bucketing（阶段 1 洞察 A 已锁定）：
 
 ```text
 τ          := price_tick (合约特定 · 由 workspace/common/contract_specs.py 提供)
 G_τ        := { n · τ | n ∈ ℤ }                    -- tick 网格
-bucket(p)  := round_τ(p) = floor_τ(p) if p/τ - floor(p/τ) < 0.5 else ceil_τ(p)
+bucket(p)  := round_τ(p)                            -- 就近舍入到 tick
 
 Π_W1(p; t) := Σ_{i ∈ W1(t)} V_i · 1[ bucket(C_i) = p ],  p ∈ G_τ
 ```
@@ -120,7 +128,7 @@ POC_W1(t) := argmin_{p ∈ M_W1(t)} |p - C_{last(W1(t))}|
     where M_W1(t) := { p ∈ G_τ | Π_W1(p; t) = max_{u ∈ G_τ} Π_W1(u; t) }
 ```
 
-**注**：POC/VA 定义仅供参考。**本分类器实际使用的度量是 A3_skew（§4）**，
+**注**：POC/VA 定义仅供参考。本分类器实际使用的度量是 A3_skew（§4）·
 POC/VA 不进入触发条件。
 
 ## 4. A3_skew 度量
@@ -150,211 +158,179 @@ A3_skew(t) := (1 / V_total(t)) · Σ_{p ∈ G_τ} ((p - μ_W1(t)) / σ_W1(t))³ 
 ### 4.2 A3_skew 的严格无未来函数属性
 
 `A3_skew(t)` 只依赖于 `W1(t)` 内的 5m bar · 即 **t-1 交易日的完整数据**。
-在 t 时刻取值时 · **完全无当日信息**。
+在 t 时刻取值时完全无当日信息。
 
 ## 5. Rolling Rank 分位定义
 
 ### 5.1 Signed Skew Rank
 
-对每个合约 `s` 独立维护 `A3_skew` 事件序列 · rolling 100 事件分位：
+对每个合约 `s` 独立维护 `A3_skew` 事件序列 · rolling K 事件分位（`K` 由
+`parameter-selection-spec.md` 配置）：
 
 ```text
-n_rolling_events := 100                        -- rolling 事件窗口
-
-E_s(t) := { u ∈ E | s(u) = s, idx(u) < idx(t) }        -- 合约 s 在 t 之前的事件集
-E_s^prev(t, K) := { u ∈ E_s(t) | idx(u) 属于前 K 个事件 }   -- 前 K 事件子集
+E_s(t)         := { u ∈ E | s(u) = s, idx(u) < idx(t) }
+E_s^prev(t, K) := { u ∈ E_s(t) | idx(u) 属于前 K 个事件 }
 
 signed_skew_rank(s, t) :=
-    (1 / |E_s^prev(t, K)|) · Σ_{u ∈ E_s^prev(t, K)} 1[ A3_skew(u) ≤ A3_skew(t) ]
-
-    where K = n_rolling_events
+    (1 / |E_s^prev(t, K)|) · Σ_{u ∈ E_s^prev(t, K)} 1[ A3_skew(u) < A3_skew(t) ]
 ```
 
-**范围**：`signed_skew_rank ∈ [0, 1]`。
+**范围**：`signed_skew_rank ∈ [0, 1]`（严格小于计数 · tie-break 见下）。
 
 **语义**：
-- rank ≈ 0 → A3_skew 是**过去 100 事件里的最低值**（极端左偏 / 底厚）
-- rank ≈ 1 → A3_skew 是**过去 100 事件里的最高值**（极端右偏 / 顶厚）
+- rank ≈ 0 → A3_skew 是过去 K 事件里的最低值（极端左偏 / 底厚）
+- rank ≈ 1 → A3_skew 是过去 K 事件里的最高值（极端右偏 / 顶厚）
 
-**Tie-break**：当多个历史值等于当前值时 · 使用严格小于计数 · 即：
-
-```text
-signed_skew_rank(s, t) :=
-    |{ u ∈ E_s^prev(t, K) | A3_skew(u) < A3_skew(t) }| / |E_s^prev(t, K)|
-```
+**Tie-break**：使用严格小于计数 · 见公式定义（等值不加分）。
 
 ### 5.1a 独立采样单位与冻结约束（KF-22）
 
 **表面 vs 实际**：
-- **表面**：rolling 100 events 每个合约 · rank 有 100 个观察
-- **实际**：`A3_skew` 是**日级变量**（同一交易日所有 event 共享 W1 · 因此 A3_skew 相同）·
-  独立采样单位是**"合约-日期"**（约每合约 60 独立日）· 100 events ≈ **约 10 独立日**
+- **表面**：rolling K events 每合约的观察数为 K
+- **实际**：`A3_skew` 是**日级变量**（同一交易日所有 event 共享 W1 · 因此
+  A3_skew 相同）· 独立采样单位是 (合约, 日期) · K events ≈ K / (每日事件数)
+  独立日
 
-**这意味着**：
-- 同一交易日内所有 event 的 `signed_skew_rank` 完全相同
-- 触发条件在**日级触发** · event 级只是"入场时机采样"
-- 有效独立观察数远小于 event 总数
-
-**冻结约束**（阶段 3 workbench §12.12 论证）：
-
-- **rank 单位固定为 per-contract**：**禁止** cross-contract 池化 · **禁止**
-  用 (品种前缀 / 交易所 / 全池) 计算 rank
+**冻结约束**（stage 3 workbench §12.12 论证）：
+- **rank 单位固定为 per-contract**：禁止跨合约池化（品种前缀 / 交易所 / 全池）
 - **禁止贝叶斯 shrinkage**：即使把其他合约作为先验也会破坏尾部信号
-- **依据**：prefix 池化实验中 · 空头 4/5 档 Bonferroni 从 ✅ 降级到 ❌ ·
-  因跨合约尾部 (p05, p95) 极差 0.5-0.7 · 池化会稀释极端触发的品种特异性
-- **Bootstrap 单位**：必须按 **(contract, date)** cluster · 而非 (contract)
-- **表述规范**：文档中报告样本量时 · 应同时给出 event 数和独立日数（例如
-  "n_events=142 · n_indep_days≈14"）
+- **Bootstrap 单位**：必须按 (contract, date) cluster · 而非 (contract)
+- **表述规范**：报告样本量时应同时给出 event 数和独立日数
 
 **核心原则**："数据边界不可造假 · 承认样本量 · 用正确 bootstrap 揭露真实
 不确定性 · 不用池化 / shrinkage 制造虚假显著性"（KF-poc-va-22 · 跨主题方法论）。
 
 ### 5.2 ATR Rank
 
-Rolling 20 交易日的日线 ATR_10 分位：
+Rolling `N` 交易日的日线 ATR_L 分位（`N` 与 `L` 由 `parameter-selection-spec.md`
+配置）：
 
 ```text
-n_rolling_days := 20                           -- rolling 日窗口
-n_atr_lookback := 10                           -- ATR 平均窗口
-
-D_s(t) := { d' ∈ Trading_Sessions | s available on d', d' < d(t) }
+D_s(t)         := { d' ∈ Trading_Sessions | s available on d', d' < d(t) }
 D_s^prev(t, N) := { d' ∈ D_s(t) | d' 属于前 N 个 session }
 
 TR_s(d) := max(H_s(d) - L_s(d),
                 |H_s(d) - C_s(d-1)|,
-                |L_s(d) - C_s(d-1)|)          -- 要求 d ≥ d_start(s) + 1
+                |L_s(d) - C_s(d-1)|)                 -- 要求 d ≥ d_start(s) + 1
 
-daily_atr_10_bps(s, d) := (1e4 / C_s(d)) · (1/n_atr_lookback) · Σ_{i=d-n_atr_lookback+1}^{d} TR_s(i)
-                                              -- 要求 d ≥ d_start(s) + n_atr_lookback
+daily_atr_L_bps(s, d) := (1e4 / C_s(d)) · (1/L) · Σ_{i=d-L+1}^{d} TR_s(i)
+                                                     -- 要求 d ≥ d_start(s) + L
 
 atr_rank(s, t) :=
-    |{ d' ∈ D_s^prev(t, N) | daily_atr_10_bps(s, d') < daily_atr_10_bps(s, d(t)-1) }|
+    |{ d' ∈ D_s^prev(t, N) | daily_atr_L_bps(s, d') < daily_atr_L_bps(s, d(t)-1) }|
     / |D_s^prev(t, N)|
-
-    where N = n_rolling_days
 ```
 
 **范围**：`atr_rank ∈ [0, 1]`。
 
-**注**：`daily_atr_10_bps(s, d(t)-1)` 使用 **前一交易日** 的 ATR 值 · 无未来函数。
+**注**：`daily_atr_L_bps(s, d(t)-1)` 使用前一交易日的 ATR 值 · 无未来函数。
 
 ### 5.3 Trend Rank
 
-Rolling 20 交易日的近 10 日累计 log return 分位：
+Rolling `N` 交易日的近 `M` 日累计 log return 分位（`N` 与 `M` 由
+`parameter-selection-spec.md` 配置）：
 
 ```text
-trend_ret_10d(s, d) := log(C_s(d) / C_s(d-9))
+trend_ret_M(s, d) := log(C_s(d) / C_s(d - M + 1))
 
 trend_rank(s, t) :=
-    |{ d' ∈ D_s^prev(t, N) | trend_ret_10d(s, d') < trend_ret_10d(s, d(t)-1) }|
+    |{ d' ∈ D_s^prev(t, N) | trend_ret_M(s, d') < trend_ret_M(s, d(t)-1) }|
     / |D_s^prev(t, N)|
-
-    where N = n_rolling_days
 ```
 
 **范围**：`trend_rank ∈ [0, 1]`。
 
 **语义**：
-- rank ≈ 0 → 近 10 日累计跌幅是过去 20 日**最深**（跌段）
-- rank ≈ 1 → 近 10 日累计涨幅是过去 20 日**最强**（涨段）
+- rank ≈ 0 → 近 M 日累计跌幅是过去 N 日最深（跌段）
+- rank ≈ 1 → 近 M 日累计涨幅是过去 N 日最强（涨段）
 
 ### 5.4 Warmup 约束
 
-```text
-n_warmup_days := max(n_rolling_days, n_atr_lookback + 10) = 20
-                (设计为 20 · 因 n_atr_lookback=10 + 10 缓冲 = 20)
-```
-
+Warmup 天数 `n_warmup_days`（由 `parameter-selection-spec.md` 配置）·
 事件 `t` 有效 iff（`warmup_ok(s, t) = True`）：
 
 ```text
-|E_s^prev(t, n_rolling_events)| ≥ n_rolling_events   -- 至少 100 个历史事件
-∧ |D_s^prev(t, n_rolling_days)| ≥ n_rolling_days      -- 至少 20 个历史 session
-∧ d(t) ≥ d_start(s) + n_warmup_days                   -- warmup 期过后
-∧ TR_s / ATR_s 在 D_s^prev(t, n_rolling_days) 上全可定义
+|E_s^prev(t, K)| ≥ K                      -- 至少 K 个历史事件
+∧ |D_s^prev(t, N)| ≥ N                    -- 至少 N 个历史 session
+∧ d(t) ≥ d_start(s) + n_warmup_days        -- warmup 期过后
+∧ ∀ d' ∈ D_s^prev(t, N):
+      TR_s(d') 与 daily_atr_L_bps(s, d') 均可定义
 ```
 
-否则 `Classifier(s, t) := ClassifierOutput(warmup_ok=False, tier=None, transition_flag=None, ...)` （不触发）。
+否则 `Classifier(s, t)` 输出 `warmup_ok = False` · `tier = None` ·
+`transition_flag = None`。
 
-## 6. 分类器中间标签
+## 6. 分类器中间标签（结构化定义）
+
+**说明**：本节定义中间标签的**分档结构** · 具体阈值（`θ_*`）由
+`parameter-selection-spec.md` 配置。
 
 ### 6.1 Skew Label
 
+Signed skew rank 分档为 K_skew 个互斥类别：
+
 ```text
-skew_label(s, t) :=
-    "DN_strict"     if signed_skew_rank(s, t) ≤ 0.10
-    "DN_loose"      if 0.10 < signed_skew_rank(s, t) ≤ 0.30
-    "NEUTRAL"       if 0.30 < signed_skew_rank(s, t) < 0.70
-    "UP"            if signed_skew_rank(s, t) ≥ 0.70
-    "UP_extreme"    未使用（预留）
+skew_label(s, t) := 由 signed_skew_rank(s, t) 通过阈值配置 Θ_skew 分档得到
+                    分档结构必须满足：
+                    - 若配置为二侧对称 · 返回 {DN_*, ..., NEUTRAL, UP_*, ...}
+                    - 所有类别两两互斥 · 并集覆盖 [0, 1]
 ```
+
+**语义方向约定**：
+- `DN_*` 类别对应 `signed_skew_rank` 靠近 0（底厚 · A3_skew < 0）
+- `UP_*` 类别对应 `signed_skew_rank` 靠近 1（顶厚 · A3_skew > 0）
+- `NEUTRAL` 类别对应中间区间（不进入分类器输出）
+
+**具体分档配置**：见 `parameter-selection-spec.md §2`。
 
 ### 6.2 ATR Regime
 
-3-way 分档（阶段 3 洞察 P 定义）：
+`atr_rank` 分档为 K_atr 个互斥类别（默认 3-way · 阶段 3 洞察 P 定义）：
 
 ```text
-atr_regime(s, t) :=
-    "low"     if atr_rank(s, t) ≤ 0.33
-    "mid"     if 0.33 < atr_rank(s, t) < 0.67
-    "high"    if atr_rank(s, t) ≥ 0.67
+atr_regime(s, t) := 由 atr_rank(s, t) 通过阈值配置 Θ_atr 分档得到
+                    互斥性同 §6.1
 ```
 
-**辅助阈值**（用于宽松档位）：
+**语义方向约定**：类别命名如 `"low"` / `"mid"` / `"high"` · 对应
+`atr_rank` 从小到大。
 
-```text
-atr_extra(s, t) :=
-    "≤0.50"   if atr_rank(s, t) ≤ 0.50
-    "≤0.70"   if atr_rank(s, t) ≤ 0.70
-    ">0.50"   if atr_rank(s, t) > 0.50
-    ">0.67"   if atr_rank(s, t) > 0.67
-    ">0.80"   if atr_rank(s, t) > 0.80
-    (多个可同时命中)
-```
+**具体分档配置**：见 `parameter-selection-spec.md §2`。
 
 ### 6.3 Trend Regime
 
-3-way 分档：
+`trend_rank` 分档为 K_trend 个互斥类别（默认 3-way · 阶段 4 加入平稳期
+探索）：
 
 ```text
-trend_regime(s, t) :=
-    "down"    if trend_rank(s, t) ≤ 0.33
-    "flat"    if 0.33 < trend_rank(s, t) < 0.67
-    "up"      if trend_rank(s, t) ≥ 0.67
+trend_regime(s, t) := 由 trend_rank(s, t) 通过阈值配置 Θ_trend 分档得到
+                     互斥性同 §6.1
 ```
 
-**辅助阈值**（用于严格档位）：
+**语义方向约定**：类别命名如 `"down"` / `"flat"` / `"up"` · 对应
+`trend_rank` 从小到大。
 
-```text
-trend_extra(s, t) :=
-    "≤0.20"   if trend_rank(s, t) ≤ 0.20
-    "≥0.75"   if trend_rank(s, t) ≥ 0.75
-    (多个可同时命中)
-```
+**具体分档配置**：见 `parameter-selection-spec.md §2`。
 
 ### 6.4 Transition Flag
 
-Regime transition 定义（阶段 3 洞察 R）：
+Regime transition 定义（阶段 3 洞察 R）· `atr_bucket_session` 用于日级
+ATR 制度识别：
 
 ```text
-n_transition_window_days := 3
-
--- Session 级 ATR 分档（区别于 event 级 atr_regime）
-atr_bucket_session(s, d) :=
-    "low"     if atr_rank_session(s, d) ≤ 0.33
-    "mid"     if 0.33 < atr_rank_session(s, d) < 0.67
-    "high"    if atr_rank_session(s, d) ≥ 0.67
-
-    where atr_rank_session(s, d) := atr_rank on session d evaluated same way as §5.2
-                                     using daily_atr_10_bps(s, d) and D_s^prev(d, N)
+-- Session 级 ATR 分档（区别于 event 级 atr_regime · 用 daily bar 计算）
+atr_bucket_session(s, d) := 由 atr_rank_session(s, d) 通过阈值 Θ_atr_session 分档
+                            (通常与 §6.2 相同 · 但可独立配置)
 
 -- 前一同合约 session
 prev_session(s, d) := max { d' ∈ D_s(·) | d' < d }
 
+-- 制度切换判定
 is_crossover(s, d) :=
     prev_session(s, d) exists
     ∧ atr_bucket_session(s, d) ≠ atr_bucket_session(s, prev_session(s, d))
 
+-- Transition flag · 转换窗口天数 n_transition_window_days 由 parameter-selection 配置
 transition_flag(s, t) :=
     1[ ∃ d' ∈ Trading_Sessions_of_s :
          d' ≤ d(t) ∧ d(t) - d' < n_transition_window_days
@@ -362,109 +338,70 @@ transition_flag(s, t) :=
 ```
 
 **语义**：
-- `transition_flag = 1` → t 时刻处于 regime 转换期（前 3 交易日 atr 制度切换）
+- `transition_flag = 1` → t 时刻处于 regime 转换期（前若干交易日 atr 制度切换）
 - `transition_flag = 0` → t 时刻处于 regime 稳定期
 
-**注**：`d(t) - d'` 用 session 计数（不含周末停牌 · 只算实际交易日 · 沿用 §2.1 语义）。
+**注**：`d(t) - d'` 用 session 计数（不含周末停牌）· 沿用 §2.1 语义。
 
-## 7. 触发条件集合（10 互斥 tier）
+## 7. 触发条件与 Tier 集合（结构定义）
 
-### 7.1 互斥类别定义
+### 7.1 Tier 结构
 
-**多头方向**（`skew_label ∈ {DN_strict, DN_loose} ∧ atr_rank ≤ 0.70 ∧ trend_rank ≥ 0.75`）：
-
-```text
-LP_only := { (s, t) : skew_label(s, t) = "DN_strict"
-                    ∧ atr_rank(s, t) ≤ 0.70
-                    ∧ trend_rank(s, t) ≥ 0.75 }
-                                              -- 即 signed_skew_rank ≤ 0.10
-
-LL_only := { (s, t) : skew_label(s, t) = "DN_loose"
-                    ∧ atr_rank(s, t) ≤ 0.70
-                    ∧ trend_rank(s, t) ≥ 0.75 }
-                                              -- 即 signed_skew_rank ∈ (0.10, 0.30]
-```
-
-**空头方向**（`skew_label = UP ∧ trend_rank ≤ 0.20`）：
+每个 tier 由**中间标签的组合值**唯一定义：
 
 ```text
-SP_only := { (s, t) : skew_label(s, t) = "UP"
-                    ∧ atr_rank(s, t) > 0.80
-                    ∧ trend_rank(s, t) ≤ 0.20 }
-                                              -- 极高波动率
-
-SC_only := { (s, t) : skew_label(s, t) = "UP"
-                    ∧ 0.67 < atr_rank(s, t) ≤ 0.80
-                    ∧ trend_rank(s, t) ≤ 0.20 }
-                                              -- 高波动率
-
-SL_only := { (s, t) : skew_label(s, t) = "UP"
-                    ∧ 0.50 < atr_rank(s, t) ≤ 0.67
-                    ∧ trend_rank(s, t) ≤ 0.20 }
-                                              -- 中偏高波动率
+Tier ≡ (skew_label 取值, atr_regime 取值, trend_regime 取值, transition_flag 取值)
 ```
 
-**互斥性证明**：
+或省略某些维度（表示"对该维度不设约束"）。
+
+**分类器契约要求**：
+- **完全互斥**：`∀ Tier_i ≠ Tier_j : Tier_i ∩ Tier_j = ∅`
+- **可分类事件全集**：`⋃ Tiers = { (s, t) : warmup_ok ∧ 命中某个 tier }`
+- **未分类事件**：不命中任何 tier · 分类器返回 `tier = None`
+
+**具体 tier 集合与命名**：见 `parameter-selection-spec.md §3`（每个版本可能
+不同 · v3.0 定义了 10 个 tier · v4.0 计划扩展为分位×制度×趋势的更细粒度）。
+
+### 7.2 Tier ID 命名规范
+
+Tier ID 采用**结构化命名**：
 
 ```text
-LP_only ∩ LL_only = ∅
-    (skew_label 二分 · DN_strict vs DN_loose 互斥)
+<direction>_<detail>_<regime>[_stable|_trans|_full]
 
-SP_only ∩ SC_only ∩ SL_only = ∅
-    (atr_rank 区间不重叠 · (0.80, ∞) / (0.67, 0.80] / (0.50, 0.67] 严格分割)
-
-(LP_only ∪ LL_only) ∩ (SP_only ∪ SC_only ∪ SL_only) = ∅
-    (skew 方向严格互斥 · DN_* vs UP 无交集)
+例：
+  LP_only_stable    -- 多头首选 · 稳定期
+  SP_only_trans     -- 空头首选 · 转换期
+  LL_only_full      -- 多头宽档 · 全期别（stable ∪ trans 的报告口径）
 ```
 
-### 7.2 稳定/转换拆分
+`_full` 表示不区分 stable/trans（是 stable ∪ trans 的并集报告口径 · **不是
+独立 tier** · 只在性能报告中使用）。
 
-对每个基础类 `M ∈ {LP_only, LL_only, SP_only, SC_only, SL_only}`：
+### 7.3 Tier 集合的当前版本引用
 
-```text
-M_stable := { (s, t) ∈ M : transition_flag(s, t) = 0 }
-M_trans  := { (s, t) ∈ M : transition_flag(s, t) = 1 }
-```
+- **v3.0 tier 集合**（10 互斥 tier · 阶段 4 v3 过渡版）：见 `parameter-selection-spec.md §3.1`（保留作诊断证据）
+- **v4.0 tier 集合**（6 类合并版 · 阶段 4 v9.1 收尾冻结）：见 `parameter-selection-spec.md §3.2`
+  - 决策依据：144 tier 精细化通过率仅 20% · 稀疏率 91% · 合并 6 类后通过率 83%（KF-29）
+  - 6 类：L_seg3_lowmid_up / L_seg12_high_up / L_seg2_low_flat / S_seg12_high_dn / S_seg34_high_dn / S_seg2_mid_dn
 
-由 `transition_flag ∈ {0, 1}` 二分 · 每个基础类拆分为互斥的 stable / trans ·
-共 5 × 2 = **10 互斥 tier**。
+### 7.4 白名单
 
-### 7.3 Tier ID 列表
-
-```text
-Tiers := {
-    LP_only_stable, LP_only_trans,
-    LL_only_stable, LL_only_trans,
-    SP_only_stable, SP_only_trans,
-    SC_only_stable, SC_only_trans,
-    SL_only_stable, SL_only_trans
-}
-```
-
-`|Tiers| = 10` · 两两不相交 · 并集 = 「可分类事件全集」（warmup_ok ∧ 命中任一基础类）。
-
-### 7.4 白名单（v3.0 · 阶段 4 冻结）
-
-- **A 级 6 个**：`LP_only_full` · `LL_only_stable` · `SP_only_stable` · `SP_only_trans` · `SC_only_full` · `SC_only_trans`
-- **A- 级 3 个**（时稳警示）：`LL_only_full` · `LL_only_trans` · `SP_only_full`
-- **未过 6 个**：`LP_only_stable` / `LP_only_trans` / `SC_only_stable` / `SL_only_full` / `SL_only_stable` / `SL_only_trans`
-
-注：`_full` 表示不区分 stable/trans（例如 `LP_only_full = LP_only_stable ∪ LP_only_trans`）·
-`_full` 不是独立 tier · 是 stable/trans 的并集报告口径。
-
-具体判据与性能指标见 [parameter-selection-spec.md](parameter-selection-spec.md)。
+**评级判据**（Bonferroni + 反事实 + CI + 时稳）· 分级为 A / A- / 未过 ·
+详见 `parameter-selection-spec.md §4-5`。
 
 ## 8. 严格无未来函数约束（Leakage Boundary）
 
 ### 8.1 数据边界
 
-对每个 `Classifier(s, t)` 输出 · **所有输入数据严格来自 t 之前**：
+对每个 `Classifier(s, t)` 输出 · 所有输入数据严格来自 t 之前：
 
 ```text
 Data_inputs(s, t) := {
-    W1(t),                         -- 前一交易日 5m bar (完全在 t 之前)
-    E_s^prev(t, 100),              -- 前 100 个事件的 A3_skew 值
-    D_s^prev(t, 20),               -- 前 20 个 session 的 daily 特征
+    W1(t),                     -- 前一交易日 5m bar (完全在 t 之前)
+    E_s^prev(t, K),            -- 前 K 个事件的 A3_skew 值
+    D_s^prev(t, N),            -- 前 N 个 session 的 daily 特征
 }
 ```
 
@@ -475,7 +412,7 @@ Data_inputs(s, t) := {
     max { time(u) : u ∈ Data_inputs(s, t) } < time(t)
 ```
 
-即：**分类器输出在 time(t) 时刻可用 · 不需要 t 之后的信息**。
+即：分类器输出在 `time(t)` 时刻可用 · 不需要 t 之后的信息。
 
 ### 8.3 Session 边界约束
 
@@ -497,30 +434,24 @@ ClassifierOutput := {
     -- 原始数值
     A3_skew: float | NaN
     signed_skew_rank: float ∈ [0, 1] | NaN
-    daily_atr_10_bps: float ≥ 0 | NaN
+    daily_atr_L_bps: float ≥ 0 | NaN
     atr_rank: float ∈ [0, 1] | NaN
-    trend_ret_10d: float | NaN
+    trend_ret_M: float | NaN
     trend_rank: float ∈ [0, 1] | NaN
 
     -- 中间标签
-    skew_label: str ∈ {"DN_strict", "DN_loose", "NEUTRAL", "UP", None}
-    atr_regime: str ∈ {"low", "mid", "high", None}
-    trend_regime: str ∈ {"down", "flat", "up", None}
+    skew_label: str | None         -- §6.1 · None if warmup 未过
+    atr_regime: str | None         -- §6.2
+    trend_regime: str | None       -- §6.3
 
     -- Regime transition
-    atr_bucket_current: str
+    atr_bucket_current: str | None
     atr_bucket_prev: str | None
-    is_crossover_today: bool
+    is_crossover_today: bool | None
     transition_flag: bool | None    -- None if warmup 不足
 
-    -- Tier 命中（单值 · 互斥 · 见 §7）
-    tier: str | None
-    -- ∈ {LP_only_stable, LP_only_trans,
-    --    LL_only_stable, LL_only_trans,
-    --    SP_only_stable, SP_only_trans,
-    --    SC_only_stable, SC_only_trans,
-    --    SL_only_stable, SL_only_trans}
-    -- 或 None（未命中任何基础类 / warmup 未满足）
+    -- 分类结果（v3.0 及以后 · 单值 tier · 互斥）
+    tier: str | None                -- tier ID (见 §7.2 命名) 或 None (未分类)
 
     -- Warmup 状态
     warmup_ok: bool
@@ -534,22 +465,13 @@ ClassifierOutput := {
     warmup_ok = False  =>  tier = None ∧ transition_flag = None
     warmup_ok = True   =>  transition_flag ∈ {True, False}
 
-    -- 互斥性（单值不变量）
-    |{ hit tier }| ≤ 1
-    tier ∈ Tiers ∪ {None}                    -- 10 mutex tier 之一 或 None
+    tier ≠ None       =>  (skew_label, atr_regime, trend_regime, transition_flag)
+                          唯一决定该 tier ID
 
-    -- Tier 与中间标签的等价关系（tier ≠ None 时）
-    tier = "LP_only_stable"
-        <=>  skew_label = "DN_strict"
-             ∧ atr_rank ≤ 0.70
-             ∧ trend_rank ≥ 0.75
-             ∧ transition_flag = False
-    tier = "LP_only_trans"
-        <=>  (LP_only conditions) ∧ transition_flag = True
-    (LL_only / SP_only / SC_only / SL_only × stable/trans 类似 · 见 §7.1)
-
-    -- 已删除嵌套关系不变量（v3.0 互斥类别不再有嵌套）
+    tier = None       =>  或未命中任何 tier · 或 warmup 未过
 ```
+
+**互斥性**：一个 event 属于且仅属于一个 tier（或 None）。
 
 ### 9.3 批量输出
 
@@ -565,73 +487,85 @@ Timeline_s := [ClassifierOutput(s, t) : t ∈ E_s, warmup_ok(s, t) = True]
 
 ### 10.1 符号一致性
 
-- `signed_skew_rank`（§5.1）与 `A3_skew`（§4.1）语义方向一致：rank ≤ 0.10 ⇔ A3_skew 底 10%
-- `atr_rank / trend_rank`（§5.2/5.3）分别独立算 · **只在 t-1 时点评估** · 无同日互相依赖
-- `transition_flag`（§6.4）只用 `atr_bucket_session` · 与 `trend` / `skew` 无关
+- `signed_skew_rank`（§5.1）与 `A3_skew`（§4.1）语义方向一致：rank 靠近 0
+  ⇔ A3_skew 靠近其分布最低值
+- `atr_rank / trend_rank`（§5.2/5.3）分别独立算 · 只在 `t-1` 时点评估 ·
+  无同日互相依赖
+- `transition_flag`（§6.4）只用 `atr_bucket_session` · 与 `trend` / `skew`
+  无关
 
 ### 10.2 时序单调性
 
 - `E_s^prev(t, K)` 只包含 `idx(u) < idx(t)` · 严格历史
 - `D_s^prev(t, N)` 只包含 `d' < d(t)` · 严格历史
-- `daily_atr_10_bps(s, d(t)-1)` 使用前一 session（阶段 3 洞察 R 明确 t 时刻已知）
+- `daily_atr_L_bps(s, d(t)-1)` 使用前一 session（无 leakage）
 
 ### 10.3 触发条件完全互斥性
 
-- **所有 10 tier 两两不相交**：
-  `∀ T_i, T_j ∈ Tiers, i ≠ j : T_i ∩ T_j = ∅`
-- **并集是「可分类事件全集」**：
-  `⋃ Tiers = { (s, t) : warmup_ok(s, t) ∧ tier(s, t) ≠ None }`
-- 互斥来源：
-  - skew 方向严格互斥（DN_strict / DN_loose vs UP · §6.1）
-  - 空头 3 类 atr_rank 区间不重叠（(0.50, 0.67] / (0.67, 0.80] / (0.80, ∞) · §7.1）
-  - stable / trans 由 `transition_flag ∈ {0, 1}` 二分（§7.2）
+- **所有 tier 两两不相交**：`∀ T_i, T_j ∈ Tiers, i ≠ j : T_i ∩ T_j = ∅`
+- **并集是「可分类事件全集」**：`⋃ Tiers = { (s, t) : warmup_ok ∧ tier ≠ None }`
+- 互斥性由 §6 中间标签的**互斥分档**+ §7.1 的**组合值分类**共同保证：
+  - `skew_label` / `atr_regime` / `trend_regime` 各自内部互斥（§6）
+  - tier 定义为中间标签组合值 · 天然互斥（§7.1）
 
 ### 10.4 Warmup 不变量
 
-- warmup 未满足 → 所有 tier 为空 · transition_flag None（§9.2）
-- warmup 满足 → transition_flag 一定有明确布尔值
+- warmup 未满足 → `tier = None` ∧ `transition_flag = None`
+- warmup 满足 → `transition_flag ∈ {True, False}` · `tier ∈ Tiers ∪ {None}`
 
-### 10.5 参数固定值汇总
+### 10.5 参数占位符汇总
 
-| 参数 | 值 | 来源 |
-|------|-----|-----|
-| `Δbar_profile` | 5m | KF-02 · 阶段 1 |
-| `Δbar_trade` | 1h | KF-09 · 阶段 2 |
-| `n_rolling_events` | 100 | KF-07 · 洞察 K |
-| `n_rolling_days` | 20 | KF-06 · 洞察 I |
-| `n_warmup_days` | 20 | 阶段 2 严格无未来函数版本 |
-| `n_transition_window_days` | 3 | 洞察 R · 阶段 3 §6 |
-| `skew_thresholds` | {0.10, 0.30, 0.70} | KF-12 · 洞察 N |
-| `atr_thresholds` | {0.33, 0.50, 0.67, 0.70, 0.80} | 洞察 N/P/Q |
-| `trend_thresholds` | {0.20, 0.33, 0.67, 0.75} | 洞察 N |
+**说明**：本 spec 只承载计算方式 · 所有可调参数的**具体数值**由
+`parameter-selection-spec.md` 配置。以下是参数占位符清单：
+
+| 参数占位符 | 语义 | 配置位置 |
+|-----------|------|---------|
+| `Δbar_profile` | Profile 构建 bar 周期 | `parameter-selection-spec.md §1` |
+| `Δbar_trade` | 事件时钟 bar 周期 | 同上 |
+| `Δbar_daily` | 日线特征 bar 周期 | 同上 |
+| `K = n_rolling_events` | Rolling 事件窗口大小 | 同上 |
+| `N = n_rolling_days` | Rolling 日窗口大小 | 同上 |
+| `L = n_atr_lookback` | ATR 平均窗口 | 同上 |
+| `M = n_trend_lookback` | Trend 累计窗口 | 同上 |
+| `n_warmup_days` | Warmup 天数 | 同上 |
+| `n_transition_window_days` | Transition 窗口 | 同上 |
+| `Θ_skew` | Skew 分档阈值 | `parameter-selection-spec.md §2.1` |
+| `Θ_atr` | ATR 分档阈值 | `parameter-selection-spec.md §2.2` |
+| `Θ_trend` | Trend 分档阈值 | `parameter-selection-spec.md §2.3` |
+| `Θ_atr_session` | Session 级 ATR 分档阈值 | `parameter-selection-spec.md §2.4` |
+| Tier 集合 | 具体 tier 定义与命名 | `parameter-selection-spec.md §3` |
+| Tier 白名单 | A/A- 级分级 | `parameter-selection-spec.md §4` |
 
 ### 10.6 已知边界（数学层面）
 
-- **单值输出 · 完全互斥**：`tier ∈ Tiers ∪ {None}` · `|Tiers| = 10` · 两两不相交（§10.3）
-- **stable/trans 拆分**：`M_stable ∩ M_trans = ∅` · `M_stable ∪ M_trans = M`（对任意基础类 M）
+- **单值输出 · 完全互斥**：`tier ∈ Tiers ∪ {None}` · Tiers 内两两不相交（§10.3）
 - **warmup 硬边界**：`warmup_ok = False` ⇒ `tier = None` ∧ `transition_flag = None`
-- **transition_flag 滞后**：依赖 `atr_bucket_session` 的日级切换 · 同日 atr rank
-  计算延迟不引入 leakage（因用 `d(t) - 1` 的 daily 值）
+- **transition_flag 滞后**：依赖 `atr_bucket_session` 的日级切换 · 同日 atr
+  rank 计算延迟不引入 leakage（因用 `d(t) - 1` 的 daily 值）
 
-**参数选择相关的使用限制、扩样本建议、机制假说**等非契约内容
-详见 [parameter-selection-spec.md §5](parameter-selection-spec.md)。
+**参数选择、性能指标、机制假说、使用限制**等非契约内容详见
+`parameter-selection-spec.md`。
 
-## 11. 版本控制与阶段 4 引用
+## 11. 版本控制与阶段引用
 
-### 11.1 冻结承诺
+### 11.1 版本管理
 
-**本文件 v1 冻结后**：
-- 所有阈值参数（skew/atr/trend/rolling）不再改动
-- 若阶段 4 或后续实验发现需要调整 · 必须先修订本文件 · 再更新代码
-- 修订需要 workbench 附录说明变更理由
+**Spec 本身的版本**（本文件）：
+- v3.1 · 结构化重构 · 数学定义与参数分离
+- 数学计算方式如需修订（例如 A3_skew 定义、rank 公式）· spec 需升版
 
-### 11.2 阶段 4 引用方式
+**参数配置的版本**（`parameter-selection-spec.md`）：
+- v3.0 · 10 互斥 tier · skew 3 档 × atr 3 档 × trend 2 档
+- v4.0 计划 · 分位×制度×趋势细化 · trend 加入 flat 档
+- 参数配置更新 · 不影响本 spec
 
-阶段 4 的 `strategy-math-spec.md` 通过 `import` 语义引用 · v3.0 输出单值 tier ·
-分支采用相等判断：
+### 11.2 下游引用方式
+
+下游策略（`strategy-math-spec.md`）通过 `import` 语义引用：
 
 ```text
-Classifier := as defined in classifier-math-spec.md v3.0
+Classifier := as defined in classifier-math-spec.md v3.x
+              with parameter config from parameter-selection-spec.md v3.x
 
 Strategy(s, t) :=
     tier := Classifier(s, t).tier            -- 单值 · str | None
@@ -642,71 +576,50 @@ Strategy(s, t) :=
         ...
     elif tier is None:
         skip                                  -- 未分类 · 不进场
-    ... (其他互斥 tier)
+    ...
 ```
 
-分类器规格不重复写入 strategy-math-spec.md · 保证 single source of truth。
-
-### 11.3 参数选择与阶段 4 使用建议（外部引用）
-
-**分类器契约（本文件）不承载**：
-- 参数选择的评级判据
-- 单个 tier 的性能指标（mean / IR / Sharpe / hit / 品种保留率）
-- 机制假说与经济解读
-- 阶段 4 落地的组合建议
-- 分位×制度未来细化候选（KF-23 · 12 格地图）
-
-以上内容全部见 [parameter-selection-spec.md](parameter-selection-spec.md)：
-
-- §1 · 一眼可读总览（A/B/C 白名单 + 12 格候选）
-- §2 · 10 档评级卡（每 tier 单独一节 · 含机制假说）
-- §3 · 12 格分位×制度地图（KF-23）
-- §4 · 阶段 4 使用建议（起点组合 / 出场策略 / 仓位管理）
-- §5 · 已知边界与阶段 4 必做验证
-
-## 附录 A · 与阶段 3 workbench 的对应关系
+## 附录 A · 与阶段 workbench 的对应关系
 
 | 本文件章节 | Workbench 位置 |
 |---------|------------|
 | §3 W1 profile | 阶段 1 workbench §3 · KF-02 |
 | §4 A3_skew | 阶段 1 workbench §4 · KF-01/03 |
 | §5.1 signed_skew_rank | 阶段 1 workbench §10 · KF-07（洞察 K）|
+| §5.1a 冻结约束 KF-22 | 阶段 3 workbench §12.12 |
 | §5.2/5.3 rank | 阶段 2 workbench §2 · KF-14 |
-| §6.2 3-way ATR | 阶段 3 workbench §2 · KF-16（洞察 P）|
+| §6.2 ATR regime | 阶段 3 workbench §2 · KF-16（洞察 P）|
 | §6.4 transition_flag | 阶段 3 workbench §6 · KF-18（洞察 R）|
-| §7 触发条件 | 阶段 2 workbench §7.10 + 阶段 3 workbench §12.9 |
-| §7.3 评级 | 阶段 3 workbench §12.9 |
+| §7 tier 结构 | 阶段 4 workbench（待建） |
+| §10.3 互斥性 | 阶段 4 workbench（待建） |
 
 ## 附录 B · 数据源要求
 
 分类器计算的必需数据源（阶段 4 代码实现时对齐）：
 
-- **5m bar**：`project_data/bars_5m/{contract}.parquet` · 至少覆盖 `n_warmup_days + n_rolling_events + 目标区间`
+- **5m bar**：`project_data/bars_5m/{contract}.parquet` · 至少覆盖
+  `n_warmup_days + K + 目标区间`
 - **日线 bar**：从 5m bar 聚合 · 或用 `project_data/bars_1d/{contract}.parquet`
-- **合约规格**：`workspace/common/contract_specs.py` · 提供 `price_tick` · `session_close_time`
+- **合约规格**：`workspace/common/contract_specs.py` · 提供 `price_tick` ·
+  `session_close_time`
 
 ## 附录 C · 阶段 4 建议实现结构
 
 ```
-workspace/common/poc_va_classifier.py
+workspace/strategies/classifiers/poc_va.py
 ├── class POCVAClassifier
 │   ├── __init__(config: ClassifierConfig)
 │   ├── build_profile(contract, session) -> ProfileData
 │   ├── compute_a3_skew(profile) -> float
+│   ├── compute_ranks(...) -> RankValues
 │   ├── evaluate_event(contract, event_time) -> ClassifierOutput
-│   │       # ClassifierOutput.tier: Literal[
-│   │       #   "LP_only_stable", "LP_only_trans",
-│   │       #   "LL_only_stable", "LL_only_trans",
-│   │       #   "SP_only_stable", "SP_only_trans",
-│   │       #   "SC_only_stable", "SC_only_trans",
-│   │       #   "SL_only_stable", "SL_only_trans"
-│   │       # ] | None
-│   │       # 单值互斥输出 · 见 §9
 │   └── generate_timeline(contract, start, end) -> List[ClassifierOutput]
 └── class ClassifierConfig
+    -- 从 parameter-selection-spec.md 加载所有 Θ_* 阈值与 K/N/L/M 参数
     ├── skew_thresholds, atr_thresholds, trend_thresholds
     ├── n_rolling_events, n_rolling_days, n_warmup_days
+    ├── n_atr_lookback, n_trend_lookback
     └── n_transition_window_days
 ```
 
-**默认 config** = §10.5 参数汇总表的 v1 冻结值。
+**config 默认值**：来源于 `parameter-selection-spec.md` 当前版本冻结值。

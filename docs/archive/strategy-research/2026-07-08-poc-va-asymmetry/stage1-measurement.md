@@ -59,7 +59,7 @@ log ratio 类对完全对称取 0；skew 对完全对称取 0。
 | monotonic.csv | Q1..Q5 mean 序列单调性 Spearman |
 | quantile_sweep.csv | 阈值分位（20/15/10/8/5%）扫描 |
 
-对应脚本：`scripts/ai_tmp/poc_va_asymmetry_stage1{,_quintile,_significant,_quantile_sweep}.py`
+对应脚本：`docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1{,_quintile,_significant,_quantile_sweep}.py`
 
 ## 2. 证据链
 
@@ -1001,11 +1001,11 @@ cu2601 在 W1 × A3_skew × q=8% × ret_8h 上：
 ## 9. 复现命令
 
 ```bash
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage1.py                # 主流程 + pooled IC
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage1_quintile.py       # 五分位分析
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage1_significant.py    # 绝对阈值子集
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage1_quantile_sweep.py # 分位阈值扫描
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage1_profit_space.py   # v1 · 真实成本利润空间（未去重）
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1.py                # 主流程 + pooled IC
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1_quintile.py       # 五分位分析
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1_significant.py    # 绝对阈值子集
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1_quantile_sweep.py # 分位阈值扫描
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage1_profit_space.py   # v1 · 真实成本利润空间（未去重）
 uv run python -u scripts/ai_tmp/poc_va_asymmetry_diag_cu.py               # v2 · cu2601 异常诊断
 uv run python -u scripts/ai_tmp/poc_va_asymmetry_threshold_dedup.py       # v2 · 阈值扫描 × 去重
 uv run python -u scripts/ai_tmp/poc_va_asymmetry_no_lookahead.py          # v2 · 去未来函数对比（固定阈值 / rolling 分位）

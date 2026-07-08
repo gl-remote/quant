@@ -38,9 +38,9 @@
 - 阶段 2 已按 v2.2 重构为"塑形受益条件扫描"（2a 方向 alpha × 塑形 /
   2b 跨周期 tail / 2c 波动率制度）——**暂不启动**，等待方向 alpha 主题
   产出 baseline 后再拉起 2a
-- 冻结批次准备中：`docs/archive/strategy-research/2026-07-XX-structural-shaping-alpha-frozen/`
+- 阶段 1 归档：`docs/archive/strategy-research/2026-07-06-structural-shaping-alpha-stage1/`
 - 相关工具（First-Passage Designer）已沉 [first-passage-designer-math-spec.md](first-passage-designer-math-spec.md)
-  + 实现脚本 `scripts/ai_tmp/first_passage_designer.py` + 对照表
+  + 实现脚本 `docs/archive/strategy-research/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
   `archive:2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables`
 
 ## 关键发现清单

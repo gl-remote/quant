@@ -70,7 +70,7 @@
 ### 1.4 复现命令
 
 ```bash
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_timeframe.py
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_timeframe.py
 ```
 
 ## 2. 门槛 2 · ν\_implied 反算（KF-9 硬约束）· ✅ 通过
@@ -111,7 +111,7 @@ uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_timeframe.py
 ### 2.5 复现命令
 
 ```bash
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_nu_implied.py
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_nu_implied.py
 ```
 
 ## 3. 门槛 3 · 样本外扩展 · ⚠️ 部分通过
@@ -174,7 +174,7 @@ uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_nu_implied.py
 ### 3.6 复现命令
 
 ```bash
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_oos.py
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_oos.py
 ```
 
 ## 4. 分品种 net 精算（阶段 2 收尾）
@@ -297,7 +297,7 @@ THEN 做多，持仓 8h
 | E · 崩盘前奏 | UP + 跌段 + 高 ATR | 顶厚+跌段+动荡=真正崩盘 |
 | F · UP 单层 | 无 filter · 对照 | Baseline |
 
-### 7.2 结果（2026-07-07 · scripts/ai_tmp/poc_va_asymmetry_stage2_short_scan.py）
+### 7.2 结果（2026-07-07 · docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_short_scan.py）
 
 **关键发现**：**空头信号在短 horizon（2-4h）显著 · 长 horizon（8h）全部塌陷**：
 
@@ -367,7 +367,7 @@ THEN 做多，持仓 8h
 
 ### 7.8 空头 E 深挖 · 6 项验证（阶段 2 补充 · 与多头相同深度）
 
-（2026-07-07 · scripts/ai_tmp/poc_va_asymmetry_stage2_short_e_deep.py · 4h horizon）
+（2026-07-07 · docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_short_e_deep.py · 4h horizon）
 
 #### 7.8.1 分品种 mean（≥60% 保留 edge · 优于多头）
 
@@ -636,7 +636,7 @@ THEN 做空 · 持仓 4h
 **目的**：对洞察 N 的四大主线做最严格验证 · 排除"网格 96 组合可能有 false discovery"
 及"ν_implied 未在新 sweet spot 重算"两条边界。
 
-**执行**（2026-07-07 · scripts/ai_tmp/poc_va_asymmetry_stage2_final_verify.py）：
+**执行**（2026-07-07 · docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_final_verify.py）：
 
 ### 7.10.1 KF-9 ν_implied 全部主线（Bonferroni 校正 p<0.05/96=0.00052）
 
@@ -708,14 +708,14 @@ THEN 做空 · 持仓 4h
 ## 8. 复现命令
 
 ```bash
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_nu_implied.py       # 门槛 2 · ν_implied
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_oos.py              # 门槛 3 · 样本外
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_timeframe.py        # 门槛 1 · 跨周期
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_time_decay.py       # 洞察 L · 触发时段衰减
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_short_scan.py       # 洞察 M · 空头方向探索
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_short_e_deep.py     # 洞察 M · 空头 E 6 项深挖
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_grid_search.py      # 洞察 N · 参数网格搜索
-uv run python -u scripts/ai_tmp/poc_va_asymmetry_stage2_final_verify.py     # 洞察 O · 严格收尾
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_nu_implied.py       # 门槛 2 · ν_implied
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_oos.py              # 门槛 3 · 样本外
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_timeframe.py        # 门槛 1 · 跨周期
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_time_decay.py       # 洞察 L · 触发时段衰减
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_short_scan.py       # 洞察 M · 空头方向探索
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_short_e_deep.py     # 洞察 M · 空头 E 6 项深挖
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_grid_search.py      # 洞察 N · 参数网格搜索
+uv run python -u docs/archive/strategy-research/2026-07-08-poc-va-asymmetry/raw-scripts/poc_va_asymmetry_stage2_final_verify.py     # 洞察 O · 严格收尾
 ```
 
 数据文件：

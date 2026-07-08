@@ -72,10 +72,10 @@ value_area_random_baseline
 - 用 same-direction / random-direction 随机入场判断结构入口是否优于随机。
 ```
 
-轻量随机基准 runner：
+轻量随机基准 runner（已归档）：
 
 ```text
-scripts/analysis/value_area_random_baseline_compare.py
+docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-scripts/value_area_random_baseline_compare.py
 ```
 
 注意：runner 的 `total_net_pnl` 使用 vnpy BacktestResult 口径，只能做同一 runner 内相对比较，不和 trade_clearings 清算口径混算。
