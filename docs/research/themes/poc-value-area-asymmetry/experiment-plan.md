@@ -1,18 +1,19 @@
 # poc-value-area-asymmetry · 实验计划
 
 > 类型：Experiment Plan
-> 状态：**v6（2026-07-08）· 阶段 1+2+3 完成 · KF-22/23 加入 · 分位×ATR 12 格地图冻结 · 阶段 4 待启动**
+> 状态：**v7（2026-07-08）· 阶段 1+2+3 完成 · 阶段 4 目标重新校准：从"三大方向落地"改为"互斥分类器 v3.0 验证"**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 阶段 1 详细流水：[docs/workbench/poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）
 > 阶段 2 详细流水：[docs/workbench/poc-value-area-asymmetry-stage2-guardrails.md](../../../workbench/poc-value-area-asymmetry-stage2-guardrails.md)（v4）
-> 阶段 3 详细流水:[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v7）
+> 阶段 3 详细流水:[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v11）
 
 本计划检验"POC 两侧 value area 不对称是否携带信息量"的命题。阶段 1+2+3
-已完成 · **主题定位为"交易背景分类器"** · 分类器输出 **A 级白名单 5 档 +
-B 级 3 档** · 7 层严格证据链完整（Bonferroni + 差异检验 + Sharpe + 品种
-保留 + 反事实 + 独立性 + 覆盖率）；阶段 4 探索"如何被使用"（quality
-filter / 完整策略 / 多空组合）。
+已完成 · **主题定位为"交易背景分类器"** · 阶段 3 产出 10 tier 体系但**存在
+嵌套（LP ⊆ LL · SP ⊆ SC ⊆ SL）· 不满足"分类器每个 event 属于且仅属于一个
+类"的基本定义**。**阶段 4 唯一目标：把 10 tier 拆成互斥类别 · 独立验证 ·
+冻结分类器 v3.0**。完整策略（入场 / 出场 / 仓位 / cost）**不属于本主题** ·
+留给下游"跨主题组合策略"主题。
 
 ## 0. 全局设定（所有阶段共用）
 
@@ -357,73 +358,151 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 
 ---
 
-## 阶段 4 · 背景分类器的使用与组合
+## 阶段 4 · 互斥分类器 v3.0 验证与冻结
 
-**触发**：阶段 3 通过（✅）· 分类器 7 层严格证据链完整 · A 级白名单 5 档已冻结。
+**触发**：阶段 3 通过（✅）· 10 tier 严格证据链完整 · **但 tier 之间存在嵌套 · 不满足分类器互斥性定义**。
 
-**目标**：**使用阶段 3 产出的分类器 · 探索"如何被使用"**（作为其他策略的
-quality filter · 或与入场/出场规则组合形成完整策略）。这里**第一次涉及具体
-交易规则**。
+**目标**：**把 10 tier 拆成互斥类别 · 每类独立通过完整严格性验证 · 冻结分类器 v3.0 契约**。
 
-### 4.1 阶段 4 三大方向
+### 4.1 阶段 4 唯一目标 · 互斥分类器构造
 
-**方向 A · Quality Filter**（推荐先做 · 与其他主题组合）
+**分类器基本定义**（阶段 4 起遵循）：
+- 一个分类器 = 从事件空间到类别空间的**单值函数**
+- **每个 event 属于且仅属于一个类别**（含"未分类"）
+- 类别之间**严格互斥** · 触发次数无重复计数
 
-- 优先使用 **A 级 5 档**（尤其多头宽松·稳定 · 多头首选·全 两档）
-- 首个目标：与 structural-shaping-alpha（若通过）7 combo（A/B/C/D/E/F/L）组合
-  - 例：combo E baseline + POC 背景标签 · 是否显著优
-  - 用背景标签在触发时刻筛选 combo 事件
-- 次要目标：与 value-area 家族已证伪特征（negative signal）组合
-  - 若某负信号在 POC 背景标签下变正 · 可能是"环境相关"证据
+**当前问题**（阶段 3 遗留）：
+- 10 tier 存在嵌套：`LP ⊆ LL` · `SP ⊆ SC ⊆ SL`
+- 一个 skew=0.08 事件同时命中 `LP_all + LP_stable + LL_all + LL_stable` · **是"多标签系统" · 不是分类器**
 
-**方向 B · 与入场/出场规则合并成完整策略**（首次做 realistic-cost 判决）
+**阶段 4 处理路径**：**从 5 主线嵌套拆成 5 主线互斥（方案 γ）**：
 
-- 触发条件：A 级主线之一 · 触发时刻 t
-- **入场**（阶段 4 探索）：t 时刻市价 / 限价 / 触发线
-- **出场**（洞察 P/U 已给出方向）：
-  - 多头 3 机制版本 · 持仓期随 ATR 自适应（低/中 ATR 8h · 高 ATR 4h）
-  - 空头收敛 + regime 稳定 · 稳定日追踪止损（8-12h）· 转换日目标止盈 4h
-- **仓位**（阶段 4 探索）：Kelly / 定额 / 波动率归一化（洞察 S · 可随 ATR 加仓）
-- 判据：realistic-cost 后年化 Sharpe / MDD / Calmar
+```
+多头（skew ≤ 0.30 ∧ atr ≤ 0.70 ∧ trend ≥ 0.75）:
+  LP_only:  skew ∈ [0, 0.10]                (原 LP)
+  LL_only:  skew ∈ (0.10, 0.30]             (原 LL \ LP)
 
-**方向 C · 多空双向组合对冲**
+空头（skew ≥ 0.70 ∧ trend ≤ 0.20）:
+  SP_only:  atr > 0.80                       (原 SP)
+  SC_only:  atr ∈ (0.67, 0.80]               (原 SC \ SP)
+  SL_only:  atr ∈ (0.50, 0.67]               (原 SL \ SC)
 
-- 阶段 2 洞察 M 已发现：空头 4h + 多头 8h 时间窗口互补
-- 阶段 3 任务 5 + workbench §12.6 已验证：多空触发互斥性 · 首选⊂宽松嵌套
-- 阶段 4 具体化：
-  - 同时触发时的仓位分配（同一品种）
-  - 跨品种时的组合权重
-  - 净头寸波动率控制
+× 稳定/转换 = 10 互斥类别 + "未分类"
+```
 
-### 4.2 阶段 4 输出与判据
+**总类别数**：10 互斥 tier + 1 未分类 = **11 类**（family size = 10 用于 Bonferroni）
 
-**输出**：
-- workbench：`docs/workbench/poc-value-area-asymmetry-stage4-usage.md`
-- 分类器代码：`workspace/common/poc_va_classifier.py`（复用组件）
-- strategy-math-spec.md（**若阶段 4 通过 · 至少一个方向 A/B/C 有实盘可行的完整策略**）
+### 4.2 阶段 4 执行步骤
 
-**判据**：
-- 至少一个方向的完整策略在 realistic-cost 后：
-  - CI 排 0 · Bonferroni 校正后仍显著
-  - 分品种保留度 ≥ 60%
-  - KF-8 四道账户闸门通过前三道
-  - 与既有主题信号相关性 < 0.7（独立性）
+#### Step 1 · 定义互斥类别 · 描述性统计（30-45 分钟）
 
-### 4.3 衍生候选主题（阶段 4 或后续独立立题）
+- 用现有阶段 3 数据 · 应用互斥定义重新分组
+- 对每个互斥类别输出：
+  - n_events / n_indep_days
+  - 主导品种 top3
+  - 品种分布（几个品种触发过）
+  - mean bps / hit / payoff（描述性）
+- **验证互斥性**：∑ 各类 n 应等于总触发数（无重叠）
 
-阶段 1/2/3 已积累若干"未走完"的线索 · 值得独立立题：
+**判据**：若某类 n < 15 · 该类**不进入 Step 2**（样本不足以判决）。
 
-1. **`poc-va-tail-asymmetry`**（KF-01 遗留 · 洞察 A）
-   - A3 用整个 profile · A1/A2/A4 只用 VA 内 · 差异揭示 **VA 外 tail 携带独立信息**
-   - 独立主题验证 tail 假设
+#### Step 2 · 每类独立完整 7 层严格性验证（45-60 分钟）
 
-2. **`volatility-regime-flip`**（KF-10 & KF-16 遗留）
-   - 空头信号在"高 ATR + 跌段" · 波动率突变本身可能是独立信号
-   - 与 POC 主题的关系待厘清
+对**通过 Step 1 门槛**的每个类别 · 独立跑：
 
-3. **`intraday-momentum-decay`**（KF-09 遗留）
-   - 触发时段分析 · 早盘 vs 夜盘信号差异（空头早盘独强）
-   - 独立于 POC 的日内动量结构
+| 层 | 判据 | 阈值 |
+|----|------|------|
+| 1 · 样本量 | n_events / n_indep_days | ≥ 15 / ≥ 5 |
+| 2 · CI（严格 date-cluster）| 95% CI 排 0 | 是 |
+| 3 · Bonferroni | family size = 10 · p < 0.005 | 是 |
+| 4 · 反事实 | vs 随机触发 · p < 0.001 | 是 |
+| 5 · 品种保留率 | 单品种 mean > 0 比例 | ≥ 80% |
+| 6 · 单笔 IR | mean / std | ≥ 0.30 |
+| 7 · 时间稳定性 | 前后半分 mean 差 / 全 mean | ≤ 50% |
+
+#### Step 3 · 判决 + 分档（15 分钟）
+
+- **A 级**：7/7 通过 → 分类器契约 v3.0 白名单主类
+- **B 级**：6/7 通过 · 或 5/7 通过但样本 n<30 → 备用类别（阶段 4+ 扩样本再验）
+- **未分类**：≤ 4/7 通过 → **不进入分类器输出** · tier = None
+
+#### Step 4 · 更新分类器契约 v3.0（30 分钟）
+
+**改造 `classifier-math-spec.md`**：
+- `ClassifierOutput.tier: str | None`（唯一输出 · 不再 `tiers_hit: List[str]`）
+- §7 触发条件改为互斥集合定义
+- 加入互斥性数学证明（§10.3 更新）
+- 版本号 v2.0 → v3.0
+
+**改造 `parameter-selection-spec.md`**：
+- §1 只留互斥类别的评级表
+- 删除"关系 A/B/C"和"去重规则"章节（§1.0 · §1.5）
+- 每类独立单卡（§2）
+
+**更新 `research-status.md`**：
+- 加 KF-24（分类器互斥化 · v3.0 冻结）
+- 更新 A 级白名单
+
+**更新 workbench**：
+- 新增 workbench：`docs/workbench/poc-value-area-asymmetry-stage4-classifier-v3.md`
+- 记录 Step 1-3 完整证据链
+
+### 4.3 阶段 4 判决
+
+**通过条件**（进阶段 5 · 或结题）：
+- ✅ **至少 3 个互斥类别通过 A 级判据**
+- ✅ 至少覆盖多头 + 空头两个方向
+- ✅ 分类器契约 v3.0 冻结 · workbench 归档
+
+**边缘条件**（分类器可用但稀疏）：
+- ⚠️ 只有 1-2 类通过 A 级 · 但方向明确
+- 分类器可实现 · 只暴露少数类别 · 主题**"活跃 · 稀疏可用"**状态
+
+**失败条件**（主题冻结）：
+- ❌ 0 类通过 Bonferroni
+- 说明"互斥后 alpha 全消失" · 分类器无严格证据支撑
+- 主题降级为"探索性发现" · 迁到 `themes-frozen`
+
+### 4.4 阶段 4 后置动作（若通过）
+
+**Step 5 · 代码规范化**（阶段 4 通过后 · 1-2 天）：
+- 提取 `workspace/common/poc_va_classifier.py`
+- 契约映射为可复用组件
+- 单元测试对齐阶段 3 CSV 输出
+- 供下游主题（跨主题组合策略）引用
+
+**Step 6 · 主题状态更新**：
+- **主动性研究暂停 · 但不进 themes-frozen**（分类器持续可用 · 供其他主题引用）
+- 归档：`docs/archive/strategy-research/2026-XX-XX-poc-value-area-asymmetry-classifier-v3`
+- 12 格候选（KF-23）作为**"未来细化候选" · 留给下游主题深挖**
+
+### 4.5 明确排除的内容（不属于本主题）
+
+**阶段 4 明确不做**：
+- ❌ 入场时机（限价 vs 市价 · 追高 vs 回踩）
+- ❌ 出场规则（止损 / 止盈 / 追踪 / 时间衰减）
+- ❌ 仓位管理（Kelly / 定额 / ATR 归一化）
+- ❌ 交易成本精算（realistic-cost）
+- ❌ Sharpe / MDD / Calmar / 覆盖率
+- ❌ 与其他主题的组合验证（如 quality filter）
+- ❌ 12 格分位×制度深化验证
+
+**理由**：以上都属于**"完整策略"层面** · 需要跨主题组合才能有意义。本主题的产出是**分类器组件** · 不是策略。
+
+### 4.6 下游主题（阶段 4 通过后）
+
+**若分类器 v3.0 成立** · 后续可立**新主题**（不属于本主题）：
+
+1. **`poc-va-shaping-composite`** — 分类器 + 结构塑形组合策略
+   - 引用本分类器 + `structural-shaping-alpha` combo
+   - 有独立的 `strategy-math-spec.md`
+   - 承担入场/出场/仓位/cost 责任
+
+2. **`poc-va-quantile-refinement`** — 分位×制度细化研究
+   - 深挖 KF-23 的 12 格候选甜蜜点
+   - 若通过 · 反向升级本主题分类器 tier
+
+3. **`poc-va-tail-asymmetry`** — VA 外 tail 独立信息假设（KF-01 遗留）
 
 ---
 
@@ -435,8 +514,8 @@ quality filter · 或与入场/出场规则组合形成完整策略）。这里*
 |------|------|-------|------|
 | 阶段 1 · 测量 + IC | **✅ 已完成 2026-07-07** | 数十分钟脚本 + 数小时文档 | 主线锁定 · 12+ 洞察 · KF 8 条 |
 | 阶段 2 · 跨周期护栏 + ν_implied + 样本外 + 网格搜索 | **✅ 已完成 2026-07-07** | 分钟级到数十分钟 | 4 大主线定型 · Bonferroni 全过 · KF 15 条 |
-| 阶段 3 · 背景分类器稳健性深度检验 | **✅ 已完成 2026-07-07** | 数小时 | 5 大任务 · 6 大洞察 · 7 层严格证据链 · KF 21 条 · A 级白名单 5 档 |
-| 阶段 4 · 背景分类器的使用与组合 | 待启动 | 视方向 A/B/C 选择 | 首次涉及入场出场规则 · 可能触发衍生主题 |
+| 阶段 3 · 背景分类器稳健性深度检验 | **✅ 已完成 2026-07-07** | 数小时 | 5 大任务 · 6 大洞察 · 7 层严格证据链 · KF 23 条 · 10 tier 体系（含嵌套）|
+| 阶段 4 · 互斥分类器 v3.0 验证与冻结 | **待启动** | 2-3 小时 | 拆分互斥 + 独立完整验证 · 冻结契约 v3.0 · **不做完整策略** |
 
 ---
 
@@ -444,10 +523,10 @@ quality filter · 或与入场/出场规则组合形成完整策略）。这里*
 
 - 阶段 1：[docs/workbench/poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）✅
 - 阶段 2：[docs/workbench/poc-value-area-asymmetry-stage2-guardrails.md](../../../workbench/poc-value-area-asymmetry-stage2-guardrails.md)（v4）✅
-- 阶段 3：[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v7）✅
-- 阶段 4+：workbench 后续报告
+- 阶段 3：[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v11）✅
+- 阶段 4：`docs/workbench/poc-value-area-asymmetry-stage4-classifier-v3.md`（待建）
 - 主题稳定后归档到 `docs/archive/strategy-research/`
-- 通过后撰写 strategy-math-spec.md
+- 分类器契约 v3.0 冻结后不再撰写 strategy-math-spec.md（本主题不承担完整策略）
 
 ---
 
