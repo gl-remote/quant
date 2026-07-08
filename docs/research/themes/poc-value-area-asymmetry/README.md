@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 主题
 
 > 类型：Theme / 交易背景分类器
-> 状态：**阶段 1+2+3 完成 · 分类器契约已冻结（classifier-math-spec v1.2）· 23 条 KF · 阶段 4 待启动**
+> 状态：**阶段 1+2+3 完成 · 分类器契约 v2.0 冻结（数学契约与参数选择分离）· 23 条 KF · 阶段 4 待启动**
 > 创建时间：2026-07-07
 > 最近更新：2026-07-08
 > 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
@@ -179,12 +179,12 @@ profile 构建的窗口必须严格在 t 之前（前一天 / 前一周 / rollin
 | 目的 | 文档 |
 |------|------|
 | 主题入口 | 本文件 |
-| 当前研究状态 | [research-status.md](research-status.md) |
-| 实验计划 | [experiment-plan.md](experiment-plan.md) |
+| 当前研究状态（23 KF）| [research-status.md](research-status.md) |
+| 实验计划（阶段 1-3 总结 + 阶段 4 起点）| [experiment-plan.md](experiment-plan.md) |
+| **分类器数学契约**（唯一定义源）| [classifier-math-spec.md](classifier-math-spec.md) v2.0 |
+| **参数选择与性能报告**（一眼可读终版）| [parameter-selection-spec.md](parameter-selection-spec.md) v1 ⭐ |
 | Archive 引用清单 | [archive-references.md](archive-references.md) |
-| 数学规格 | 尚未撰写（阶段 1 通过后按 quant-math-spec 补） |
-| 参数选择规格 | 尚未撰写（阶段 2 通过后补） |
-| 工程实现细节 | 尚未撰写（进入完整回测框架时补） |
+| 工程实现细节 | 尚未撰写（阶段 4 起写 `workspace/common/poc_va_classifier.py` 时补）|
 | 家族反例（value-area）| [../../themes-frozen/value-area/README.md](../../themes-frozen/value-area/README.md) |
 | 前置铺垫（structural-shaping-alpha）| [../structural-shaping-alpha/README.md](../structural-shaping-alpha/README.md) |
 | 长期框架 | [../../../roadmap/strategy-research-framework.md](../../../roadmap/strategy-research-framework.md) |

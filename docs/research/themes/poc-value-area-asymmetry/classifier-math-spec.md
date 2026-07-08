@@ -1,11 +1,12 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
-> 类型：Theme / 分类器数学规格
-> 状态：**v1.3（2026-07-08）· §11.4 加 KF-23 未来细化 · §5.1a 采样精度冻结 · §7.3 Sharpe 口径修正 · 阶段 4 起冻结**
+> 类型：Theme / 分类器数学规格（数学契约唯一源）
+> 状态：**v2.0（2026-07-08）· 参数选择/性能指标/机制假说全部剥离到 parameter-selection-spec.md · spec 只承载数学契约**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
-> 实验计划：[experiment-plan.md](experiment-plan.md)（v5）
-> 阶段 3 详细流水：[docs/workbench/poc-value-area-asymmetry-stage3-robustness.md](../../../workbench/poc-value-area-asymmetry-stage3-robustness.md)（v7）
+> 参数选择与性能报告：[parameter-selection-spec.md](parameter-selection-spec.md)（一眼可读版）
+> 实验计划：[experiment-plan.md](experiment-plan.md)
+> 阶段 3 详细流水：workbench:poc-value-area-asymmetry-stage3-robustness
 
 ## 1. 目标与契约边界
 
@@ -425,58 +426,43 @@ M_stable := { (s, t) ∈ M : transition_flag(s, t) = 0 }
 M_trans  := { (s, t) ∈ M : transition_flag(s, t) = 1 }
 ```
 
-### 7.3 10 档评级映射（阶段 3 §12.9 冻结 · v8 修正 Sharpe/IR 口径）
+### 7.3 Tier 定义（10 档 · 用于阶段 4 引用）
 
-**⚠️ 修正说明**（对应 workbench §12.3 v8）：v1 初稿 Sharpe 数据用错误口径
-`sqrt(yearly_events)` 而非 `sqrt(252)` 年化 · 虚高约 10 倍 · 已作废。
-本表 Sharpe = **按 event_time 日期聚合每日累计 bps · sqrt(252) 年化 · gross 版**。
-评级判据改为以**单笔 IR** 作为分类器质量代理（Sharpe 仅参考）。
+**说明**：本节仅定义 tier 的**数学集合**·**参数选择 / 评级 / 性能指标 / 机制假说**
+详见 [parameter-selection-spec.md](parameter-selection-spec.md)（一眼可读版）。
 
-| Tier ID | 集合 | 综合评级 | Bonf | 反事实 | 单笔 IR | Sharpe (gross) | 品种保留 |
-|---------|------|:-------:|:----:|:------:|:------:|:-------------:|:------:|
-| `LP_all` | LP | **A+** | ✅ | ✅ | **+0.577** | +1.59 | 100% |
-| `LP_stable` | LP ∩ stable | **B**（n=52 少）| ❌ | ✅ | **+0.603** | +1.06 | 100% |
-| `LP_trans` | LP ∩ trans | **A** | ✅ | ✅ | +0.563 | +1.22 | 100% |
-| `LL_stable` | LL ∩ stable | **A+** ⭐ | ✅ | ✅ | +0.478 | **+1.48** | 90% |
-| `LL_trans` | LL ∩ trans | **B+** | ✅ 边缘 | ✅ | +0.298 | +1.03 | 82% |
-| `SP_stable` | SP ∩ stable | **A** | ✅ | ✅ | +0.407 | +1.20 | 100% |
-| `SP_trans` | SP ∩ trans | **C** | ❌ | ✅ | +0.292 | +1.09 | 83% |
-| `SL_stable` | SL ∩ stable | **A** | ✅ | ✅ | +0.370 | +1.40 | 100% |
-| `SL_trans` | SL ∩ trans | **B-** | ❌ 边缘 | ✅ | +0.226 | +1.20 | 88% |
-| `SC_stable` | SC ∩ stable | **A** | ✅ | ✅ | +0.349 | +1.24 | 100% |
-| `SC_trans` | SC ∩ trans | **C+** | ❌ | ✅ | +0.235 | +1.02 | 86% |
-
-**评级判据**：
-```text
-tier(id) :=
-    "A+"     if Bonf_pass ∧ CF_pass ∧ IR_per_trade > 0.45 ∧ symbol_retain ≥ 0.90
-    "A"      if Bonf_pass ∧ CF_pass ∧ IR_per_trade > 0.30 ∧ symbol_retain ≥ 0.90
-    "B+"     if Bonf_edge ∧ CF_pass ∧ IR_per_trade > 0.25
-    "B"      if CF_pass ∧ IR_per_trade > 0.30 (Bonf 因 n 少 fail)
-    "B-"     if CF_pass ∧ IR_per_trade > 0.20 (Bonf edge fail)
-    "C+"     if Bonf_fail ∧ CF_pass ∧ IR_per_trade > 0.22
-    "C"      if Bonf_fail ∧ CF_pass ∧ IR_per_trade > 0.18
-    "None"   otherwise
-```
-
-**注**：Bonferroni 判据 `p < 0.05 / 8 = 0.00625`（family size = 8 · 见 阶段 3 §12.1）。
-反事实判据 `p_vs_random < 0.001`（见 阶段 3 §12.5）。
-Sharpe (gross) 仅供参考 · **未包含仓位管理 / 组合协方差 / 具体入场出场规则 / 交易成本**。
-net-15bps 版 Sharpe 见 workbench §12.3。
-
-### 7.4 白名单
+对每个主线 `M ∈ {LP, LL, SP, SL, SC}` · tier ID 定义为：
 
 ```text
-Whitelist_A := { LP_all, LP_trans, LL_stable, SP_stable, SL_stable, SC_stable }
-Whitelist_B := { LP_stable, LL_trans, SL_trans }
-Whitelist_C := { SP_trans, SC_trans }
+M_all    := M                          -- 全期别
+M_stable := M ∩ { transition_flag = 0 }
+M_trans  := M ∩ { transition_flag = 1 }
 ```
 
-**A 级实际可用主线（去重后 5 档）**：
+**完整 tier ID 列表**：
+
 ```text
-Whitelist_A_dedup := { LP_all, LL_stable, SC_stable, SL_stable, LP_trans }
+Tiers := {
+    LP_all, LP_stable, LP_trans,
+    LL_all, LL_stable, LL_trans,
+    SP_all, SP_stable, SP_trans,
+    SL_all, SL_stable, SL_trans,
+    SC_all, SC_stable, SC_trans,
+}
 ```
-（`SP_stable ⊆ SC_stable`，二选一 · 阶段 4 推荐 `SC_stable`）
+
+**评级、Bonferroni / 反事实检验、IR、Sharpe、品种保留率等所有性能指标**
+统一在 [parameter-selection-spec.md](parameter-selection-spec.md) §2 中报告。
+
+### 7.4 白名单（数学定义 · 具体分级见 parameter-selection-spec.md §1）
+
+```text
+Whitelist_A := 阶段 3 §12.9 定义的严格通过 Bonferroni + 反事实 + 品种保留的 tier 集合
+Whitelist_B := 单一 Bonferroni 未过但满足其他判据的 tier
+Whitelist_C := 谨慎使用（多个判据 fail 但反事实过）
+```
+
+各 tier 归属见 [parameter-selection-spec.md §1](parameter-selection-spec.md)。
 
 ## 8. 严格无未来函数约束（Leakage Boundary）
 
@@ -616,12 +602,17 @@ Timeline_s := [ClassifierOutput(s, t) : t ∈ E_s, warmup_ok(s, t) = True]
 | `atr_thresholds` | {0.33, 0.50, 0.67, 0.70, 0.80} | 洞察 N/P/Q |
 | `trend_thresholds` | {0.20, 0.33, 0.67, 0.75} | 洞察 N |
 
-### 10.6 已知边界与使用建议
+### 10.6 已知边界（数学层面）
 
-- **`LP_stable`（B 级 · n=52）** · 尽管 CI 排 0 · 但 Bonferroni fail · 建议阶段 4 扩样本外补验
-- **`SP_trans / SC_trans`（C 级）** · 阶段 4 落地前需补验 · 或作为 B 级 `SL_trans` 的降级版
-- **空头 3 主线高度重叠**（Jaccard 0.65-0.86）· 阶段 4 只用一个 · 推荐 `SC_stable`
-- **`transition_flag` 的滞后**（KF-18） · 阶段 4 若需实时判断 · 需考虑同日 atr rank 计算延迟
+- **`M_stable ∪ M_trans = M`**（对任意 M ∈ 5 主线）· `M_stable ∩ M_trans = ∅`
+- **嵌套**：`LP ⊆ LL` · `SP ⊆ SC ⊆ SL` · stable/trans 拆分保持嵌套
+- **多空互斥**：`(LP ∪ LL) ∩ (SP ∪ SC ∪ SL) = ∅`（skew_label 方向严格互斥）
+- **warmup 硬边界**：`warmup_ok = False` ⇒ 所有 tier 为空 · transition_flag = None
+- **transition_flag 滞后**：依赖 `atr_bucket_session` 的日级切换 · 同日 atr rank
+  计算延迟不引入 leakage（因用 `d(t) - 1` 的 daily 值）
+
+**参数选择相关的使用限制、扩样本建议、机制假说**等非契约内容
+详见 [parameter-selection-spec.md §5](parameter-selection-spec.md)。
 
 ## 11. 版本控制与阶段 4 引用
 
@@ -649,30 +640,22 @@ Strategy(s, t) :=
 
 分类器规格不重复写入 strategy-math-spec.md · 保证 single source of truth。
 
-### 11.3 阶段 4 常见组合建议（非契约 · 参考性）
+### 11.3 参数选择与阶段 4 使用建议（外部引用）
 
-以下**仅列出阶段 3 洞察暗示的用法** · 阶段 4 落地时需重新验证：
+**分类器契约（本文件）不承载**：
+- 参数选择的评级判据
+- 单个 tier 的性能指标（mean / IR / Sharpe / hit / 品种保留率）
+- 机制假说与经济解读
+- 阶段 4 落地的组合建议
+- 分位×制度未来细化候选（KF-23 · 12 格地图）
 
-- **多头首选**：全天触发 · 8h 固定持仓（洞察 R · 转换日衰减 11% 可忽略）
-- **多头 3 机制分解**（洞察 P）：
-  - `LP_all ∩ atr_regime = "low"` → 8h 持仓 · 稳定线性
-  - `LP_all ∩ atr_regime = "mid"` → 8h 持仓 · 尖峰厚尾
-  - `LP_all ∩ atr_regime = "high"` → **4h 持仓**（避免后期回吐）
-- **空头核心**：`SC_stable` · 4h 触发 · regime 稳定日专用
-- **仓位随 ATR 自适应**（洞察 S）：`atr_regime = "high"` 时可加仓
+以上内容全部见 [parameter-selection-spec.md](parameter-selection-spec.md)：
 
-### 11.4 未来细化 · 分位 × 制度地图（KF-23 · 尚未纳入契约）
-
-阶段 3 workbench §13 发现 · 多头 4 分位 × 3 ATR 制度 12 格中：
-
-- **5 个稳定甜蜜点**：段1/2/3·ATR低 + 段4·ATR高（部分 + 段2·ATR高）
-- **空头 3 个反常甜蜜点**：段4·ATR低/高 + 段3·ATR中（n=14-18 · 待扩样本外验证）
-- **相邻格子方向一致**（多头 100% · 空头 86% · 段1·空头ATR低 是反向陷阱但已被 filter 排除）
-
-**契约上暂不加入**（因为部分格子 n<20 · 未通过严格 CI + Bonferroni 全套验证）·
-但阶段 4 落地时应**优先针对这些格子做完整验证** · 若通过则考虑升级到契约 tier。
-
-详见 workbench §13.13 · 各格子附有假设性经济机制解释表。
+- §1 · 一眼可读总览（A/B/C 白名单 + 12 格候选）
+- §2 · 10 档评级卡（每 tier 单独一节 · 含机制假说）
+- §3 · 12 格分位×制度地图（KF-23）
+- §4 · 阶段 4 使用建议（起点组合 / 出场策略 / 仓位管理）
+- §5 · 已知边界与阶段 4 必做验证
 
 ## 附录 A · 与阶段 3 workbench 的对应关系
 
