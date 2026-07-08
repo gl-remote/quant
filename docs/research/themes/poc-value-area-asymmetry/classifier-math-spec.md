@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
 > 类型：Theme / 分类器数学规格（数学契约唯一源）
-> 状态：**v2.0（2026-07-08）· 参数选择/性能指标/机制假说全部剥离到 parameter-selection-spec.md · spec 只承载数学契约**
+> 状态：**v3.0（2026-07-08）· 互斥单值分类器 · 10 mutex tier · 阶段 4 冻结**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 参数选择与性能报告：[parameter-selection-spec.md](parameter-selection-spec.md)（一眼可读版）
@@ -32,17 +32,17 @@
 
 ```text
 Classifier(s, t) := (
-  skew_label,           -- 偏度分类
-  atr_regime,           -- 波动率制度
-  trend_regime,         -- 趋势制度
+  skew_label,           -- 偏度分类（中间态）
+  atr_regime,           -- 波动率制度（中间态）
+  trend_regime,         -- 趋势制度（中间态）
   transition_flag,      -- regime 转换标记
-  tier_label,           -- 综合评级（A/B/C 或 None）
+  tier: str | None,     -- 单值互斥 tier · 见 §7.3（10 类之一 或 None）
   meta                  -- 完整原始数值
 )
 ```
 
-**每个输出对应阶段 3 §12.9 白名单的一个档位**（若命中）· 或
-`tier_label = None`（若未触发任何主线）。
+**每个 event 属于且仅属于一个 tier**（或 `tier = None` · 未分类）·
+不再是 `List[str]` · 输出严格单值 · 互斥定义见 §7。
 
 ## 2. 基础对象与量纲
 
@@ -274,7 +274,7 @@ n_warmup_days := max(n_rolling_days, n_atr_lookback + 10) = 20
 ∧ TR_s / ATR_s 在 D_s^prev(t, n_rolling_days) 上全可定义
 ```
 
-否则 `Classifier(s, t) := ClassifierOutput(warmup_ok=False, tiers_hit=[], transition_flag=None, ...)` （不触发）。
+否则 `Classifier(s, t) := ClassifierOutput(warmup_ok=False, tier=None, transition_flag=None, ...)` （不触发）。
 
 ## 6. 分类器中间标签
 
@@ -367,102 +367,92 @@ transition_flag(s, t) :=
 
 **注**：`d(t) - d'` 用 session 计数（不含周末停牌 · 只算实际交易日 · 沿用 §2.1 语义）。
 
-## 7. 触发条件集合（10 档 · A/B/C 评级）
+## 7. 触发条件集合（10 互斥 tier）
 
-### 7.1 5 大主线定义
+### 7.1 互斥类别定义
 
-**多头首选**（KF-12 · sweet spot）：
-```text
-LP := { (s, t) : skew_label(s, t) = "DN_strict"
-                ∧ atr_rank(s, t) ≤ 0.70
-                ∧ trend_rank(s, t) ≥ 0.75 }
-```
-
-**多头宽松**（KF-15）：
-```text
-LL := { (s, t) : skew_label(s, t) ∈ {"DN_strict", "DN_loose"}
-                ∧ atr_rank(s, t) ≤ 0.70
-                ∧ trend_rank(s, t) ≥ 0.75 }
-```
-
-**注**：等价于 `signed_skew_rank(s, t) ≤ 0.30`。
-
-**空头首选**：
-```text
-SP := { (s, t) : skew_label(s, t) = "UP"
-                ∧ atr_rank(s, t) > 0.80
-                ∧ trend_rank(s, t) ≤ 0.20 }
-```
-
-**空头宽松**：
-```text
-SL := { (s, t) : skew_label(s, t) = "UP"
-                ∧ atr_rank(s, t) > 0.50
-                ∧ trend_rank(s, t) ≤ 0.20 }
-```
-
-**空头收敛**（洞察 Q 建议 · atr>0.67 单一档）：
-```text
-SC := { (s, t) : skew_label(s, t) = "UP"
-                ∧ atr_rank(s, t) > 0.67
-                ∧ trend_rank(s, t) ≤ 0.20 }
-```
-
-**嵌套关系**（洞察 F · Jaccard 0.65-0.86 已验证）：
+**多头方向**（`skew_label ∈ {DN_strict, DN_loose} ∧ atr_rank ≤ 0.70 ∧ trend_rank ≥ 0.75`）：
 
 ```text
-LP ⊆ LL
-SP ⊆ SC ⊆ SL
-LP ∩ SP = LP ∩ SC = LP ∩ SL = ∅    (skew 方向互斥)
-LL ∩ SP = LL ∩ SC = LL ∩ SL = ∅
+LP_only := { (s, t) : skew_label(s, t) = "DN_strict"
+                    ∧ atr_rank(s, t) ≤ 0.70
+                    ∧ trend_rank(s, t) ≥ 0.75 }
+                                              -- 即 signed_skew_rank ≤ 0.10
+
+LL_only := { (s, t) : skew_label(s, t) = "DN_loose"
+                    ∧ atr_rank(s, t) ≤ 0.70
+                    ∧ trend_rank(s, t) ≥ 0.75 }
+                                              -- 即 signed_skew_rank ∈ (0.10, 0.30]
 ```
 
-### 7.2 稳定/转换期拆分
+**空头方向**（`skew_label = UP ∧ trend_rank ≤ 0.20`）：
 
-对每个主线 `M ∈ {LP, LL, SP, SL, SC}`：
+```text
+SP_only := { (s, t) : skew_label(s, t) = "UP"
+                    ∧ atr_rank(s, t) > 0.80
+                    ∧ trend_rank(s, t) ≤ 0.20 }
+                                              -- 极高波动率
+
+SC_only := { (s, t) : skew_label(s, t) = "UP"
+                    ∧ 0.67 < atr_rank(s, t) ≤ 0.80
+                    ∧ trend_rank(s, t) ≤ 0.20 }
+                                              -- 高波动率
+
+SL_only := { (s, t) : skew_label(s, t) = "UP"
+                    ∧ 0.50 < atr_rank(s, t) ≤ 0.67
+                    ∧ trend_rank(s, t) ≤ 0.20 }
+                                              -- 中偏高波动率
+```
+
+**互斥性证明**：
+
+```text
+LP_only ∩ LL_only = ∅
+    (skew_label 二分 · DN_strict vs DN_loose 互斥)
+
+SP_only ∩ SC_only ∩ SL_only = ∅
+    (atr_rank 区间不重叠 · (0.80, ∞) / (0.67, 0.80] / (0.50, 0.67] 严格分割)
+
+(LP_only ∪ LL_only) ∩ (SP_only ∪ SC_only ∪ SL_only) = ∅
+    (skew 方向严格互斥 · DN_* vs UP 无交集)
+```
+
+### 7.2 稳定/转换拆分
+
+对每个基础类 `M ∈ {LP_only, LL_only, SP_only, SC_only, SL_only}`：
 
 ```text
 M_stable := { (s, t) ∈ M : transition_flag(s, t) = 0 }
 M_trans  := { (s, t) ∈ M : transition_flag(s, t) = 1 }
 ```
 
-### 7.3 Tier 定义（10 档 · 用于阶段 4 引用）
+由 `transition_flag ∈ {0, 1}` 二分 · 每个基础类拆分为互斥的 stable / trans ·
+共 5 × 2 = **10 互斥 tier**。
 
-**说明**：本节仅定义 tier 的**数学集合**·**参数选择 / 评级 / 性能指标 / 机制假说**
-详见 [parameter-selection-spec.md](parameter-selection-spec.md)（一眼可读版）。
-
-对每个主线 `M ∈ {LP, LL, SP, SL, SC}` · tier ID 定义为：
-
-```text
-M_all    := M                          -- 全期别
-M_stable := M ∩ { transition_flag = 0 }
-M_trans  := M ∩ { transition_flag = 1 }
-```
-
-**完整 tier ID 列表**：
+### 7.3 Tier ID 列表
 
 ```text
 Tiers := {
-    LP_all, LP_stable, LP_trans,
-    LL_all, LL_stable, LL_trans,
-    SP_all, SP_stable, SP_trans,
-    SL_all, SL_stable, SL_trans,
-    SC_all, SC_stable, SC_trans,
+    LP_only_stable, LP_only_trans,
+    LL_only_stable, LL_only_trans,
+    SP_only_stable, SP_only_trans,
+    SC_only_stable, SC_only_trans,
+    SL_only_stable, SL_only_trans
 }
 ```
 
-**评级、Bonferroni / 反事实检验、IR、Sharpe、品种保留率等所有性能指标**
-统一在 [parameter-selection-spec.md](parameter-selection-spec.md) §2 中报告。
+`|Tiers| = 10` · 两两不相交 · 并集 = 「可分类事件全集」（warmup_ok ∧ 命中任一基础类）。
 
-### 7.4 白名单（数学定义 · 具体分级见 parameter-selection-spec.md §1）
+### 7.4 白名单（v3.0 · 阶段 4 冻结）
 
-```text
-Whitelist_A := 阶段 3 §12.9 定义的严格通过 Bonferroni + 反事实 + 品种保留的 tier 集合
-Whitelist_B := 单一 Bonferroni 未过但满足其他判据的 tier
-Whitelist_C := 谨慎使用（多个判据 fail 但反事实过）
-```
+- **A 级 6 个**：`LP_only_full` · `LL_only_stable` · `SP_only_stable` · `SP_only_trans` · `SC_only_full` · `SC_only_trans`
+- **A- 级 3 个**（时稳警示）：`LL_only_full` · `LL_only_trans` · `SP_only_full`
+- **未过 6 个**：`LP_only_stable` / `LP_only_trans` / `SC_only_stable` / `SL_only_full` / `SL_only_stable` / `SL_only_trans`
 
-各 tier 归属见 [parameter-selection-spec.md §1](parameter-selection-spec.md)。
+注：`_full` 表示不区分 stable/trans（例如 `LP_only_full = LP_only_stable ∪ LP_only_trans`）·
+`_full` 不是独立 tier · 是 stable/trans 的并集报告口径。
+
+具体判据与性能指标见 [parameter-selection-spec.md](parameter-selection-spec.md)。
 
 ## 8. 严格无未来函数约束（Leakage Boundary）
 
@@ -481,7 +471,7 @@ Data_inputs(s, t) := {
 ### 8.2 时序保证
 
 ```text
-∀ (s, t) ∈ Whitelist_A_dedup ∪ Whitelist_B ∪ Whitelist_C:
+∀ (s, t) with tier(s, t) ≠ None:
     max { time(u) : u ∈ Data_inputs(s, t) } < time(t)
 ```
 
@@ -523,9 +513,14 @@ ClassifierOutput := {
     is_crossover_today: bool
     transition_flag: bool | None    -- None if warmup 不足
 
-    -- Tier 命中（可能命中多个 · 按嵌套关系）
-    tiers_hit: List[str] ⊆ Whitelist_A ∪ Whitelist_B ∪ Whitelist_C
-    -- e.g. ["LP_all", "LP_trans", "LL_stable", "LL_trans"] 若 LP 且转换期
+    -- Tier 命中（单值 · 互斥 · 见 §7）
+    tier: str | None
+    -- ∈ {LP_only_stable, LP_only_trans,
+    --    LL_only_stable, LL_only_trans,
+    --    SP_only_stable, SP_only_trans,
+    --    SC_only_stable, SC_only_trans,
+    --    SL_only_stable, SL_only_trans}
+    -- 或 None（未命中任何基础类 / warmup 未满足）
 
     -- Warmup 状态
     warmup_ok: bool
@@ -536,20 +531,24 @@ ClassifierOutput := {
 
 ```text
 ∀ output:
-    warmup_ok = False  =>  tiers_hit = [] ∧ transition_flag = None
+    warmup_ok = False  =>  tier = None ∧ transition_flag = None
     warmup_ok = True   =>  transition_flag ∈ {True, False}
 
-    "LP_all" ∈ tiers_hit  <=>  LP condition ∧ warmup_ok
-    "LP_stable" ∈ tiers_hit  <=>  "LP_all" ∈ tiers_hit ∧ transition_flag = False
-    "LP_trans" ∈ tiers_hit  <=>  "LP_all" ∈ tiers_hit ∧ transition_flag = True
+    -- 互斥性（单值不变量）
+    |{ hit tier }| ≤ 1
+    tier ∈ Tiers ∪ {None}                    -- 10 mutex tier 之一 或 None
 
-    (类似 LL / SP / SL / SC)
+    -- Tier 与中间标签的等价关系（tier ≠ None 时）
+    tier = "LP_only_stable"
+        <=>  skew_label = "DN_strict"
+             ∧ atr_rank ≤ 0.70
+             ∧ trend_rank ≥ 0.75
+             ∧ transition_flag = False
+    tier = "LP_only_trans"
+        <=>  (LP_only conditions) ∧ transition_flag = True
+    (LL_only / SP_only / SC_only / SL_only × stable/trans 类似 · 见 §7.1)
 
-    "SP_stable" ∈ tiers_hit  =>  "SC_stable" ∈ tiers_hit  =>  "SL_stable" ∈ tiers_hit
-    (嵌套关系 · SP ⊆ SC ⊆ SL 稳定期均成立)
-
-    LP ∩ (SP ∪ SC ∪ SL) 空集不变量：
-    "LP_all" ∈ tiers_hit  =>  {SP_all, SC_all, SL_all} ∩ tiers_hit = ∅
+    -- 已删除嵌套关系不变量（v3.0 互斥类别不再有嵌套）
 ```
 
 ### 9.3 批量输出
@@ -576,12 +575,16 @@ Timeline_s := [ClassifierOutput(s, t) : t ∈ E_s, warmup_ok(s, t) = True]
 - `D_s^prev(t, N)` 只包含 `d' < d(t)` · 严格历史
 - `daily_atr_10_bps(s, d(t)-1)` 使用前一 session（阶段 3 洞察 R 明确 t 时刻已知）
 
-### 10.3 触发条件正交性
+### 10.3 触发条件完全互斥性
 
-- 5 主线 skew 方向严格互斥（DN vs UP）· `LP/LL ∩ SP/SC/SL = ∅` 已在 §7.1 声明
-- 空头 3 主线嵌套：`SP ⊆ SC ⊆ SL`（Jaccard 0.65-0.86 · 阶段 3 §12.6）
-- 多头 2 主线嵌套：`LP ⊆ LL`（skew_label DN_strict ⊆ DN_strict ∪ DN_loose）
-- 稳定/转换互斥：`M_stable ∩ M_trans = ∅` · `M_stable ∪ M_trans = M`
+- **所有 10 tier 两两不相交**：
+  `∀ T_i, T_j ∈ Tiers, i ≠ j : T_i ∩ T_j = ∅`
+- **并集是「可分类事件全集」**：
+  `⋃ Tiers = { (s, t) : warmup_ok(s, t) ∧ tier(s, t) ≠ None }`
+- 互斥来源：
+  - skew 方向严格互斥（DN_strict / DN_loose vs UP · §6.1）
+  - 空头 3 类 atr_rank 区间不重叠（(0.50, 0.67] / (0.67, 0.80] / (0.80, ∞) · §7.1）
+  - stable / trans 由 `transition_flag ∈ {0, 1}` 二分（§7.2）
 
 ### 10.4 Warmup 不变量
 
@@ -604,10 +607,9 @@ Timeline_s := [ClassifierOutput(s, t) : t ∈ E_s, warmup_ok(s, t) = True]
 
 ### 10.6 已知边界（数学层面）
 
-- **`M_stable ∪ M_trans = M`**（对任意 M ∈ 5 主线）· `M_stable ∩ M_trans = ∅`
-- **嵌套**：`LP ⊆ LL` · `SP ⊆ SC ⊆ SL` · stable/trans 拆分保持嵌套
-- **多空互斥**：`(LP ∪ LL) ∩ (SP ∪ SC ∪ SL) = ∅`（skew_label 方向严格互斥）
-- **warmup 硬边界**：`warmup_ok = False` ⇒ 所有 tier 为空 · transition_flag = None
+- **单值输出 · 完全互斥**：`tier ∈ Tiers ∪ {None}` · `|Tiers| = 10` · 两两不相交（§10.3）
+- **stable/trans 拆分**：`M_stable ∩ M_trans = ∅` · `M_stable ∪ M_trans = M`（对任意基础类 M）
+- **warmup 硬边界**：`warmup_ok = False` ⇒ `tier = None` ∧ `transition_flag = None`
 - **transition_flag 滞后**：依赖 `atr_bucket_session` 的日级切换 · 同日 atr rank
   计算延迟不引入 leakage（因用 `d(t) - 1` 的 daily 值）
 
@@ -625,17 +627,22 @@ Timeline_s := [ClassifierOutput(s, t) : t ∈ E_s, warmup_ok(s, t) = True]
 
 ### 11.2 阶段 4 引用方式
 
-阶段 4 的 `strategy-math-spec.md` 通过 `import` 语义引用：
+阶段 4 的 `strategy-math-spec.md` 通过 `import` 语义引用 · v3.0 输出单值 tier ·
+分支采用相等判断：
 
 ```text
-Classifier := as defined in classifier-math-spec.md v1
+Classifier := as defined in classifier-math-spec.md v3.0
 
 Strategy(s, t) :=
-    tier := Classifier(s, t).tiers_hit
-    if "LL_stable" ∈ tier:
-        entry := EntryFunc_LL_stable(s, t, ...)
-        exit  := ExitFunc_LL_stable(s, t, ...)
-    ... (其他主线)
+    tier := Classifier(s, t).tier            -- 单值 · str | None
+    if tier == "LL_only_stable":
+        entry := EntryFunc_LL_only_stable(s, t, ...)
+        exit  := ExitFunc_LL_only_stable(s, t, ...)
+    elif tier == "SP_only_trans":
+        ...
+    elif tier is None:
+        skip                                  -- 未分类 · 不进场
+    ... (其他互斥 tier)
 ```
 
 分类器规格不重复写入 strategy-math-spec.md · 保证 single source of truth。
@@ -687,6 +694,14 @@ workspace/common/poc_va_classifier.py
 │   ├── build_profile(contract, session) -> ProfileData
 │   ├── compute_a3_skew(profile) -> float
 │   ├── evaluate_event(contract, event_time) -> ClassifierOutput
+│   │       # ClassifierOutput.tier: Literal[
+│   │       #   "LP_only_stable", "LP_only_trans",
+│   │       #   "LL_only_stable", "LL_only_trans",
+│   │       #   "SP_only_stable", "SP_only_trans",
+│   │       #   "SC_only_stable", "SC_only_trans",
+│   │       #   "SL_only_stable", "SL_only_trans"
+│   │       # ] | None
+│   │       # 单值互斥输出 · 见 §9
 │   └── generate_timeline(contract, start, end) -> List[ClassifierOutput]
 └── class ClassifierConfig
     ├── skew_thresholds, atr_thresholds, trend_thresholds
