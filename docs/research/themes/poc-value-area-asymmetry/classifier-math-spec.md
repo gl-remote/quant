@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 分类器数学规格
 
 > 类型：Theme / 分类器数学规格
-> 状态：**v1.2（2026-07-08）· §5.1a 加采样精度冻结约束 · v1.1 修正 Sharpe 口径 · 阶段 4 起冻结**
+> 状态：**v1.3（2026-07-08）· §11.4 加 KF-23 未来细化 · §5.1a 采样精度冻结 · §7.3 Sharpe 口径修正 · 阶段 4 起冻结**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)（v5）
@@ -660,6 +660,19 @@ Strategy(s, t) :=
   - `LP_all ∩ atr_regime = "high"` → **4h 持仓**（避免后期回吐）
 - **空头核心**：`SC_stable` · 4h 触发 · regime 稳定日专用
 - **仓位随 ATR 自适应**（洞察 S）：`atr_regime = "high"` 时可加仓
+
+### 11.4 未来细化 · 分位 × 制度地图（KF-23 · 尚未纳入契约）
+
+阶段 3 workbench §13 发现 · 多头 4 分位 × 3 ATR 制度 12 格中：
+
+- **5 个稳定甜蜜点**：段1/2/3·ATR低 + 段4·ATR高（部分 + 段2·ATR高）
+- **空头 3 个反常甜蜜点**：段4·ATR低/高 + 段3·ATR中（n=14-18 · 待扩样本外验证）
+- **相邻格子方向一致**（多头 100% · 空头 86% · 段1·空头ATR低 是反向陷阱但已被 filter 排除）
+
+**契约上暂不加入**（因为部分格子 n<20 · 未通过严格 CI + Bonferroni 全套验证）·
+但阶段 4 落地时应**优先针对这些格子做完整验证** · 若通过则考虑升级到契约 tier。
+
+详见 workbench §13.13 · 各格子附有假设性经济机制解释表。
 
 ## 附录 A · 与阶段 3 workbench 的对应关系
 

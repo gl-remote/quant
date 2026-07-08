@@ -1,8 +1,9 @@
 # poc-value-area-asymmetry · 主题
 
-> 类型：Theme / 假设生成期
-> 状态：立题（2026-07-07）· 阶段 1 待启动（测量与显著性）
+> 类型：Theme / 交易背景分类器
+> 状态：**阶段 1+2+3 完成 · 分类器契约已冻结（classifier-math-spec v1.2）· 23 条 KF · 阶段 4 待启动**
 > 创建时间：2026-07-07
+> 最近更新：2026-07-08
 > 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 > 前置反例：[value-area 家族全部冻结](../../themes-frozen/value-area/README.md)
 > 前置铺垫：theme:structural-shaping-alpha · archive:2026-07-06-structural-shaping-alpha-stage1

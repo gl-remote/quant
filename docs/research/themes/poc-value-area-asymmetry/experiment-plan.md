@@ -1,7 +1,7 @@
 # poc-value-area-asymmetry · 实验计划
 
 > 类型：Experiment Plan
-> 状态：**v5（2026-07-07）· 阶段 1+2+3 完成 · 分类器 7 层严格证据链完整 · 阶段 4 待启动**
+> 状态：**v6（2026-07-08）· 阶段 1+2+3 完成 · KF-22/23 加入 · 分位×ATR 12 格地图冻结 · 阶段 4 待启动**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
 > 阶段 1 详细流水：[docs/workbench/poc-value-area-asymmetry-stage1-measurement.md](../../../workbench/poc-value-area-asymmetry-stage1-measurement.md)（v7）
@@ -305,6 +305,20 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 - 空头首选：稳定日 8-12h 峰 +67 → +70 · 转换日 4h 峰 +32 · 12h 归零
 - **严格 t-test 修正**：mean 层面差异仅空头宽松显著
 - **阶段 4 空头出场策略必须分**：稳定日追踪止损 · 转换日目标止盈 4h
+
+**KF-22 · 采样精度边界 · "数据边界不可造假"**（⭐⭐⭐ 跨主题方法论）
+- 严格 date-cluster bootstrap · A 级 5 主线全部保留 · 多头首选·稳定升级 B→A
+- prefix 池化反证：空头 4/5 档 Bonferroni 降级 · **不能通过池化补精度**
+- 冻结：rank 单位 = per-contract · bootstrap 单位 = (contract, date)
+- 详见 workbench §12.12
+
+**KF-23 · 分位 × ATR 制度信号地图**（⭐⭐⭐ 分类器细化 · 阶段 4 起点）
+- 12 格深度诊断 · **多头 5 稳定甜蜜点 + 空头 3 反常甜蜜点**
+- **段3·ATR低**（skew∈(0.19,0.25] · atr≤0.33）：mean **+85 · hit 83%** · 100% 品种保留
+- **段4·ATR高**（skew∈(0.25,0.30] · atr>0.67）：新机制 · 高 ATR 波动率反弹
+- 相邻格子方向一致（多头 100% · 空头 86%）· 阶段 4 分档策略安全
+- 教训：**"过拟合" vs "制度依赖" 辨析** · 必须拆分制度维度再判决
+- 详见 workbench §13
 
 ### 3.3 阶段 3 分类器 7 层严格性验证（workbench §12 · A~G）
 
