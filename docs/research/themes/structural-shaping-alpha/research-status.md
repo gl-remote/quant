@@ -1,10 +1,11 @@
 # structural-shaping-alpha · Research Status
 
 > 类型：Research Status
-> 状态：**阶段 1 完成 · 待冻结候选**（gatekeeper 未通过 · 阶段 2 已重构为塑形受益条件扫描，暂不启动）
-> 最近更新：2026-07-06（阶段 1 gatekeeper 完成 + KF-1..9 全部沉入本文件）
+> 状态：**阶段 1 完成 · 待冻结候选**（gatekeeper 未通过 · 阶段 2 已重构为塑形受益条件扫描，暂不启动）· **工具资产供下游主题引用**（2026-07-09 va-asymmetry-composite 立题拉起阶段 2a）
+> 最近更新：2026-07-09（登记下游引用）
 > 主题 README：[README.md](README.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)
+> 下游引用主题：[va-asymmetry-composite](../../va-asymmetry-composite/README.md)（塑形工具 / 真实成本模型 / ν_implied 归因 / KF 方法论 · 当前研究主线）
 
 ## 一句话结论
 
@@ -14,6 +15,17 @@
 但 15m 复核仅 L 保留（mean=+0.041, p=0.060），且 μ_implied 反算的
 ν_implied ≈ 0（martingale 恒等式精确成立），正 mean 主要来自 Itô 凸性
 + 时间尺度放大 + 采样噪声，非"市场有真实趋势"。
+
+**2026-07-09 更新**：本主题降级为**必要条件 & 工具资产层**（非独立策略），
+工具被下游主题 [va-asymmetry-composite](../../va-asymmetry-composite/README.md) 引用：
+- **First-Passage Designer**：SL/TP/TH 塑形参数扫描与 lookup 表
+- **真实成本模型**：滑点 0.15 ATR × (0.5+SlippageTier) + 手续费 0.03% 双边
+- **ν_implied 归因**：Itô 分解净 edge，区分"凸性伪影"与"真实趋势 alpha"
+- **KF 方法论**：多层对照 / cluster bootstrap / 跨周期护栏 / 参数平台检查
+下游组合策略（alpha 源：poc-value-area-asymmetry 分类器 v4.0 + 塑形参数
+archive:2026-07-09-poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束下
+跑出年化净 15.45% / Sharpe 2.23 / MaxDD -7.51，验证了"alpha 源 + 塑形工具"
+组合路径可行，**本主题阶段 2a（方向 alpha × 塑形受益条件扫描）被下游拉起**。
 
 ## 边界
 
@@ -29,19 +41,21 @@
 | 2026-07-05 | 初版立题，v1 单维度扫描实验计划 |
 | 2026-07-06 | v2 gatekeeper 精简改造：6 组合 × 120 次回测替代 v1 四子维度 |
 | 2026-07-06 | 阶段 1 完成，工具 spec + 对照表脚本落地，KF-1..9 全部沉本文件 |
+| 2026-07-09 | 登记下游主题 va-asymmetry-composite 引用（阶段 2a 拉起）；降级为"必要条件 + 工具资产层"；所有塑形/成本/归因参数视为 L2 冻结常量，供下游直接调用 |
 
 ## 下一步
 
 阶段 1 未通过 experiment-plan §0.6 判据（全部 combo mean ≈ -2c 或伪影），
 按 §5 "任何阶段 gatekeeper 不通过即冻结主题" 处理：
 
-- 阶段 2 已按 v2.2 重构为"塑形受益条件扫描"（2a 方向 alpha × 塑形 /
-  2b 跨周期 tail / 2c 波动率制度）——**暂不启动**，等待方向 alpha 主题
-  产出 baseline 后再拉起 2a
+- ~~阶段 2 已按 v2.2 重构为"塑形受益条件扫描"~~（2a 由下游主题拉起，2b 跨周期 tail / 2c 波动率制度暂不启动）
 - 阶段 1 归档：`docs/archive/strategy-research/2026-07-06-structural-shaping-alpha-stage1/`
 - 相关工具（First-Passage Designer）已沉 [first-passage-designer-math-spec.md](first-passage-designer-math-spec.md)
   + 实现脚本 `docs/archive/strategy-research/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
   `archive:2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables`
+- **2026-07-09 下游拉起**：[va-asymmetry-composite](../../va-asymmetry-composite/README.md) 作为当前主线，
+  承接"方向 alpha × 塑形工具 × 组合优化"全链路，本主题仅被动提供工具资产，不再独立发起实验。
+  若下游发现塑形参数（SL/TP/TH 基准）或成本模型参数需要调整，通过 pull 模式反向登记到本文件。
 
 ## 关键发现清单
 

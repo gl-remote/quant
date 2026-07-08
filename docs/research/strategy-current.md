@@ -1,9 +1,11 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**structural-shaping-alpha 立题（2026-07-05）** · value-area 家族全部冻结
-> 最近更新：2026-07-05
-> 当前主题：[structural-shaping-alpha](./themes/structural-shaping-alpha/README.md)
+> 状态：**va-asymmetry-composite 立题（2026-07-09）** · poc-value-area-asymmetry 分类器 v4.0 冻结 · structural-shaping-alpha 阶段 1 完成（待冻结候选）· value-area 家族全部冻结
+> 最近更新：2026-07-09
+> 当前主题：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)
+> 前置 Alpha 源：[poc-value-area-asymmetry](./themes/poc-value-area-asymmetry/README.md)
+> 前置塑形工具：[structural-shaping-alpha](./themes/structural-shaping-alpha/README.md)
 > 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
 
@@ -13,12 +15,28 @@
 value_area 家族两个主题于 2026-07-03 / 2026-07-05 先后冻结，
 主题假设链完全崩塌（POC / rolling POC / reacceptance / 距离档均被证伪）。
 
-2026-07-05 立新主题 structural-shaping-alpha：
-研究"结构塑形本身（仓位 / 时间退出 / 止损 / 止盈）是否具有独立 alpha"，
-从 value-area 家族的副产品观察出发，检验一个正交的命题：
-alpha 可能主要来自结构塑形，而非入场信号。
+2026-07-05 立题 structural-shaping-alpha：
+检验"结构塑形本身是否具有独立 alpha"，阶段 1 gatekeeper 未通过
+（7 combo 全部 realistic-cost 下 mean ≈ -2c 或 μ_implied≈0 伪影），
+塑形降级为"alpha 变现的必要条件而非独立 alpha 源"。
+工具资产（First-Passage Designer / ν_implied 归因 / 真实成本模型 / KF 方法论）
+保留供后续主题引用。
 
-当前处于假设生成期，阶段 1（gatekeeper）广度扫描待启动。
+2026-07-07 立题 poc-value-area-asymmetry：
+检验"POC 两侧 value area 形状不对称是否携带方向 alpha"，
+经过 4 阶段完整验证（143 合约 · 36625 events · 20 品种前缀 · FDR 校正 · 7 层严格性），
+分类器 v4.0（6 类合并版）冻结，输出 A/A- 级 9 档可用 tier，
+单笔 IR 0.28~0.46 · 品种保留 ≥ 60% · 分类器主动性研究暂停，留待下游策略层引用。
+archive:2026-07-09-poc-va-shaping 在同一分类器上完成塑形参数扫描
+与风控口径验证（年化 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% / 盈亏比 1.41），
+alpha 变现路径 POC 通过。
+
+2026-07-09 立新主题 va-asymmetry-composite（**当前主线**）：
+把 poc-value-area-asymmetry 分类器（alpha 源）+ structural-shaping-alpha 工具
+（塑形/成本/归因）+ archive:2026-07-09-poc-va-shaping 塑形参数，
+经品种筛选 / 信号强度加权 / 多空权重优化三道组合关，压缩到 100% 名义
+暴露约束下，目标构建夏普 ≥ 2.5、年化净收益 ≥ 18%、可实盘的完整交易策略。
+当前处于阶段 0（立题复现），尚未启动实验。
 ```
 
 边界：
@@ -35,13 +53,18 @@ alpha 可能主要来自结构塑形，而非入场信号。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **structural-shaping-alpha** | **活跃（立题 2026-07-05）** · 阶段 1 待启动 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
+| **va-asymmetry-composite** | **活跃（立题 2026-07-09 · 当前主线）** · 阶段 0 立题复现待启动 | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| poc-value-area-asymmetry | 活跃 · 阶段 4 完成 · 分类器 v4.0 冻结 · 主动性研究暂停（供下游引用） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
+| structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
 
 家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md)
 
-**活跃主题目录**：`docs/research/themes/structural-shaping-alpha/`
+**活跃主题目录**：
+- 当前主线：`docs/research/themes/va-asymmetry-composite/`（完整策略 · 组合层）
+- 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（分类器组件）
+- 上游工具资产：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因工具）
 
 ## 3. 当前基础设施
 
@@ -57,6 +80,25 @@ value_area_random_baseline
 - 长期随机入场基准；
 - 在 VA baseline 的事件、止损和退出口径上随机化入场；
 - 用于判断结构入口是否优于随机。
+
+poc_va_asymmetry_classifier_v4
+- poc-value-area-asymmetry 主题冻结的分类器 v4.0 实现（组件级）；
+- 包含 tier 判定（6 tier 合并）、14 条严格性约束、品种/月份前缀过滤、ATR 归一化；
+- 不做塑形/风控，仅输出事件标签与信号强度（skew / d_mid / 3D product）；
+- 位置：research/themes/poc-value-area-asymmetry/ 下组件脚本，待下游策略层包装。
+
+structural_shaping_toolkit
+- structural-shaping-alpha 主题保留的工具资产（非独立策略）；
+- 包含 First-Passage Designer（SL/TP/TH 参数扫描）、ν_implied 归因、真实成本模型
+  （滑点 0.15 ATR × (0.5+SlippageTier) + 手续费 0.03% 双边）、
+  Cluster bootstrap、跨周期稳健性检验（KF-1 至 KF-7）；
+- 位置：research/themes/structural-shaping-alpha/ 下组件脚本。
+
+va_asymmetry_composite
+- va-asymmetry-composite 主线策略（**目标输出**）：整合分类器 + 塑形 + 组合优化；
+- Stages 0-3 为向量化模拟脚本（backtest_tools vectorized pipeline），
+  Stage 4 为 vnpy 事件驱动策略；
+- 当前占位：research/themes/va-asymmetry-composite/（仅文档，Stage 0 待启动）。
 ```
 
 轻量比较 runner（已归档）：
@@ -78,14 +120,21 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 | R29 扩样 + 随机基准复验 | 固定规则不通过外推；但结构仍优于随机基准 → 触发 Stage B | [2026-07-02](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
 | Stage B v2 双 Q | Q_return 通过（C3 @ n=144 ret_mean +1.10）/ Q_generalize 未通过（Group_M 5/8 无 trade）→ feature-only 降级 | [2026-07-03](../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
 | Rolling Stage 1 / 1.5 / 4 / 4b | 20 品种 × 70 合约 × 5m/15m 双周期证伪主题全部核心假设 → 主题冻结 | [2026-07-05](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| structural-shaping Stage 1 Gatekeeper | 7 combo 全部 realistic-cost 下 μ ≈ -2c / ν_implied≈0 → 塑形非独立 alpha 源，降级为必要条件 + 工具资产 | [2026-07-06](../archive/strategy-research/2026-07-06-structural-shaping-alpha-s1/) |
+| poc-va-asymmetry Stage 3/4 | 分类器 v4.0 冻结 · 9 档 A/A- tier · 单笔 IR 0.28~0.46 · 品种保留 ≥ 60% · FDR ≤ 5% | [2026-07-08](../archive/strategy-research/2026-07-08-poc-va-asymmetry/) |
+| poc-va-shaping Stage 2/3 组合验证 | 在分类器 v4.0 + SL1.0/TP1.4/TH8h 下 · 净 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% · alpha 变现 POC | [2026-07-09](../archive/strategy-research/2026-07-09-poc-va-shaping/) |
 
 ## 5. 下一步
 
-**当前主题**：[structural-shaping-alpha](./themes/structural-shaping-alpha/README.md)（阶段 1 · Gatekeeper 广度扫描待启动）
+**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（阶段 0 · 立题复现待启动）
 
-阶段 1 分四个子维度并行扫描（仓位 / 时间退出 / 止损 / 止盈），任何一个通过（相对标准结构 baseline 显著优于），即进入阶段 2；全部不通过则主题冻结。详见 [experiment-plan.md](./themes/structural-shaping-alpha/experiment-plan.md)。
+阶段 0 目标：精确复现 archive:2026-07-09-poc-va-shaping 基准（分类器 v4.0 + SL1.0/TP1.4/TH8h + c_realistic），确认 pipeline 一致（交易时间、品种集合、事件数、各 tier 顺序、Sharpe/MDD 相对偏差 ≤ 5%），失败即暂停并回修数据/分类器。
 
-**立题时的方法论前置约束**（继承自 value-area 家族教训，任何新主题必须遵守）：
+阶段 1 目标（0 通过后）：3 条主线并行（品种筛选 × 信号强度加权 × 多空权重优化），总候选 ≤ 9 个独立实验，通过门槛 Sharpe≥2.5 & ν_implied≥0 & 跨周期稳健，未通过则暂停并复盘前置假设。
+
+详见 [experiment-plan.md](./themes/va-asymmetry-composite/experiment-plan.md)。
+
+**立题时的方法论前置约束**（继承自 value-area 家族 + 前序主题教训，任何新主题必须遵守）：
 
 ```text
 1. 距离/大小/时间统一 ATR 归一化；
@@ -95,21 +144,32 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 5. 配对差异检验（同一批事件配对），避免未配对样本假象；
 6. Cluster bootstrap 检验事件非独立性；
 7. 跨周期验证（至少 5m + 15m）作为稳健性硬门槛；
-8. 立题前先说明为什么本次假设不落入 value-area 家族已证伪的四条中。
+8. 立题前先说明为什么本次假设不落入 value-area 家族已证伪的四条中；
+9. 塑形 + 组合层必须显式核算"事件净期望 × 频率 × 资本效率"三乘积，不单独看单笔均值；
+10. 名义暴露压缩约束（100%/200%/400% 三档对比），避免无限杠杆美化夏普；
+11. 组合关前所有组件参数冻结为 L1（分类器）+ L2（塑形），禁止回看式调参。
 ```
 
-详见 [themes-frozen/value-area/README.md #共同教训](./themes-frozen/value-area/README.md)。
+详见：
+- [themes-frozen/value-area/README.md #共同教训](./themes-frozen/value-area/README.md)
+- [poc-value-area-asymmetry stage4-findings.md](./themes/poc-value-area-asymmetry/workbench/stage4-findings.md)
+- [archive:2026-07-09-poc-va-shaping stage3-shaping-result.md](../archive/strategy-research/2026-07-09-poc-va-shaping/workbench/stage3-shaping-result.md)
 
 ## 6. 文档地图
 
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
-| **structural-shaping-alpha 主题（活跃）**| [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
-| value_area 家族总结 | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
-| value_area_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
-| value_area_rolling_reacceptance 主题（冻结）| [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
+| **va-asymmetry-composite（当前主线 · 活跃）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| poc-value-area-asymmetry（分类器 v4.0 · 上游 Alpha） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
+| structural-shaping-alpha（塑形工具资产 · 上游） | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
+| value_area 家族总结（冻结） | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
+| value_area_reacceptance（冻结） | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
+| value_area_rolling_reacceptance（冻结） | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
 | Rolling 冻结摘要 | [freeze-summary.md](../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| structural-shaping Stage 1（归档） | [2026-07-06-structural-shaping-alpha-s1](../archive/strategy-research/2026-07-06-structural-shaping-alpha-s1/) |
+| poc-va-asymmetry 分类器验证（归档） | [2026-07-08-poc-va-asymmetry](../archive/strategy-research/2026-07-08-poc-va-asymmetry/) |
+| **poc-va-shaping 组合验证（当前立题起点 · 归档）** | [2026-07-09-poc-va-shaping](../archive/strategy-research/2026-07-09-poc-va-shaping/) |
 | Stage B 归档 | [stage-b-sweep-summary.md](../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
 | R29 扩样 + 随机基准 | [r29-expanded-validation.md](../archive/strategy-research/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
 | POC / VA 质量诊断阶段归档 | [quality-summary.md](../archive/strategy-research/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
@@ -120,13 +180,19 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 后续 AI 接手时：
 
 ```text
-1. 先读本文件确认当前活跃主题为 structural-shaping-alpha；
-2. 读 themes/structural-shaping-alpha/README.md 与 experiment-plan.md 了解阶段进度；
-3. 遵守 §5 的八条方法论前置约束，尤其是"多层对照"和"跨周期验证"；
+1. 先读本文件确认当前活跃主题为 va-asymmetry-composite（主线）
+   + poc-value-area-asymmetry（分类器引用）+ structural-shaping-alpha（工具引用）；
+2. 读 themes/va-asymmetry-composite/README.md 与 experiment-plan.md 了解阶段进度与门槛；
+3. 遵守 §5 的 11 条方法论前置约束，尤其是"多层对照""跨周期验证""三乘积核算""名义暴露压缩"；
 4. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
 5. 不要继续调旧 baseline 参数（value_area_reacceptance_baseline 只作历史复现工具）；
 6. 不要在冻结主题目录（themes-frozen/*/）下增加新实验；
-7. 新实验过程写入 docs/workbench/structural-shaping-alpha-stage<N>-<topic>.md；
+7. 前置组件参数（分类器 tier 表 / 塑形 SL/TP/TH / 成本模型）在新主题内视为冻结常量，
+   除非发现数据错误或分类器 bug；所有参数变更必须在 workbench 记录并写进 parameter-selection-spec；
+8. 新实验过程写入 docs/workbench/va-asymmetry-composite-stage<N>-<topic>.md；
    阶段稳定后再归档到 docs/archive；
-8. 若发现数据周期、成交配对、成本口径问题，先写 docs/issues 并暂停受影响实验。
+9. 若发现数据周期、成交配对、成本口径、品种月份过滤、事件时间对齐问题，
+   先写 docs/issues 并暂停受影响实验；
+10. 所有结论需同时给出"不压缩名义 / 2× 压缩 / 4× 压缩"三档夏普/回撤/换手对照，
+    避免用无约束杠杆美化结果。
 ```
