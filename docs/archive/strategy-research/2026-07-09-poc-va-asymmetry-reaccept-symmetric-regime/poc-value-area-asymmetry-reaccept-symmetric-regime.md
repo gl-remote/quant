@@ -7,7 +7,7 @@
 > `classifier_v31_timeline.parquet` · 143 合约 · 36625 events · 3 维 rank）
 > 分类器契约：[classifier-math-spec.md](../research/themes/poc-value-area-asymmetry/classifier-math-spec.md)
 > 立题起点归档：archive:2026-07-09-poc-va-shaping
-> 开发分支：`experiment/va-reaccept-symmetric-regime`（父分支 dev/0.5 @ 5792979）
+> 开发分支：`experiment/va-reaccept-symmetric-regime`（父分支 dev/0.5 @ 5792979 · 实现提交 8122d42）
 > 日期：2026-07-09
 
 ---
