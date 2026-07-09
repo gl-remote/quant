@@ -23,8 +23,9 @@ from __future__ import annotations
 import typing
 from dataclasses import fields as dc_fields
 from dataclasses import is_dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
+import pandas as pd
 from strategies import State, Strategy
 from strategies.utils import load_strategy
 
@@ -69,6 +70,10 @@ class StrategyFactory:
         Raises:
             TypeError: 无法提取配置类型时抛出
         """
+        maybe_config_cls = getattr(strategy_cls, "config_type", None)
+        if isinstance(maybe_config_cls, type):
+            return maybe_config_cls
+
         config_cls: type | None = None
         for base in getattr(strategy_cls, "__orig_bases__", []):
             origin = typing.get_origin(base)
@@ -157,6 +162,7 @@ class StrategyFactory:
         margin: float = 1.0,
         run_id: int = 0,
         backtest_id: int = 0,
+        last_real_bar_time: pd.Timestamp | None = None,
     ) -> type[VnpyBacktestBridge]:
         """创建注入了策略实例和状态的 VnpyBacktestBridge 子类
 
@@ -197,8 +203,12 @@ class StrategyFactory:
         filtered_params = StrategyFactory._filter_params_to_config(strategy_params, config_cls)
         strategy_config = config_cls(**filtered_params)
 
+        injected_last_real_bar_time = last_real_bar_time
+
         # 步骤3: 动态创建注入子类
         class _InjectedStrategy(VnpyBacktestBridge):
+            last_real_bar_time: ClassVar[pd.Timestamp | None] = injected_last_real_bar_time
+
             def _load_default_core(self, _setting: object | None = None) -> None:
                 """禁用默认加载，因为我们会在 __init__ 中注入"""
                 pass
@@ -235,6 +245,7 @@ def create_strategy_class(
     margin: float = 1.0,
     run_id: int = 0,
     backtest_id: int = 0,
+    last_real_bar_time: pd.Timestamp | None = None,
 ) -> type[VnpyBacktestBridge]:
     """便捷函数：直接创建注入的策略桥接类"""
     return StrategyFactory.create_injected_strategy_class(
@@ -247,6 +258,7 @@ def create_strategy_class(
         margin=margin,
         run_id=run_id,
         backtest_id=backtest_id,
+        last_real_bar_time=last_real_bar_time,
     )
 
 

@@ -37,6 +37,7 @@ def make_base_config_dict() -> dict:
             "database_path": "project_data/database/unit_test/quant.db",
             "export_dir": "project_data/market_data/csv",
             "filename_template": "{symbol}.{provider}.{interval}.csv",
+            "allow_aggressive_schema_migration": True,
         },
         "backtest": {
             "initial_capital": 100000.0,

@@ -102,8 +102,12 @@ class DataManager:
     def _init_store(self) -> None:
         """延迟初始化存储层"""
         if self._store is None:
-            db_path = self._get_config().get_data_config().database_path
-            self._store = DataStore(db_path, create=self._create_database)
+            data_config = self._get_config().get_data_config()
+            self._store = DataStore(
+                data_config.database_path,
+                create=self._create_database,
+                allow_aggressive_schema_migration=data_config.allow_aggressive_schema_migration,
+            )
 
     @property
     def store(self) -> DataStore:
@@ -360,7 +364,44 @@ class DataManager:
                 if not Path(fp).exists():
                     raise FileNotFoundError(f"数据源记录存在但文件缺失: {symbol} provider={p} filepath={fp}")
                 return fp
+
+        repaired = self._repair_metadata_from_csv(symbol, interval, candidates)
+        if repaired is not None:
+            return repaired
+
         raise FileNotFoundError(f"ExportMetadata 中找不到 {symbol} (interval={interval}, candidates={candidates})")
+
+    def _repair_metadata_from_csv(self, symbol: str, interval: str, candidates: list[str]) -> str | None:
+        """从本地 CSV 反向补齐 ExportMetadata。"""
+        data_dir = Path(self._get_data_dir())
+        filename_template = self._get_filename_template()
+
+        for provider in candidates:
+            filepath = data_dir / filename_template.format(symbol=symbol, provider=provider, interval=interval)
+            if not filepath.exists():
+                continue
+
+            df = self._load_csv_with_validation(filepath)
+            if df is None or df.empty:
+                continue
+
+            min_dt = pd.to_datetime(df["datetime"].min())
+            max_dt = pd.to_datetime(df["datetime"].max())
+            self.store.upsert_metadata(
+                symbol=symbol,
+                provider=provider,
+                interval=interval,
+                filepath=str(filepath),
+                start_date=str(min_dt.date()),
+                end_date=str(max_dt.date()),
+                min_dt=str(min_dt.date()),
+                max_dt=str(max_dt.date()),
+                total_rows=len(df),
+            )
+            logger.info("已从 CSV 补齐 ExportMetadata: {} provider={} interval={}", symbol, provider, interval)
+            return str(filepath)
+
+        return None
 
     # ── 回测记录 ────────────────────────────────────────────
 
@@ -401,6 +442,27 @@ class DataManager:
         """查询交易明细"""
         return self.store.query_trades(backtest_id)
 
+    def get_backtests_for_clearing(self, run_id: int) -> list[dict[str, object]]:
+        """查询 run 下需要清算的成功 backtest。"""
+        return self.store.get_backtests_for_clearing(run_id)
+
+    def replace_clearing_outputs(
+        self,
+        backtest_id: int,
+        clearing_rows: list[dict[str, object]],
+        account_ledger_rows: list[dict[str, object]],
+        position_ledger_rows: list[dict[str, object]],
+        summary_fields: dict[str, object],
+    ) -> None:
+        """幂等替换单个 backtest 的清算、账户账本、持仓账本并回填汇总。"""
+        self.store.replace_clearing_outputs(
+            backtest_id,
+            clearing_rows,
+            account_ledger_rows,
+            position_ledger_rows,
+            summary_fields,
+        )
+
     def insert_backtest_daily(self, backtest_id: int, daily_results: list[dict[str, object]]) -> int:
         """批量插入每日资金曲线数据"""
         return self.store.insert_backtest_daily(backtest_id, daily_results)
@@ -412,7 +474,7 @@ class DataManager:
         1. win_trades + loss_trades 是否等于 total_trades
         2. backtest_trades 表的实际记录数是否等于 total_trades
         3. 如果 total_trades > 0，win_trades/loss_trades 不能同时为 None
-        4. (2026-06-06新增) profit_days + loss_days ≈ total_days
+        4. profit_days + loss_days 不能超过 total_days
         5. (2026-06-06新增) total_commission ≈ sum(trade.commission)
 
         调试沉淀(2026-06-04):
@@ -514,6 +576,20 @@ class DataManager:
         from .optuna_query import get_optuna_data as _query
 
         return _query(run_id)
+
+    def get_clearing_diagnostics_for_run(self, run_id: int) -> list[dict[str, object]]:
+        """获取 run 下各品种的结构诊断聚合（成本后指标 / exit reason / R 分布）。"""
+        from .report_queries import build_clearing_diagnostics_for_run as _query
+
+        self._init_store()
+        return _query(self.store, run_id)
+
+    def get_exit_policy_diff(self, backtest_id_a: int, backtest_id_b: int) -> dict[str, object]:
+        """对比两个回测的退出结构（成本后指标变化）。"""
+        from .report_queries import build_exit_policy_diff as _query
+
+        self._init_store()
+        return _query(backtest_id_a, backtest_id_b)
 
     # ── 资源管理 ────────────────────────────────────────────
 

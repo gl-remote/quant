@@ -33,6 +33,7 @@ echo ""
 echo "[步骤 1/2] 执行全量回测 + 贝叶斯搜索..."
 
 if "$ROOT_DIR/run.sh" backtest \
+    --env backtest \
     --pattern "$PATTERN" \
     --strategy atr \
     --mode search \
@@ -41,7 +42,8 @@ if "$ROOT_DIR/run.sh" backtest \
     --trials "$TRIALS" \
     --early-stop-patience "$EARLY_STOP_PATIENCE" \
     --capital 100000 \
-    --contract-size 10 "$@"; then
+    --contract-size 10 \
+    --build-report "$@"; then
     echo -e "${GREEN}✓ 回测执行成功${NC}"
 else
     echo -e "${RED}✗ 回测执行失败 (exit=$?)${NC}"

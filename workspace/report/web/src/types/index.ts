@@ -24,8 +24,13 @@ export type {
 export type {
   ContourTrial,
   ContourMeta,
+  ParamValue,
   BestParam,
   DenormalizedScatter,
   OptunaData,
   EChartsOption,
 } from "./optuna";
+
+export type {
+  ClearingDiagnostics,
+} from "./diagnostics";

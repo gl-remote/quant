@@ -38,9 +38,9 @@ env/
 
 # Local agent/tooling workspaces
 .codebuddy/
-.trae/
 .uploads/
 .pip/
+.dbg/
 
 # Tool caches
 .mypy_cache/

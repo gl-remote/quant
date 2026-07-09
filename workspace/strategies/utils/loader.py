@@ -6,14 +6,13 @@
 
 import importlib
 from pathlib import Path
-from typing import Any
 
 from common.constants import STRATEGY_MA
 
-from strategies import Strategy
+from ..core import Strategy
 
 
-def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> Strategy:
+def load_strategy(strategy_name: str | None = None, **strategy_kwargs: object) -> Strategy[object]:
     """根据名称动态加载策略实例
 
     支持三种传入方式:
@@ -49,17 +48,29 @@ def load_strategy(strategy_name: str | None = None, **strategy_kwargs: Any) -> S
         raise FileNotFoundError(f"策略文件 {name}.py 不存在，可用策略: {', '.join(available)}")
 
     module = importlib.import_module(f"strategies.{name}")
+    requested_simple_name = name.removesuffix("_strategy")
 
+    strategy_classes: list[type[Strategy[object]]] = []
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
         if isinstance(attr, type) and issubclass(attr, Strategy) and attr is not Strategy and attr_name != "Strategy":
+            strategy_classes.append(attr)
+
+    for strategy_cls in strategy_classes:
+        if getattr(strategy_cls, "name", None) == requested_simple_name:
             if strategy_kwargs:
-                return attr(**strategy_kwargs)
-            return attr()
+                return strategy_cls(**strategy_kwargs)
+            return strategy_cls()
+
+    if strategy_classes:
+        strategy_cls = strategy_classes[0]
+        if strategy_kwargs:
+            return strategy_cls(**strategy_kwargs)
+        return strategy_cls()
 
     raise ValueError(f"策略文件 {name}.py 中未找到 Strategy 实现类")
 
 
-def get_strategy_class_name(strategy: Strategy) -> str:
+def get_strategy_class_name(strategy: Strategy[object]) -> str:
     """获取策略类名用于日志显示"""
     return type(strategy).__name__

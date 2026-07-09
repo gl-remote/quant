@@ -119,7 +119,7 @@ _ON_BAR_RETURN = Signal(action="", reason="mock_entry", volume=0)
 # --------------------------
 
 
-@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+@exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
 class _ATRStrategy:
     """ATR 止损测试策略"""
 
@@ -247,8 +247,8 @@ class TestExitStopLossATR:
 # --------------------------
 
 
-@exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
-@exit_for_stop_loss("profit_abs() >= atr@15m * {atr_stop_loss_multiplier}")
+@exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
+@exit_for_stop_loss("loss_abs() >= atr@15m * {atr_stop_loss_multiplier}")
 class _CombinedStrategy:
     """叠加固定比例 + ATR 止损的测试策略"""
 

@@ -23,6 +23,10 @@ class TestConfigLoading:
         assert tc.sma_long == 40
         assert tc.stop_loss_ratio == 0.03
 
+    def test_data_config_loads_aggressive_schema_migration_flag(self, temp_config_file):
+        cm = ConfigManager(config_file=temp_config_file)
+        assert cm.get_data_config().allow_aggressive_schema_migration is True
+
     def test_defaults_when_no_config(self):
         cm = ConfigManager(env="backtest")
         tc = cm.get_trading_config()
@@ -47,6 +51,26 @@ class TestTradingConfig:
         assert tc.sma_short == 10
         assert tc.sma_long == 40
 
+    def test_strategy_private_params_are_passed_through_without_schema_fields(self, base_config_dict):
+        base_config_dict["strategies"][0]["new_private_threshold"] = 1.25
+        base_config_dict["strategies"][0]["signal_profile"] = "sma_only"
+        base_config_dict["strategies"][0]["enabled_filters"] = ["trend", "pullback", "reaccept"]
+        fd, path = tempfile.mkstemp(suffix=".toml")
+        with open(fd, "wb") as f:
+            f.write(tomli_w.dumps(base_config_dict).encode("utf-8"))
+
+        cm = ConfigManager(config_file=path)
+        tc = cm.get_trading_config()
+        params = tc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+        os.unlink(path)
+
+        assert tc.new_private_threshold == 1.25
+        assert tc.signal_profile == "sma_only"
+        assert tc.enabled_filters == ["trend", "pullback", "reaccept"]
+        assert params["new_private_threshold"] == 1.25
+        assert params["signal_profile"] == "sma_only"
+        assert params["enabled_filters"] == ["trend", "pullback", "reaccept"]
+
 
 class TestBacktestConfig:
     def test_get_backtest_config_defaults(self):
@@ -65,14 +89,14 @@ class TestValidateConfig:
         cm = ConfigManager(config_file=temp_config_file)
         assert cm.validate_config() is True
 
-    def test_invalid_stop_loss_ratio(self, base_config_dict):
-        """stop_loss_ratio=0 → Pydantic field_validator 拒绝"""
+    def test_strategy_private_ratio_params_are_passed_through(self, base_config_dict):
         base_config_dict["strategies"][0]["stop_loss_ratio"] = 0.0
         fd, path = tempfile.mkstemp(suffix=".toml")
         with open(fd, "wb") as f:
             f.write(tomli_w.dumps(base_config_dict).encode("utf-8"))
-        with pytest.raises(ValidationError):
-            ConfigManager(config_file=path)
+
+        cm = ConfigManager(config_file=path)
+        assert cm.get_trading_config().stop_loss_ratio == 0.0
         os.unlink(path)
 
     def test_invalid_sma_ordering(self, base_config_dict):

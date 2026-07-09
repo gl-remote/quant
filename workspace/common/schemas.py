@@ -103,33 +103,47 @@ class DailyReturnSchema(pa.DataFrameModel):
 
 
 class TradeRecordSchema(pa.DataFrameModel):
-    """回测交易记录验证Schema（字段与 ORM BacktestTrade 完全对齐）
+    """回测原始成交记录验证 Schema（字段与 ORM BacktestTrade 对齐）。
 
-    验证写入 backtest_trades 表的交易记录数据。
+    验证写入 backtest_trades 表的 raw simulated fills。
+
     字段说明：
-        datetime:   成交时间
-        symbol:     品种代码 (如 DCE.m2505)
-        direction:  方向 (long/short)
-        offset:     开平标志 (open/close/closetoday)
-        open_price: 开仓=成交价；平仓=加权平均开仓价（FIFO 配对时同方向待配对开仓的均价）
-        close_price: 成交价（开仓和平仓均为实际成交价）
-        quantity:   成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
-        pnl:        单笔净盈亏（已扣除 commission + slippage）
-        commission: 该笔平仓周期总手续费（开仓侧 + 平仓侧）
+        datetime: 成交时间
+        symbol: 品种代码（如 DCE.m2601）
+        direction: 成交方向（long/short），保持 vnpy 成交方向语义
+        offset: 开平标志（open/close/closetoday）
+        price: 实际模拟成交价，已包含 vnpy 撮合层应用的滑点
+        quantity: 成交量（ORM 统一用 quantity，非 vnpy 原生 volume）
+        reason: 策略或引擎记录的人类可读成交原因
+        decision_payload_json: 机器可读的信号事件载荷 JSON，用于离线诊断和报告
+        engine_trade_id: vn.py 原始 trade id / vt_tradeid
+        engine_order_id: vn.py 原始 order id / vt_orderid
+        raw_direction: 引擎原始 direction 字符串，用于排查映射问题
+        raw_offset: 引擎原始 offset 字符串，用于排查映射问题
+        open_price / close_price: report 契约兼容字段，第一阶段等于 price
+        pnl: raw fill 表不再存权威清算盈亏，权威值由 trade_clearings 生成
+        commission: raw fill 表不再存权威手续费，权威值由 clearing 统一计算
 
-    统一规则(2026-06-04):
-    - 各引擎层（vnpy/TqSdk）产出时必须使用本 Schema 定义的字段名
-    - store 层不再做字段名兼容转换（fallback）
-    - vnpy TradeData.volume → 映射为 quantity
+    统一规则：
+    - backtest_trades 只保存回测引擎产生的原始模拟成交事实。
+    - FIFO 配对、gross/net PnL、手续费、滑点归因属于 clearing 业务域。
+    - store 层不再从 raw fill 推导清算结果。
+    - report JSON 兼容字段暂时保留，契约升级留到 analytics-reporting 阶段。
     """
 
     datetime: Series[pd.Timestamp] = pa.Field()
     symbol: Series[str] = pa.Field()
     direction: Series[str] = pa.Field(isin=["long", "short"])
     offset: Series[str] = pa.Field(isin=["open", "close", "closetoday"])
+    price: Series[float] = pa.Field(ge=0.0)
+    quantity: Series[float] = pa.Field(gt=0.0)
+    reason: Series[str] = pa.Field(nullable=True)
+    engine_trade_id: Series[str] = pa.Field(nullable=True)
+    engine_order_id: Series[str] = pa.Field(nullable=True)
+    raw_direction: Series[str] = pa.Field(nullable=True)
+    raw_offset: Series[str] = pa.Field(nullable=True)
     open_price: Series[float] = pa.Field(ge=0.0)
     close_price: Series[float] = pa.Field(ge=0.0)
-    quantity: Series[float] = pa.Field(ge=0.0)
     pnl: Series[float] = pa.Field()
     commission: Series[float] = pa.Field(ge=0.0)
 
@@ -197,7 +211,6 @@ def validate_backtest_consistency(
     - backtest_trades 表的实际记录数应等于 total_trades（总成交笔数）
 
     2026-06-06 新增/调整:
-    - profit_days + loss_days 应约等于 total_days（允许 ±2 天误差，因持仓跨日）
     - total_commission 应约等于逐笔交易 commission 之和（允许 1 元误差）
     - 2026-06-06 调整: win_trades + loss_trades 不再要求 == total_trades，
       因为 win/loss 只统计有实际盈亏的平仓交易，而 total_trades 包含所有成交(含开仓)。
@@ -240,13 +253,13 @@ def validate_backtest_consistency(
     if total_trades > 0 and win_trades is None and loss_trades is None:
         errors.append(f"{prefix}total_trades={total_trades}>0，但 win_trades 和 loss_trades 均为 None")
 
-    # 4. 2026-06-06新增: profit_days + loss_days ≈ total_days (允许±2天)
+    # profit_days/loss_days 是有交易或有盈亏的天数，不能要求覆盖 total_days；
+    # 无交易日通常既不是盈利日也不是亏损日，只校验二者不超过 total_days。
     if total_days is not None and profit_days is not None and loss_days is not None and total_days > 0:
         day_sum = profit_days + loss_days
-        if abs(day_sum - total_days) > 2:
+        if day_sum > total_days:
             errors.append(
-                f"{prefix}profit_days({profit_days}) + loss_days({loss_days}) "
-                f"= {day_sum} 与 total_days({total_days}) 差异超过 2 天"
+                f"{prefix}profit_days({profit_days}) + loss_days({loss_days}) = {day_sum} > total_days({total_days})"
             )
 
     # 5. 2026-06-06新增: total_commission ≈ sum(trade.commission) (允许1元误差)

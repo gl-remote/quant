@@ -6,13 +6,12 @@
 3. ORM 模型 - 内部数据库模型（不对外暴露）
 """
 
-from pathlib import Path
-
 # 从 common.schemas 导入 Pandera Schema，供 manager.py 等上层模块引用
 # 注：此 import 作为 re-export 供上层模块使用
 from common.schemas import KlineSchema  # noqa: F401  # pyright: ignore[reportUnusedImport]
 from peewee import (
     SQL,
+    BooleanField,
     CharField,
     DateField,
     DateTimeField,
@@ -20,10 +19,11 @@ from peewee import (
     ForeignKeyField,
     IntegerField,
     Model,
-    SqliteDatabase,
     TextField,
 )
 from pydantic import BaseModel, field_validator
+
+from .connection import database as peewee_database
 
 # ==============================================================================
 # Pydantic 模型（对外暴露，用于单条记录验证）
@@ -80,7 +80,7 @@ class BacktestRecord(BaseModel):
     ewm_sharpe: float | None = None  # [vnpy] EWM夏普比率
     rgr_ratio: float | None = None  # [vnpy] RGR比率
 
-    # 交易统计 (total_trades 来自 vnpy; win/loss/avg 基于逐笔 pnl 聚合)
+    # 交易统计 (total_trades 来自 vnpy; win/loss/avg 基于逐笔毛 pnl 聚合)
     total_trades: int = 0  # [vnpy] 总成交笔数（含开仓+平仓）
     win_trades: int | None = None
     loss_trades: int | None = None
@@ -103,7 +103,7 @@ class BacktestRecord(BaseModel):
 
 
 class TradeRecord(BaseModel):
-    """交易记录"""
+    """回测原始成交记录"""
 
     id: int | None = None
     backtest_id: int
@@ -111,11 +111,18 @@ class TradeRecord(BaseModel):
     symbol: str
     direction: str
     offset: str = "open"
-    open_price: float
-    close_price: float
+    price: float
     quantity: float
-    pnl: float = 0.0  # 净盈亏（已扣除 commission + slippage）
-    commission: float = 0.0  # 该笔平仓周期总手续费（开仓侧 + 平仓侧）
+    reason: str = ""
+    decision_payload_json: str | None = None
+    engine_trade_id: str | None = None
+    engine_order_id: str | None = None
+    raw_direction: str | None = None
+    raw_offset: str | None = None
+    open_price: float | None = None
+    close_price: float | None = None
+    pnl: float = 0.0
+    commission: float = 0.0
     created_at: str | None = None
 
     @field_validator("quantity")
@@ -167,40 +174,12 @@ class DataLoadResult(BaseModel):
 # ORM 模型（内部使用，不对外暴露）
 # ==============================================================================
 
-database = SqliteDatabase(None)
-
-
-def _normalize_db_path(db_path: str) -> str:
-    return str(Path(db_path).expanduser().resolve())
-
-
-def current_database_path() -> str | None:
-    db_path = database.database
-    return _normalize_db_path(str(db_path)) if db_path else None
-
-
-def reset_database_binding() -> None:
-    if not database.is_closed():
-        _ = database.close()
-    database.init(None)  # pyright: ignore[reportUnknownMemberType]
-
-
-def bind_database(db_path: str, *, pragmas: dict[str, object] | None = None) -> str:
-    expected_path = _normalize_db_path(db_path)
-    current_path = current_database_path()
-    if current_path is None:
-        database.init(expected_path, pragmas=pragmas)  # pyright: ignore[reportUnknownMemberType]
-        return expected_path
-    if current_path == expected_path:
-        return expected_path
-    raise RuntimeError(f"peewee database already bound: current={current_path}, target={expected_path}")
-
 
 class OrmBaseModel(Model):
     """基础模型"""
 
     class Meta:
-        database: SqliteDatabase = database
+        database = peewee_database
 
 
 class ExportMetadata(OrmBaseModel):
@@ -268,7 +247,7 @@ class Backtest(OrmBaseModel):
 
     字段来源说明:
       - vnpy 直接提供: vnpy calculate_statistics() 输出，基于日度净盈亏(net_pnl)计算
-      - 自行计算: 从逐笔交易记录(pnl)聚合统计，改后同样基于净盈亏
+      - 自行计算: 从逐笔交易记录(pnl)聚合统计，pnl 为毛盈亏，不含手续费/滑点
       - 配置入参: 回测运行时传入的参数
     """
 
@@ -344,22 +323,19 @@ class BacktestParam(OrmBaseModel):
 
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="params", on_delete="CASCADE")
     param_name: CharField = CharField()
-    param_value: FloatField = FloatField()
+    param_value: FloatField = FloatField(null=True)
+    param_type: CharField = CharField(default="float")
+    param_text: TextField = TextField(null=True)
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = "backtest_params"
 
 
 class BacktestTrade(OrmBaseModel):
-    """回测交易明细（逐笔成交记录）
+    """回测原始成交记录（raw simulated fill）。
 
-    注意: vnpy 的 TradeData 代表单笔成交(fill)，不是完整交易(trade)。
-
-    open_price / close_price 语义:
-      开仓记录 (offset=open): open_price = close_price = 成交价
-      平仓记录 (offset=close):
-        open_price = 加权平均开仓价（FIFO 配对时同方向待配对开仓的 Σ(price×vol)/Σ(vol)）
-        close_price = 平仓成交价
+    clearing 业务域负责后续 FIFO 配对、PnL、手续费和滑点归因。
+    open_price / close_price / pnl / commission 仅为 report 契约兼容字段，不再作为权威清算口径。
     """
 
     backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trades", on_delete="CASCADE")
@@ -367,16 +343,131 @@ class BacktestTrade(OrmBaseModel):
     symbol: CharField = CharField()
     direction: CharField = CharField()
     offset: CharField = CharField()
-    open_price: FloatField = FloatField()  # 开仓=成交价，平仓=加权平均开仓价
-    close_price: FloatField = FloatField()  # 实际成交价（开仓/平仓均为此笔的执行价格）
+    price: FloatField = FloatField()
     quantity: FloatField = FloatField()
-    pnl: FloatField = FloatField()  # 净盈亏（已扣除 commission + slippage）
-    commission: FloatField = FloatField()  # 该笔平仓周期总手续费（开仓侧 + 平仓侧）
     reason: CharField = CharField(max_length=512, default="")
+    decision_payload_json: TextField = TextField(null=True)
+    engine_trade_id: CharField = CharField(null=True, max_length=128)
+    engine_order_id: CharField = CharField(null=True, max_length=128)
+    raw_direction: CharField = CharField(null=True, max_length=32)
+    raw_offset: CharField = CharField(null=True, max_length=32)
+    open_price: FloatField = FloatField(default=0.0)
+    close_price: FloatField = FloatField(default=0.0)
+    pnl: FloatField = FloatField(default=0.0)
+    commission: FloatField = FloatField(default=0.0)
     created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
     class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
         table_name: str = "backtest_trades"
+
+
+class TradeClearing(OrmBaseModel):
+    """成交配对清算记录。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="trade_clearings", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="trade_clearings", null=True, on_delete="SET NULL")
+    symbol: CharField = CharField()
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="open_clearings", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="close_clearings", null=True, on_delete="SET NULL"
+    )
+    source_trade_ids: TextField = TextField(null=True)
+    direction: CharField = CharField()
+    volume: FloatField = FloatField()
+    open_time: DateTimeField = DateTimeField()
+    close_time: DateTimeField = DateTimeField()
+    open_price: FloatField = FloatField()
+    close_price: FloatField = FloatField()
+    contract_multiplier: FloatField = FloatField()
+    price_tick: FloatField = FloatField(null=True)
+    gross_pnl: FloatField = FloatField()
+    commission: FloatField = FloatField()
+    slippage_cost: FloatField = FloatField()
+    net_pnl: FloatField = FloatField()
+    open_reason: CharField = CharField(max_length=512, default="")
+    close_reason: CharField = CharField(max_length=512, default="")
+    holding_seconds: FloatField = FloatField(null=True)
+    holding_bars: IntegerField = IntegerField(null=True)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    forced_close_reason: CharField = CharField(null=True, max_length=128)
+    # 结构诊断透传与派生字段（2026-06-30 新增）
+    # diagnostics_json: 原样透传开仓成交 decision_payload 的 alpha/risk/execution 三层；
+    #   字段集随策略族变化，不拆成固定列，聚合在报告查询层解析。
+    exit_reason: CharField = CharField(null=True, max_length=64)  # 规约后的退出原因枚举
+    mae: FloatField = FloatField(null=True)  # 最大不利波动（价格口径，clearing 从 K 线派生）
+    mfe: FloatField = FloatField(null=True)  # 最大有利波动（价格口径，clearing 从 K 线派生）
+    diagnostics_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "trade_clearings"
+
+
+class AccountLedgerEntry(OrmBaseModel):
+    """账户账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="account_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="account_ledger_entries", null=True, on_delete="SET NULL")
+    trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="account_ledger_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="account_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField(null=True)
+    cash_delta: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    unrealized_pnl_delta: FloatField = FloatField(default=0.0)
+    commission_delta: FloatField = FloatField(default=0.0)
+    slippage_delta: FloatField = FloatField(default=0.0)
+    cash_balance: FloatField = FloatField(default=0.0)
+    realized_pnl_balance: FloatField = FloatField(default=0.0)
+    unrealized_pnl_balance: FloatField = FloatField(default=0.0)
+    equity: FloatField = FloatField(default=0.0)
+    margin: FloatField = FloatField(null=True)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "account_ledger_entries"
+
+
+class PositionLedgerEntry(OrmBaseModel):
+    """持仓账本流水。"""
+
+    backtest: ForeignKeyField = ForeignKeyField(Backtest, backref="position_ledger_entries", on_delete="CASCADE")
+    run: ForeignKeyField = ForeignKeyField(Run, backref="position_ledger_entries", null=True, on_delete="SET NULL")
+    open_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_open_entries", null=True, on_delete="SET NULL"
+    )
+    close_trade: ForeignKeyField = ForeignKeyField(
+        BacktestTrade, backref="position_close_entries", null=True, on_delete="SET NULL"
+    )
+    clearing: ForeignKeyField = ForeignKeyField(
+        TradeClearing, backref="position_ledger_entries", null=True, on_delete="CASCADE"
+    )
+    source_type: CharField = CharField(default="backtest", max_length=32)
+    source_id: IntegerField = IntegerField(null=True)
+    event_time: DateTimeField = DateTimeField()
+    event_type: CharField = CharField(max_length=64)
+    symbol: CharField = CharField()
+    direction: CharField = CharField()
+    volume_delta: FloatField = FloatField(default=0.0)
+    position_volume: FloatField = FloatField(default=0.0)
+    avg_open_price: FloatField = FloatField(default=0.0)
+    realized_pnl_delta: FloatField = FloatField(default=0.0)
+    is_forced_close: BooleanField = BooleanField(default=False)
+    metadata_json: TextField = TextField(null=True)
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "position_ledger_entries"
 
 
 class BacktestDaily(OrmBaseModel):
@@ -405,15 +496,15 @@ class BacktestDaily(OrmBaseModel):
 
 
 class SchemaInfo(OrmBaseModel):
-    """数据库 schema 版本表 — 配合 data/schema.py 实现极简版本化迁移
+    """数据库 schema 版本表 — 配合 data/migrations.py 实现极简版本化迁移
 
-    每条记录代表一次已执行的迁移。version 单调递增，与 data/schema.py 中的
+    每条记录代表一次已执行的迁移。version 单调递增，与 data/migrations.py 中的
     CURRENT_SCHEMA_VERSION / MIGRATIONS 对齐。
 
     约定（给 AI 看）：新增迁移时必须同时更新 3 个地方：
     1. data/models.py 中的 ORM 字段定义（改表结构）
-    2. data/schema.py 中的 CURRENT_SCHEMA_VERSION（+1）
-    3. data/schema.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
+    2. data/migrations.py 中的 CURRENT_SCHEMA_VERSION（+1）
+    3. data/migrations.py 中的 MIGRATIONS 列表（追加一条，对应新版本号）
     """
 
     version: IntegerField = IntegerField(unique=True)
@@ -425,137 +516,75 @@ class SchemaInfo(OrmBaseModel):
 
 
 # ==============================================================================
-# Live / Test 实时交易 ORM 模型（2 个 Model → 4 张物理表）
+# Realtime 实时链路 ORM 模型
 #
-# 设计决策 (参见 cli/tqsdk-test-plan.md §8-9):
-#   - test 和 live 共用同一套字段定义，通过工厂函数指定不同表名
-#   - test 表: test_sessions / test_trades（信号验证，不下单，pnl/commission 为 NULL）
-#   - live 表: live_sessions / live_trades（实盘/模拟交易，有真实盈亏）
-#   - 安全隔离: test 命令代码路径中不包含 TargetPosTask，永远不下单
+# test/live 已通过不同 SQLite 数据库文件隔离，因此实时链路在各环境内共用同一套表名：
+#   - realtime_sessions：一次实时策略运行的整体摘要
+#   - realtime_trades：实时运行中的信号或成交明细
 # ==============================================================================
 
 
-class BaseLiveModel(OrmBaseModel):
-    """Live / Test 共用的基类 — 子类必须指定 table_name"""
+class RealtimeSession(OrmBaseModel):
+    """实时策略运行会话记录"""
 
-    class Meta:
-        table_name: str | None = None  # pyright: ignore[reportIncompatibleVariableOverride]
+    # ── 标识 ──────────────────────────────────────
+    symbol: CharField = CharField(max_length=20)  # 品种代码 (如 SHFE.rb2509)
+    strategy: CharField = CharField(max_length=50)  # 策略名称
+    strategy_version: CharField = CharField(null=True, max_length=20)
+    git_hash: CharField = CharField(null=True, max_length=40)
+    # ── 运行状态 ──────────────────────────────────
+    mode: CharField = CharField(max_length=10)  # "test" / "sim" / "live"
+    status: CharField = CharField(max_length=20)  # running / stopped / error
+    started_at: DateTimeField = DateTimeField()
+    ended_at: DateTimeField = DateTimeField(null=True)
+    # ── 金额变动（live 时实时更新，test 时为 NULL）──
+    initial_capital: FloatField = FloatField(null=True)
+    current_balance: FloatField = FloatField(null=True)
+    total_pnl: FloatField = FloatField(null=True)
+    total_commission: FloatField = FloatField(null=True)
+    total_trades: IntegerField = IntegerField(default=0)
+    # ── 信号统计（test 时填充，live 时为 0）───────
+    total_signals: IntegerField = IntegerField(default=0)
+    buy_signals: IntegerField = IntegerField(default=0)
+    sell_signals: IntegerField = IntegerField(default=0)
+    # ── 统计指标（预留）────────────────────────────
+    total_return: FloatField = FloatField(null=True)
+    sharpe_ratio: FloatField = FloatField(null=True)
+    max_drawdown: FloatField = FloatField(null=True)
+    win_rate: FloatField = FloatField(null=True)
+    # ── 元数据 ──────────────────────────────────────
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
+    updated_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
-
-def _make_live_session_model(table_name: str) -> type[BaseLiveModel]:
-    """工厂函数：返回映射到指定表名的 LiveSession Model
-
-    Args:
-        table_name: "test_sessions" 或 "live_sessions"
-
-    用法:
-        TestSession = get_live_session_model("test_sessions")
-        LiveSession = get_live_session_model("live_sessions")
-    """
-
-    class LiveSession(BaseLiveModel):
-        # ── 标识 ──────────────────────────────────────
-        symbol: CharField = CharField(max_length=20)  # 品种代码 (如 SHFE.rb2509)
-        strategy: CharField = CharField(max_length=50)  # 策略名称
-        strategy_version: CharField = CharField(null=True, max_length=20)
-        git_hash: CharField = CharField(null=True, max_length=40)
-        # ── 运行状态 ──────────────────────────────────
-        mode: CharField = CharField(max_length=10)  # "test" / "sim" / "live"
-        status: CharField = CharField(max_length=20)  # running / stopped / error
-        started_at: DateTimeField = DateTimeField()
-        ended_at: DateTimeField = DateTimeField(null=True)
-        # ── 金额变动（live 时实时更新，test 时为 NULL）──
-        initial_capital: FloatField = FloatField(null=True)
-        current_balance: FloatField = FloatField(null=True)
-        total_pnl: FloatField = FloatField(null=True)
-        total_commission: FloatField = FloatField(null=True)
-        total_trades: IntegerField = IntegerField(default=0)
-        # ── 信号统计（test 时填充，live 时为 0）───────
-        total_signals: IntegerField = IntegerField(default=0)
-        buy_signals: IntegerField = IntegerField(default=0)
-        sell_signals: IntegerField = IntegerField(default=0)
-        # ── 统计指标（预留）────────────────────────────
-        total_return: FloatField = FloatField(null=True)
-        sharpe_ratio: FloatField = FloatField(null=True)
-        max_drawdown: FloatField = FloatField(null=True)
-        win_rate: FloatField = FloatField(null=True)
-        # ── 元数据 ──────────────────────────────────────
-        created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
-        updated_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
-
-        class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
-            pass
-
-    # peewee 元类处理时嵌套类闭包变量不可见，需在类创建后设置表名
-    LiveSession._meta.table_name = table_name  # type: ignore[attr-defined]
-
-    return LiveSession
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "realtime_sessions"
 
 
-def _make_live_trade_model(table_name: str) -> type[BaseLiveModel]:
-    """工厂函数：返回映射到指定表名的 LiveTrade Model
+class RealtimeTrade(OrmBaseModel):
+    """实时策略信号或成交明细"""
 
-    Args:
-        table_name: "test_trades" 或 "live_trades"
-    """
+    session_id: IntegerField = IntegerField()  # FK → RealtimeSession.id
+    datetime: DateTimeField = DateTimeField()  # test=信号时间, live=成交时间
+    symbol: CharField = CharField(max_length=20)
+    direction: CharField = CharField(max_length=10)  # long / short
+    offset: CharField = CharField(max_length=10)  # open / close
+    price: FloatField = FloatField()  # test=触发价, live=成交价
+    quantity: FloatField = FloatField()  # 数量（手）
+    pnl: FloatField = FloatField(null=True)  # test 时为 NULL
+    commission: FloatField = FloatField(null=True)  # test 时为 NULL
+    reason: CharField = CharField(max_length=512, default="")
+    created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
 
-    class LiveTrade(BaseLiveModel):
-        session_id: IntegerField = IntegerField()  # FK → LiveSession.id
-        datetime: DateTimeField = DateTimeField()  # test=信号时间, live=成交时间
-        symbol: CharField = CharField(max_length=20)
-        direction: CharField = CharField(max_length=10)  # long / short
-        offset: CharField = CharField(max_length=10)  # open / close
-        price: FloatField = FloatField()  # test=触发价, live=成交价
-        quantity: FloatField = FloatField()  # 数量（手）
-        pnl: FloatField = FloatField(null=True)  # test 时为 NULL
-        commission: FloatField = FloatField(null=True)  # test 时为 NULL
-        reason: CharField = CharField(max_length=512, default="")
-        created_at: DateTimeField = DateTimeField(constraints=[SQL("DEFAULT CURRENT_TIMESTAMP")])
-
-        class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
-            pass
-
-    LiveTrade._meta.table_name = table_name  # type: ignore[attr-defined]
-
-    return LiveTrade
+    class Meta:  # pyright: ignore[reportIncompatibleVariableOverride]
+        table_name: str = "realtime_trades"
 
 
-# 公开工厂函数（供 cli/commands/test.py 和 live.py 使用）
-def get_live_session_model(table_name: str) -> type[BaseLiveModel]:
-    """获取映射到指定表名的 LiveSession Model"""
-    return _make_live_session_model(table_name)
+# 兼容旧导入名；table_name 参数已不再使用，环境隔离由不同 SQLite 文件承担。
+def get_live_session_model(table_name: str | None = None) -> type[RealtimeSession]:
+    """获取实时运行会话模型。"""
+    return RealtimeSession
 
 
-def get_live_trade_model(table_name: str) -> type[BaseLiveModel]:
-    """获取映射到指定表名的 LiveTrade Model"""
-    return _make_live_trade_model(table_name)
-
-
-def init_database(db_path: str) -> None:
-    """初始化数据库连接 + 执行版本化迁移
-
-    迁移逻辑在 data/schema.py，按版本号顺序执行。迁移失败直接 raise。
-    """
-    bind_database(db_path)
-    database.create_tables(
-        [
-            Run,
-            RunStudy,
-            ExportMetadata,
-            OperationLog,
-            Backtest,
-            BacktestParam,
-            BacktestTrade,
-            BacktestDaily,
-            SchemaInfo,
-        ],
-        safe=True,
-    )  # pyright: ignore[reportUnknownMemberType]
-    from . import schema as _schema
-
-    _schema.run_pending_migrations()
-
-
-def close_database() -> None:
-    """关闭数据库连接并重置绑定"""
-    reset_database_binding()
+def get_live_trade_model(table_name: str | None = None) -> type[RealtimeTrade]:
+    """获取实时信号/成交模型。"""
+    return RealtimeTrade

@@ -8,6 +8,7 @@
 """
 
 import os
+import sqlite3
 
 import pandas as pd
 import pytest
@@ -36,7 +37,6 @@ class TestDataStoreInit:
 
     def test_tables_exist(self, temp_db_path):
         store = DataStore(temp_db_path)
-        import sqlite3
 
         conn = sqlite3.connect(temp_db_path)
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
@@ -44,6 +44,72 @@ class TestDataStoreInit:
         store.close()
         assert "export_metadata" in tables
         assert "operation_logs" in tables
+
+    def test_aggressive_migration_rebuilds_backtest_params_value_nullable(self, temp_db_path):
+        conn = sqlite3.connect(temp_db_path)
+        conn.executescript(
+            """
+            CREATE TABLE backtests (
+                id INTEGER NOT NULL PRIMARY KEY,
+                symbol VARCHAR(255) NOT NULL,
+                strategy VARCHAR(255) NOT NULL,
+                total_trades INTEGER NOT NULL,
+                total_return REAL NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE backtest_params (
+                id INTEGER NOT NULL PRIMARY KEY,
+                backtest_id INTEGER NOT NULL,
+                param_name VARCHAR(255) NOT NULL,
+                param_value REAL NOT NULL,
+                FOREIGN KEY(backtest_id) REFERENCES backtests(id) ON DELETE CASCADE
+            );
+            CREATE INDEX backtestparam_backtest_id ON backtest_params (backtest_id);
+            CREATE TABLE schema_info (
+                id INTEGER NOT NULL PRIMARY KEY,
+                version INTEGER NOT NULL,
+                description VARCHAR(255) NOT NULL,
+                applied_at DATETIME NOT NULL
+            );
+            INSERT INTO schema_info (version, description, applied_at) VALUES (3, 'legacy', CURRENT_TIMESTAMP);
+            INSERT INTO backtests (id, symbol, strategy, total_trades, total_return)
+            VALUES (1, 'DCE.m2509', 'ma', 1, 0.0);
+            INSERT INTO backtest_params (id, backtest_id, param_name, param_value)
+            VALUES (1, 1, 'sma_short', 5.0);
+            """
+        )
+        conn.close()
+
+        store = DataStore(temp_db_path, allow_aggressive_schema_migration=True)
+        from data.models import BacktestParam
+
+        params = {row.param_name: row for row in BacktestParam.select().where(BacktestParam.backtest == 1)}
+        store.close()
+
+        conn = sqlite3.connect(temp_db_path)
+        param_value_info = [
+            row for row in conn.execute("PRAGMA table_info(backtest_params)") if row[1] == "param_value"
+        ][0]
+        conn.close()
+        assert param_value_info[3] == 0
+        assert params["sma_short"].param_value == 5.0
+        assert params["sma_short"].param_type == "float"
+        assert params["sma_short"].param_text == "5.0"
+
+    def test_migration_adds_clearing_diagnostics_columns(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        store.close()
+
+        from data.migrations import get_current_version, get_expected_version
+
+        assert get_expected_version() >= 8
+
+        conn = sqlite3.connect(temp_db_path)
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(trade_clearings)")}
+        conn.close()
+        assert {"diagnostics_json", "exit_reason", "mae", "mfe"} <= cols
+        assert get_current_version() == get_expected_version()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -325,6 +391,29 @@ class TestInsertAndQuery:
         assert results[0].symbol == "DCE.good"
         store.close()
 
+    def test_insert_backtest_persists_non_numeric_strategy_params(self, temp_db_path):
+        store = DataStore(temp_db_path)
+        result = BacktestResult(
+            symbol="DCE.m2509",
+            strategy="ma",
+            status="success",
+            strategy_params={"sma_short": 5, "signal_profile": "sma_only", "enabled": True},
+        )
+
+        bt_id = store.insert_backtest_detailed(result)
+
+        from data.models import BacktestParam
+
+        params = {row.param_name: row for row in BacktestParam.select().where(BacktestParam.backtest == bt_id)}
+        assert params["sma_short"].param_value == 5.0
+        assert params["sma_short"].param_type == "int"
+        assert params["signal_profile"].param_value is None
+        assert params["signal_profile"].param_type == "str"
+        assert params["signal_profile"].param_text == '"sma_only"'
+        assert params["enabled"].param_value == 1.0
+        assert params["enabled"].param_type == "bool"
+        store.close()
+
 
 # ═══════════════════════════════════════════════════════════
 # DataStore 删除 & 级联
@@ -417,7 +506,13 @@ class TestTradeRecordSchema:
                 "offset": ["open", "close"],
                 "open_price": [3500.0, 3520.0],
                 "close_price": [3500.0, 3520.0],
+                "price": [3500.0, 3520.0],
                 "quantity": [1.0, 1.0],
+                "reason": ["", ""],
+                "engine_trade_id": [None, None],
+                "engine_order_id": [None, None],
+                "raw_direction": [None, None],
+                "raw_offset": [None, None],
                 "pnl": [200.0, -100.0],
                 "commission": [3.0, 3.0],
             }
@@ -434,7 +529,13 @@ class TestTradeRecordSchema:
                 "offset": ["open"],
                 "open_price": [3500.0],
                 "close_price": [3500.0],
+                "price": [3500.0],
                 "quantity": [1.0],
+                "reason": [""],
+                "engine_trade_id": [None],
+                "engine_order_id": [None],
+                "raw_direction": [None],
+                "raw_offset": [None],
                 "pnl": [0.0],
                 "commission": [0.0],
             }
@@ -451,7 +552,13 @@ class TestTradeRecordSchema:
                 "offset": ["open"],
                 "open_price": [-100.0],
                 "close_price": [3500.0],
+                "price": [-100.0],
                 "quantity": [1.0],
+                "reason": [""],
+                "engine_trade_id": [None],
+                "engine_order_id": [None],
+                "raw_direction": [None],
+                "raw_offset": [None],
                 "pnl": [0.0],
                 "commission": [0.0],
             }
@@ -566,7 +673,7 @@ class TestBacktestConsistency:
 
     # 2026-06-06 新增: profit_days + loss_days 一致性校验
     def test_profit_loss_days_consistent(self):
-        """盈利天数+亏损天数≈总天数（允许±2天误差）"""
+        """盈利天数+亏损天数不超过总天数 → 通过"""
         errors = validate_backtest_consistency(
             total_trades=10,
             win_trades=5,
@@ -574,39 +681,25 @@ class TestBacktestConsistency:
             trade_count=10,
             backtest_id=1,
             total_days=200,
-            profit_days=100,
-            loss_days=99,
+            profit_days=2,
+            loss_days=1,
         )
-        # 100+99=199 vs 200，差1天，在±2范围内，应通过
         assert len(errors) == 0
 
     def test_profit_loss_days_mismatch(self):
-        """盈利天数+亏损天数与总天数差异超过2天"""
-        validate_backtest_consistency(
+        """盈利天数+亏损天数不能超过总天数"""
+        errors = validate_backtest_consistency(
             total_trades=10,
             win_trades=5,
             loss_trades=5,
             trade_count=10,
             backtest_id=1,
-            total_days=365,
-            profit_days=195,
-            loss_days=170,
+            total_days=20,
+            profit_days=15,
+            loss_days=10,
         )
-        # 195+170=365 vs 365... 实际上相等
-        # 换一个不匹配的例子
-        errors2 = validate_backtest_consistency(
-            total_trades=10,
-            win_trades=5,
-            loss_trades=5,
-            trade_count=10,
-            backtest_id=1,
-            total_days=365,
-            profit_days=195,
-            loss_days=50,
-        )
-        # 195+50=245 vs 365，差120天，应报错
-        assert len(errors2) >= 1
-        assert any("profit_days" in e for e in errors2)
+        assert len(errors) >= 1
+        assert any("profit_days" in e for e in errors)
 
     # 2026-06-06 新增: commission 一致性校验
     def test_commission_consistent(self):

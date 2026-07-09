@@ -260,6 +260,7 @@ class TestExecuteTrial:
         bp._WORKER_CTX["strategy_name"] = "noop_strategy"
         bp._WORKER_CTX["strategy_params"] = {}
         bp._WORKER_CTX["backtest_config"] = config
+        bp._WORKER_CTX["data_env"] = None
 
         result = _execute_trial({}, trial_seed=42)
 
@@ -388,4 +389,3 @@ class TestParallelBacktestOptimizer:
         assert result.best_params == {}
         assert result.best_value == 0.0
         assert result.trial_data == []
-

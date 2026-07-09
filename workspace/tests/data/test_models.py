@@ -1,6 +1,7 @@
 """测试 data/models.py — Pydantic 模型与 ORM 模型"""
 
 import pytest
+from data.lifecycle import close_database, init_database
 from data.models import (
     Backtest,
     BacktestDaily,
@@ -10,10 +11,12 @@ from data.models import (
     DataSummary,
     ExportMetadata,
     OperationLog,
+    RealtimeSession,
+    RealtimeTrade,
     SymbolInfo,
     TradeRecord,
-    close_database,
-    init_database,
+    get_live_session_model,
+    get_live_trade_model,
 )
 
 # ==============================================================================
@@ -188,6 +191,7 @@ class TestTradeRecord:
             offset="open",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
             pnl=250.0,
         )
@@ -203,6 +207,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=0,
                 pnl=0.0,
             )
@@ -216,6 +221,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=-1,
                 pnl=0.0,
             )
@@ -229,6 +235,7 @@ class TestTradeRecord:
                 direction="long",
                 open_price=3500.0,
                 close_price=3550.0,
+                price=3550.0,
                 quantity=5,
                 pnl=0.0,
                 commission=-0.1,
@@ -242,9 +249,8 @@ class TestTradeRecord:
             direction="long",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
-            pnl=0.0,
-            commission=0.0,
         )
         assert t.commission == 0.0
 
@@ -256,6 +262,7 @@ class TestTradeRecord:
             direction="long",
             open_price=3500.0,
             close_price=3550.0,
+            price=3550.0,
             quantity=5,
         )
         d = t.model_dump(exclude_none=True)
@@ -272,6 +279,7 @@ class TestTradeRecord:
             "direction": "short",
             "open_price": 4000.0,
             "close_price": 3900.0,
+            "price": 3900.0,
             "quantity": 3,
             "pnl": 300.0,
         }
@@ -352,6 +360,16 @@ class TestOrmModels:
     def test_backtest_daily_table_name(self):
         assert BacktestDaily._meta.table_name == "backtest_daily"
 
+    def test_realtime_table_names(self):
+        assert RealtimeSession._meta.table_name == "realtime_sessions"
+        assert RealtimeTrade._meta.table_name == "realtime_trades"
+
+    def test_legacy_realtime_model_factories_return_unified_models(self):
+        assert get_live_session_model("test_sessions") is RealtimeSession
+        assert get_live_session_model("live_sessions") is RealtimeSession
+        assert get_live_trade_model("test_trades") is RealtimeTrade
+        assert get_live_trade_model("live_trades") is RealtimeTrade
+
     def test_backtest_trade_foreign_key(self):
         """BacktestTrade 有外键关联 Backtest"""
         fk_field = BacktestTrade.backtest
@@ -359,7 +377,7 @@ class TestOrmModels:
 
 
 # ==============================================================================
-# init_database / close_database
+# lifecycle init_database / close_database
 # ==============================================================================
 
 
@@ -377,6 +395,19 @@ class TestDatabaseInit:
             assert "backtests" in tables
             assert "backtest_trades" in tables
             assert "backtest_daily" in tables
+        finally:
+            close_database()
+
+    def test_realtime_models_create_unified_tables(self, temp_db_path):
+        """实时链路在不同环境 DB 内使用统一 realtime 表名。"""
+        init_database(temp_db_path)
+        try:
+            RealtimeSession._meta.database.create_tables([RealtimeSession, RealtimeTrade], safe=True)
+            tables = RealtimeSession._meta.database.get_tables()
+            assert "realtime_sessions" in tables
+            assert "realtime_trades" in tables
+            assert "test_sessions" not in tables
+            assert "live_sessions" not in tables
         finally:
             close_database()
 

@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 ROOT_DIR="$SCRIPT_DIR/../.."
 PROJECT_DATA="$ROOT_DIR/project_data"
-DB="$PROJECT_DATA/database/quant_shared.db"
+DB="$PROJECT_DATA/database/backtest/quant.db"
 TARGET="${1:-backtests}"
 
 clean_backtests() {
@@ -28,7 +28,7 @@ conn = sqlite3.connect(db)
 cur = conn.cursor()
 
 # 固定业务表（不动 export_metadata）
-biz_tables = ['runs', 'run_studies', 'backtests', 'backtest_params', 'backtest_trades', 'backtest_daily', 'operation_logs']
+biz_tables = ['runs', 'run_studies', 'backtests', 'backtest_params', 'account_ledger_entries', 'position_ledger_entries', 'trade_clearings', 'backtest_trades', 'backtest_daily', 'operation_logs']
 for tbl in biz_tables:
     try:
         cur.execute(f'SELECT count(*) FROM \"{tbl}\"')
@@ -93,15 +93,28 @@ case "$TARGET" in
     logs)
         clean_dir "clean-logs" "$PROJECT_DATA/logs"
         ;;
+    research)
+        clean_dir "clean-research" "$PROJECT_DATA/research"
+        ;;
     runtime)
         clean_dir "clean-reports" "$PROJECT_DATA/reports"
         clean_dir "clean-cache" "$PROJECT_DATA/cache"
         clean_dir "clean-profiles" "$PROJECT_DATA/profiles"
         clean_dir "clean-coverage" "$PROJECT_DATA/coverage"
         ;;
+    all)
+        # 一次性清空所有回测衍生物：DB 业务表 + reports/cache/logs/profiles/coverage/research
+        clean_backtests
+        clean_dir "clean-reports" "$PROJECT_DATA/reports"
+        clean_dir "clean-cache" "$PROJECT_DATA/cache"
+        clean_dir "clean-logs" "$PROJECT_DATA/logs"
+        clean_dir "clean-profiles" "$PROJECT_DATA/profiles"
+        clean_dir "clean-coverage" "$PROJECT_DATA/coverage"
+        clean_dir "clean-research" "$PROJECT_DATA/research"
+        ;;
     *)
         echo "未知清理目标: $TARGET" >&2
-        echo "可选: backtests | reports | cache | logs | runtime" >&2
+        echo "可选: backtests | reports | cache | logs | research | runtime | all" >&2
         exit 1
         ;;
 esac

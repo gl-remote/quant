@@ -1,12 +1,9 @@
 """
 期货品种合约规格表
 
-交易所标准参数 + 期货公司加收，按 symbol 前缀查询。
-
-期货公司加收说明:
-  东方财富期货用户实测约 1.3 元/手（以玉米为例: 开平共 5 元，
-  交易所 1.2 元/手，加收 = 2.5 - 1.2 = 1.3 元/手单边）。
-  不同品种、不同居间人加收不同，可在调用时按需调整 broker_addon 参数。
+期货公司手续费说明:
+  当前按东方财富期货官网“公司期货手续费标准”作为普通账户成本口径；
+  该标准已包含期货公司加收部分，具体账户仍以中国期货市场监控中心结算单为准。
 
 使用方法::
 
@@ -19,8 +16,11 @@
 
 from dataclasses import dataclass
 
-# 常见期货公司加收标准（元/手，单边）
-BROKER_ADDON_DFCF = 1.3  # 东方财富: 玉米开平共5元→单边2.5, 交易所1.2, 加收=2.5-1.2=1.3
+from common.symbol_utils import extract_contract_prefix
+
+# 东方财富期货官网“公司期货手续费标准”数据采集时间：2026-05-13。
+# 该普通账户标准已包含期货公司加收部分；具体账户以交易结算单为准。
+BROKER_ADDON_DFCF = 0.0
 
 
 @dataclass
@@ -58,10 +58,7 @@ class ContractSpec:
         return self.commission * lots
 
     def total_commission(self, price: float, lots: int = 1, broker_addon: float = BROKER_ADDON_DFCF) -> float:
-        """总手续费（含期货公司加收），单边
-
-        总手续费 = 交易所手续费 + broker_addon × 手数
-        """
+        """总手续费，单边。"""
         return self.exchange_commission(price, lots) + broker_addon * lots
 
     def slippage(self, lots: int = 1) -> float:
@@ -88,16 +85,16 @@ class _ContractRegistry:
 
     def get_symbol(self, symbol: str) -> ContractSpec | None:
         """通过完整 symbol 查询（如 'DCE.m2505', 'SHFE.rb2505'）"""
-        clean = symbol.split(".")[-1] if "." in symbol else symbol
-        # 去掉数字后缀: m2505 → m
-        prefix = "".join(c for c in clean if not c.isdigit())
+        prefix = extract_contract_prefix(symbol)
+        if prefix is None:
+            return None
         return self.get_prefix(prefix)
 
     def _register_all(self) -> None:
         # ════════════════════════════════════════
         # 大连商品交易所 (DCE)
         # ════════════════════════════════════════
-        self._register("m", ContractSpec(size=10, tick=1.0, commission=1.5, margin=0.07))
+        self._register("m", ContractSpec(size=10, tick=1.0, commission=4.5, margin=0.07))
         self._register("y", ContractSpec(size=10, tick=1.0, commission=2.5, margin=0.07))
         self._register("c", ContractSpec(size=10, tick=1.0, commission=1.2, margin=0.07))
         self._register("i", ContractSpec(size=100, tick=0.5, commission=0.0003, is_rate=True, margin=0.11))
@@ -114,7 +111,7 @@ class _ContractRegistry:
         # ════════════════════════════════════════
         # 上海期货交易所 (SHFE)
         # ════════════════════════════════════════
-        self._register("rb", ContractSpec(size=10, tick=1.0, commission=0.0002, is_rate=True, margin=0.07))
+        self._register("rb", ContractSpec(size=10, tick=1.0, commission=0.0003, is_rate=True, margin=0.07))
         self._register("cu", ContractSpec(size=5, tick=10.0, commission=0.00005, is_rate=True, margin=0.05))
         self._register("al", ContractSpec(size=5, tick=5.0, commission=3.0, margin=0.05))
         self._register("zn", ContractSpec(size=5, tick=5.0, commission=3.0, margin=0.05))
@@ -132,7 +129,7 @@ class _ContractRegistry:
         # ════════════════════════════════════════
         # 郑州商品交易所 (CZCE)
         # ════════════════════════════════════════
-        self._register("sr", ContractSpec(size=10, tick=1.0, commission=3.0, margin=0.05))
+        self._register("sr", ContractSpec(size=10, tick=1.0, commission=9.0, margin=0.05))
         self._register("cf", ContractSpec(size=5, tick=5.0, commission=4.3, margin=0.05))
         self._register("ta", ContractSpec(size=5, tick=2.0, commission=3.0, margin=0.05))
         self._register("ma", ContractSpec(size=10, tick=1.0, commission=2.0, margin=0.05))

@@ -13,10 +13,9 @@ from typing import Any, TypeVar
 
 from common.constants import SIGNAL_STOP_LOSS, SIGNAL_TAKE_PROFIT, SIGNAL_TRADE_COOLDOWN
 
-from strategies.strategy_aspects.primitives import RiskReason, RiskRole
-
-from .._parser import _ParsedPredicate, parse_expr
-from ..direction._core import _build_indicator_requirements
+from ..predicate import AspectPredicate
+from ..primitives import RiskReason, RiskRole
+from ..requirements import build_indicator_requirements
 
 T = TypeVar("T", bound=type)
 
@@ -35,7 +34,7 @@ def _write_position_diagnostics(ctx: Any, state: Any, close: float) -> None:
 # ── data_requirements 包装工具 ──────────────────────────────
 
 
-def _wrap_data_requirements(cls: type, predicate: _ParsedPredicate) -> None:
+def _wrap_data_requirements(cls: type, predicate: AspectPredicate) -> None:
     """包装类的 data_requirements，在原始基础上合并谓词涉及的指标需求。"""
     original_dr = cls.data_requirements  # type: ignore[attr-defined]
 
@@ -45,7 +44,7 @@ def _wrap_data_requirements(cls: type, predicate: _ParsedPredicate) -> None:
         if base is None:
             return base
         for metric in predicate.metrics:
-            base.merge(_build_indicator_requirements(metric, config))
+            base.merge(build_indicator_requirements(metric, config))
         return base
 
     cls.data_requirements = _dr_wrapper  # type: ignore[attr-defined]
@@ -57,7 +56,7 @@ def _wrap_data_requirements(cls: type, predicate: _ParsedPredicate) -> None:
 def _exit_aspect(
     role: RiskRole,
     reason_name: str,
-    predicate: _ParsedPredicate,
+    predicate: AspectPredicate,
 ) -> Callable[[T], T]:
     """出场切面统一工厂 — 有持仓时触发谓词求值，满足则写入对应 exit 桶。"""
 
@@ -99,7 +98,7 @@ def _exit_aspect(
 def _entry_block_aspect(
     role: RiskRole,
     reason_name: str,
-    predicate: _ParsedPredicate,
+    predicate: AspectPredicate,
 ) -> Callable[[T], T]:
     """入场阻断切面统一工厂 — 空仓时触发谓词求值，满足则写入对应 entry_block 桶。"""
 
@@ -138,14 +137,18 @@ def exit_for_take_profit(expr: str) -> Callable[[T], T]:
 
     :param expr: DSL 表达式，如 ``"atr@15m * {atr_take_profit_multiplier} < profit_abs()"``。
     """
+    from .._parser import parse_expr
+
     return _exit_aspect("take_profit", SIGNAL_TAKE_PROFIT, parse_expr(expr))
 
 
 def exit_for_stop_loss(expr: str) -> Callable[[T], T]:
     """止损出场切面 — 有持仓时评估表达式条件，触发则写入 ``risk.stop_loss.exit``。
 
-    :param expr: DSL 表达式，如 ``"profit_pct() >= {stop_loss_ratio}"``。
+    :param expr: DSL 表达式，如 ``"loss_pct() >= {stop_loss_ratio}"``。
     """
+    from .._parser import parse_expr
+
     return _exit_aspect("stop_loss", SIGNAL_STOP_LOSS, parse_expr(expr))
 
 
@@ -154,6 +157,8 @@ def entry_block_after_take_profit(expr: str) -> Callable[[T], T]:
 
     :param expr: DSL 表达式，如 ``"cooldown() < {cooldown_minutes}"``。
     """
+    from .._parser import parse_expr
+
     return _entry_block_aspect("take_profit", SIGNAL_TRADE_COOLDOWN, parse_expr(expr))
 
 
@@ -162,4 +167,6 @@ def entry_block_after_stop_loss(expr: str) -> Callable[[T], T]:
 
     :param expr: DSL 表达式，如 ``"cooldown() < {cooldown_minutes}"``。
     """
+    from .._parser import parse_expr
+
     return _entry_block_aspect("stop_loss", SIGNAL_TRADE_COOLDOWN, parse_expr(expr))

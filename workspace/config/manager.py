@@ -328,7 +328,10 @@ class ConfigManager:
         try:
             if not self._config.is_valid:
                 return False
-            return all(not (s.name == STRATEGY_MA and s.sma_short >= s.sma_long) for s in self._config.strategies)
+            return all(
+                not (s.name == STRATEGY_MA and getattr(s, "sma_short", 0) >= getattr(s, "sma_long", float("inf")))
+                for s in self._config.strategies
+            )
         except Exception:
             return False
 

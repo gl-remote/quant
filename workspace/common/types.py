@@ -71,7 +71,7 @@ class BacktestResult:
 
     字段来源说明:
       - vnpy 直接提供: vnpy calculate_statistics() 输出
-      - 自行计算: 从逐笔交易记录(pnl)聚合统计（基于净盈亏）
+      - 自行计算: 从逐笔交易记录(pnl)聚合统计（pnl 为毛盈亏，不含手续费/滑点）
       - 配置入参: 回测运行时传入的参数
     """
 
@@ -135,7 +135,7 @@ class BacktestResult:
     # ── 原始数据 ──────────────────────────────────────
     engine_config: dict[str, object] = field(default_factory=dict)  # JSON 元数据
     data_src: str | None = None  # 数据源路径
-    strategy_params: dict[str, float] | None = None  # 策略参数
+    strategy_params: dict[str, object] | None = None  # 策略参数
     fills: list[dict[str, object]] = field(default_factory=list)  # 逐笔交易记录
     daily_results: list[dict] = field(default_factory=list)  # 每日资金曲线
     # ── 链路信息 ──────────────────────────────────────

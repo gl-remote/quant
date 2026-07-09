@@ -32,13 +32,14 @@ PATTERN ?= DCE\.m.*
 TRIALS ?= 30
 
 .DEFAULT_GOAL := help
-.PHONY: help backtest-ma backtest-atr debug-parallel debug-single report clean clean-backtests clean-reports clean-cache clean-logs clean-runtime fetch signal
+.PHONY: help backtest-ma backtest-atr debug-parallel debug-single report clean clean-backtests clean-reports clean-cache clean-logs clean-research clean-runtime fetch signal
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-clean: clean-backtests ## 清理回测 / Optuna 数据（保留 CSV / metadata）
+clean: ## 清空所有回测衍生物：DB 业务表 + reports/cache/logs/profiles/coverage/research（保留 CSV / metadata）
+	bash scripts/tools/clean_data.sh all
 
 clean-backtests: ## 只清 DB 中回测 / Optuna 数据（保留 CSV / metadata）
 	bash scripts/tools/clean_data.sh backtests
@@ -51,6 +52,9 @@ clean-cache: ## 只清 project_data/cache
 
 clean-logs: ## 只清 project_data/logs
 	bash scripts/tools/clean_data.sh logs
+
+clean-research: ## 只清 project_data/research（脚本产出的 JSON 摘要）
+	bash scripts/tools/clean_data.sh research
 
 clean-runtime: ## 清 reports/cache/profiles/coverage，保留 market_data/database
 	bash scripts/tools/clean_data.sh runtime

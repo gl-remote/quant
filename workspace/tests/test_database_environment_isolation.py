@@ -10,7 +10,8 @@ from cli.commands.report import cmd_report
 from cli.env import build_data_context
 from config import ConfigManager
 from data import DataManager
-from data.models import current_database_path, init_database
+from data.connection import current_database_path
+from data.lifecycle import init_database
 from data.output_paths import database_path
 from data.store import DataStore
 

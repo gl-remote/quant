@@ -72,6 +72,13 @@ repos:
         files: ^(workspace/backtest/|workspace/tests/backtest/)
         pass_filenames: false
 
+      - id: verify-clearing
+        name: verify clearing (scripts/test.sh all clearing)
+        entry: bash scripts/test.sh all clearing
+        language: system
+        files: ^(workspace/clearing/|workspace/tests/clearing/)
+        pass_filenames: false
+
       - id: verify-strategies
         name: verify strategies (scripts/test.sh all strategies)
         entry: bash scripts/test.sh all strategies

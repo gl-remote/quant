@@ -85,4 +85,4 @@ case "$COMMAND" in
 esac
 
 # 执行命令
-(cd "$SCRIPT_DIR" && uv run python main.py "$@")
+(cd "$SCRIPT_DIR" && PYTHONPATH="$SCRIPT_DIR/workspace${PYTHONPATH:+:$PYTHONPATH}" uv run python main.py "$@")

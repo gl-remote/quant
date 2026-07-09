@@ -98,9 +98,18 @@ class RunFinalizer:
     3. 最后 export_json（此时日志完整）
     """
 
-    def __init__(self, dm: DataManager, helper: RunLogHelper | None = None) -> None:
+    def __init__(
+        self,
+        dm: DataManager,
+        helper: RunLogHelper | None = None,
+        *,
+        skip_report_build: bool = False,
+    ) -> None:
         self._dm = dm
         self._helper = helper or RunLogHelper()
+        # 用于批量扫参 / smoke run，跳过前端构建以省 10~30s/run；
+        # DB 状态、清算、logs.json 仍正常落地。
+        self._skip_report_build = skip_report_build
 
     def _finalize(self, run_id: int, status: str) -> None:
         """内部收尾，单调线性时序（每步只做一件事）：
@@ -110,10 +119,22 @@ class RunFinalizer:
              run_data_exports → build_frontend → [hook] → write_entry_html
            其中 hook（detach + export_json）在 frontend 之后、entry_html 之前执行，
            确保 logs.json 落盘后再打包入口 HTML，只打包一次。
+
+        当 `skip_report_build=True` 时跳过步骤 2 的 ReportWorkflow 调用，
+        但仍保留 finish_run / ClearingWorkflow / logs.json 导出，便于批量扫参场景。
         """
+        from cli.workflows.clearing import ClearingRequest, ClearingWorkflow
         from cli.workflows.report import ReportBuildRequest, ReportWorkflow
 
         self._dm.store.finish_run(run_id, status)
+        if status == "success":
+            ClearingWorkflow(self._dm).run(ClearingRequest(run_id=run_id))
+        if self._skip_report_build:
+            # 完全跳过 report 目录相关的产物：前端 / JSON 数据 / logs.json。
+            # 只保留 finish_run + Clearing 与 DB 落地，供批量扫参场景。
+            self._helper.detach()
+            logger.info("跳过报表构建（skip_report_build=True），run_id={}", run_id)
+            return
         ReportWorkflow(self._dm).build(
             ReportBuildRequest(
                 run_id=run_id,

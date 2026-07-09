@@ -21,9 +21,9 @@
     @entry_block_after_take_profit("cooldown() < {cooldown_minutes}")
     @entry_block_after_stop_loss("cooldown() < {cooldown_minutes}")
     @exit_for_take_profit("atr@15m * {atr_take_profit_multiplier} < profit_abs()")
-    @exit_for_stop_loss("atr@15m * {atr_stop_loss_multiplier} < profit_abs()")
+    @exit_for_stop_loss("atr@15m * {atr_stop_loss_multiplier} < loss_abs()")
     @exit_for_take_profit("profit_pct() >= {take_profit_ratio}")
-    @exit_for_stop_loss("profit_pct() >= {stop_loss_ratio}")
+    @exit_for_stop_loss("loss_pct() >= {stop_loss_ratio}")
     class MyStrategy(Strategy[MyParams]):
         def on_bar(self, state, ctx):
             # 策略自行消费方向建议与风控建议

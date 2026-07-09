@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import cProfile
+import json
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -32,6 +33,7 @@ from backtest import (
     SearchResultPersister,
     VnpyBacktestEngine,
     WalkForwardPersister,
+    load_strategy_and_config,
 )
 from common.constants import (
     LOG_STATUS_ERROR,
@@ -48,6 +50,8 @@ from config import ConfigManager
 from config.schemas import BacktestConfig
 from data import DataManager
 from loguru import logger
+from strategies.core import Strategy
+from strategies.runtime.aggregate import parse_period_minutes
 from strategies.runtime.data_feed import DataFeed
 from strategies.utils import (
     apply_strategy_config,
@@ -80,6 +84,8 @@ class VnpySearchRequest:
     no_search: bool = False
     dump_indicators: bool = False
     early_stop_patience: int | None = None
+    strategy_param_overrides: dict[str, Any] | None = None
+    no_report: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,7 @@ class VnpyWalkForwardRequest:
     pattern: str | None
     start: str | None
     end: str | None
+    no_report: bool = False
     # 阶段 7 在此扩展窗口参数
 
 
@@ -135,7 +142,9 @@ class BacktestRunWorkflow:
     def run_vnpy_search(self, req: VnpySearchRequest) -> None:
         """vnpy 批量参数搜索（含串行 / 并行）"""
         bc = self._cm.get_backtest_config()
-        strategy_params = self._strategy_params(req.strategy)
+        strategy_params = self._strategy_params(req.strategy, req.strategy_param_overrides)
+        interval = self._strategy_required_interval(req.strategy, strategy_params, bc.interval)
+        bc = bc.model_copy(update={"interval": interval})
 
         datasets = self._load_datasets(req.symbol, req.pattern, req.start, req.end, bc.interval)
         if datasets is None:
@@ -156,7 +165,7 @@ class BacktestRunWorkflow:
         engine.set_run_id(run_id)
 
         log_helper = RunLogHelper()
-        finalizer = RunFinalizer(self._dm, log_helper)
+        finalizer = RunFinalizer(self._dm, log_helper, skip_report_build=req.no_report)
         log_helper.attach(run_id)
 
         try:
@@ -182,6 +191,8 @@ class BacktestRunWorkflow:
         """vnpy Walk-Forward 滚动验证"""
         bc = self._cm.get_backtest_config()
         strategy_params = self._strategy_params(req.strategy)
+        interval = self._strategy_required_interval(req.strategy, strategy_params, bc.interval)
+        bc = bc.model_copy(update={"interval": interval})
 
         datasets = self._load_datasets(req.symbol, req.pattern, req.start, req.end, bc.interval)
         if datasets is None:
@@ -201,7 +212,7 @@ class BacktestRunWorkflow:
         engine.set_run_id(run_id)
 
         log_helper = RunLogHelper()
-        finalizer = RunFinalizer(self._dm, log_helper)
+        finalizer = RunFinalizer(self._dm, log_helper, skip_report_build=req.no_report)
         log_helper.attach(run_id)
 
         try:
@@ -260,7 +271,7 @@ class BacktestRunWorkflow:
             contract_size=int(bc.contract_size),
             margin=0.1,
         )
-        bridge = TqsdkStrategyBridge(strategy=strategy_core, state=state)
+        bridge: TqsdkStrategyBridge[Any] = TqsdkStrategyBridge(strategy=cast(Strategy[Any], strategy_core), state=state)
 
         logger.info(
             "回测: {} {}~{} 资金={} strategy={} GUI={}",
@@ -326,9 +337,34 @@ class BacktestRunWorkflow:
 
     # ── vnpy 公共部分 ──────────────────────────────────
 
-    def _strategy_params(self, strategy_name: str) -> dict[str, Any]:
+    def _strategy_params(self, strategy_name: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         sc = self._cm.get_strategy_config(strategy_name or "ma")
-        return sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+        params = sc.model_dump(exclude={"name", "enabled", "kline_period", "search_space"})
+        if overrides:
+            params.update(overrides)
+        return params
+
+    @staticmethod
+    def _strategy_required_interval(strategy_name: str, strategy_params: dict[str, Any], default_interval: str) -> str:
+        strategy_cls, strategy_config = load_strategy_and_config(strategy_name, strategy_params)
+        requirements = strategy_cls().data_requirements(strategy_config)
+        if requirements is None:
+            return default_interval
+        all_periods = set(requirements.periods)
+        for period in requirements.indicators:
+            all_periods.add(period)
+        if not all_periods:
+            return default_interval
+        required_interval = min(all_periods, key=parse_period_minutes)
+        if parse_period_minutes(default_interval) > parse_period_minutes(required_interval):
+            logger.info(
+                "策略 {} 需要最小周期 {}，覆盖回测配置周期 {}",
+                strategy_name,
+                required_interval,
+                default_interval,
+            )
+            return required_interval
+        return default_interval
 
     def _load_datasets(
         self,
@@ -566,6 +602,7 @@ class BacktestRunWorkflow:
                 search_space=search_space,
                 strategy_params=strategy_params,
                 backtest_config=bc,
+                data_env=self._cm.get_data_config().environment,
                 run_id=run_id,
                 n_trials=n_trials,
                 search_type=run_engine,
@@ -714,6 +751,9 @@ class BacktestRunWorkflow:
                     "pnl": 0.0,
                     "commission": 0.0,
                     "reason": f.reason,
+                    "decision_payload_json": json.dumps(f.decision_payload, ensure_ascii=False)
+                    if f.decision_payload
+                    else None,
                 }
                 for f in fills
             ]

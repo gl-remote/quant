@@ -14,8 +14,10 @@ from data import DataManager
 from loguru import logger
 
 from ..cache import BuildCache
+from ..output_paths import run_data_dir
 from ..writer import (
     export_backtests_json,
+    export_clearing_diagnostics_json,
     export_equity_json,
     export_kline_json,
     export_optuna_json,
@@ -53,6 +55,11 @@ def run_data_exports(
         ("equity", _collect_equity_fingerprint, lambda rid, d: export_equity_json(rid, d)),
         ("kline", _collect_kline_fingerprint, lambda rid, d: export_kline_json(rid, d)),
         ("optuna", lambda d, rid: d.get_optuna_data(rid), lambda rid, d: export_optuna_json(rid, d)),
+        (
+            "clearing_diagnostics",
+            lambda d, rid: d.get_clearing_diagnostics_for_run(rid),
+            lambda rid, d: export_clearing_diagnostics_json(rid, d),
+        ),
         ("trades", _collect_trades_fingerprint, lambda rid, d: export_trades_json(rid, d)),
         ("nav", lambda d, _rid: d.get_all_runs(), lambda _rid, d: write_nav_json(d)),
     ]
@@ -73,7 +80,7 @@ def run_data_exports(
         elif cache:
             # 通用增量检查: 基于指纹/缓存哈希对比
             new_data = getter(dm, run_id)
-            if cache.needs_update(data_type, run_id, new_data):
+            if cache.needs_update(data_type, run_id, new_data) or _artifact_missing(run_id, data_type):
                 exporter(run_id, dm)
                 cache.update_fingerprint(data_type, run_id, new_data)
                 logger.info("→ 导出 {}（数据已变更）", data_type)
@@ -96,6 +103,11 @@ def run_data_exports(
 
 
 # ── 指纹收集函数 ─────────────────────────────────────────────────────────
+
+
+def _artifact_missing(run_id: int, data_type: str) -> bool:
+    """增量缓存命中时仍确保对应 artifact 文件真实存在。"""
+    return not (run_data_dir(run_id) / f"{data_type}.json").is_file()
 
 
 def _collect_equity_fingerprint(dm: DataManager, run_id: int) -> dict[str, object]:
@@ -127,7 +139,13 @@ def _collect_trades_fingerprint(dm: DataManager, run_id: int) -> dict[str, objec
         if not s_id:
             continue
         symbol = str(s.get("symbol", ""))
-        result[symbol] = len(list(dm.query_trades(int(str(s_id)))))
+        trades = dm.query_trades(int(str(s_id)))
+        result[symbol] = {
+            "count": len(trades),
+            "total_net_pnl": s.get("total_net_pnl"),
+            "total_commission": s.get("total_commission"),
+            "total_slippage": s.get("total_slippage"),
+        }
     return result
 
 

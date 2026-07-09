@@ -97,6 +97,24 @@ def test_fixture_run_artifacts_conform_to_schemas(tmp_path: Path) -> None:
             "optimization_history": {"series": [{"name": "value", "data": [[1, 1.0]]}]},
         },
         "logs.json": "fixture log",
+        "clearing_diagnostics.json": [
+            {
+                "backtest_id": 1,
+                "symbol": "DCE.m2601",
+                "trade_count": 2,
+                "total_net_pnl": 250.0,
+                "cost_adjusted_win_rate": 0.5,
+                "cost_adjusted_payoff_ratio": 2.0,
+                "breakeven_win_rate": 0.33,
+                "win_rate_margin": 0.17,
+                "max_single_loss": -100.0,
+                "max_consecutive_losses": 1,
+                "exit_reason_distribution": {"take_profit": 1, "strict_failure": 1},
+                "raw_account_r_multiples": [2.0, -1.0],
+                "mae_values": [4.0, 10.0],
+                "mfe_values": [12.0, 2.0],
+            }
+        ],
     }
     for name, payload in artifacts.items():
         (data_dir / name).write_text(json.dumps(payload), encoding="utf-8")

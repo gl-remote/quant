@@ -1,6 +1,6 @@
 # 测试体系设计与规范
 
-本文记录 `workspace/tests/` 的组织方式、运行入口、覆盖率门禁和新增测试规范。它是测试目录内的就近说明；更完整的治理路线见 `workspace/docs/roadmap/test-governance-roadmap.md`。
+本文记录 `workspace/tests/` 的组织方式、运行入口、覆盖率门禁和新增测试规范。它是测试目录内的就近说明；更完整的治理路线见 `docs/archive/infra/test-governance-roadmap.md`。
 
 ## 核心原则
 
@@ -318,7 +318,7 @@ helper 规则：
 2. `scripts/test/domains.sh` 中的 `resolve_src`、`resolve_test`、`resolve_coverage_min`；
 3. `.pre-commit-config.yaml` 中对应业务域 hook；
 4. 本 README 的目录和 coverage 阈值表；
-5. 必要时更新 `workspace/docs/roadmap/test-governance-roadmap.md`。
+5. 必要时更新 `docs/archive/infra/test-governance-roadmap.md`。
 
 ## 提交前建议
 

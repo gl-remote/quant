@@ -34,6 +34,12 @@ _RUN_ARTIFACT_MAP = {
     "logs": "logs",
 }
 
+# Optional artifacts: validated only when present (newer artifacts that legacy
+# run directories may not have). Missing => skipped, not an issue.
+_OPTIONAL_RUN_ARTIFACT_MAP = {
+    "clearing_diagnostics": "clearing_diagnostics",
+}
+
 
 def validate_run_artifacts(
     run_dir: str | Path,
@@ -41,8 +47,9 @@ def validate_run_artifacts(
 ) -> list[str]:
     """Validate all artifacts of a single run.
 
-    Checks 7 files under ``<run_dir>/data/`` plus an optional
-    ``nav_path`` for the global navigation index.
+    Checks the 7 required files under ``<run_dir>/data/`` plus any optional
+    artifacts that are present, plus an optional ``nav_path`` for the global
+    navigation index.
 
     Args:
         run_dir:  Path to ``project_data/reports/runs/r{run_id}``.
@@ -59,6 +66,31 @@ def validate_run_artifacts(
         artifact_path = data_dir / f"{filename}.json"
         if not artifact_path.is_file():
             issues.append(f"MISSING: {artifact_path}")
+            continue
+        try:
+            schema = load_schema(schema_name)
+        except FileNotFoundError:
+            issues.append(f"SCHEMA_NOT_FOUND: {schema_name}.schema.json")
+            continue
+        except json.JSONDecodeError as exc:
+            issues.append(f"SCHEMA_INVALID_JSON: {schema_name}.schema.json ({exc})")
+            continue
+
+        try:
+            instance = json.loads(artifact_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            issues.append(f"INVALID_JSON: {artifact_path} ({exc})")
+            continue
+
+        try:
+            _jsonschema_validate(instance, schema)
+        except _ValidationError as exc:
+            issues.append(f"SCHEMA_FAIL: {artifact_path} | {exc.message} (path={list(exc.absolute_path)})")
+
+    # --- optional artifacts: validate only when present ---
+    for filename, schema_name in _OPTIONAL_RUN_ARTIFACT_MAP.items():
+        artifact_path = data_dir / f"{filename}.json"
+        if not artifact_path.is_file():
             continue
         try:
             schema = load_schema(schema_name)

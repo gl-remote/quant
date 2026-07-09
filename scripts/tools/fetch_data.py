@@ -36,6 +36,13 @@ TARGET_SYMBOLS: list[tuple[str, str | None, str | None, str]] = [
     # 其他品种做对比验证
     ("DCE.i2601", None, None, "铁矿 2601  已到期"),
     ("DCE.p2601", None, None, "棕榈 2601  已到期"),
+    # 棕榈 R29 扩样组（Group_P 主验证样本，需完整 5m 序列）
+    ("DCE.p2405", None, None, "棕榈 2405  已到期 (R29 Group_P)"),
+    ("DCE.p2409", None, None, "棕榈 2409  已到期 (R29 Group_P)"),
+    ("DCE.p2501", None, None, "棕榈 2501  已到期 (R29 Group_P)"),
+    ("DCE.p2505", None, None, "棕榈 2505  已到期 (R29 Group_P)"),
+    ("DCE.p2509", None, None, "棕榈 2509  已到期 (R29 Group_P)"),
+    ("DCE.p2605", None, None, "棕榈 2605  已到期 (R29 Group_P)"),
     ("SHFE.rb2601", None, None, "螺纹 2601  已到期"),
     ("CZCE.SR601", None, None, "白糖 601  已到期"),
 ]
@@ -56,7 +63,7 @@ def fetch_all(
     Returns:
         {symbol: {success, rows, path, date_range, elapsed}}
     """
-    cm = ConfigManager()
+    cm = ConfigManager(env="backtest")
     dc = cm.get_data_config()
     results: dict[str, dict] = {}
 

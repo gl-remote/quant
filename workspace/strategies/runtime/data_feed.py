@@ -443,6 +443,14 @@ class DataFeed:
 
     # ── 上下文构建 ────────────────────────────────────
 
+    def _period_indicator_lookback(self, period_name: str, requested_lookback: int) -> int:
+        indicator_lookbacks = [
+            int(spec.window) + 1 for spec in self.get_registered_indicators(period_name) if isinstance(spec.window, int)
+        ]
+        if not indicator_lookbacks:
+            return requested_lookback
+        return max(requested_lookback, max(indicator_lookbacks))
+
     def _get_period_views(
         self,
         requirements: DataRequirements,
@@ -451,7 +459,8 @@ class DataFeed:
         """阶段1：为所有需求周期构建视图"""
         multi: dict[str, PeriodDataView] = {}
         for period, req in requirements.periods.items():
-            view = self.get_data(period, current_time, req.lookback_bars)
+            lookback_bars = self._period_indicator_lookback(period, req.lookback_bars)
+            view = self.get_data(period, current_time, lookback_bars)
             if view is not None:
                 multi[period] = view
         return multi
@@ -574,9 +583,10 @@ class DataFeed:
 
         base_df = all_loaded.get(source_period)
         if base_df is None:
-            # 所有周期都没加载到数据，尝试内存缓存
+            # 所有周期都没加载到数据，尝试内存缓存；缓存必须满足当前策略的数据周期需求。
             cached = get_cached_feed_by_symbol(symbol)
-            if cached is not None:
+            if cached is not None and _feed_satisfies_requirements(cached, requirements, None):
+                cached.apply_requirements(requirements)
                 return cached
             raise FileNotFoundError(f"无法加载品种 {symbol} 的任何 K线数据")
 
@@ -584,7 +594,8 @@ class DataFeed:
         src_date_range = _source_date_range(base_df)
         if src_date_range is not None:
             cached = get_cached_feed(symbol, src_date_range[0], src_date_range[1])
-            if cached is not None:
+            if cached is not None and _feed_satisfies_requirements(cached, requirements, src_date_range):
+                cached.apply_requirements(requirements)
                 return cached
 
         # 3. 尝试磁盘序列化缓存
@@ -642,7 +653,33 @@ def _try_load_from_disk(
     if feed_date_range != src_date_range:
         return None
 
+    if not _feed_satisfies_requirements(feed, requirements, src_date_range):
+        return None
+
     feed.apply_requirements(requirements)
 
     feed.loaded_from_cache = True
     return feed
+
+
+def _feed_satisfies_requirements(
+    feed: DataFeed,
+    requirements: DataRequirements,
+    src_date_range: tuple[str, str] | None,
+) -> bool:
+    all_periods = set(requirements.periods)
+    for period in requirements.indicators:
+        all_periods.add(period)
+    if not all_periods:
+        return True
+
+    required_base_period = min(all_periods, key=parse_period_minutes)
+    if feed.base_period != required_base_period:
+        return False
+
+    for period in all_periods:
+        period_data = feed.get_period(period)
+        if period_data is None or period_data.length == 0:
+            return False
+
+    return src_date_range is None or feed.get_source_date_range() == src_date_range

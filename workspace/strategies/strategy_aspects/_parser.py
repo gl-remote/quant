@@ -1,7 +1,7 @@
 """字符串表达式解析器（Pratt Parser）— 装饰器 DSL 字符串化的核心。
 
 将形如 ``"macd@1m > 0 && sma({sma_short})@5m > sma({sma_long})@5m"``
-的字符串表达式解析为 ``_ParsedPredicate``，兼容 ``_Predicate`` Protocol，
+的字符串表达式解析为 ``_ParsedPredicate``，兼容 ``AspectPredicate`` Protocol，
 供方向/风控装饰器统一使用。
 
 用法::
@@ -18,7 +18,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .builtins import call_builtin
 from .primitives import MetricRef
+from .templates import resolve_template_value
 
 # ── Token 定义 ─────────────────────────────────────────────
 
@@ -90,6 +92,15 @@ def tokenize(source: str) -> list[Token]:
     return tokens
 
 
+def _as_indicator_params(params: list[Any]) -> tuple[float | int | str, ...] | None:
+    result: list[float | int | str] = []
+    for value in params:
+        if not isinstance(value, (float, int, str)):
+            return None
+        result.append(value)
+    return tuple(result)
+
+
 # ── 表达式 AST 节点 ─────────────────────────────────────────
 
 
@@ -123,7 +134,7 @@ class MetricRefExpr:
 
 @dataclass(frozen=True)
 class CompareExpr:
-    """比较表达式，如 ``macd@1m > 0``、``profit_pct() >= {stop_loss_ratio}``"""
+    """比较表达式，如 ``macd@1m > 0``、``loss_pct() >= {stop_loss_ratio}``"""
 
     left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
     op: str
@@ -135,8 +146,8 @@ class ArithExpr:
     """算术表达式，如 atr@15m * {multiplier}"""
 
     op: Literal["*", "/"]
-    left: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr
-    right: MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr
+    left: ExprValue
+    right: ExprValue
 
 
 @dataclass(frozen=True)
@@ -148,7 +159,8 @@ class BoolOpExpr:
     right: Expr
 
 
-Expr = NumberExpr | ConfigRefExpr | FuncCallExpr | MetricRefExpr | CompareExpr | ArithExpr | BoolOpExpr
+ExprValue = MetricRefExpr | FuncCallExpr | ConfigRefExpr | NumberExpr | ArithExpr
+Expr = ExprValue | CompareExpr | BoolOpExpr
 
 
 # ── Pratt Parser ───────────────────────────────────────────
@@ -174,6 +186,12 @@ _PRECEDENCE: dict[str, int] = {
 
 def _bp_of(token: Token) -> int:
     return _PRECEDENCE.get(token.value, 0)
+
+
+def _as_value_expr(expr: Expr, token: Token) -> ExprValue:
+    if isinstance(expr, (MetricRefExpr, FuncCallExpr, ConfigRefExpr, NumberExpr, ArithExpr)):
+        return expr
+    raise SyntaxError(f"位置 {token.pos}：运算符 '{token.value}' 两侧必须是值表达式")
 
 
 class _PrattParser:
@@ -256,11 +274,12 @@ class _PrattParser:
 
         if token.type in ("MUL", "DIV"):
             right = self.parse(_bp_of(token))
-            return ArithExpr(op=token.value, left=left, right=right)  # type: ignore[arg-type]
+            op: Literal["*", "/"] = "*" if token.type == "MUL" else "/"
+            return ArithExpr(op=op, left=_as_value_expr(left, token), right=_as_value_expr(right, token))
 
         if token.type == "OP":
             right = self.parse(_bp_of(token))
-            return CompareExpr(left=left, op=token.value, right=right)  # type: ignore[arg-type]
+            return CompareExpr(left=_as_value_expr(left, token), op=token.value, right=_as_value_expr(right, token))
 
         if token.type == "AND":
             right = self.parse(_bp_of(token))
@@ -343,7 +362,7 @@ def parse_expr(source: str) -> _ParsedPredicate:
     """解析 DSL 字符串表达式为 ``_ParsedPredicate``。
 
     :param source: DSL 表达式字符串，如 ``"macd@1m > 0"``
-    :returns: 满足 ``_Predicate`` Protocol 的可求值谓词对象
+    :returns: 满足 ``AspectPredicate`` Protocol 的可求值谓词对象
     :raises SyntaxError: 语法错误时抛出，含位置信息
     """
     tokens = tokenize(source)
@@ -356,7 +375,7 @@ def parse_expr(source: str) -> _ParsedPredicate:
 
 
 class _ParsedPredicate:
-    """将解析后的表达式树包装为 ``_Predicate`` Protocol。
+    """将解析后的表达式树包装为 ``AspectPredicate`` Protocol。
 
     由 ``parse_expr`` 返回，不直接构造。
     """
@@ -364,7 +383,7 @@ class _ParsedPredicate:
     def __init__(self, expr: Expr) -> None:
         self._expr = expr
 
-    # ── _Predicate Protocol ──
+    # ── AspectPredicate Protocol ──
 
     @property
     def metrics(self) -> tuple[MetricRef, ...]:
@@ -458,7 +477,7 @@ def _resolve_value(
         return _read_metric(expr, ctx, config)
 
     if isinstance(expr, FuncCallExpr):
-        return _call_builtin(expr.name, ctx, config)
+        return call_builtin(expr.name, ctx, config)
 
     if isinstance(expr, ArithExpr):
         left_val = _resolve_value(expr.left, ctx, config)
@@ -479,158 +498,34 @@ def _resolve_value(
 # ── 指标读取 ────────────────────────────────────────────────
 
 
+def _read_indicator_value(ctx: Any, metric: MetricRef, config: Any) -> Any:
+    """读取某个 MetricRef 在当前 bar(-1) 上的指标值，周期缺失则返回 None。"""
+    from ..core.indicators import generate_indicator_column_name
+
+    view = ctx.multi.get(metric.period)
+    if view is None:
+        return None
+    col = generate_indicator_column_name(metric.indicator.name, metric.indicator.params, period=metric.period)
+    resolved_col = resolve_template_value(col, config)
+    return view.indicator(resolved_col, -1)
+
+
 def _read_metric(expr: MetricRefExpr, ctx: Any, config: Any) -> float | None:
     """从 ctx.multi[period] 读取指标值；数据未就绪时返回 None。"""
-    from .direction._core import _read_metric as _core_read_metric
+    from .indicators import build_indicator
 
-    # 构造 MetricRef
-    from .indicators import KDJ, MACD, SMA
-
-    _indicator_map: dict[str, Any] = {
-        "macd": MACD,
-        "kdj": KDJ,
-        "sma": SMA,
-        "atr": None,  # 特殊处理
-    }
-
-    if expr.indicator_name == "atr":
-        # ATR 是特殊指标：ATR 工厂支持模板参数（如 {atr_period}），
-        # 且不存在固定的 IndicatorSpec 实例。列名由 generate_indicator_column_name 生成。
-        from ..core.indicators import generate_indicator_column_name
-
-        view = ctx.multi.get(expr.period)
-        if view is None:
-            return None
-        atr_period = getattr(config, "atr_period", 14)
-        col = generate_indicator_column_name("atr", {"period": atr_period}, period=expr.period)
-        value = view.indicator(col, -1)
-        if value == 0.0:
-            return None
-        return value  # type: ignore[no-any-return]
-
-    indicator_factory = _indicator_map.get(expr.indicator_name)
-    if indicator_factory is None:
+    resolved_params = _as_indicator_params([resolve_template_value(p, config) for p in expr.params])
+    if resolved_params is None:
         return None
-
-    from ..core.indicators import IndicatorSpec
-
-    # IndicatorSpec vs callable 分支：MACD/KDJ 是预置的 IndicatorSpec 实例（不可调用），
-    # SMA 是工厂函数（callable），两者在 _read_metric 中处理方式不同。
-    if isinstance(indicator_factory, IndicatorSpec):
-        indicator = indicator_factory
-    elif callable(indicator_factory):
-        if expr.params:
-            resolved_params = []
-            for p in expr.params:
-                if isinstance(p, str) and p.startswith("{") and p.endswith("}"):
-                    resolved_params.append(getattr(config, p[1:-1], p))
-                else:
-                    resolved_params.append(p)
-            indicator = indicator_factory(*resolved_params)
-        else:
-            indicator = indicator_factory()
-    else:
+    indicator = build_indicator(expr.indicator_name, resolved_params)
+    if indicator is None:
         return None
 
     metric_ref = MetricRef(period=expr.period, indicator=indicator)
-    return _core_read_metric(ctx, metric_ref, config)  # type: ignore[no-any-return]
-
-
-# ── 内置函数求值 ────────────────────────────────────────────
-
-
-def _call_builtin(name: str, ctx: Any, config: Any) -> float | None:
-    """调用内置函数（profit_abs, cooldown 等）；数据不足时返回 None。"""
-    # 这些函数需要 state 中的持仓/成交数据，仅在风控场景下有效
-    # 方向切面在空仓时调用会返回 None（由空安全机制静默跳过）
-    try:
-        if name == "cooldown":
-            return _builtin_cooldown(ctx, config)
-        if name == "profit_abs":
-            return _builtin_profit_abs(ctx, config)
-        if name == "profit_pct":
-            return _builtin_profit_pct(ctx, config)
-        if name == "peak_profit":
-            return _builtin_peak_profit(ctx, config)
-        if name == "drawdown_pct":
-            return _builtin_drawdown_pct(ctx, config)
+    value = _read_indicator_value(ctx, metric_ref, config)
+    if value == 0.0 and expr.indicator_name == "atr":
         return None
-    except (AttributeError, TypeError):
-        return None
-
-
-def _builtin_cooldown(ctx: Any, config: Any) -> float | None:
-    """自上次匹配风控角色的成交以来的冷却分钟数。
-
-    角色过滤是一个关键设计决策：
-    - take_profit 后的冷却：只匹配 reason 包含 "take_profit" 的成交
-    - stop_loss 后的冷却：排除 reason 包含 "take_profit" 的成交（即只匹配止损成交）
-
-    注意 ``SIGNAL_TAKE_PROFIT = "take_profit"``（小写），角色名需与常量一致。
-    """
-    fills = ctx.state.fills if hasattr(ctx, "state") else []
-    if not fills:
-        return None
-    last_fill = fills[-1]
-
-    # 角色过滤：只匹配当前风控角色对应的成交
-    risk_role = getattr(ctx, "risk_role", None)
-    if risk_role == "take_profit":
-        if "take_profit" not in last_fill.reason:
-            return None
-    elif risk_role == "stop_loss":
-        if "take_profit" in last_fill.reason:
-            return None
-
-    # 计算 bar 时间与最近成交时间之间的分钟差
-    from datetime import datetime
-
-    # Bar 对象使用 datetime 字段（而非 timestamp），兼容 int/float/datetime 三种格式
-    bar_dt = getattr(ctx.bar, "datetime", None)
-    if bar_dt is None:
-        return None
-
-    bar_ts = datetime.fromtimestamp(bar_dt / 1000) if isinstance(bar_dt, (int, float)) else bar_dt
-
-    try:
-        fill_ts = datetime.fromisoformat(str(last_fill.timestamp))
-    except (ValueError, TypeError):
-        return None
-
-    elapsed_minutes = (bar_ts - fill_ts).total_seconds() / 60.0
-    return elapsed_minutes  # type: ignore[no-any-return]
-
-
-def _builtin_profit_abs(ctx: Any, config: Any) -> float | None:
-    """绝对盈亏 |close - entry_price|"""
-    pos = ctx.state.position if hasattr(ctx, "state") else None
-    if pos is None or not pos.direction:
-        return None
-    return abs(ctx.bar.close - pos.entry_price)  # type: ignore[no-any-return]
-
-
-def _builtin_profit_pct(ctx: Any, config: Any) -> float | None:
-    """盈亏比例 |close - entry_price| / entry_price"""
-    pos = ctx.state.position if hasattr(ctx, "state") else None
-    if pos is None or not pos.direction or pos.entry_price == 0:
-        return None
-    return abs(ctx.bar.close - pos.entry_price) / pos.entry_price  # type: ignore[no-any-return]
-
-
-def _builtin_peak_profit(ctx: Any, config: Any) -> float | None:
-    """峰值收益 |highest_price - entry_price|"""
-    pos = ctx.state.position if hasattr(ctx, "state") else None
-    if pos is None or not pos.direction:
-        return None
-    return abs(pos.highest_price - pos.entry_price)  # type: ignore[no-any-return]
-
-
-def _builtin_drawdown_pct(ctx: Any, config: Any) -> float | None:
-    """回撤比例 |highest_price - close| / highest_price"""
-    pos = ctx.state.position if hasattr(ctx, "state") else None
-    if pos is None or not pos.direction or pos.highest_price == 0:
-        return None
-    return abs(pos.highest_price - ctx.bar.close) / pos.highest_price  # type: ignore[no-any-return]
+    return value  # type: ignore[no-any-return]
 
 
 # ── 工具函数 ────────────────────────────────────────────────
@@ -639,21 +534,11 @@ def _builtin_drawdown_pct(ctx: Any, config: Any) -> float | None:
 def _collect_metrics(expr: Expr) -> tuple[MetricRef, ...]:
     """递归收集表达式树中所有 MetricRef。"""
     if isinstance(expr, MetricRefExpr):
-        from .indicators import ATR, KDJ, MACD, SMA, IndicatorSpec
+        from .indicators import build_indicator
 
-        _indicator_map: dict[str, Any] = {
-            "macd": MACD,
-            "kdj": KDJ,
-            "sma": SMA,
-            "atr": ATR,
-        }
-        factory = _indicator_map.get(expr.indicator_name)
-        if factory is None:
+        indicator = build_indicator(expr.indicator_name, expr.params)
+        if indicator is None:
             return ()
-        if callable(factory) and not isinstance(factory, IndicatorSpec):
-            indicator = factory(*expr.params) if expr.params else factory()
-        else:
-            indicator = factory
         return (MetricRef(period=expr.period, indicator=indicator),)
 
     if isinstance(expr, CompareExpr):
