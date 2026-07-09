@@ -1,7 +1,7 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**va-asymmetry-composite 立题（2026-07-09）** · poc-value-area-asymmetry 分类器 v4.0 冻结 · structural-shaping-alpha 阶段 1 完成（待冻结候选）· value-area 家族全部冻结
+> 状态：**va-asymmetry-composite 阶段 1 降级 · B0 即最优（2026-07-09）** · poc-value-area-asymmetry 分类器 v4.0 冻结 · structural-shaping-alpha 阶段 1 完成（待冻结候选）· value-area 家族全部冻结
 > 最近更新：2026-07-09
 > 当前主题：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)
 > 前置 Alpha 源：[poc-value-area-asymmetry](./themes/poc-value-area-asymmetry/README.md)
@@ -36,7 +36,8 @@ alpha 变现路径 POC 通过。
 （塑形/成本/归因）+ archive:2026-07-09-poc-va-shaping 塑形参数，
 经品种筛选 / 信号强度加权 / 多空权重优化三道组合关，压缩到 100% 名义
 暴露约束下，目标构建夏普 ≥ 2.5、年化净收益 ≥ 18%、可实盘的完整交易策略。
-当前处于阶段 0（立题复现），尚未启动实验。
+阶段 1 Gatekeeper 三大方向 0/6 通过，B0=S1×W0×VW0 即最优（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）。
+当前待决策：路径 A（直接工程化）或路径 B（提名义上限至 120%）。
 ```
 
 边界：
@@ -53,7 +54,7 @@ alpha 变现路径 POC 通过。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-composite** | **活跃（立题 2026-07-09 · 当前主线）** · 阶段 0 立题复现待启动 | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| **va-asymmetry-composite** | **活跃（阶段 1 降级 · B0 即最优 · 待工程化 2026-07-09）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
 | poc-value-area-asymmetry | 活跃 · 阶段 4 完成 · 分类器 v4.0 冻结 · 主动性研究暂停（供下游引用） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
@@ -98,7 +99,7 @@ va_asymmetry_composite
 - va-asymmetry-composite 主线策略（**目标输出**）：整合分类器 + 塑形 + 组合优化；
 - Stages 0-3 为向量化模拟脚本（backtest_tools vectorized pipeline），
   Stage 4 为 vnpy 事件驱动策略；
-- 当前占位：research/themes/va-asymmetry-composite/（仅文档，Stage 0 待启动）。
+- 当前占位：research/themes/va-asymmetry-composite/（文档 + Stage 0-1 完成，B0 锁定，待工程化）。
 ```
 
 轻量比较 runner（已归档）：
@@ -126,11 +127,10 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 
 ## 5. 下一步
 
-**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（阶段 0 · 立题复现待启动）
+**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（阶段 1 降级 · B0 锁定 · 待工程化）
 
-阶段 0 目标：精确复现 archive:2026-07-09-poc-va-shaping 基准（分类器 v4.0 + SL1.0/TP1.4/TH8h + c_realistic），确认 pipeline 一致（交易时间、品种集合、事件数、各 tier 顺序、Sharpe/MDD 相对偏差 ≤ 5%），失败即暂停并回修数据/分类器。
-
-阶段 1 目标（0 通过后）：3 条主线并行（品种筛选 × 信号强度加权 × 多空权重优化），总候选 ≤ 9 个独立实验，通过门槛 Sharpe≥2.5 & ν_implied≥0 & 跨周期稳健，未通过则暂停并复盘前置假设。
+阶段 1 Gatekeeper 三大方向 0/6 通过。B0=S1×W0×VW0：Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%。
+组合层 alpha 已被吃满。待决策路径 A（直接工程化）或路径 B（提名义上限至 120%）。
 
 详见 [experiment-plan.md](./themes/va-asymmetry-composite/experiment-plan.md)。
 

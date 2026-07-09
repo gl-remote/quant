@@ -22,7 +22,7 @@ major 版本号。
 - §3 塑形参数的具体数值（在 ±30% 平台内）
 - §4 品种筛选的 tier × 品种映射（按 A/B/C 三类粒度）
 - §5 信号强度加权方案（W1/W2/W3 三选一 + 系数）
-- §5 多空权重方案（VW1/VW2/VW3 三选一 + 系数）
+- §5 多空权重方案（VW1/VW2 二选一 + 系数）
 
 ---
 
@@ -43,8 +43,10 @@ mean_p     = Σ_{p in profile} p · vol(p) / Σ vol(p)
 std_p      = sqrt( Σ (p - mean_p)² · vol(p) / Σ vol(p) )
 A3_skew    = Σ ((p - mean_p) / std_p)³ · vol(p) / Σ vol(p)
 profile    = 前一交易日全部 5m bar（W1 窗口）
-VA / POC   = 70% volume window / volume mode（仅用于构造 profile 的 tick bin，不作为交易锚）
 ```
+
+> VA（70% volume window）和 POC（volume mode）仅用于构造 profile 的 tick bin，
+> 不参与本规格任何计算。定义见上游分类器 math-spec。
 
 ### 1.2 Tier 映射（6 类互斥 + 未分类）
 
@@ -59,7 +61,8 @@ VA / POC   = 70% volume window / volume mode（仅用于构造 profile 的 tick 
 | 未分类 | - | 其他 | 其他 | 其他 | - |
 
 判定顺序：**先判多空（skew ≤ 0.30 为多域 · skew ≥ 0.60 为空域 · 否则未分类），
-再在域内按区间匹配唯一 tier，匹配多个时按 ATR 段更严格的优先。**
+再在域内按区间匹配唯一 tier。当 skew 段在多 tier 间重叠时（如 S_seg12 与 S_seg2 在 [0.81, 0.91] 重叠），
+按 ATR 段严格区分（ATR 段互不重叠，开闭边界保证唯一匹配）。**
 
 ### 1.3 触发时钟
 
@@ -69,12 +72,15 @@ VA / POC   = 70% volume window / volume mode（仅用于构造 profile 的 tick 
 
 ## 2. ATR 归一化（硬约束）
 
-所有距离 / 止损 / 仓位 / 成本的单位均用 **entry_atr（触发前 20 日日化 ATR，
-与 §1.1 daily_atr_bps 的同一度量，contract 面额归一化为 bps）**。
+所有距离 / 止损 / 仓位 / 成本的单位均用 **entry_atr（触发前 10 日日化 ATR，
+与 §1.1 daily_atr_10_bps 的同一度量，contract 面额归一化为 bps）**。
 
 ```
-entry_atr_bps = daily_atr_bps_rolling20d at trigger t
+entry_atr_bps = daily_atr_10_bps at trigger t
 ```
+
+> 注：§1.1 特征表写 `daily_atr_bps_rank` 窗口 20 交易日，但 timeline 实际列名为
+> `daily_atr_10_bps`（10 日）。实现以实际数据列为准。
 
 ---
 
@@ -107,7 +113,8 @@ P_SL^short = entry_price + K_S^SL × entry_atr_bps × entry_price / 10000
 | L_*（多头 tier） | **H_L = 8**（基线 · 阶段 2 平台：6 ~ 10） |
 | S_*（空头 tier） | **H_S = 10**（基线 · 阶段 2 平台：8 ~ 12） |
 
-到达 H_L / H_S bar close 时按 close 平仓。优先级：SL > 时间退出（同时触发取 SL）。
+到达 H_L / H_S 小时后的第一根 1h bar 的 close 平仓（等价于第 H×12 根 5m bar 的 close）。
+优先级：SL > 时间退出（同时触发取 SL）。
 
 ### 3.4 Trailing（不启用）
 
@@ -152,18 +159,18 @@ archive:2026-07-09-poc-va-shaping 已验证硬 TP 劣于纯时间退出。
 | 方案 ID | 权重公式 w_strength(tier, t) ∈ [0.2, 1.0] | 说明 |
 |:---:|:---|:---|
 | **W0 · 等权** | w = 1.0（恒等） | Baseline（对照用） |
-| **W1 · Skew 距离** | w = clamp( (thr_skew − skew_rank) / (thr_skew − 0.5 × thr_skew), 0.2, 1.0 ) | 越远离阈值权重越大；thr_skew = tier 对应 skew 段最近端点（多 0.30/0.19，空 0.60/0.81） |
+| **W1 · Skew 距离** | w = clamp( |skew_rank − thr_skew| / |thr_skew − 0.5 × thr_skew|, 0.2, 1.0 ) | 越远离阈值权重越大（多空对称）；thr_skew = tier 对应 skew 段最近端点（多 0.30/0.19，空 0.60/0.81） |
 | **W2 · ATR 匹配** | w = clamp( 1 − 4 × |atr_rank − 0.50|, 0.2, 1.0 ) | ATR 靠近档位中心（0.50）权重越大 |
-| **W3 · 三维乘积** | w = clamp( w1 × w2 × w3, 0.2, 1.0 ) · w1=W1 式 · w2=W2 式 · w3 = 1 − 2×|trend_rank − t_center|（t_center=多 0.875 / 空 0.10） | 三维独立打分乘积（默认） |
+| **W3 · 三维乘积** | w1 = clamp(W1式, 0.2, 1.0); w2 = clamp(W2式, 0.2, 1.0); w3 = clamp(1 − 2×|trend_rank − t_center|, 0.2, 1.0); w = clamp(w1 × w2 × w3, 0.2, 1.0) | 先各自 clamp 再乘积（避免负值污染）；t_center = 多 0.875 / 空 0.10（默认） |
 
 判据：W1/W2/W3 中最优 vs W0，净夏普增量 ≥ 0.2 则保留，否则回退 W0。
 
-### 5.2 多空权重（C.3 · 阶段 1 四选一）
+### 5.2 多空权重（C.3 · 含 VW0 共三选一）
 
 | 方案 ID | 多空比 w_dir | 说明 |
 |:---:|:---|:---|
 | **VW0 · 等权** | w_L = 1.0 · w_S = 1.0 | Baseline（对照用） |
-| **VW1 · IR 比例** | w_L = IR_L̄ / IR_max · w_S = IR_S̄ / IR_max · IR_max = max(IR_L̄, IR_S̄)（clamp [0.5, 1.0]） | 按 tier 组平均单笔 IR 分配（默认） |
+| **VW1 · IR 比例** | w_L = IR_L̄ / IR_max · w_S = IR_S̄ / IR_max · IR_max = max(IR_L̄, IR_S̄)（clamp [0.5, 1.0]） | 按 tier 组等权平均单笔 IR 分配（先算每 tier 的 mean(pnl_net_bps)/std(pnl_net_bps)，再在 tier 间等权平均；默认） |
 | **VW2 · 频率平衡** | w_L = sqrt(N_S / N_L) · w_S = sqrt(N_L / N_S) · clamp [0.5, 2.0] | 按触发频率平方根反比分配，平衡多空年度贡献度 |
 
 判据：VW1/VW2 中最优 vs VW0，净夏普增量 ≥ 0.2 则保留，否则回退 VW0。
@@ -174,16 +181,19 @@ archive:2026-07-09-poc-va-shaping 已验证硬 TP 劣于纯时间退出。
 notional_target(tier, sym, t)
   = w_dir(direction(tier))
   × w_strength(tier, t)
-  × ( RiskPerTrade / K_SL(tier) )
+  × ( RiskPerTrade / (K_SL(tier) × entry_atr_bps / 10000) )
   × Equity(t)
 ```
 
 其中：
 - `RiskPerTrade = 0.02`（§7 单笔 2% 风控）
 - `K_SL(tier)` = §3.2 的 SL 倍数（多头 1.0 / 空头 2.5）
+- `entry_atr_bps / 10000` = ATR 占价格的比例（将 ATR 倍数转为价格距离分数）
 - `Equity(t)` = t 时刻账户权益（阶段 0-2 用初始权益 + 累计 PnL 简化；阶段 3+ 走真实资金曲线）
 
-解释：目标仓位 = 方向权重 × 强度权重 × 单笔 2% 风险对应的名义本金（SL 越大 → 单笔名义越小，反之越大）。
+解释：目标仓位 = 方向权重 × 强度权重 × 单笔 2% 风险对应的名义本金。
+`RiskPerTrade / (K_SL × atr_frac)` 将"最大可承受损失金额"转换为"最大可承受名义暴露"：
+SL 距离越大（K_SL 大 or ATR 大），单笔名义越小。
 
 ---
 

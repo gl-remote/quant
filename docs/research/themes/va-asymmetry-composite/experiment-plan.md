@@ -90,7 +90,7 @@
 
 ### 0.4 阶段 0 输出
 
-- workbench：`docs/workbench/va-asymmetry-composite-stage0-baseline.md`
+- workbench：archive:2026-07-09-poc-va-shaping#va-asymmetry-composite-stage0-baseline
 - 数据：`project_data/ai_tmp/va_composite_stage0_baseline.trades.parquet`（按 strategy-math-spec.md §10 字段）
 - 诊断：B0 与 archive 的逐指标对比表 + 差异归因
 
@@ -151,7 +151,7 @@
 
 ### 1.5 阶段 1 输出
 
-- workbench：`docs/workbench/va-asymmetry-composite-stage1-gatekeepers.md`
+- workbench：archive:2026-07-09-poc-va-shaping#va-asymmetry-composite-stage1-gatekeepers
 - 数据：`project_data/ai_tmp/va_composite_stage1_*.trades.parquet`（每配置一份）
 - 汇总表：7 配置 × 12 指标矩阵（夏普 / 年化 / MaxDD / 月度胜率 / 品种保留率 / ν_implied / p_boot / w_strength 分布 / 多空贡献度 / 压仓比例 / 成本 ATR 倍率 / 交易数）
 - 每方向 vs baseline 的 paired CI 与 bootstrap p 值
