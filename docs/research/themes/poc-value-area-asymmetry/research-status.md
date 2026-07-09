@@ -1,10 +1,11 @@
 # poc-value-area-asymmetry · Research Status
 
 > 类型：Research Status
-> 状态：**✅ 阶段 4 通过（v9.1 · 三维 144 tier 深化 + 合并降级）· 分类器 v4.0 冻结 · 6 类合并版 · 9 A/6 A-**
-> 最近更新：2026-07-08
+> 状态：**✅ 阶段 4 通过（v9.1 · 三维 144 tier 深化 + 合并降级）· 分类器 v4.0 冻结 · 6 类合并版 · 9 A/6 A-** · **主动性研究暂停 · 下游主题 va-asymmetry-composite 立题（2026-07-09）**
+> 最近更新：2026-07-09
 > 主题 README：[README.md](README.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)（v9.1）
+> 下游引用主题：[va-asymmetry-composite](../../va-asymmetry-composite/README.md)（完整交易策略组合层 · 2026-07-09 立题 · 当前主线）
 
 ## 一句话结论
 
@@ -13,8 +14,12 @@
 档可用类别 · 多空双向覆盖 · 是长期可用的交易背景分类器组件。所有 A 级 tier
 在 143 合约 · 36625 events · 20 品种前缀扩样本下通过 4 硬门槛严格性验证
 （Bonferroni family=15 · p<0.0033 · 反事实 p<0.001 · 品种保留 ≥ 60% ·
-单笔 IR ≥ 0.30）。本主题主动性研究暂停 · 分类器组件保留供下游策略层引用 ·
-完整策略（入场/出场/仓位/cost）不属本主题。**
+单笔 IR ≥ 0.30）。分类器 v4.0（6 类合并版）2026-07-08 冻结。本主题主动性研究暂停 ·
+分类器组件保留供下游策略层引用 · 完整策略（入场/出场/仓位/cost）不属本主题。
+2026-07-09 起，下游主题 va-asymmetry-composite 立题：以本分类器 v4.0 为 alpha 源，
+叠加 structural-shaping-alpha 工具 + archive:2026-07-09-poc-va-shaping 塑形参数，
+探索品种筛选 / 信号强度加权 / 多空权重优化三道组合关，
+目标构建 Sharpe ≥ 2.5 · 年化净 ≥ 18% 的实盘可上线完整交易策略。**
 
 - **A 级白名单**（v3.0 · 6 档 · 4 硬门槛 + 时稳全过）：
   - **LP_only·全**（多头精选·全期）· skew ≤ 0.10 · mean +33.3 · IR 0.28 · 时稳 0.03（最稳）
@@ -244,7 +249,8 @@
 - **分类器承诺"整体信号存在"**：整体证据链在 143 合约扩样本下通过 4 硬门槛
   严格性验证 · 分类器 v3.0 契约成立
 - **品种筛选是下游策略层责任**：分类器不承担"选择哪个品种用哪个 tier"的
-  责任 · 该责任交给下游"组合策略"主题（如 `poc-va-shaping-composite`）
+  责任 · 该责任交给下游"组合策略"主题
+  （如 **[va-asymmetry-composite](../../va-asymmetry-composite/README.md)**，2026-07-09 立题）
 - **3 大品种类型**（下游策略层参考）：
   - **A · 金融贵金属**（IF/IH/IC/IM/T/TF/TS/au/ag）：低频 · 深流动性 · 偏 LP/SP 精选档
   - **B · 化工建材黑色**（rb/hc/i/j/jm/TA/MA/PP/pp/l/v/eb/eg/sc/fu/bu）：主流波动 · LL/SC 中档为主
@@ -340,40 +346,15 @@
 | 2026-07-07 | 阶段 3 完成 · 洞察 P-U 落地 · workbench v7 · **KF-16 ~ KF-21 定型** · 分类器 7 层严格证据链完整 |
 | 2026-07-08 | 阶段 4 v3.0（10 互斥 tier）· KF-24 品种异质性定型 · 143 合约扩样本 |
 | 2026-07-08 | 阶段 4 v9.1 三维 144 tier 深化 + 合并降级 · **KF-25 ~ KF-29 定型** · 分类器 v4.0（6 类合并版）· FDR 校正 |
+| 2026-07-09 | **主动性研究暂停**；登记下游主题 [va-asymmetry-composite](../../va-asymmetry-composite/README.md)（组合层 · 立题）；分类器 v4.0 合同冻结供下游引用（L1 tier 表 + 14 条严格性约束） |
 
 ## 下一步 · 阶段 4 · 背景分类器的使用与组合
 
-**阶段 4 目标**：**使用阶段 3 产出的分类器**（A 级白名单 5 档 + B 级 3 档）·
-探索与其他策略/主题的组合价值 · 或叠加入场出场规则形成完整策略。
-
-**阶段 4 三大方向**（详见 [experiment-plan.md](experiment-plan.md) §4）：
-
-**方向 A · Quality Filter**（推荐先做）
-- 将分类器作为其他策略的**质量过滤器**
-- 首个目标：与 structural-shaping-alpha 7 combo 组合
-- 优先使用 **多头首选·全事件** 和 **多头宽松·稳定** 两档（最稳健）
-
-**方向 B · 完整策略**（首次涉及入场/出场规则）
-- 多头首选 · 全天触发 · 8h 时间止盈
-- 多头 3 机制分解 · 持仓期随 ATR 自适应（4h/8h）
-- 空头收敛 + regime 稳定 filter · 4h 目标止盈
-- **仓位随 ATR 自适应**（洞察 S · 高 ATR = 强度 · 可加仓）
-- 首次做 realistic-cost 上线判决 + KF-8 全项闸门
-
-**方向 C · 多空组合对冲**
-- 多头 8h + 空头 4h 时间窗口互补
-- 首选⊂宽松嵌套 · 分档加仓（分类器 §12.6 独立性证据）
-- 多空完全互斥 · 无对冲需求 · 但可形成互补组合
-- 跨品种自然形成"多空组合"
-
-**代码规范化建议**：阶段 4 起把分类器逻辑提取成
-`workspace/common/poc_va_classifier.py` · 供后续多主题复用。
-
-**衍生候选主题**（阶段 4 或独立立题）：
-
-- `poc-va-tail-asymmetry`（KF-01 遗留 · VA 外 tail 假设）
-- `volatility-regime-flip`（KF-10 & KF-16 遗留 · 波动率突变独立信号）
-- `intraday-momentum-decay`（KF-09 遗留 · 早盘 vs 夜盘差异）
+> **2026-07-09 起本主题主动性研究暂停**；下游策略层工作转移到 **[va-asymmetry-composite](../../va-asymmetry-composite/README.md)**（当前研究主线）。
+> 以下方向 A/B/C 已部分在 archive:2026-07-09-poc-va-shaping 与 va-asymmetry-composite 立题中承接：
+> - archive:2026-07-09-poc-va-shaping 完成"方向 B（完整策略）"的塑形 POC 验证（SL1.0/TP1.4/TH8h + c_realistic → 净 15.45% / Sharpe 2.23）
+> - va-asymmetry-composite 承接"方向 C（多空组合对冲）+ 方向 B（完整策略）+ 组合优化"三道组合关
+> 未来若发现分类器 bug，仅在本主题 research-status / parameter-selection-spec 中登记参数变更，不重开实验。
 
 ## 立题日期
 
