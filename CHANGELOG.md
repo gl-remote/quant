@@ -5,6 +5,51 @@
 
 ---
 
+## [0.4.0-dev] - 2026-07-10（开发周期，未发布）
+
+> 当前包版本基线。`dev/0.5`、`dev/0.6` 为研究分支标签，不自动等于发布版本；本开发周期内的策略研究进展（如 dev/0.5 达成稳定盈利）合并至 main 时**不做版本号 bump**，仅在里程碑中记录。
+
+### 新增
+- `strategies/strategy_aspects` 提升为正式包，实现 advisory direction DSL，重构 MA 策略
+- MA 策略加入交易冷却（trade cooldown）
+- DataFeed 聚合：从 1m 聚合高周期 bar
+- LoadHistory / 聚合 / 反序列化环节的防御性日志
+
+### 改动
+- DataFeed / PeriodData 重构：指标计算从 DataFeed 下沉到 PeriodData；移除全局指标注册表（直接传 func）；统一 `IndicatorSpec` 并优化窗口计算
+- bridges 统一：backtest / live 桥接通过 DataFeed 公共 API 统一
+- 指标库：以 `ta-lib` 替换 `pandas-ta`，消除指标计算对 pandas index 的依赖
+- 测试目录重构为按源布局镜像（mirror source layout）
+- 信号终结（signal finalization）上移到 `Strategy` 基类；`data_requirements` 默认实现移至基类
+- 类型与可维护性：大量 mypy 类型标注修复、以 `Literal` 注解消除 `cast()`、抽取 `EventManager`、统一指标/聚合/反序列化路径
+- 工程文档重组
+
+### 修复
+- 并行回测报告管线稳定性
+- forming bar 指标缓存被清空后无法重新计算
+- interceptor periods 注册与 `ZeroDivisionError`
+- walk-forward 解包与类型标注问题
+
+### 里程碑
+- 2026-07-10：`dev/0.5`（策略研究：达成稳定盈利）合并至 main（commit `a7e1724`）；包版本维持在 `0.4.0-dev`，未做发布号 bump
+
+---
+
+## [0.3.0] - 2026-06-12
+
+> 策略研发与实时验证基础设施完成（非"策略已完成"）。详见当时路线图 S2-A。
+
+### 新增
+- 回测链路：vnpy 批量回测、参数优化、Walk-Forward 工具链可用
+- 实时链路：tqsdk test / live 路径打通（test 使用实时行情但不下单，live 才下单）
+- DataFeed：多周期 PeriodData、指标注册、初始化全量计算、实时单周期增量触发
+- 指标一致性：backtest / test / live 复用同一套指标计算机制，并补充覆盖测试
+- 报告系统：React SPA 报告、图表 / 表格 / 主题体系、数据预加载与展示增强
+- 质量门禁：ruff / ruff-format / mypy / pytest smoke（pre-commit 触发）
+- 安全治理：清理敏感凭证历史，test / live 形成明确安全边界
+
+---
+
 ## [0.2.1-dev] - 2026-06-06
 
 ### 新增

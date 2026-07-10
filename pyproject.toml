@@ -121,6 +121,15 @@ strict_optional = true
 warn_return_any = true
 warn_unused_configs = true
 
+# 测试代码豁免"函数必须带类型注解"（no-untyped-def / no-incomplete-def）：
+# 测试函数以 fixture/断言为主，强制返回值与参数注解收益低、噪音高。
+# 但仍保留 check_untyped_defs=true，因此测试体内的真实类型错误
+# （arg-type / union-attr / attr-defined 等）依旧会被检出。
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.12"

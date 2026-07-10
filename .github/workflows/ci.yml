@@ -42,7 +42,9 @@ jobs:
         run: ruff format --check .
 
       - name: Type check with mypy
-        run: uv run mypy workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/
+        # ruff 已做全仓库 lint+format（见上两步）；mypy 做源包静态类型检查，覆盖全部 7 个业务域。
+        # 注意：workspace/tests/ 暂不纳入 mypy（见 A20 备注），避免把测试注解负担混入源门禁。
+        run: uv run mypy workspace/common/ workspace/data/ workspace/backtest/ workspace/strategies/ workspace/cli/ workspace/config/ workspace/report/
 
       - name: Test with pytest
         run: uv run pytest workspace/tests/ --cov=. --cov-report=term --cov-fail-under=60
