@@ -1,7 +1,7 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**va-asymmetry-composite 阶段 1 降级 · B0 即最优（2026-07-09）** · poc-value-area-asymmetry 分类器 v4.0 冻结 · structural-shaping-alpha 阶段 1 完成（待冻结候选）· value-area 家族全部冻结
+> 状态：**va-asymmetry-composite v1.0 已归档 · v2.0 重启开发中（2026-07-10）** · poc-value-area-asymmetry 分类器 v4.0 冻结 · structural-shaping-alpha 阶段 1 完成（待冻结候选）· value-area 家族全部冻结
 > 最近更新：2026-07-09
 > 当前主题：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)
 > 前置 Alpha 源：[poc-value-area-asymmetry](./themes/poc-value-area-asymmetry/README.md)
@@ -54,7 +54,7 @@ alpha 变现路径 POC 通过。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-composite** | **活跃（阶段 1 降级 · B0 即最优 · 待工程化 2026-07-09）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| **va-asymmetry-composite** | **重启开发态（v1.0 已归档 · 2026-07-10）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026-07-10-va-asymmetry-composite/) |
 | poc-value-area-asymmetry | 活跃 · 阶段 4 完成 · 分类器 v4.0 冻结 · 主动性研究暂停（供下游引用） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
@@ -63,7 +63,7 @@ alpha 变现路径 POC 通过。
 家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md)
 
 **活跃主题目录**：
-- 当前主线：`docs/research/themes/va-asymmetry-composite/`（完整策略 · 组合层）
+- 当前主线：`docs/research/themes/va-asymmetry-composite/`（**v2.0 重启开发态**，旧 v1.0 已归档）
 - 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（分类器组件）
 - 上游工具资产：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因工具）
 
@@ -127,12 +127,13 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 
 ## 5. 下一步
 
-**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（阶段 1 降级 · B0 锁定 · 待工程化）
+**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（**v2.0 重启开发态** · 旧 v1.0 已归档至 [archive/2026-07-10-va-asymmetry-composite](../archive/strategy-research/2026-07-10-va-asymmetry-composite/)）
 
-阶段 1 Gatekeeper 三大方向 0/6 通过。B0=S1×W0×VW0：Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%。
-组合层 alpha 已被吃满。待决策路径 A（直接工程化）或路径 B（提名义上限至 120%）。
+旧 v1.0 的 B0=S1×W0×VW0（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）作为 **frozen control baseline**，
+任何新底层逻辑须相对 B0 做同一批事件的配对增量（≥0.2 夏普）评估。
+本次重启将修订**底层逻辑**与**探索计划**，具体待定义。
 
-详见 [experiment-plan.md](./themes/va-asymmetry-composite/experiment-plan.md)。
+详见新主题 [strategy-math-spec.md](./themes/va-asymmetry-composite/strategy-math-spec.md)。
 
 **立题时的方法论前置约束**（继承自 value-area 家族 + 前序主题教训，任何新主题必须遵守）：
 
@@ -160,7 +161,7 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
-| **va-asymmetry-composite（当前主线 · 活跃）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| **va-asymmetry-composite（v2.0 重启开发态 · 原 v1.0 已归档）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026-07-10-va-asymmetry-composite/) |
 | poc-value-area-asymmetry（分类器 v4.0 · 上游 Alpha） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha（塑形工具资产 · 上游） | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area 家族总结（冻结） | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
@@ -180,7 +181,7 @@ docs/archive/strategy-research/2026-06-29-structural-alpha-random-baseline/raw-s
 后续 AI 接手时：
 
 ```text
-1. 先读本文件确认当前活跃主题为 va-asymmetry-composite（主线）
+1. 先读本文件确认当前活跃主题为 va-asymmetry-composite（**v2.0 重启开发态**，旧 v1.0 已归档）；新逻辑须相对归档 B0 做配对增量评估
    + poc-value-area-asymmetry（分类器引用）+ structural-shaping-alpha（工具引用）；
 2. 读 themes/va-asymmetry-composite/README.md 与 experiment-plan.md 了解阶段进度与门槛；
 3. 遵守 §5 的 11 条方法论前置约束，尤其是"多层对照""跨周期验证""三乘积核算""名义暴露压缩"；

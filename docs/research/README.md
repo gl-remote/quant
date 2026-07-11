@@ -39,7 +39,7 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-composite** | **活跃 / 立题 2026-07-09 / 阶段 0 立题复现待启动（当前主线）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) |
+| **va-asymmetry-composite** | **重启开发态（v1.0 已归档 · 2026-07-10）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026-07-10-va-asymmetry-composite/) |
 | poc-value-area-asymmetry | 活跃 / 阶段 4 完成 / 分类器 v4.0 冻结 / 下游引用 | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 / 阶段 1 完成待冻结候选 / 工具资产引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 已冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
@@ -48,7 +48,7 @@ AI 接手规则。
 家族目录：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 
 活跃主题目录：
-- 主线：`docs/research/themes/va-asymmetry-composite/`（完整策略 · 组合层）
+- 主线：`docs/research/themes/va-asymmetry-composite/`（**v2.0 重启开发态**，旧 v1.0 已归档）
 - 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（分类器）
 - 上游工具：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因）
 
@@ -70,6 +70,8 @@ Sharpe ≥ 2.5 / 年化净 ≥ 18% / MaxDD ≤ 8% 的实盘可上线标准。
 阶段 0（立题复现）待启动：精确复现 archive:2026-07-09-poc-va-shaping 基准
 （分类器 v4.0 + SL1.0/TP1.4/TH8h + c_realistic），Sharpe/MDD 偏差 ≤ 5% 即通过。
 ```
+
+> **2026-07-10 重置提示**：va-asymmetry-composite 已从 v1.0（B0 冻结版）整体重置为 v2.0 开发态，旧版整目录归档至 [2026-07-10-va-asymmetry-composite](../archive/strategy-research/2026-07-10-va-asymmetry-composite/)。B0 作为 frozen control baseline，新底层逻辑待定义。
 
 ## 5. 关键文档
 

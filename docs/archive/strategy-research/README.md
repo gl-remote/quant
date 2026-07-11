@@ -8,6 +8,7 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
+| 2026-07-10 | va-asymmetry-composite | 主题 v1.0 冻结版整目录归档：B0=S1×W0×VW0（Sharpe 2.70·年化15.10%·MaxDD−2.40%）· 组合层 0/6 增量死路（1/N 等权谜题）· 重启 v2.0 改底层逻辑+探索计划 | ✅ 通过(组合层结论) · ❌ 证伪(组合层增量) · 🔁 转 v2.0 |
 | 2026-07-09 | poc-value-area-asymmetry | 分类器 v4.0 塑形参数优化 + 组合层优化（品种筛选/强度加权/多空权重 0/6 通过）：B0=S1×W0×VW0 最优（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）· 9 处 math-spec 修正 · 13 脚本 + 9 数据 + 3 workbench | ✅ 通过 · 🧪 方法论 · ⚠️ 分流 |
 | 2026-07-08 | poc-value-area-asymmetry | **全阶段合并归档（Stage 1~4）** · 1/2/3/4 阶段 workbench + 51 专属脚本：阶段 1 测量 A3_skew DN 独立方向 → 阶段 2 跨周期护栏+ν_implied+OOS 4 主线 Bonferroni → 阶段 3 背景划分器 7 层严格+5/5 任务 → 阶段 4 三维 144 tier → 合并降级 6 类白名单 · 分类器 v4.0 冻结（9 A + 6 A-）· KF-25~29 定型 | ✅ 通过 · 🧪 方法论 · 🔁 转主线 |
 | 2026-07-06 | structural-shaping-alpha | 结构塑形阶段 1：DirRandom 下无独立 alpha 证伪；产出 9 条 KF + First-Passage Designer 工具遗产 | ❌ 证伪 · 🧪 方法论 |
