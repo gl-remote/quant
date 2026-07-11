@@ -121,9 +121,11 @@ def test_clear_backtest_pairs_fifo_and_updates_summary() -> None:
     assert rows[0]["close_trade_id"] == 3
     assert rows[0]["volume"] == 2.0
     assert rows[0]["gross_pnl"] == pytest.approx(200.0)
-    assert rows[0]["commission"] == pytest.approx(18.0)
+    # 新成本模型: m 品种 commission=1.51(交易所基准) ×(1+broker_markup=2.0)=4.53/手
+    # 该行(开2手+平2手)= 4.53×2×2 = 18.12; net = 200(gross) − 18.12 − 20(slip) = 161.88
+    assert rows[0]["commission"] == pytest.approx(18.12)
     assert rows[0]["slippage_cost"] == pytest.approx(20.0)
-    assert rows[0]["net_pnl"] == pytest.approx(162.0)
+    assert rows[0]["net_pnl"] == pytest.approx(161.88)
     assert rows[1]["open_trade_id"] == 2
     assert rows[1]["volume"] == 1.0
     assert rows[1]["gross_pnl"] == pytest.approx(90.0)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 import pandas as pd
-from common.contract_specs import BROKER_ADDON_DFCF, CONTRACT_SPECS, ContractSpec
+from common.contract_specs import CONTRACT_SPECS, ContractSpec
 from data.models import TradeRecord
 from loguru import logger
 
@@ -366,7 +366,7 @@ class BacktestClearingService:
         if cost_spec.spec is None:
             return 0.0
         lots = int(volume)
-        return cost_spec.spec.total_commission(price=price, lots=lots, broker_addon=BROKER_ADDON_DFCF)
+        return cost_spec.spec.total_commission(price=price, lots=lots)
 
     @staticmethod
     def _slippage_cost(volume: float, cost_spec: CostSpec) -> float:
