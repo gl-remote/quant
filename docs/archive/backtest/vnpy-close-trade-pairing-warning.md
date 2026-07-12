@@ -6,7 +6,7 @@
 > 完成日期：2026-06-30  
 > 发现分支：`feature/random-entry-baseline-roadmap`  
 > 关联实验：结构型 Alpha 随机对照阶段  
-> 相关归档：[结构型 Alpha 随机对照阶段归档](../strategy-research/2026-06-29-structural-alpha-random-baseline/README.md)  
+> 相关归档：[结构型 Alpha 随机对照阶段归档](../strategy-research/2026/06/structural-alpha-random-baseline/README.md)  
 > 修复相关提交：`dfbcb62`、`ba4cf11`  
 > 相关代码：[vnpy_backtest_bridge.py](../../../workspace/strategies/bridges/vnpy_backtest_bridge.py)，[vnpy_backtest_engine.py](../../../workspace/backtest/vnpy_backtest_engine.py)，[data_utils.py](../../../workspace/backtest/data_utils.py)，[service.py](../../../workspace/clearing/service.py)
 
@@ -27,10 +27,10 @@
 
 相关记录：
 
-- [value-area r2 multiseed](../strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-random-baseline-r2-value-area-multiseed.md)
-- [value-area r4 time-exit](../strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-deepening-r4-value-area-time-exit-realization.md)
-- [prevday reacceptance](../strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-r2-prevday-reacceptance.md)
-- [low volatility restart](../strategy-research/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-r6-low-volatility-restart.md)
+- [value-area r2 multiseed](../strategy-research/2026/06/structural-alpha-random-baseline/raw-workbench/structural-alpha-random-baseline-r2-value-area-multiseed.md)
+- [value-area r4 time-exit](../strategy-research/2026/06/structural-alpha-random-baseline/raw-workbench/structural-alpha-deepening-r4-value-area-time-exit-realization.md)
+- [prevday reacceptance](../strategy-research/2026/06/structural-alpha-random-baseline/raw-workbench/structural-alpha-r2-prevday-reacceptance.md)
+- [low volatility restart](../strategy-research/2026/06/structural-alpha-random-baseline/raw-workbench/structural-alpha-r6-low-volatility-restart.md)
 
 ## 现象
 

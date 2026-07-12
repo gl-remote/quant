@@ -13,8 +13,8 @@
 
 | 成员 | 冻结日期 | 冻结原因 | 目录 | 归档 |
 |------|---------|---------|------|------|
-| **value-area-reacceptance** | 2026-07-03 | Stage B v2 双 Q 判据未同时达标：Q_return 通过（C3 @ n=144 ret_mean +1.10）但 Q_generalize 未通过（Group_M 5/8 无 trade）→ **feature-only 降级 + 主策略暂停** | [value-area-reacceptance/](value-area-reacceptance/README.md) | [2026-07-03-value-area-reacceptance-stage-b/](../../../archive/strategy-research/2026-07-03-value-area-reacceptance-stage-b/README.md) |
-| **value-area-rolling-reacceptance** | 2026-07-05 | 前主题的 rolling 版本 pivot。Stage 1 / 1.5 / 4 / 4b 完整链条证伪：POC 特殊性 / rolling 独立价值 / reacceptance 触发器特殊性 / 4+ ATR 距离档 edge 全部被独立证伪 → **主题假设完全崩塌** | [value-area-rolling-reacceptance/](value-area-rolling-reacceptance/README.md) | [2026-07-05-value-area-rolling-reacceptance-freeze/](../../../archive/strategy-research/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| **value-area-reacceptance** | 2026-07-03 | Stage B v2 双 Q 判据未同时达标：Q_return 通过（C3 @ n=144 ret_mean +1.10）但 Q_generalize 未通过（Group_M 5/8 无 trade）→ **feature-only 降级 + 主策略暂停** | [value-area-reacceptance/](value-area-reacceptance/README.md) | [2026/07/value-area-reacceptance-stage-b/](../../../archive/strategy-research/2026/07/value-area-reacceptance-stage-b/README.md) |
+| **value-area-rolling-reacceptance** | 2026-07-05 | 前主题的 rolling 版本 pivot。Stage 1 / 1.5 / 4 / 4b 完整链条证伪：POC 特殊性 / rolling 独立价值 / reacceptance 触发器特殊性 / 4+ ATR 距离档 edge 全部被独立证伪 → **主题假设完全崩塌** | [value-area-rolling-reacceptance/](value-area-rolling-reacceptance/README.md) | [2026/07/value-area-rolling-reacceptance-freeze/](../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md) |
 
 ## 关系图
 

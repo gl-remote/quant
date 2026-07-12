@@ -5,7 +5,7 @@
 > 发现日期：2026-06-27
 > 修复提交 hash：96f2869
 > 发现分支：experiment/low-validation-cost-r2-bollinger-retest
-> 关联实验：[`low-validation-cost-r2-bollinger-retest`](../strategy-research/2026-06-27-low-validation-cost/low-validation-cost-r2-bollinger-retest.md)
+> 关联实验：[`low-validation-cost-r2-bollinger-retest`](../strategy-research/2026/06/low-validation-cost/low-validation-cost-r2-bollinger-retest.md)
 > 相关代码：[`workspace/cli/commands/backtest.py`](../../../workspace/cli/commands/backtest.py)、[`workspace/cli/workflows/backtests_run.py`](../../../workspace/cli/workflows/backtests_run.py)
 
 ## 背景

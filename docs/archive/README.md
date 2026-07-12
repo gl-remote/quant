@@ -66,8 +66,8 @@
 
 | 文件 | 类型 | 状态 | 完成日期 | 说明 |
 |------|------|------|---------|------|
-| [ma-positive-expectancy.md](strategy-research/2026-06-26-indicator-baseline/ma-positive-expectancy.md) | 策略研究复盘 | 主触发方向暂停 | 2026-06-26 | MA baseline 正期望研究复盘，保留 `ma8` baseline |
-| [strategy-atr-tuning.md](strategy-research/2026-06-26-indicator-baseline/strategy-atr-tuning.md) | 策略研究复盘 | 主触发方向降级 | 2026-06-27 | ATR 主触发方向降级，保留 ATR 风控模块 |
+| [ma-positive-expectancy.md](strategy-research/2026/06/indicator-baseline/ma-positive-expectancy.md) | 策略研究复盘 | 主触发方向暂停 | 2026-06-26 | MA baseline 正期望研究复盘，保留 `ma8` baseline |
+| [strategy-atr-tuning.md](strategy-research/2026/06/indicator-baseline/strategy-atr-tuning.md) | 策略研究复盘 | 主触发方向降级 | 2026-06-27 | ATR 主触发方向降级，保留 ATR 风控模块 |
 
 ### infra/ — 基础设施
 

@@ -10,7 +10,7 @@
 本主题于 2026-07-10 整体重置：
 
 - **旧版 v1.0（B0 = S1×W0×VW0 冻结版）已整目录归档**至
-  `../../archive/strategy-research/2026-07-10-va-asymmetry-composite/`。
+  `../../archive/strategy-research/2026/07/va-asymmetry-composite/`。
 - 重置原因：需修订**底层逻辑**与**探索计划**，幅度超出 v1.0 冻结契约的可调范围。
 - 旧版全部信息（KF-1~4 结论、1/N 等权谜题注、§11 审计附录、B0 配置）均保留于归档，**不丢失**。
 - 本主题为**同名重启**，不新建相似主题，避免主题 sprawl。
@@ -20,7 +20,7 @@
 v1.0 的 B0 = S1×W0×VW0（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）作为
 **frozen control baseline**。任何新底层逻辑的提案，必须用**同一批事件做配对增量**
 （净夏普增量 ≥ 0.2）证明优于 B0，否则不采用。B0 完整定义见归档：
-`../../archive/strategy-research/2026-07-10-va-asymmetry-composite/strategy-math-spec.md`。
+`../../archive/strategy-research/2026/07/va-asymmetry-composite/strategy-math-spec.md`。
 
 ## 2. 待定义（本次重启的核心工作）
 
