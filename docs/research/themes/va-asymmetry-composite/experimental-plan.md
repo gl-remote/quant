@@ -1,7 +1,7 @@
 # va-asymmetry-composite · 实验计划与测试顺序
 
 > 配套文档：`strategy-math-spec.md`（策略行为唯一契约，已重写为干净、参数配置化版本）。本计划只安排"测什么、按什么顺序、怎么判定"，
-> 不重复定义规则；所有符号/公式以 spec 为准。实验过程与结论见 `../../workbench/va-asymmetry-composite-p0-p9-summary.md`。
+> 不重复定义规则；所有符号/公式以 spec 为准。实验过程与结论见 `../../../archive/strategy-research/2026-07-12-va-asymmetry-composite-mathspec/p0-p9-summary.md`。
 > 状态流转：本计划随实验推进更新；每个 Phase 的"判定"栏给出明确的采用/否决/回溯触发条件。
 
 > ⚠ **年化口径变更（2026-07-11 起生效）**：所有"年化"指标口径由 **"exit 首尾之间的全部日历日（含周末+预热空窗）"** 改为 **"只用 skew 秩拿到值（非NaN）的那一天（交易日，剔周末）的跨合约并集"** 作分母、年因子 **252**（一年 252 个交易日，标准口径，与 Sharpe 的 `sqrt(252)` 一致）。即只计入 **skew 拿到值、可正式交易** 的交易日。
