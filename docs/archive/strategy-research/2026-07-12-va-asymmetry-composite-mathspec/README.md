@@ -4,7 +4,7 @@
 - **状态**：已完成
 - **开发分支**：`experiment/va-asymmetry-composite-mathspec`
 - **实现提交**：`cdf4f488`
-- **目标 dev**：`dev/0.5`
+- **目标 dev**：`dev/0.6`
 - **日期**：2026-07-12
 
 ## 内容
@@ -14,6 +14,10 @@
 | `p0-p9-summary.md` | P0~P9 全 Phase 实验结论汇总 |
 | `p0-p9-fixed-rerun.md` | 前视修复后 fixed 基线重跑结果 |
 | `p2-timing-holding-time.md` | P2 entry_mode 全族证伪 + 持仓时长诊断详报 |
+| `r1-feature-independence.md` | 特征独立性验证 (from workbench) |
+| `r1-transition-flag-scope.md` | transition_flag 作用域分析 (from workbench) |
+| `stage1-gatekeepers.md` | Stage1 Gatekeeper 报告 (from workbench) |
+| `scripts/` | 全部实验脚本（顶层 va_*.py + ai_tmp + backtest-va.sh） |
 
 ## 关键结论
 
