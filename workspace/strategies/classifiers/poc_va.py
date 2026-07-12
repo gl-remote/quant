@@ -75,7 +75,11 @@ def roll_t_pit(series: pd.Series, window: int, min_periods: int | None = None) -
     # 滚动窗口中位数（pandas C 级）
     roll_med = roll.median()
     # 滚动 MAD = median(|x - med|)（pandas C 级 quantile(0.5)）
-    roll_mad = (series - roll_med).abs().rolling(window, min_periods=min_periods).quantile(0.5)
+    # 注意：MAD 需要 roll_med 已就绪的样本，故 min_periods 须 ≤ 实际有效样本数。
+    # 当 dataset ≪ 2×window 时，用较小 min_periods 避免全部 NaN 回退到 0.5。
+    dev_abs = (series - roll_med).abs()
+    mad_min = max(3, window // 4)
+    roll_mad = dev_abs.rolling(window, min_periods=mad_min).quantile(0.5)
     scale = roll_mad * MAD_SCALE
     # 稳健 z-score
     z_arr = ((series - roll_med) / scale.where(scale >= 1e-12)).fillna(0.0).to_numpy(dtype=np.float64)
@@ -285,7 +289,7 @@ class _TierSpec:
     trans_set: frozenset[str]
 
 
-# spec §1.3 六阵营（v4.0 锁定，与窗口长度无关）
+# spec §1.3 六阵营
 TIERS: Final[tuple[_TierSpec, ...]] = (
     _TierSpec(  # L_seg3：全期参与
         TIER_L_SEG3,
@@ -317,7 +321,7 @@ TIERS: Final[tuple[_TierSpec, ...]] = (
     ),
     _TierSpec(  # S_seg34：稳定期 + 切换期仅扩张
         TIER_S_SEG34,
-        _Bound(0.60, 0.81, True, False),  # spec §1.3: r_s ∈ [0.60, 0.81) 右开
+        _Bound(0.60, 0.81, True, False),
         _Bound(0.67, 1.00, False, True),
         _Bound(0.00, 0.20, True, True),
         frozenset({TRANS_STABLE, TRANS_EXPAND}),
@@ -366,9 +370,9 @@ def tier_direction(tier: str | None) -> str:
 class ClassifierConfig:
     """spec §0 窗口生产配置（各参数独立归一化窗口）。"""
 
-    skew_rank_win: int = 20
-    atr_rank_win: int = 20
-    trend_win: int = 20
+    skew_rank_win: int = 10
+    atr_rank_win: int = 10
+    trend_win: int = 10
     atr_entry_win: int = 10
     trend_entry_win: int = 10
 
@@ -413,6 +417,8 @@ def build_coordinates(
         return g
 
     out = df.groupby(contract_col, sort=False, group_keys=False).apply(_one_contract)
+    if contract_col not in out.columns:
+        out[contract_col] = df[contract_col].values  # pandas 3.0 strips group key column
     return out
 
 

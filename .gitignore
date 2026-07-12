@@ -91,6 +91,10 @@ node_modules/
 project_data/
 workspace/output/
 
+# Workbench temporary scripts/data (README.md is tracked as a guide)
+docs/workbench/*
+!docs/workbench/README.md
+
 # Distribution / packaging
 *.egg-info/
 dist/

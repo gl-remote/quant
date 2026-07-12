@@ -12,7 +12,7 @@ window 设置规则：
 - 如果指标需要比业务参数更多历史，直接放大 window，不另设额外字段。
 """
 
-from ..core.indicators import IndicatorSpec, atr_func, kdj_func, macd_func, sma_func
+from ..core.indicators import IndicatorSpec, atr_func, daily_atr_bps_func, kdj_func, macd_func, sma_func
 
 IndicatorParam = int | float | str
 
@@ -49,6 +49,15 @@ def ATR(period: IndicatorParam = 14) -> IndicatorSpec:  # noqa: N802
         window=period + 1 if isinstance(period, int) else period,
         func=atr_func,
     )
+
+
+DAILY_ATR_BPS = IndicatorSpec(
+    name="daily_atr_bps",
+    params={"period": 10},
+    window=12,
+    func=daily_atr_bps_func,
+)
+"""va-asymmetry-composite A 层日线波动率：ATR(10)/close*10000，在 1d 周期上使用。"""
 
 
 def build_indicator(name: str, params: tuple[IndicatorParam, ...]) -> IndicatorSpec | None:

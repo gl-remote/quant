@@ -4,25 +4,27 @@
   由 Bridge 提供 State + BarContext）。严格实现
   docs/research/themes/va-asymmetry-composite/strategy-math-spec.md §2 / §3 定义的
   入场、止损、波动率-时间退出与 §3.1 名义暴露 sizing。
-- 用途：单合约 on_bar 决策——A 层结论（tier / direction / daily_atr_bps [ / sigma_day ]）
-  由上游 timeline parquet 提供，本策略只做 (contract, date)→tier 查表并按 spec 执行。
+- 用途：单合约 on_bar 决策——A 层 tier/direction/daily_atr_bps 由策略内部每日状态机
+  自算（datafeed 提供 1d 指标 + 策略自维护日线缓冲区 → t-PIT → 六阵营），
+  不再依赖外部 timeline parquet。
 - 注意事项：
     * 严格按 spec §2/§3 落地，未定锚点（H_vol{L:B_L,S:B_S} / σ_day）通过参数暴露；
-    * 主周期 = spec §0 base_tf = 1m（波动率-时间退出 §2.3 所需的对数收益粒度），
-      §2.2 止损用的 1h RMA(10) ATR 由 data_requirements 声明 "1h" 周期 + ATR 指标；
+    * 主周期 = spec §0 base_tf = 1m（波动率-时间退出 §2.3 所需的对数收益粒度）；
+    * spec §7.1（2026-07-12 修正）：止损 ATR 改用 A 层日线 SMA(10) ATR（daily_atr_bps），
+      不再通过桥梁请求 1h RMA(10) ATR 指标；
     * §3.3 组合级 Cap 属于组合/桥接层职责，超出单合约 on_bar 范围；
     * §3.4 单日熔断按 spec §0 关闭；未实现，如需请由上层组装。
 """
 
 from __future__ import annotations
 
-import contextlib
+from collections import deque
 from dataclasses import dataclass
-from datetime import date as _date
 from math import isnan, log
-from pathlib import Path
-from typing import Any, override
+from typing import override
 
+import numpy as np
+import pandas as pd
 from common.constants import (
     TRADE_ACTION_BUY,
     TRADE_ACTION_SELL,
@@ -30,6 +32,14 @@ from common.constants import (
     TRADE_DIRECTION_SHORT,
 )
 
+from .classifiers.poc_va import (
+    ClassifierConfig,
+    classify_tier,
+    compute_transition_series,
+    roll_t_pit,
+    tier_direction,
+    volume_weighted_skew,
+)
 from .core import (
     CORE_VERSION,
     Fill,
@@ -38,16 +48,13 @@ from .core import (
     Strategy,
     placeholder_diagnostics,
 )
-from .core.indicators import generate_indicator_column_name
 from .runtime import DataRequirements, EventsRequirements, PeriodRequirements
 from .runtime.requirements import BarContext
-from .strategy_aspects.indicators import ATR
+from .strategy_aspects.indicators import DAILY_ATR_BPS
 
 # ---------------------------------------------------------------------------
 # spec §0：生产配置（可通过参数覆盖，默认对齐 spec）
 # ---------------------------------------------------------------------------
-
-_DEFAULT_TIMELINE: str = "project_data/logs/poc_va_asymmetry_stage4/classifier_v31_timeline.parquet"
 
 
 @dataclass
@@ -62,10 +69,10 @@ class VAAsymmetryCompositeParams:
     """spec §0 entry_tf：入场 K 线粒度（§2.1）；用于 open_grace 语义对齐。"""
 
     atr_tf: str = "1h"
-    """spec §2.2 止损 ATR 的 K 线粒度（1h RMA/Wilder）。"""
+    """[legacy] spec §7.1 已修正：止损 ATR 改用 A 层日线 SMA(10) ATR，本字段不再生效。"""
 
     atr_period: int = 10
-    """spec §2.2 ATR 平滑 α = 1/atr_period；默认 10（即 α=0.1）。"""
+    """[legacy] spec §7.1 已修正：止损 ATR 改用 A 层日线 SMA(10) ATR，本字段不再生效。"""
 
     # ── §2.1 入场 baseline 增强 ─────────────────────────────────
     open_grace_min: float = 5.0
@@ -87,7 +94,7 @@ class VAAsymmetryCompositeParams:
 
     sigma_day_from_atr: bool = True
     """spec §2.3 σ_day 缺省来源：True 时 σ_day := daily_atr_bps / 10000；
-    False 时须由 A 层 timeline parquet 提供 sigma_day 列（fraction，例 0.008）。"""
+    False 时须由外部提供 sigma_day 值。"""
 
     # ── §3.1 目标仓位 ────────────────────────────────────────
     risk_per_trade: float = 0.02
@@ -96,23 +103,13 @@ class VAAsymmetryCompositeParams:
     integer_lots: bool = False
     """True 时对手数向下取整（实盘整手约束）；False 保留分数手以对齐研究引擎口径。"""
 
-    # ── A 层查表 ─────────────────────────────────────────────
-    a_layer_timeline_path: str = _DEFAULT_TIMELINE
-    """A 层 (contract, date)→(tier, direction, daily_atr_bps [, sigma_day]) 查表 parquet。"""
-
-
-# ---------------------------------------------------------------------------
-# spec §1.3：阵营名 → 多/空域
-# ---------------------------------------------------------------------------
-
-
-def _tier_direction(tier: str) -> str:
-    """spec §1.3：L_* → long；S_* → short；其他 → 空串。"""
-    if tier.startswith("L_"):
-        return TRADE_DIRECTION_LONG
-    if tier.startswith("S_"):
-        return TRADE_DIRECTION_SHORT
-    return ""
+    # ── 分类器参数 ───────────────────────────────────────────
+    skew_rank_win: int = 10
+    atr_rank_win: int = 10
+    trend_win: int = 10
+    atr_entry_win: int = 10
+    trend_entry_win: int = 10
+    """spec §0 窗口生产配置：各参数独立归一化窗口。与 ClassifierConfig 对齐。"""
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +123,10 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
     严格实现 spec §2/§3.1：
       §2.1 入场：A 层命中 + 首根 bar 之后 + t_bar - t_open ≥ open_grace_min
                 → 按 tier 方向开仓（Bridge 用当前 bar close 成交）。
-      §2.2 止损：SL = entry ∓ K_SL·A，A = 入场当日盘前 1h RMA(10) ATR。
+      §2.2 止损：SL = entry ∓ K_SL·A，A = 入场当日盘前日线 SMA(10) ATR（spec §7.1）。
       §2.3 时间退出：ΔV_k = |log(C_k/C_{k-1})|/σ_day；V ≥ H_vol(τ) 后下一根 base_tf 收盘平仓。
       §2.4 优先级：SL > 时间退出（同 bar 同时触发取 SL）。
-      §3.1 sizing：Notional = RiskPerTrade·Equity / (K_SL·ATR_bps)，qty = Notional/(price·contract_size)。
+      §3.1 sizing：Notional = RiskPerTrade·Equity / (K_SL·daily_atr_bps)，qty = Notional/(price·contract_size)。
     """
 
     name: str = "va_asymmetry_composite"
@@ -144,17 +141,19 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
 
     @override
     def data_requirements(self, config: VAAsymmetryCompositeParams) -> DataRequirements:
-        """声明主周期 base_tf 与 §2.2 所需 1h RMA(10) ATR。
+        """声明 base_tf（1m）用于 §2.3 波动率-时间退出 + 1d 周期用于日线 ATR 指标。
 
-        主周期 = base_tf（1m）——回测引擎会按最小周期驱动 on_bar，符合 §2.3
-        对数收益需 1m 粒度的语义；atr_tf（1h）通过 multi 视图 + ATR 指标提供。
+        止损 ATR 来源：datafeed 在 1d 周期上计算 DAILY_ATR_BPS(10)，
+        策略通过 ctx.multi["1d"].indicator(...) 读取昨日已完成值。
         """
         return DataRequirements(
             periods={
                 config.base_tf: PeriodRequirements(lookback_bars=2),
-                config.atr_tf: PeriodRequirements(lookback_bars=config.atr_period + 5),
+                "1d": PeriodRequirements(lookback_bars=25),
             },
-            indicators={config.atr_tf: [ATR(config.atr_period)]},
+            indicators={
+                "1d": [DAILY_ATR_BPS],
+            },
             events=EventsRequirements.no_events(),
         )
 
@@ -165,10 +164,12 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
     @override
     @placeholder_diagnostics
     def on_bar(self, state: State[VAAsymmetryCompositeParams], ctx: BarContext) -> Signal:
-        self._ensure_a_table(state, state.strategy_config)
-
-        # 每根 base_tf bar 都要维护 session 锚点与前一根收盘（用于 §2.3 累积）
+        # 每根 base_tf bar 维护 session 锚点（t_open）与前一日 5m bar 缓冲区
         self._anchor_session(state, ctx)
+        self._accumulate_session_bar(state, ctx)
+
+        # 新交易日：结算昨日 A3_skew → 更新滚动缓冲区 → t-PIT → 今日 tier
+        self._on_new_day(state, ctx)
 
         if state.position.direction:
             return self._on_holding(state, ctx)
@@ -190,6 +191,161 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         if state.extra.get("va_session_date") != today:
             state.extra["va_session_date"] = today
             state.extra["va_session_open"] = bar.datetime
+
+    # ------------------------------------------------------------
+    # A 层每日状态机：1m bar → 5m 聚合 → session 缓冲区 → 新日结算
+    # ------------------------------------------------------------
+
+    @staticmethod
+    def _accumulate_session_bar(state: State[VAAsymmetryCompositeParams], ctx: BarContext) -> None:
+        """将 1m bar 聚合到 5m 粒度并追加到 session 缓冲区。
+
+        session 缓冲区 (va_session_5m_bars) 存储当日每个已完成 5m bar 的 OHLCV，
+        供收盘/下一交易日开盘时计算 A3_skew 使用。
+        """
+        bar = ctx.bar
+        bar_time = bar.datetime
+        five_min_key = (bar_time.hour * 60 + bar_time.minute) // 5
+
+        last_key = state.extra.get("va_last_5m_key", -1)
+        if five_min_key != last_key:
+            # 新 5m bar：刷出上一个
+            prev_bar = state.extra.get("va_current_5m")
+            if prev_bar is not None:
+                bars: list[dict[str, float]] = state.extra.setdefault("va_session_5m_bars", [])
+                bars.append(prev_bar)
+            state.extra["va_current_5m"] = {
+                "open": float(bar.open),
+                "high": float(bar.high),
+                "low": float(bar.low),
+                "close": float(bar.close),
+                "volume": float(bar.volume),
+            }
+            state.extra["va_last_5m_key"] = five_min_key
+        else:
+            # 同一 5m bar 内：更新 OHLC
+            cur = state.extra.setdefault("va_current_5m", {})
+            if not cur:
+                cur.update(
+                    open=float(bar.open),
+                    high=float(bar.high),
+                    low=float(bar.low),
+                    close=float(bar.close),
+                    volume=float(bar.volume),
+                )
+            else:
+                cur["high"] = max(float(cur.get("high", 0)), float(bar.high))
+                cur["low"] = min(float(cur.get("low", float("inf"))), float(bar.low))
+                cur["close"] = float(bar.close)
+                cur["volume"] = float(cur.get("volume", 0)) + float(bar.volume)
+
+    # ------------------------------------------------------------
+    # A 层每日状态机：新交易日结算 → 滚动缓冲区 → t-PIT → tier
+    # ------------------------------------------------------------
+
+    _INDICATOR_COL: str = "1d_daily_atr_bps_10"
+    """generate_indicator_column_name("daily_atr_bps", {"period": 10}, period="1d") 的硬编码结果。"""
+
+    @staticmethod
+    def _on_new_day(state: State[VAAsymmetryCompositeParams], ctx: BarContext) -> None:
+        """新交易日结算：昨日 A3_skew → 更新滚动缓冲区 → t-PIT → 今日 tier。
+
+        仅在 va_session_date 变更后的首根 bar 执行一次。
+        tier 结果存为 state.extra["va_today_{tier,direction,daily_atr_bps}"]。
+        """
+        if state.extra.get("va_tier_computed_date") == state.extra.get("va_session_date"):
+            return
+
+        config = state.strategy_config
+        today = state.extra["va_session_date"]
+
+        # ── 1. 结算昨日 session：计算 A3_skew ──
+        yesterday_skew = float("nan")
+        yesterday_close = float("nan")
+        bars: list[dict[str, float]] = state.extra.get("va_session_5m_bars", [])
+        if bars:
+            session_closes = np.array([b["close"] for b in bars], dtype=float)
+            session_volumes = np.array([b["volume"] for b in bars], dtype=float)
+            yesterday_skew = volume_weighted_skew(session_closes, session_volumes)
+            yesterday_close = float(session_closes[-1])
+            # 清空旧缓冲区，开始新 session
+            state.extra["va_session_5m_bars"] = []
+
+        # ── 2. 读取昨日 daily_atr_bps（idx=-2 = 昨日已完成 1d bar）──
+        atr_view = ctx.multi.get("1d")
+        yesterday_atr_bps = float("nan")
+        if atr_view is not None:
+            val = atr_view.indicator(VAAsymmetryCompositeStrategy._INDICATOR_COL, -2)
+            if val is not None:
+                yesterday_atr_bps = float(val)
+
+        # ── 3. 更新滚动缓冲区 ──
+        skews: deque[float] = state.extra.setdefault("va_skew_buf", deque(maxlen=40))
+        atrs: deque[float] = state.extra.setdefault("va_atr_bps_buf", deque(maxlen=40))
+        closes: deque[float] = state.extra.setdefault("va_close_buf", deque(maxlen=40))
+
+        if not np.isnan(yesterday_skew):
+            skews.append(yesterday_skew)
+        if not np.isnan(yesterday_atr_bps):
+            atrs.append(yesterday_atr_bps)
+        if not np.isnan(yesterday_close):
+            closes.append(yesterday_close)
+
+        # ── 4. t-PIT → tier 分类（至少需要 window=20 天历史）──
+        class_config = ClassifierConfig(
+            skew_rank_win=config.skew_rank_win,
+            atr_rank_win=config.atr_rank_win,
+            trend_win=config.trend_win,
+            atr_entry_win=config.atr_entry_win,
+            trend_entry_win=config.trend_entry_win,
+        )
+        tier_name: str | None = None
+        direction: str = ""
+        daily_atr_bps = float("nan")
+
+        min_len = class_config.skew_rank_win  # 20
+        trend_min_len = (class_config.trend_entry_win - 1) + class_config.trend_win  # (M-1)+trend_win, spec §1.1
+        if len(skews) >= min_len and len(atrs) >= min_len and len(closes) >= trend_min_len:
+            # spec §1.1: trend_ret_M = log(C_d / C_{d-M+1}), M = trend_entry_win
+            trend_offset = class_config.trend_entry_win - 1  # M-1 = 9 (C_d vs C_{d-M+1})
+            n_close = len(closes)
+
+            # 构造滚动窗口 Series（用全部可用数据，使 MAD 有足够有效样本）
+            s_skew = pd.Series(list(skews), dtype=float)
+            s_atr = pd.Series(list(atrs), dtype=float)
+            # trend: 从最早的 (offset, close_offset) 开始逐日计算 log return
+            t_vals = []
+            for i in range(trend_offset, n_close):
+                if closes[i - trend_offset] > 0 and closes[i] > 0:
+                    t_vals.append(float(log(closes[i] / closes[i - trend_offset])))
+                else:
+                    t_vals.append(float("nan"))
+            s_trend = pd.Series(t_vals, dtype=float)
+
+            # t-PIT 归一化
+            r_s_raw = roll_t_pit(s_skew, class_config.skew_rank_win)
+            r_s = 1.0 - r_s_raw.iloc[-1]  # 互补
+            r_a_series = roll_t_pit(s_atr, class_config.atr_rank_win)
+            r_a = float(r_a_series.iloc[-1])
+            r_t_series = roll_t_pit(s_trend, class_config.trend_win)
+            r_t = float(r_t_series.iloc[-1])
+
+            # trans 从 r_a 系列派生
+            trans_df = compute_transition_series(r_a_series)
+            trans = str(trans_df["trans"].iloc[-1])
+
+            if not np.isnan(r_s) and not np.isnan(r_a) and not np.isnan(r_t):
+                tier_name = classify_tier(float(r_s), float(r_a), float(r_t), trans)
+                if tier_name is not None:
+                    direction = tier_direction(tier_name)
+
+            # 今日使用的 daily_atr_bps = 昨日值 (止损/sizing/sigma)
+            daily_atr_bps = yesterday_atr_bps
+
+        state.extra["va_today_tier"] = tier_name
+        state.extra["va_today_direction"] = direction
+        state.extra["va_today_daily_atr_bps"] = daily_atr_bps
+        state.extra["va_tier_computed_date"] = today
 
     # ------------------------------------------------------------
     # 持仓分支：§2.2 SL / §2.3 时间退出 / §2.4 优先级
@@ -264,33 +420,30 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         if elapsed_min < config.open_grace_min:
             return Signal()
 
-        # A 层命中
-        table: dict[_date, dict[str, Any]] = state.extra.get("va_table", {})
-        record = table.get(today)
-        if record is None:
-            return Signal()
-
-        direction = str(record["direction"])
+        # A 层命中：从每日状态机读取
+        direction = str(state.extra.get("va_today_direction", ""))
         if direction not in (TRADE_DIRECTION_LONG, TRADE_DIRECTION_SHORT):
             return Signal()
 
-        # §2.2 ATR：入场当日盘前 1h RMA(10) ATR，取当前 multi["1h"] 最新值（回测中即最近可见）
-        atr_price = self._latest_atr(ctx, config)
+        tier_name = str(state.extra.get("va_today_tier", ""))
+
+        # §2.2 ATR：spec §7.1 修正——使用 datafeed 1d 周期 DAILY_ATR_BPS 指标昨日值
         entry_price = float(bar.close)
-        if entry_price <= 0 or atr_price <= 0 or isnan(atr_price):
+        daily_atr_bps = float(state.extra.get("va_today_daily_atr_bps", float("nan")))
+        if entry_price <= 0 or isnan(daily_atr_bps) or daily_atr_bps <= 0:
             return Signal()
+        atr_price = entry_price * daily_atr_bps / 10000.0
 
         is_long = direction == TRADE_DIRECTION_LONG
         k_sl = config.k_sl_long if is_long else config.k_sl_short
         h_vol = config.h_vol_long if is_long else config.h_vol_short
         sign = 1 if is_long else -1
 
-        # §2.2 止损价：SL = entry ∓ K_SL · A
+        # §2.2 止损价：SL = entry ∓ K_SL · A，其中 A = entry_price × daily_atr_bps/10000
         stop_price = entry_price - sign * k_sl * atr_price
 
         # §3.1 名义暴露 sizing
-        atr_bps = atr_price / entry_price * 10000.0
-        stop_dist_frac = k_sl * atr_bps / 10000.0
+        stop_dist_frac = k_sl * daily_atr_bps / 10000.0
         if stop_dist_frac <= 0:
             return Signal()
         notional_frac = config.risk_per_trade / stop_dist_frac
@@ -300,8 +453,8 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         if qty <= 0:
             return Signal()
 
-        # §2.3 σ_day：优先 A 层 timeline 提供；否则回退 daily_atr_bps/10000
-        sigma_day = self._resolve_sigma_day(record, atr_bps, config)
+        # §2.3 σ_day：daily_atr_bps / 10000（不再依赖外部 timeline）
+        sigma_day = daily_atr_bps / 10000.0
         if sigma_day <= 0:
             return Signal()
 
@@ -316,14 +469,14 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         action = TRADE_ACTION_BUY if is_long else TRADE_ACTION_SELL
         return Signal(
             action=action,
-            reason=f"entry_{record['tier']}",
+            reason=f"entry_{tier_name}",
             volume=qty,
             diagnostics={
-                "tier": record["tier"],
+                "tier": tier_name,
                 "direction": direction,
                 "entry_price": entry_price,
                 "atr_price": atr_price,
-                "atr_bps": atr_bps,
+                "daily_atr_bps": daily_atr_bps,
                 "stop_price": stop_price,
                 "k_sl": k_sl,
                 "h_vol": h_vol,
@@ -337,35 +490,6 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
     # ------------------------------------------------------------
 
     @staticmethod
-    def _latest_atr(ctx: BarContext, config: VAAsymmetryCompositeParams) -> float:
-        """从 ctx.multi[atr_tf] 读取 §2.2 需要的 1h RMA(atr_period) ATR。"""
-        view = ctx.multi.get(config.atr_tf)
-        if view is None:
-            return float("nan")
-        col = generate_indicator_column_name("atr", {"period": config.atr_period}, period=config.atr_tf)
-        value = view.indicator(col)
-        return float(value) if value is not None else float("nan")
-
-    @staticmethod
-    def _resolve_sigma_day(
-        record: dict[str, Any],
-        atr_bps: float,
-        config: VAAsymmetryCompositeParams,
-    ) -> float:
-        """spec §2.3 σ_day：优先 A 层 record["sigma_day"]，否则 daily_atr_bps/10000。"""
-        raw = record.get("sigma_day")
-        if raw is not None:
-            try:
-                v = float(raw)
-                if v > 0:
-                    return v
-            except (TypeError, ValueError):
-                pass
-        if not config.sigma_day_from_atr:
-            return 0.0
-        return atr_bps / 10000.0
-
-    @staticmethod
     def _clear_holding(state: State[VAAsymmetryCompositeParams]) -> None:
         for key in (
             "va_stop_price",
@@ -375,89 +499,3 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
             "va_time_exit_pending",
         ):
             state.extra.pop(key, None)
-
-    # ------------------------------------------------------------
-    # A 层查表：从 timeline parquet 惰性预加载 (date → 记录)
-    # ------------------------------------------------------------
-
-    def _ensure_a_table(
-        self,
-        state: State[VAAsymmetryCompositeParams],
-        config: VAAsymmetryCompositeParams,
-    ) -> None:
-        if state.extra.get("va_a_initialized"):
-            return
-        state.extra["va_a_initialized"] = True
-        state.extra["va_table"] = self._load_a_table(config.a_layer_timeline_path, state.symbol)
-
-    @staticmethod
-    def _load_a_table(timeline_path: str, symbol: str) -> dict[_date, dict[str, Any]]:
-        """加载 A 层 timeline parquet 并按 (contract=symbol) 折叠成 {date: 记录}。
-
-        记录字段：
-          - tier         : spec §1.3 阵营名（L_*/S_*）；供入场方向与 §2.2 K_SL 选择
-          - direction    : 由 tier 派生（long/short）
-          - daily_atr_bps: 日 ATR 归一化到 bps（用于 §2.3 σ_day 回退方案）
-          - sigma_day    : 可选；上游提供的日波动率基准（fraction）
-        同日多行取最早（event_time 最小）。文件缺失或无匹配返回空表。
-        """
-        import pandas as pd
-
-        path = Path(timeline_path)
-        if not path.is_absolute():
-            path = Path.cwd() / path
-        if not path.exists():
-            return {}
-
-        try:
-            tl = pd.read_parquet(path)
-        except Exception:
-            return {}
-
-        if "contract" not in tl.columns or "tier" not in tl.columns:
-            return {}
-        tl = tl[(tl["contract"] == symbol) & tl["tier"].notna()]
-        if tl.empty:
-            return {}
-
-        # 时间列
-        if "event_time" in tl.columns:
-            tl = tl.copy()
-            tl["event_time"] = pd.to_datetime(tl["event_time"])
-            tl = tl.sort_values("event_time")
-            date_series = tl["event_time"].dt.date
-        elif "date" in tl.columns:
-            tl = tl.copy()
-            date_series = pd.to_datetime(tl["date"]).dt.date
-        else:
-            return {}
-
-        # daily_atr_bps 列的可能命名（兼容 A 层预处理输出）
-        atr_col = None
-        for cand in ("daily_atr_bps", "daily_atr_10_bps", "entry_atr_bps"):
-            if cand in tl.columns:
-                atr_col = cand
-                break
-
-        sigma_col = "sigma_day" if "sigma_day" in tl.columns else None
-
-        table: dict[_date, dict[str, Any]] = {}
-        for pos, (_, row) in enumerate(tl.iterrows()):
-            ev_date = date_series.iloc[pos]
-            if ev_date in table:
-                continue
-            tier = str(row["tier"])
-            direction = _tier_direction(tier)
-            if not direction:
-                continue
-            atr_bps = float(row[atr_col]) if atr_col is not None else float("nan")
-            record: dict[str, Any] = {
-                "tier": tier,
-                "direction": direction,
-                "daily_atr_bps": atr_bps,
-            }
-            if sigma_col is not None:
-                with contextlib.suppress(TypeError, ValueError):
-                    record["sigma_day"] = float(row[sigma_col])
-            table[ev_date] = record
-        return table
