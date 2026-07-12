@@ -23,7 +23,7 @@
 - **ν_implied 归因**：Itô 分解净 edge，区分"凸性伪影"与"真实趋势 alpha"
 - **KF 方法论**：多层对照 / cluster bootstrap / 跨周期护栏 / 参数平台检查
 下游组合策略（alpha 源：poc-value-area-asymmetry 分类器 v4.0 + 塑形参数
-archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束下
+archive:2026/07/2026-07-09-poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束下
 跑出年化净 15.45% / Sharpe 2.23 / MaxDD -7.51，验证了"alpha 源 + 塑形工具"
 组合路径可行，**本主题阶段 2a（方向 alpha × 塑形受益条件扫描）被下游拉起**。
 
@@ -49,10 +49,10 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 按 §5 "任何阶段 gatekeeper 不通过即冻结主题" 处理：
 
 - ~~阶段 2 已按 v2.2 重构为"塑形受益条件扫描"~~（2a 由下游主题拉起，2b 跨周期 tail / 2c 波动率制度暂不启动）
-- 阶段 1 归档：`docs/archive/strategy-research/2026/07/structural-shaping-alpha-stage1/`
+- 阶段 1 归档：`docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/`
 - 相关工具（First-Passage Designer）已沉 [first-passage-designer-math-spec.md](first-passage-designer-math-spec.md)
-  + 实现脚本 `docs/archive/strategy-research/2026/07/structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
-  `archive:2026/07/structural-shaping-alpha-stage1#first-passage-lookup-tables`
+  + 实现脚本 `docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
+  `archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables`
 - **2026-07-09 下游拉起**：[va-asymmetry-composite](../../va-asymmetry-composite/README.md) 作为当前主线，
   承接"方向 alpha × 塑形工具 × 组合优化"全链路，本主题仅被动提供工具资产，不再独立发起实验。
   若下游发现塑形参数（SL/TP/TH 基准）或成本模型参数需要调整，通过 pull 模式反向登记到本文件。
@@ -61,12 +61,12 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 
 主题重要结论的唯一入口。格式与更新规则见 `quant-research-layout` skill
 的"关键发现清单"与"命名引用协议"两章。产出证据快照见
-`archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report` §4。
+`archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report` §4。
 
 ### KF-1 · 结构塑形在 no-signal DirRandom 下无独立 alpha
 - 类型：策略行为 · 假设证伪
 - 状态：已证伪（本主题核心假设）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §2-3 · §8.7
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §2-3 · §8.7
 - 影响：结构塑形不是独立 alpha 源；未来主题必须把 alpha 放在入场方向层面；
   数学根源见 theme:structural-shaping-alpha#first-passage-designer-math-spec §2.5
   （ν=0 下 E[gross]≡0，OSt 恒等式）
@@ -75,7 +75,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-2 · Trailing 分两类 · 急性负 edge · 延迟中性偏正
 - 类型：策略行为
 - 状态：已证实（跨 6 场景稳健）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.9 · §8.10
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.9 · §8.10
 - 影响：急性 breakeven trailing（F: MFE≥1 · stop=entry）paired 显著负 edge
   (F vs A p=1.000)；延迟 chandelier trailing（M/N: MFE≥3+ · trail 1.5）
   短期区首次出现正 gross 期望。armed 阈值 / 缓冲 / 是否配止盈三元组决定方向，
@@ -85,7 +85,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-3 · Trailing 组合机械诊断准则
 - 类型：方法论
 - 状态：已证实
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §4 · D 参数病诊断案例
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §4 · D 参数病诊断案例
 - 影响：breakeven trailing 的 (armed 阈值, 缓冲, 是否配止盈) 三元组决定
   win_rate 机械上限；若 win_rate 与 armed / breakeven 出场比例强反相关，
   先排查参数病（放宽 armed + 加缓冲 + 加止盈），再定命题病
@@ -94,7 +94,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-4 · "少输"型 paired 显著性 ≠ 独立 alpha
 - 类型：方法论
 - 状态：已证实（B/K 二维拆分）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.6
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.6
 - 影响：任何 gatekeeper 看到 paired diff CI 排除 0 但 mean<0 时，必须先做
   "绝对损益尺度归因"复核（单独变距离 vs 单独变时间的二维拆分），确认显著性
   不是紧止损缩小方差带来的机械副作用
@@ -103,7 +103,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-5 · 扁平 ATR 成本模型跨品种低估 4.5 倍
 - 类型：方法论
 - 状态：已证实（跨 10 品种实测）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.7
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.7
 - 影响：5m 期货扁平 0.05 ATR/单边 vs realistic 平均 0.225，跨品种跨度
   0.043-0.405（9 倍）。所有跨品种 mean_net_atr 判决必须用 realistic-cost
   复核；扁平模式仅供快速原型 / debug；已升级至 quant-research-methodology
@@ -113,7 +113,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-6 · 近距被首达定理支配 · 远距可捕获 tail 但样本极偏
 - 类型：策略行为 · 方法论
 - 状态：已证实（跨 3 档 SCALE 实测）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · theme:structural-shaping-alpha#first-passage-designer-math-spec §2.7
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · theme:structural-shaping-alpha#first-passage-designer-math-spec §2.7
 - 影响：5m × SCALE=1 (K<3 ATR) 下 A/B/C/E/G/H/I mean 恒 ≈ -2c，胜率由
   K_S/(K_S+K_T) 完全决定；SCALE=5 (K>7 ATR) 下 L/M/N mean 严格 > 0 且
   p<0.05，但 median 严重负（-7.6 ATR），是 tail 投注分布。数学分界
@@ -123,7 +123,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-7 · 5m × SCALE=5 tail alpha 是重采样伪影
 - 类型：方法论
 - 状态：部分证实（M/N 证伪 · L 保留）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.11
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.11
 - 影响：M/N 在 15m × SCALE=1 复核（相近物理时间 20h）下 mean 反而 <0，
   确认是"5m 数据被 5x 堆叠"伪影；L 保留（15m mean=+0.041, p=0.060）。
   任何未来 tail 类 alpha 候选必须做**同物理尺度的跨周期护栏**才能立论
@@ -132,7 +132,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-8 · "数学正 edge" ≠ 工业可用 alpha
 - 类型：方法论
 - 状态：已证实（L/M/N 案例）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · roadmap:strategy-research-framework §5
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · roadmap:strategy-research-framework §5
 - 影响：满足 mean 显著正 + paired CI 排除 0 只是必要条件。还需通过 framework
   §5 四道账户闸门：(1) 单次风险 ≤3%、(2) MDD 可控、(3) 频率足够、(4)
   参数平台。L/M/N @ SCALE=5 仅过 mean 门（1 就失败：stop=7.5 ATR 对应
@@ -142,7 +142,7 @@ archive:2026/07/poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束
 ### KF-9 · 归因必须用 ν = μ - σ²/2，不能用 μ
 - 类型：方法论
 - 状态：已证实（数学 + 6 场景实测反算）
-- 证据：archive:2026/07/structural-shaping-alpha-stage1#first-passage-lookup-tables 表 5 · theme:structural-shaping-alpha#first-passage-designer-math-spec 顶部警告章节
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables 表 5 · theme:structural-shaping-alpha#first-passage-designer-math-spec 顶部警告章节
 - 影响：Itô 引理下 P_win(λ) 由 λ=2ν/σ² 决定，μ=0 时 ν=-σ²/2<0（凸性修正）。
   本主题所有 combo 反算 |ν/σ|≤0.04 → **martingale 恒等式在实测精确成立**，
   所有"正 mean"都是 Itô 凸性 + 时间尺度放大 + 采样噪声，无真实市场漂移。

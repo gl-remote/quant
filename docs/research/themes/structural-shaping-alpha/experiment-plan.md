@@ -537,7 +537,7 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 ## 6. 输出
 
-- 阶段 1：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report（原 `docs/workbench/structural-shaping-alpha-gatekeeper.md` · 已归档）
+- 阶段 1：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report（原 `docs/workbench/structural-shaping-alpha-gatekeeper.md` · 已归档）
 - 阶段 2+：workbench 报告 `docs/workbench/structural-shaping-alpha-stageN-<topic>.md`
 - 主题稳定后归档到 `docs/archive/strategy-research/`
 - 通过后撰写 strategy-math-spec.md

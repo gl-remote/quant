@@ -24,15 +24,15 @@
 
 ## Archive 目录清单
 
-### archive:2026/07/poc-va-shaping
+### archive:2026/07/2026-07-09-poc-va-shaping
 - 关系类型：继承（自归档 · 本主题产物）
 - 说明：分类器 v4.0 的塑形参数优化与成本后收益验证。240 参数组合扫描
   确认最优塑形参数；L_seg2_low_flat 淘汰；期货保证金制度下风控口径
   年化 15.45% / Sharpe 2.23 / MaxDD −7.51%；胜率 60.3% / 盈亏比 1.41。
   11 个临时脚本 + 9 个数据产出。
-- 相关文件：archive:2026/07/poc-va-shaping#README
+- 相关文件：archive:2026/07/2026-07-09-poc-va-shaping#README
 
-### archive:2026/07/poc-va-asymmetry
+### archive:2026/07/2026-07-08-poc-va-asymmetry
 - 关系类型：继承（自归档 · 本主题产物）
 - 说明：本主题**全阶段 1-4 合并归档批次**（从首次 commit 到当前 HEAD 的所有主题相关文件）。
   - 阶段 1（v7 · 19 合约）：A3_skew DN 侧独立方向信号测量
@@ -40,13 +40,13 @@
   - 阶段 3（v11 · 5/5 任务）：背景划分器 7 层严格性 + 12 格经济机制 · KF P~U
   - 阶段 4（v9.1 · 143 合约）：三维 144 tier 深化 · FDR 校正 · 合并降级（KF-25~29）· v4.0 分类器契约冻结
   - 专属临时脚本 51 个（分阶段搬入 raw-scripts/）
-- 相关文件：archive:2026/07/poc-va-asymmetry#stage1-measurement ·
-  archive:2026/07/poc-va-asymmetry#stage2-guardrails ·
-  archive:2026/07/poc-va-asymmetry#stage3-robustness ·
-  archive:2026/07/poc-va-asymmetry#stage-summary ·
-  archive:2026/07/poc-va-asymmetry#stage4-classifier-v4
+- 相关文件：archive:2026/07/2026-07-08-poc-va-asymmetry#stage1-measurement ·
+  archive:2026/07/2026-07-08-poc-va-asymmetry#stage2-guardrails ·
+  archive:2026/07/2026-07-08-poc-va-asymmetry#stage3-robustness ·
+  archive:2026/07/2026-07-08-poc-va-asymmetry#stage-summary ·
+  archive:2026/07/2026-07-08-poc-va-asymmetry#stage4-classifier-v4
 
-### archive:2026/07/structural-shaping-alpha-stage1
+### archive:2026/07/2026-07-06-structural-shaping-alpha-stage1
 - 关系类型：方法论遗产 + 铺垫
 - 说明：本主题**方法论前置约束**完全继承本批次的 KF-1 / KF-4 / KF-5 /
   KF-7 / KF-8 / KF-9（结构塑形无独立 alpha、"少输"型 paired 显著 ≠ alpha、
@@ -54,16 +54,16 @@
   可用 alpha、归因必须用 ν 而不是 μ）。**跳过 5m 交易尺度、直接从 1h 起测**
   的口径决策源于 KF-7。阶段 2 的 7 combo 结构塑形对比框架直接沿用本批次
   设施。
-- 相关文件：archive:2026/07/structural-shaping-alpha-stage1#stage1-gatekeeper-report
+- 相关文件：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report
 
-### archive:2026/07/value-area-rolling-reacceptance-freeze
+### archive:2026/07/2026-07-05-value-area-rolling-reacceptance-freeze
 - 关系类型：反例 + 方法论遗产
 - 说明：value-area 家族最终证伪批次。证伪的四条假设（POC 特殊性 / rolling
   独立价值 / reacceptance 触发器 / 距离档 edge）**均不被本主题触碰**（见
   README §2.1 · §10）。本主题**继承**其四大方法论约束（ATR 归一化 / 期望
   净值 / cluster bootstrap / 多层对照）。本主题假设正交：不是"POC/VA 作为
   价格锚"，而是"POC/VA 形状不对称作为特征"。
-- 相关文件：archive:2026/07/value-area-rolling-reacceptance-freeze#freeze-summary
+- 相关文件：archive:2026/07/2026-07-05-value-area-rolling-reacceptance-freeze#freeze-summary
 
 ## Archive 家族反向索引
 
@@ -79,11 +79,11 @@ archive 与本主题的**个体关系**。
 
 以下 archive 与本主题**当前无直接关系**（pull 模式：真被引用时再登记）：
 
-- archive:2026/06/indicator-baseline
-- archive:2026/06/low-validation-cost
-- archive:2026/06/structural-alpha-random-baseline
-- archive:2026/07/value-area-reacceptance-quality
-- archive:2026/07/value-area-reacceptance-expansion
-- archive:2026/07/value-area-reacceptance-stage-b
+- archive:2026/06/2026-06-26-indicator-baseline
+- archive:2026/06/2026-06-27-low-validation-cost
+- archive:2026/06/2026-06-29-structural-alpha-random-baseline
+- archive:2026/07/2026-07-01-value-area-reacceptance-quality
+- archive:2026/07/2026-07-02-value-area-reacceptance-expansion
+- archive:2026/07/2026-07-03-value-area-reacceptance-stage-b
 
 若后续研究中发现新的引用关系，追加到"Archive 目录清单"节即可。

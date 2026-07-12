@@ -6,7 +6,7 @@
 > 创建时间：2026-07-03
 > 冻结时间：2026-07-05
 > 结论文档：[research-status.md](research-status.md)
-> 归档：[../../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md](../../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md)
+> 归档：[../../../../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md](../../../../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
 
 ## 冻结摘要（2026-07-05）
 
@@ -22,7 +22,7 @@
 4. **4+ ATR 距离档本身无 edge**（Stage 4b）：no_trigger baseline 期望 ≈ 0
 
 详见 [research-status.md](research-status.md) 与
-[freeze-summary.md](../../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md)。
+[freeze-summary.md](../../../../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)。
 
 **以下 §1-§8 为立题时的动机推演，冻结后仅作历史记录保留，其中的策略假设
 已全部证伪，请勿再作为策略依据。**
@@ -203,7 +203,7 @@ C3_s(t) := A_s(t) >= 1 ∧ Z_s^-(t) = False
 
 前置条件（**已满足**）：
 - ✓ 前置主题 `value-area-reacceptance` 冻结（README 已更新为"已冻结"）
-- ✓ Stage B v2/v3 结论稳定（[Stage B 归档](../../../../archive/strategy-research/2026/07/value-area-reacceptance-stage-b/README.md)）
+- ✓ Stage B v2/v3 结论稳定（[Stage B 归档](../../../../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/README.md)）
 - ✓ 建模路径决策：B（rolling window），A/C 已排除，理由见 §1.3
 
 阶段规划：

@@ -3,7 +3,7 @@
 > 类型：Theme / 策略数学规格
 > 状态：草案 / 待实现与验证
 > 最近更新：2026-07-03
-> 前置结论：[R29 扩样与随机基准复验](../../../../archive/strategy-research/2026/07/value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+> 前置结论：[R29 扩样与随机基准复验](../../../../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
 > 研究计划：[experiment-plan.md](experiment-plan.md)
 > 参数选择：[parameter-selection-spec.md](parameter-selection-spec.md)
 > 工程实现细节：[implementation-notes.md](implementation-notes.md)

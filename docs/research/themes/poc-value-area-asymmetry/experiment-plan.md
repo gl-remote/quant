@@ -4,9 +4,9 @@
 > 状态：**v9.1（2026-07-08 收尾）· ✅ 阶段 1+2+3+4 全部完成 · 分类器 v4.0 冻结（6 类合并版）· 阶段 4 三维深化后合并降级 · KF-25 ~ KF-29 定型**
 > 主题 README：[README.md](README.md)
 > 研究状态：[research-status.md](research-status.md)
-> 阶段 1 详细流水：archive:2026/07/poc-va-asymmetry#stage1-measurement（v7 · 已归档）
-> 阶段 2 详细流水：archive:2026/07/poc-va-asymmetry#stage2-guardrails（v4 · 已归档）
-> 阶段 3 详细流水：archive:2026/07/poc-va-asymmetry#stage3-robustness（v11 · 已归档）
+> 阶段 1 详细流水：archive:2026/07/2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）
+> 阶段 2 详细流水：archive:2026/07/2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）
+> 阶段 3 详细流水：archive:2026/07/2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）
 
 本计划检验"POC 两侧 value area 不对称是否携带信息量"的命题。阶段 1+2+3
 已完成 · **主题定位为"交易背景分类器"** · 阶段 3 产出 10 tier 体系但**存在
@@ -173,9 +173,9 @@ r_{t,N} = log(close_{t+N} / close_t)
 
 ### 1.4 输出
 
-- workbench：archive:2026/07/poc-va-asymmetry#stage1-measurement（v7 · 已归档）
+- workbench：archive:2026/07/2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage1/`（14 个 CSV）
-- 复现脚本：已归档至 archive:2026/07/poc-va-asymmetry 的 `raw-scripts/`（12+ 脚本 · 见批次 README §脚本归档清单）
+- 复现脚本：已归档至 archive:2026/07/2026-07-08-poc-va-asymmetry 的 `raw-scripts/`（12+ 脚本 · 见批次 README §脚本归档清单）
 
 ***
 
@@ -260,7 +260,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 
 ### 2.4 输出
 
-- workbench：archive:2026/07/poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
+- workbench：archive:2026/07/2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage2/`（15+ CSV）
 - KF 定型：15 条（`KF-poc-va-01` \~ `KF-poc-va-15`）· 见 research-status.md
 
@@ -373,7 +373,7 @@ Bonferroni p < 0.00052 ✅ · ν_implied +27.0
 
 ### 3.5 输出
 
-- workbench：archive:2026/07/poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
+- workbench：archive:2026/07/2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
 - 数据文件：`project_data/logs/poc_va_asymmetry_stage3/`（15+ CSV）
 - KF 定型：新增 6 条（`KF-poc-va-16` \~ `KF-poc-va-21`）· 累计 21 条 · 见 research-status.md
 - 分类器代码规范化：已提取为 `workspace/strategies/classifiers/poc_va.py`（方案A · classifiers 子目录）
@@ -610,12 +610,12 @@ skew 分段（KF-23 阶段 3 §13 探索使用）:
 
 ## 输出
 
-- 阶段 1：archive:2026/07/poc-va-asymmetry#stage1-measurement（v7 · 已归档）✅
-- 阶段 2：archive:2026/07/poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
-- 阶段 3：archive:2026/07/poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
-- 阶段 4：archive:2026/07/poc-va-asymmetry#stage4-classifier-v4（v2 · 已归档）✅
-- 阶段 4 摘要：archive:2026/07/poc-va-asymmetry#stage-summary ✅
-- 归档总 README（4 阶段 + 51 脚本清单 + 数据元信息）：archive:2026/07/poc-va-asymmetry
+- 阶段 1：archive:2026/07/2026-07-08-poc-va-asymmetry#stage1-measurement（v7 · 已归档）✅
+- 阶段 2：archive:2026/07/2026-07-08-poc-va-asymmetry#stage2-guardrails（v4 · 已归档）✅
+- 阶段 3：archive:2026/07/2026-07-08-poc-va-asymmetry#stage3-robustness（v11 · 已归档）✅
+- 阶段 4：archive:2026/07/2026-07-08-poc-va-asymmetry#stage4-classifier-v4（v2 · 已归档）✅
+- 阶段 4 摘要：archive:2026/07/2026-07-08-poc-va-asymmetry#stage-summary ✅
+- 归档总 README（4 阶段 + 51 脚本清单 + 数据元信息）：archive:2026/07/2026-07-08-poc-va-asymmetry
 - 分类器契约 v4.0：theme:poc-value-area-asymmetry#classifier-math-spec
 - 参数规格 v4.0：theme:poc-value-area-asymmetry#parameter-selection-spec
 

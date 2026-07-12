@@ -1,6 +1,6 @@
 # va-asymmetry-composite · 策略数学规格
 
-> 本规格是 `va-asymmetry-composite` 策略的**数学契约**：单独阅读即可复现当前策略行为，不依赖代码或聊天上下文。所有参数集中在 §0，正文公式引用 §0 符号。实验过程、候选方案比较与结论见归档 `../../../archive/strategy-research/2026/07/va-asymmetry-composite-mathspec/p0-p9-summary.md`，不在本契约内重复。
+> 本规格是 `va-asymmetry-composite` 策略的**数学契约**：单独阅读即可复现当前策略行为，不依赖代码或聊天上下文。所有参数集中在 §0，正文公式引用 §0 符号。实验过程、候选方案比较与结论见归档 `../../../archive/strategy-research/2026/07/2026-07-12-va-asymmetry-composite-mathspec/p0-p9-summary.md`，不在本契约内重复。
 
 策略物理上分两层（后者依赖前者）：
 

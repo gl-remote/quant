@@ -3,7 +3,7 @@
 > 类型：Roadmap / 长期研究共识  
 > 状态：指导后续策略实验  
 > 创建日期：2026-06-27  
-> 相关归档：[MA 策略正期望优化复盘](../archive/strategy-research/2026/06/indicator-baseline/ma-positive-expectancy.md)、[ATR 策略研究复盘](../archive/strategy-research/2026/06/indicator-baseline/strategy-atr-tuning.md)、[历史短期实验规划](../archive/strategy-research/2026/06/low-validation-cost/low-validation-cost-short-term-plan.md)  
+> 相关归档：[MA 策略正期望优化复盘](../archive/strategy-research/2026/06/2026-06-26-indicator-baseline/ma-positive-expectancy.md)、[ATR 策略研究复盘](../archive/strategy-research/2026/06/2026-06-26-indicator-baseline/strategy-atr-tuning.md)、[历史短期实验规划](../archive/strategy-research/2026/06/2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
 > 短期执行：[策略短期研究计划](./strategy-short-term-plan.md)
 
 ## 1. 核心共识
@@ -641,7 +641,7 @@ docs/archive/strategy-research/<YYYY-MM-DD>-<阶段主题>/
 示例：
 
 ```text
-docs/archive/strategy-research/2026/06/low-validation-cost/
+docs/archive/strategy-research/2026/06/2026-06-27-low-validation-cost/
 docs/archive/strategy-research/2026-06-28-structural-alpha/
 docs/archive/strategy-research/2026-07-xx-auction-structure/
 ```

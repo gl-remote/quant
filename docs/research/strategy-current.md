@@ -27,13 +27,13 @@ value_area 家族两个主题于 2026-07-03 / 2026-07-05 先后冻结，
 经过 4 阶段完整验证（143 合约 · 36625 events · 20 品种前缀 · FDR 校正 · 7 层严格性），
 分类器 v4.0（6 类合并版）冻结，输出 A/A- 级 9 档可用 tier，
 单笔 IR 0.28~0.46 · 品种保留 ≥ 60% · 分类器主动性研究暂停，留待下游策略层引用。
-archive:2026/07/poc-va-shaping 在同一分类器上完成塑形参数扫描
+archive:2026/07/2026-07-09-poc-va-shaping 在同一分类器上完成塑形参数扫描
 与风控口径验证（年化 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% / 盈亏比 1.41），
 alpha 变现路径 POC 通过。
 
 2026-07-09 立新主题 va-asymmetry-composite（**当前主线**）：
 把 poc-value-area-asymmetry 分类器（alpha 源）+ structural-shaping-alpha 工具
-（塑形/成本/归因）+ archive:2026/07/poc-va-shaping 塑形参数，
+（塑形/成本/归因）+ archive:2026/07/2026-07-09-poc-va-shaping 塑形参数，
 经品种筛选 / 信号强度加权 / 多空权重优化三道组合关，压缩到 100% 名义
 暴露约束下，目标构建夏普 ≥ 2.5、年化净收益 ≥ 18%、可实盘的完整交易策略。
 阶段 1 Gatekeeper 三大方向 0/6 通过，B0=S1×W0×VW0 即最优（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）。
@@ -54,7 +54,7 @@ alpha 变现路径 POC 通过。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-composite** | **重启开发态（v1.0 已归档 · 2026-07-10）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026/07/va-asymmetry-composite/) |
+| **va-asymmetry-composite** | **重启开发态（v1.0 已归档 · 2026-07-10）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026/07/2026-07-10-va-asymmetry-composite/) |
 | poc-value-area-asymmetry | 活跃 · 阶段 4 完成 · 分类器 v4.0 冻结 · 主动性研究暂停（供下游引用） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
@@ -105,7 +105,7 @@ va_asymmetry_composite
 轻量比较 runner（已归档）：
 
 ```text
-docs/archive/strategy-research/2026/06/structural-alpha-random-baseline/raw-scripts/value_area_random_baseline_compare.py
+docs/archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/raw-scripts/value_area_random_baseline_compare.py
 ```
 
 注意：该 runner 输出使用 vnpy BacktestResult 口径，只做同一 runner 下相对比较，不替代 trade_clearings 清算口径。
@@ -116,18 +116,18 @@ docs/archive/strategy-research/2026/06/structural-alpha-random-baseline/raw-scri
 
 | 阶段 | 结论 | 归档 |
 | --- | --- | --- |
-| R27 外推降级 | 旧 m/SR + 1m + A4_ratio_80 单笔 POC 回归候选外推失败 | [2026-07-02](../archive/strategy-research/2026/07/value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
-| R28 结构诊断 | DCE.p 四样本内收益主要来自第 2 笔，第 1 笔更像 VA reacceptance | [2026-07-02](../archive/strategy-research/2026/07/value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
-| R29 扩样 + 随机基准复验 | 固定规则不通过外推；但结构仍优于随机基准 → 触发 Stage B | [2026-07-02](../archive/strategy-research/2026/07/value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
-| Stage B v2 双 Q | Q_return 通过（C3 @ n=144 ret_mean +1.10）/ Q_generalize 未通过（Group_M 5/8 无 trade）→ feature-only 降级 | [2026-07-03](../archive/strategy-research/2026/07/value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
-| Rolling Stage 1 / 1.5 / 4 / 4b | 20 品种 × 70 合约 × 5m/15m 双周期证伪主题全部核心假设 → 主题冻结 | [2026-07-05](../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md) |
-| structural-shaping Stage 1 Gatekeeper | 7 combo 全部 realistic-cost 下 μ ≈ -2c / ν_implied≈0 → 塑形非独立 alpha 源，降级为必要条件 + 工具资产 | [2026-07-06](../archive/strategy-research/2026/07/structural-shaping-alpha-stage1/) |
-| poc-va-asymmetry Stage 3/4 | 分类器 v4.0 冻结 · 9 档 A/A- tier · 单笔 IR 0.28~0.46 · 品种保留 ≥ 60% · FDR ≤ 5% | [2026-07-08](../archive/strategy-research/2026/07/poc-va-asymmetry/) |
-| poc-va-shaping Stage 2/3 组合验证 | 在分类器 v4.0 + SL1.0/TP1.4/TH8h 下 · 净 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% · alpha 变现 POC | [2026-07-09](../archive/strategy-research/2026/07/poc-va-shaping/) |
+| R27 外推降级 | 旧 m/SR + 1m + A4_ratio_80 单笔 POC 回归候选外推失败 | [2026-07-02](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md) |
+| R28 结构诊断 | DCE.p 四样本内收益主要来自第 2 笔，第 1 笔更像 VA reacceptance | [2026-07-02](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md) |
+| R29 扩样 + 随机基准复验 | 固定规则不通过外推；但结构仍优于随机基准 → 触发 Stage B | [2026-07-02](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
+| Stage B v2 双 Q | Q_return 通过（C3 @ n=144 ret_mean +1.10）/ Q_generalize 未通过（Group_M 5/8 无 trade）→ feature-only 降级 | [2026-07-03](../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
+| Rolling Stage 1 / 1.5 / 4 / 4b | 20 品种 × 70 合约 × 5m/15m 双周期证伪主题全部核心假设 → 主题冻结 | [2026-07-05](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| structural-shaping Stage 1 Gatekeeper | 7 combo 全部 realistic-cost 下 μ ≈ -2c / ν_implied≈0 → 塑形非独立 alpha 源，降级为必要条件 + 工具资产 | [2026-07-06](../archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/) |
+| poc-va-asymmetry Stage 3/4 | 分类器 v4.0 冻结 · 9 档 A/A- tier · 单笔 IR 0.28~0.46 · 品种保留 ≥ 60% · FDR ≤ 5% | [2026-07-08](../archive/strategy-research/2026/07/2026-07-08-poc-va-asymmetry/) |
+| poc-va-shaping Stage 2/3 组合验证 | 在分类器 v4.0 + SL1.0/TP1.4/TH8h 下 · 净 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% · alpha 变现 POC | [2026-07-09](../archive/strategy-research/2026/07/2026-07-09-poc-va-shaping/) |
 
 ## 5. 下一步
 
-**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（**v2.0 重启开发态** · 旧 v1.0 已归档至 [archive/2026/07/va-asymmetry-composite](../archive/strategy-research/2026/07/va-asymmetry-composite/)）
+**当前主题**：[va-asymmetry-composite](./themes/va-asymmetry-composite/README.md)（**v2.0 重启开发态** · 旧 v1.0 已归档至 [archive/2026/07/2026-07-10-va-asymmetry-composite](../archive/strategy-research/2026/07/2026-07-10-va-asymmetry-composite/)）
 
 旧 v1.0 的 B0=S1×W0×VW0（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）作为 **frozen control baseline**，
 任何新底层逻辑须相对 B0 做同一批事件的配对增量（≥0.2 夏普）评估。
@@ -154,26 +154,26 @@ docs/archive/strategy-research/2026/06/structural-alpha-random-baseline/raw-scri
 详见：
 - [themes-frozen/value-area/README.md #共同教训](./themes-frozen/value-area/README.md)
 - [poc-value-area-asymmetry stage4-findings.md](./themes/poc-value-area-asymmetry/workbench/stage4-findings.md)
-- [archive:2026/07/poc-va-shaping stage3-shaping-result.md](../archive/strategy-research/2026/07/poc-va-shaping/workbench/stage3-shaping-result.md)
+- [archive:2026/07/2026-07-09-poc-va-shaping stage3-shaping-result.md](../archive/strategy-research/2026/07/2026-07-09-poc-va-shaping/workbench/stage3-shaping-result.md)
 
 ## 6. 文档地图
 
 | 目的 | 文档 |
 | --- | --- |
 | 当前状态入口 | 本文件 |
-| **va-asymmetry-composite（v2.0 重启开发态 · 原 v1.0 已归档）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026/07/va-asymmetry-composite/) |
+| **va-asymmetry-composite（v2.0 重启开发态 · 原 v1.0 已归档）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026/07/2026-07-10-va-asymmetry-composite/) |
 | poc-value-area-asymmetry（分类器 v4.0 · 上游 Alpha） | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha（塑形工具资产 · 上游） | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area 家族总结（冻结） | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
 | value_area_reacceptance（冻结） | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance（冻结） | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
-| Rolling 冻结摘要 | [freeze-summary.md](../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md) |
-| structural-shaping Stage 1（归档） | [2026/07/structural-shaping-alpha-stage1](../archive/strategy-research/2026/07/structural-shaping-alpha-stage1/) |
-| poc-va-asymmetry 分类器验证（归档） | [2026/07/poc-va-asymmetry](../archive/strategy-research/2026/07/poc-va-asymmetry/) |
-| **poc-va-shaping 组合验证（当前立题起点 · 归档）** | [2026/07/poc-va-shaping](../archive/strategy-research/2026/07/poc-va-shaping/) |
-| Stage B 归档 | [stage-b-sweep-summary.md](../archive/strategy-research/2026/07/value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
-| R29 扩样 + 随机基准 | [r29-expanded-validation.md](../archive/strategy-research/2026/07/value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
-| POC / VA 质量诊断阶段归档 | [quality-summary.md](../archive/strategy-research/2026/07/value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
+| Rolling 冻结摘要 | [freeze-summary.md](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| structural-shaping Stage 1（归档） | [2026/07/2026-07-06-structural-shaping-alpha-stage1](../archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/) |
+| poc-va-asymmetry 分类器验证（归档） | [2026/07/2026-07-08-poc-va-asymmetry](../archive/strategy-research/2026/07/2026-07-08-poc-va-asymmetry/) |
+| **poc-va-shaping 组合验证（当前立题起点 · 归档）** | [2026/07/2026-07-09-poc-va-shaping](../archive/strategy-research/2026/07/2026-07-09-poc-va-shaping/) |
+| Stage B 归档 | [stage-b-sweep-summary.md](../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
+| R29 扩样 + 随机基准 | [r29-expanded-validation.md](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md) |
+| POC / VA 质量诊断阶段归档 | [quality-summary.md](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md) |
 | 长期框架 | [strategy-research-framework.md](../roadmap/strategy-research-framework.md) |
 
 ## 7. 给 AI 的工作规则

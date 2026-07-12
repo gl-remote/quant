@@ -3,8 +3,8 @@
 > 类型：Issue / 回测清算诊断口径\
 > 状态：已验证\
 > 创建日期：2026-06-30\
-> 发现阶段：[value-area-reacceptance-stage-plan.md](../archive/strategy-research/2026/07/value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-stage-plan.md)\
-> 关联实验：[value-area-reacceptance-r1-risk-budget.md](../archive/strategy-research/2026/07/value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r1-risk-budget.md)
+> 发现阶段：[value-area-reacceptance-stage-plan.md](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-stage-plan.md)\
+> 关联实验：[value-area-reacceptance-r1-risk-budget.md](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r1-risk-budget.md)
 
 ## 1. 问题摘要
 
@@ -169,6 +169,6 @@ trade_clearings.diagnostics_json 已可用于 POC 质量标签分桶、edge_or_a
 
 关联记录：
 
-- [R11 POC quality diagnostics](../archive/strategy-research/2026/07/value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r11-poc-quality-diagnostics.md)
-- [R12 diagnostics bucket recheck](../archive/strategy-research/2026/07/value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r12-diagnostics-bucket-recheck.md)
-- [R15 shadow filter](../archive/strategy-research/2026/07/value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r15-shadow-filter.md)
+- [R11 POC quality diagnostics](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r11-poc-quality-diagnostics.md)
+- [R12 diagnostics bucket recheck](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r12-diagnostics-bucket-recheck.md)
+- [R15 shadow filter](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/value-area-reacceptance-r15-shadow-filter.md)

@@ -3,7 +3,7 @@
 > 类型：Research Status
 > 状态：**已冻结（Frozen 2026-07-05）**
 > 主题 README：[README.md](README.md)
-> 归档：[../../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md](../../../../archive/strategy-research/2026/07/value-area-rolling-reacceptance-freeze/freeze-summary.md)
+> 归档：[../../../../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md](../../../../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
 
 ## 一句话结论
 

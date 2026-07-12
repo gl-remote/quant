@@ -6,7 +6,7 @@
 > 最近更新：2026-07-08
 > 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 > 前置反例：[value-area 家族全部冻结](../../themes-frozen/value-area/README.md)
-> 前置铺垫：theme:structural-shaping-alpha · archive:2026/07/structural-shaping-alpha-stage1
+> 前置铺垫：theme:structural-shaping-alpha · archive:2026/07/2026-07-06-structural-shaping-alpha-stage1
 
 ## 1. 主题问题
 

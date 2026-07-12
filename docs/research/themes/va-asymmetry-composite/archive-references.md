@@ -2,9 +2,9 @@
 
 > 本文件登记本主题引用的归档批次。
 
-## 2026/07/va-asymmetry-composite（本主题 v1.0 冻结版归档）
+## 2026/07/2026-07-10-va-asymmetry-composite（本主题 v1.0 冻结版归档）
 
-- 路径：`../../archive/strategy-research/2026/07/va-asymmetry-composite/`
+- 路径：`../../archive/strategy-research/2026/07/2026-07-10-va-asymmetry-composite/`
 - 性质：整主题 v1.0 冻结快照，作为本次重启的 **frozen control baseline**。
 - 关键结论：
   - B0 = S1×W0×VW0：Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%
