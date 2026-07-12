@@ -32,7 +32,7 @@ PATTERN ?= DCE\.m.*
 TRIALS ?= 30
 
 .DEFAULT_GOAL := help
-.PHONY: help backtest-ma backtest-atr debug-parallel debug-single report clean clean-backtests clean-reports clean-cache clean-logs clean-research clean-runtime fetch signal
+.PHONY: help backtest-ma backtest-atr backtest-va debug-parallel debug-single report clean clean-backtests clean-reports clean-cache clean-logs clean-research clean-runtime fetch signal
 
 help: ## 显示可用命令
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | \
@@ -64,6 +64,9 @@ backtest-ma: ## MA 策略全链路回测（含贝叶斯搜索）
 
 backtest-atr: ## ATR 策略全链路回测（含贝叶斯搜索）
 	bash scripts/tools/backtest-atr.sh $(ARGS)
+
+backtest-va: ## VA 非对称复合策略全链路回测（含贝叶斯搜索）
+	bash scripts/tools/backtest-va.sh $(ARGS)
 
 debug-parallel: ## 并行 DEBUG 回测（trials=3，不清理）
 	TRIALS=3 bash scripts/tools/backtest-ma.sh $(ARGS)
