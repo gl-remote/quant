@@ -77,3 +77,21 @@ def atr_func(df: pd.DataFrame, period: int = 14) -> NDArray[np.float64]:
         np.asarray(df["close"], dtype=float),
         timeperiod=period,
     )
+
+
+def daily_atr_bps_func(df: pd.DataFrame, period: int = 10) -> NDArray[np.float64]:
+    """日线 ATR(period) / close * 10000，产出 bps 量纲的波动率。
+
+    用于 va-asymmetry-composite 策略的 A 层日线波动率基准：
+    - 止损/sizing 直接消费 bps 值；
+    - t-PIT 归一化中 bps 与原始 ATR 秩等价（MAD/中位数线性不变）。
+    """
+    atr = talib.ATR(
+        np.asarray(df["high"], dtype=float),
+        np.asarray(df["low"], dtype=float),
+        np.asarray(df["close"], dtype=float),
+        timeperiod=period,
+    )
+    close_arr = np.asarray(df["close"], dtype=float)
+    close_safe = np.where(close_arr > 0, close_arr, np.nan)
+    return atr / close_safe * 10000.0

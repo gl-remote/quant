@@ -597,12 +597,19 @@ class PeriodDataView:
 
         if not persist or self._base_df_ref is None:
             return
-        non_nan = result_series.notna()
-        if non_nan.any():
-            self._base_df_ref.loc[result_series.index[non_nan], col_name] = result_series[non_nan]
 
-        if self._df_ref is not self._base_df_ref and not pd.isna(last_val):
-            self._base_df_ref.loc[self._current_time, col_name] = float(last_val)
+        same_period = self._df_ref is self._base_df_ref
+        non_nan = result_series.notna()
+
+        if same_period:
+            # base 周期：结果索引 == base_df 索引，直接对齐写入
+            if non_nan.any():
+                self._base_df_ref.loc[result_series.index[non_nan], col_name] = result_series[non_nan]
+        else:
+            # 高周期：结果索引（如 1d）与 base_df 索引（如 1m）不对齐，
+            # 只把最新值写回 current_time 行的 base_df
+            if not pd.isna(last_val):
+                self._base_df_ref.loc[self._current_time, col_name] = float(last_val)
 
     def indicator_series(self, name: str, bars: int | None = None) -> pd.Series:
         """获取当前视图内的指标序列。"""
