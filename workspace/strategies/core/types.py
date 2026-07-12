@@ -65,6 +65,15 @@ class Signal:
     decision_payload: dict[str, Any] = field(default_factory=dict)
     """机器可读的信号事件载荷，用于落库和离线分析；reason 只保留人类摘要语义。"""
 
+    order_type: str = "LIMIT"
+    """发单类型通道（Strategy → Bridge）：'LIMIT' | 'STOP' | 'MARKET'。
+    Bridge 据此路由到 vnpy 的 buy/sell/short/cover(stop=...)。未指定（默认
+    'LIMIT'）时退回「LIMIT@当前 bar 收盘价」的旧行为，保证向后兼容。"""
+    limit_price: float | None = None
+    """LIMIT 单挂单价；为 None 时 Bridge 用当前 bar 收盘价。"""
+    stop_price: float | None = None
+    """STOP 单触发价（如 SL 止损价），由策略在需要 STOP 单时给定。"""
+
 
 @dataclass
 class StrategyPosition:

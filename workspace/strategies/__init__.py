@@ -58,6 +58,10 @@ from .runtime import (
 # 具体策略实现
 from .atr_strategy import ATRCrossParams, ATRStrategyCore
 from .ma_strategy import MaStrategyCore, MACrossParams
+from .va_asymmetry_composite_strategy import (
+    VAAsymmetryCompositeParams,
+    VAAsymmetryCompositeStrategy,
+)
 
 # 工具函数（来自 utils）
 from .utils import (
@@ -129,6 +133,8 @@ __all__ = [
     "MACrossParams",
     "ATRStrategyCore",
     "ATRCrossParams",
+    "VAAsymmetryCompositeStrategy",
+    "VAAsymmetryCompositeParams",
     # 工具函数
     "load_strategy",
     "get_strategy_class_name",

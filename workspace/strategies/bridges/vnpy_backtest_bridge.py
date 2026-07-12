@@ -19,6 +19,7 @@
 - 采用注入模式是因为 vn.py 回测引擎要求传入策略类而非实例，引擎内部会自行创建对象实例
 """
 
+import contextlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -95,6 +96,7 @@ class VnpyBacktestBridge(CtaTemplate):
         self._data_feed: DataFeed | None = None
         self.entry_price: float = 0.0
         self._order_contexts: dict[str, SignalDecisionContext] = {}
+        self._active_entry_orders: dict[str, Any] = {}
         self._last_real_bar_time: pd.Timestamp | None = getattr(type(self), "last_real_bar_time", None)
         self._forced_flat_submitted: bool = False
 
@@ -252,6 +254,9 @@ class VnpyBacktestBridge(CtaTemplate):
         bar_time = pd.Timestamp(raw_dt)
         close_price = float(getattr(bar, "close_price", 0))
         is_synthetic_liquidation = bool(getattr(bar, "is_synthetic_liquidation", False))
+
+        # 下午收盘撤销当日未成交的开仓挂单（在驱动策略前先清理，避免跨夜/跨日误成交）
+        self._maybe_cancel_stale_entry_orders(bar_time)
 
         if is_synthetic_liquidation:
             return
@@ -414,6 +419,10 @@ class VnpyBacktestBridge(CtaTemplate):
             decision_payload=trade_payload,
         )
 
+        # 成交后从开仓挂单登记表移除（开仓单成交即不再 pending；平仓单本就不登记）
+        for oid in self._trade_order_ids(trade):
+            self._active_entry_orders.pop(oid, None)
+
     def _resolve_direction(self, direction: Any) -> bool:
         """解析 vnpy Direction 枚举或字符串，返回 True=做多"""
         if hasattr(direction, "value"):
@@ -458,6 +467,44 @@ class VnpyBacktestBridge(CtaTemplate):
         for order_id in ids:
             if order_id:
                 self._order_contexts[str(order_id)] = context
+
+    def _track_entry_order(self, order_ids: str | list[str], bar_time: pd.Timestamp) -> None:
+        """登记开仓挂单（仅开仓），记录下单日期，供「当日未成交→下午收盘撤销」。"""
+        ids = [order_ids] if isinstance(order_ids, str) else (order_ids or [])
+        for oid in ids:
+            if oid:
+                self._active_entry_orders[str(oid)] = bar_time.date()
+
+    def _maybe_cancel_stale_entry_orders(self, bar_time: pd.Timestamp) -> None:
+        """下午收盘撤销当日未成交的开仓挂单。
+
+        规则（兼顾日盘-only 与含夜盘合约）：
+          - 挂单下单日若已进入「下午收盘后」（bar 小时 >= cancel_hour，默认 15）→ 撤销；
+          - 或挂单跨到了新的日历日（夜盘仍未成交也一并作废）→ 撤销。
+        仅撤销「开仓」挂单；平仓（SL/TIME）挂单不在此撤销，须保留至成交。
+
+        注意：本策略只在当日早盘首根 bar 尝试开仓，故 cancel_hour 以日盘下午收盘为界
+        即可，不会误伤夜盘开仓（本策略无夜盘开仓）。
+        """
+        if not self._active_entry_orders:
+            return
+        cancel_hour = 15
+        today = bar_time.date()
+        to_cancel: list[str] = []
+        for oid, placed_date in self._active_entry_orders.items():
+            if placed_date != today or bar_time.hour >= cancel_hour:
+                to_cancel.append(oid)
+        for oid in to_cancel:
+            with contextlib.suppress(Exception):
+                self.cancel_order(oid)
+            self._active_entry_orders.pop(oid, None)
+        if to_cancel:
+            logger.debug(
+                "[{}] {} 下午收盘撤销未成交开仓挂单 x{}",
+                self.strategy_name,
+                bar_time,
+                len(to_cancel),
+            )
 
     def _apply_trade_to_state(
         self,
@@ -532,25 +579,45 @@ class VnpyBacktestBridge(CtaTemplate):
         """执行交易委托 — 统一入口
 
         :param signal: 策略信号
-        :param price: 当前价格
+        :param price: 当前价格（LIMIT 默认挂单价 / STOP 兜底价）
         :param bar_time: K线时间
         :param is_buy: 做多开仓
         :param is_short: 做空开仓
         :param is_cover: 做空平仓
+
+        发单类型通道：Signal.order_type 指定 'LIMIT' | 'STOP' | 'MARKET'。
+        - LIMIT 且带 limit_price → 用 limit_price；否则用当前 bar 收盘价（旧行为）。
+        - STOP 且带 stop_price → 用 stop_price 作为触发价（vnpy stop=True）。
+        - 未指定 order_type → 默认 LIMIT@close，完全向后兼容。
         """
+        order_type = getattr(signal, "order_type", "LIMIT") or "LIMIT"
+        stop = order_type == "STOP"
+        limit_price = getattr(signal, "limit_price", None)
+        stop_price = getattr(signal, "stop_price", None)
+        if order_type == "LIMIT" and limit_price is not None:
+            exec_price = float(limit_price)
+        elif order_type == "STOP" and stop_price is not None:
+            exec_price = float(stop_price)
+        else:
+            exec_price = price
+
         if is_buy or is_short:
             volume = signal.volume
             if volume <= 0:
                 return
             if is_buy:
-                order_ids = self.buy(price, volume)
+                order_ids = self.buy(exec_price, volume, stop=stop)
                 action_label = "买入开多"
             else:
-                order_ids = self.short(price, volume)
+                order_ids = self.short(exec_price, volume, stop=stop)
                 action_label = "卖出开空"
             self._register_order_context(order_ids, signal)
-            self.entry_price = price
-            logger.debug(f"[{self.strategy_name}] {bar_time} {action_label} @{price:.2f} x{volume}")
+            # 开仓挂单：登记下单日期，供下午收盘未成交撤销
+            self._track_entry_order(order_ids, bar_time)
+            self.entry_price = exec_price
+            logger.debug(
+                f"[{self.strategy_name}] {bar_time} {action_label} @{exec_price:.2f} x{volume} type={order_type}"
+            )
             return
 
         # 平仓路径
@@ -558,11 +625,11 @@ class VnpyBacktestBridge(CtaTemplate):
         if pos <= 0:
             return
         if is_cover:
-            order_ids = self.cover(price, pos)
+            order_ids = self.cover(exec_price, pos, stop=stop)
             action_label = f"{signal.reason}买入平空"
         else:
-            order_ids = self.sell(price, pos)
+            order_ids = self.sell(exec_price, pos, stop=stop)
             action_label = f"{signal.reason}卖出平多"
         self._register_order_context(order_ids, signal)
         self.entry_price = 0.0
-        logger.debug(f"[{self.strategy_name}] {bar_time} {action_label} @{price:.2f}")
+        logger.debug(f"[{self.strategy_name}] {bar_time} {action_label} @{exec_price:.2f}")
