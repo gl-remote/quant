@@ -309,10 +309,18 @@ docs/research/themes-frozen/<family>/
 - 受框架 issue 影响的部分；
 - 临时结论。
 
+**AI 生成的临时研究资产也全部写入 `docs/workbench/`**，取代旧的 `scripts/ai_tmp/` 与 `project_data/ai_tmp/`：
+
+- 临时分析 / debug / 探查脚本：`docs/workbench/<theme-slug>/scripts/*.py`（或大主题下 `docs/workbench/<theme-slug>-<topic>/scripts/`）；
+- 临时策略代码（未进入 `workspace/strategies/` 长期目录的实验策略）：`docs/workbench/<theme-slug>/strategies/*.py`；
+- 临时中间数据 / 图表 / parquet / csv 产出：`docs/workbench/<theme-slug>/outputs/`；
+- 单文件主题可放在 `docs/workbench/<theme-slug>-<topic>.md` 同级或改用子目录形式；大主题多组件时建议直接使用子目录布局 `docs/workbench/<theme-slug>/`。
+
 工作原则：
 
 - workbench 内容**允许粗糙**，但结论稳定后必须提炼进主题目录或 archive；主题目录**禁止**长期引用 workbench 文件。
 - 完整策略公式由 `strategy-math-spec.md` 承载，workbench 中不重复完整公式。
+- workbench 下的临时脚本 / 策略 / 数据在归档时一起搬运进 archive 批次（详见 `## Archive 写法`）。
 
 ## Archive 写法
 
@@ -322,10 +330,10 @@ docs/research/themes-frozen/<family>/
 
 | 类别 | 路径模式（按主题 slug / 关键词匹配） | 归档后位置 |
 |:---|:---|:---|
-| workbench 实验流水 | `docs/workbench/<theme-slug>-*.md` 或 `docs/workbench/<theme-slug>/` | `<batch>/` 根目录（压缩版）+ `<batch>/raw-workbench/`（原始版，若需保留多份） |
-| 临时分析脚本 | `scripts/ai_tmp/*<theme-slug>*` · 或分支中新增/修改且仅服务于该主题的脚本 | `<batch>/raw-scripts/` |
-| 临时策略代码 | `workspace/strategies/*<theme-slug>*` · 分支中新增且未进入长期策略目录的临时策略 | `<batch>/raw-strategies/` |
-| 临时中间数据 | `project_data/logs/<theme-slug>*/` 下由本次实验产生的 parquet / csv / 图像（大文件不移动，只在 README 登记路径） | **不移动文件本身**，只在 `<batch>/README.md` 登记绝对路径和文件 hash / 行数 |
+| workbench 实验流水 | `docs/workbench/<theme-slug>-*.md` 或 `docs/workbench/<theme-slug>/*.md` | `<batch>/` 根目录（压缩版）+ `<batch>/raw-workbench/`（原始版，若需保留多份） |
+| 临时分析脚本 | `docs/workbench/<theme-slug>/scripts/` · 或分支中新增/修改且仅服务于该主题的脚本 | `<batch>/raw-scripts/` |
+| 临时策略代码 | `docs/workbench/<theme-slug>/strategies/` · 分支中新增且未进入 `workspace/strategies/` 长期目录的临时策略；或 `workspace/strategies/*<theme-slug>*` 中未通过验证的临时策略 | `<batch>/raw-strategies/` |
+| 临时中间数据 | `docs/workbench/<theme-slug>/outputs/` 下由本次实验产生的 parquet / csv / 图像（大文件不移动，只在 README 登记路径） | **不移动文件本身**，只在 `<batch>/README.md` 登记绝对路径和文件 hash / 行数 |
 | 主题目录长期文档（experiment-plan / research-status 等） | 不归档，保留在 `docs/research/themes/<theme-slug>/` | — |
 | 框架 issue | `docs/issues/` 不移动，archive 只做命名引用 | — |
 
@@ -365,8 +373,9 @@ docs/research/themes-frozen/<family>/
   docs/workbench/<name>.md
     -> <archive-batch>/<compressed-name>.md （压缩版，根目录）
     -> <archive-batch>/raw-workbench/<name>.md （原始版，多文件时）
-  scripts/ai_tmp/*<theme>*        -> <archive-batch>/raw-scripts/
-  workspace/strategies/*<theme>*  -> <archive-batch>/raw-strategies/
+  docs/workbench/<theme>/scripts/*     -> <archive-batch>/raw-scripts/
+  docs/workbench/<theme>/strategies/*  -> <archive-batch>/raw-strategies/
+  workspace/strategies/*<theme>*       -> <archive-batch>/raw-strategies/（仅未通过验证的临时策略）
   （数据文件不搬运，只登记）
 ```
 
