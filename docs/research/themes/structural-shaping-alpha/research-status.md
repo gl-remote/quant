@@ -23,7 +23,7 @@
 - **ν_implied 归因**：Itô 分解净 edge，区分"凸性伪影"与"真实趋势 alpha"
 - **KF 方法论**：多层对照 / cluster bootstrap / 跨周期护栏 / 参数平台检查
 下游组合策略（alpha 源：poc-value-area-asymmetry 分类器 v4.0 + 塑形参数
-archive:2026/07/2026-07-09-poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束下
+archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping SL1.0/TP1.4/TH8h）已在 100% 名义暴露约束下
 跑出年化净 15.45% / Sharpe 2.23 / MaxDD -7.51，验证了"alpha 源 + 塑形工具"
 组合路径可行，**本主题阶段 2a（方向 alpha × 塑形受益条件扫描）被下游拉起**。
 

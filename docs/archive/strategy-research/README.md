@@ -8,11 +8,7 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
-| 2026-07-13 | va-asymmetry-composite | **未来信息泄漏铁证**：4 层独立证据链（含截断法因果判据）证明原研究侧年化 63.44%/夏普 3.47 来自 daily 特征在事件触发时使用了当日 event_time 之后的 5m bars；shift(1) 修复后年化 -38.25%/夏普 -1.60/1018 笔；原策略假设失去独立 alpha 支持；方法论遗产：截断法泄漏检测范式 | ❌ 证伪 · 🧪 方法论 |
-| 2026-07-13 | va-asymmetry-composite | 工程化修复：A 层分类从外部 parquet → 策略内部自算，CLI backtest 可运行；MAD min_periods/pandas 3.0/跨周期持久化修复；研究侧全量 63.44%年化/夏普 3.47；工程↔研究 15× 差距根因定位（ATR/K_S_SL/Cap/粒度/bar） | ✅ 通过(工程可运行) · ⚠️ 待修复(收益差距) |
-| 2026-07-10 | va-asymmetry-composite | 主题 v1.0 冻结版整目录归档：B0=S1×W0×VW0（Sharpe 2.70·年化15.10%·MaxDD−2.40%）· 组合层 0/6 增量死路（1/N 等权谜题）· 重启 v2.0 改底层逻辑+探索计划 | ✅ 通过(组合层结论) · ❌ 证伪(组合层增量) · 🔁 转 v2.0 |
-| 2026-07-09 | poc-value-area-asymmetry | 分类器 v4.0 塑形参数优化 + 组合层优化（品种筛选/强度加权/多空权重 0/6 通过）：B0=S1×W0×VW0 最优（Sharpe 2.70 · 年化 15.10% · MaxDD −2.40%）· 9 处 math-spec 修正 · 13 脚本 + 9 数据 + 3 workbench | ✅ 通过 · 🧪 方法论 · ⚠️ 分流 |
-| 2026-07-08 | poc-value-area-asymmetry | **全阶段合并归档（Stage 1~4）** · 1/2/3/4 阶段 workbench + 51 专属脚本：阶段 1 测量 A3_skew DN 独立方向 → 阶段 2 跨周期护栏+ν_implied+OOS 4 主线 Bonferroni → 阶段 3 背景划分器 7 层严格+5/5 任务 → 阶段 4 三维 144 tier → 合并降级 6 类白名单 · 分类器 v4.0 冻结（9 A + 6 A-）· KF-25~29 定型 | ✅ 通过 · 🧪 方法论 · 🔁 转主线 |
+| 2026-07-13 | va-asymmetry-composite | **⚠️ 错误路径链条归并封装**：07-08 ~ 07-13 共 7 个 va-asymmetry 系列批次因共享同一条泄漏 daily 特征管道，所有性能类数字结论作废；封装为单一批次 `2026-07-13-va-asymmetry-leak-chain-consolidated/`，顶层 README 列出保留的方法论遗产与作废清单。**引用任何子批次前必读封装 README** | ❌ 证伪 · 🧪 方法论 · 🔒 数字作废 |
 | 2026-07-06 | structural-shaping-alpha | 结构塑形阶段 1：DirRandom 下无独立 alpha 证伪；产出 9 条 KF + First-Passage Designer 工具遗产 | ❌ 证伪 · 🧪 方法论 |
 | 2026-07-05 | value-area | value-area-rolling-reacceptance 主题冻结：POC 特殊性 / rolling 独立价值 / reacceptance 触发器 / 距离档 edge 全部证伪 | ❌ 证伪 · 🧪 方法论 |
 | 2026-07-03 | value-area | value-area-reacceptance stage-b sweep，主题降级 feature-only | ❌ 证伪 |
