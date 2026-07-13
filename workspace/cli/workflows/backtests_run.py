@@ -452,6 +452,7 @@ class BacktestRunWorkflow:
             self._run_single_backtest(
                 engine=engine,
                 req=req,
+                bc=bc,
                 strategy_params=strategy_params,
                 datasets=datasets,
                 git_hash=git_hash,
@@ -530,16 +531,32 @@ class BacktestRunWorkflow:
         *,
         engine: VnpyBacktestEngine,
         req: VnpySearchRequest,
+        bc: BacktestConfig,
         strategy_params: dict[str, Any],
         datasets: list[tuple[str, KlineDataFrame, str]],
         git_hash: str | None,
         run_id: int,
         finalizer: RunFinalizer,
     ) -> None:
-        """不搜索参数，用默认策略参数跑单次回测（支持 --profile / --dump-indicators）"""
+        """不搜索参数，用默认策略参数跑单次回测（支持 --profile / --dump-indicators / --parallel）"""
         DataFeed.dump_indicators_default = req.dump_indicators
-        pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
-        if req.profile:
+        datasets_simple = cast(list[tuple[str, Any]], [(s, d) for s, d, _ in datasets])
+
+        if req.parallel and not req.profile:
+            from backtest.parallel import run_single_backtest_parallel
+
+            engine_results = run_single_backtest_parallel(
+                datasets=datasets_simple,
+                strategy_name=req.strategy,
+                strategy_params=strategy_params,
+                backtest_config=bc,
+                data_env=self._cm.get_data_config().environment,
+                run_id=run_id,
+                n_workers=req.workers,
+                dump_indicators=req.dump_indicators,
+            )
+        elif req.profile:
+            pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
             from data.output_paths import profiles_dir
 
             profile_path = profiles_dir() / f"backtest_{req.strategy}_{datetime.now():%Y%m%d_%H%M%S}.prof"
@@ -550,6 +567,7 @@ class BacktestRunWorkflow:
             logger.info("性能分析结果已保存: {}", profile_path)
             logger.info("查看方式: snakeviz {}", profile_path)
         else:
+            pairs = [(s, d, req.strategy, strategy_params) for s, d, _ in datasets]
             engine_results = engine.run(cast(Any, pairs))
 
         bt_persister = BacktestResultPersister(self._dm)

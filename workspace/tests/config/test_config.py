@@ -76,7 +76,7 @@ class TestBacktestConfig:
     def test_get_backtest_config_defaults(self):
         cm = ConfigManager(env="backtest")
         bc = cm.get_backtest_config()
-        assert bc.initial_capital == 100000.0
+        assert bc.initial_capital == 1_000_000.0
         assert bc.commission_rate == 0.0003
         assert bc.slippage == 1.0
         assert bc.price_tick == 1.0

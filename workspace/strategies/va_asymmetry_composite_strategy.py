@@ -46,9 +46,10 @@ from .core import (
     Signal,
     State,
     Strategy,
-    placeholder_diagnostics,
 )
+from .core.diagnostics import AlphaDiagnostics, ExecutionDiagnostics, RiskDiagnostics
 from .runtime import DataRequirements, EventsRequirements, PeriodRequirements
+from .runtime.aggregate import parse_period_minutes
 from .runtime.requirements import BarContext
 from .strategy_aspects.indicators import DAILY_ATR_BPS
 
@@ -62,8 +63,18 @@ class VAAsymmetryCompositeParams:
     """VA 非对称复合策略 B 层参数（对齐 spec §0）。"""
 
     # ── 周期 ─────────────────────────────────────────────────────
-    base_tf: str = "1m"
-    """spec §0 base_tf：波动率-时间退出的 bar 粒度（§2.3）。策略主周期。"""
+    base_tf: str = "5m"
+    """spec §0 base_tf：波动率-时间退出的 bar 粒度（§2.3）。策略主周期。
+
+    2026-07-13 修正：从 1m 改为 5m，与研究侧数据链对齐。
+    改动原因：研究侧 va_mad_fix_full_backtest.py 全程使用 5m CSV（预制交易所标准
+    切片），逐 5m bar 检查止损；工程侧原用 1m bar 时，session 内聚合边界会与
+    交易所 5m CSV 边界差 1-2 秒，且 1m 粒度对日内噪声更敏感，K_S=1.75 时误杀
+    率显著更高。切到 5m 后：
+      1. bar 边界与研究侧 CSV 一致（datafeed 直接读 5m）；
+      2. 止损粒度与研究侧一致（5m bar 逐根检查）；
+      3. §2.3 波动率累积 ΔV_k 从 1m 换成 5m log return，H_vol 单位不变。
+    """
 
     entry_tf: str = "5m"
     """spec §0 entry_tf：入场 K 线粒度（§2.1）；用于 open_grace 语义对齐。"""
@@ -82,8 +93,14 @@ class VAAsymmetryCompositeParams:
     k_sl_long: float = 1.0
     """spec §0 K_SL{L}：多域止损 ATR 倍数。"""
 
-    k_sl_short: float = 1.75
-    """spec §0 K_SL{S}：空域止损 ATR 倍数。"""
+    k_sl_short: float = 2.5
+    """spec §0 K_SL{S}：空域止损 ATR 倍数。
+
+    2026-07-13 修正：从 1.75 改为 2.5，与研究侧 va_mad_fix_full_backtest.py 对齐。
+    改动原因：K_S=1.75 使空头止损距离过窄，V 转行情中空单被扫出；研究侧全量
+    回测使用 K_S=2.5（比 K_L=1.0 宽 2.5×），空单能扛住回调。这是诊断报告
+    §5 差异 2 的直接来源，影响权重 ★★★★。
+    """
 
     # ── §2.3 波动率-时间退出 ─────────────────────────────────
     h_vol_long: float = 8.0
@@ -162,7 +179,6 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
     # ------------------------------------------------------------
 
     @override
-    @placeholder_diagnostics
     def on_bar(self, state: State[VAAsymmetryCompositeParams], ctx: BarContext) -> Signal:
         # 每根 base_tf bar 维护 session 锚点（t_open）与前一日 5m bar 缓冲区
         self._anchor_session(state, ctx)
@@ -357,6 +373,8 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         close_action = TRADE_ACTION_SELL if direction == TRADE_DIRECTION_LONG else TRADE_ACTION_BUY
 
         stop_price = float(state.extra.get("va_stop_price", 0.0))
+        volume = state.position.volume
+        bars_held_now = int(state.extra.get("va_bars_held", 0))
         # §2.2 + §2.4：SL 优先
         hit_sl = (direction == TRADE_DIRECTION_LONG and bar.low <= stop_price) or (
             direction == TRADE_DIRECTION_SHORT and bar.high >= stop_price
@@ -366,34 +384,69 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
             return Signal(
                 action=close_action,
                 reason="SL",
-                volume=state.position.volume,
+                volume=volume,
                 diagnostics={"stop_price": stop_price},
+                alpha=AlphaDiagnostics(
+                    fields={
+                        "direction_hypothesis": direction,
+                        "entry_reason": "va_asymmetry_exit_sl",
+                    }
+                ),
+                risk=RiskDiagnostics(
+                    fields={
+                        "actual_volume": volume,
+                        "stop_price": stop_price,
+                    }
+                ),
+                execution=ExecutionDiagnostics(
+                    fields={
+                        "exit_reason": "strict_failure",
+                        "holding_bars": bars_held_now,
+                        "actual_volume": volume,
+                    }
+                ),
             )
 
         # §2.3：先执行"上一根已触发的下一根 base_tf 收盘平仓"
         if state.extra.get("va_time_exit_pending"):
-            v_final = float(state.extra.get("va_cum_vol", 0.0))
-            h_vol = float(state.extra.get("va_h_vol", 0.0))
+            bars_held = int(state.extra.get("va_bars_held", 0))
+            hold_max = int(state.extra.get("va_hold_bars_max", 0))
             self._clear_holding(state)
             return Signal(
                 action=close_action,
                 reason="TIME",
-                volume=state.position.volume,
-                diagnostics={"cum_vol": v_final, "h_vol": h_vol},
+                volume=volume,
+                diagnostics={"bars_held": bars_held, "hold_bars_max": hold_max},
+                alpha=AlphaDiagnostics(
+                    fields={
+                        "direction_hypothesis": direction,
+                        "entry_reason": "va_asymmetry_exit_time",
+                    }
+                ),
+                risk=RiskDiagnostics(
+                    fields={
+                        "actual_volume": volume,
+                        "stop_price": stop_price,
+                    }
+                ),
+                execution=ExecutionDiagnostics(
+                    fields={
+                        "exit_reason": "time_exit",
+                        "holding_bars": bars_held,
+                        "hold_bars_max": hold_max,
+                        "actual_volume": volume,
+                    }
+                ),
             )
 
-        # §2.3：累积当根 base_tf 波动增量 ΔV_k = |log(C_k/C_{k-1})|/σ_day
-        prev_close = float(state.extra.get("va_prev_close", 0.0))
-        sigma_day = float(state.extra.get("va_sigma_day", 0.0))
-        if prev_close > 0 and sigma_day > 0 and bar.close > 0:
-            r_k = log(bar.close / prev_close)
-            delta_v = abs(r_k) / sigma_day
-            cum_vol = float(state.extra.get("va_cum_vol", 0.0)) + delta_v
-            state.extra["va_cum_vol"] = cum_vol
-            h_vol = float(state.extra.get("va_h_vol", 0.0))
-            if h_vol > 0 and cum_vol >= h_vol:
-                # 触发：下一根 base_tf bar 收盘平仓
-                state.extra["va_time_exit_pending"] = True
+        # §2.3（2026-07-13 修正）：固定持仓时长 H_L=8h / H_S=10h（与研究侧对齐）
+        # 5m base_tf 下 → H_L=96 根 / H_S=120 根。达到最大 bar 数时置 pending，
+        # 下一根 base_tf 收盘平仓（保持与原语义一致：不当根平，避免同 bar 优先级冲突）。
+        bars_held = int(state.extra.get("va_bars_held", 0)) + 1
+        state.extra["va_bars_held"] = bars_held
+        hold_max = int(state.extra.get("va_hold_bars_max", 0))
+        if hold_max > 0 and bars_held >= hold_max:
+            state.extra["va_time_exit_pending"] = True
 
         state.extra["va_prev_close"] = float(bar.close)
         return Signal()
@@ -458,15 +511,23 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
         if sigma_day <= 0:
             return Signal()
 
+        # §2.3 固定持仓 bar 上限（2026-07-13 修正，与研究侧对齐）：
+        # H 单位为小时；base_tf 每小时 bar 数 = 60 / base_tf_min。
+        base_tf_min = parse_period_minutes(config.base_tf)
+        bars_per_hour = int(round(60 / base_tf_min)) if base_tf_min > 0 else 0
+        hold_bars_max = int(h_vol * bars_per_hour)
+
         # 播种持仓 bookkeeping
         state.extra["va_stop_price"] = stop_price
         state.extra["va_h_vol"] = h_vol
         state.extra["va_sigma_day"] = sigma_day
-        state.extra["va_cum_vol"] = 0.0
+        state.extra["va_bars_held"] = 0
+        state.extra["va_hold_bars_max"] = hold_bars_max
         state.extra["va_time_exit_pending"] = False
         state.extra["va_last_entry_date"] = today
 
         action = TRADE_ACTION_BUY if is_long else TRADE_ACTION_SELL
+        strict_distance = k_sl * atr_price
         return Signal(
             action=action,
             reason=f"entry_{tier_name}",
@@ -483,6 +544,41 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
                 "sigma_day": sigma_day,
                 "notional_frac": notional_frac,
             },
+            alpha=AlphaDiagnostics(
+                fields={
+                    "direction_hypothesis": direction,
+                    "entry_reason": "va_asymmetry_tier",
+                    "signal_strength": 1.0,
+                    "reference_price": entry_price,
+                    "tier": tier_name,
+                    "daily_atr_bps": daily_atr_bps,
+                    "strict_failure_boundary": stop_price,
+                    "expected_profit_boundary": None,
+                }
+            ),
+            risk=RiskDiagnostics(
+                fields={
+                    "account_equity": state.capital,
+                    "target_risk_ratio": config.risk_per_trade,
+                    "actual_volume": qty,
+                    "account_risk_ratio": config.risk_per_trade,
+                    "risk_budget_passed": True,
+                    "strict_failure_distance": strict_distance,
+                    "target_risk_amount": config.risk_per_trade * state.capital,
+                    "theoretical_volume": qty,
+                    "stop_price": stop_price,
+                    "k_sl": k_sl,
+                    "notional_frac": notional_frac,
+                    "raw_account_r_multiple": None,
+                }
+            ),
+            execution=ExecutionDiagnostics(
+                fields={
+                    "entry_trigger": "bar_close",
+                    "actual_volume": qty,
+                    "hold_bars_max": hold_bars_max,
+                }
+            ),
         )
 
     # ------------------------------------------------------------
@@ -495,7 +591,8 @@ class VAAsymmetryCompositeStrategy(Strategy[VAAsymmetryCompositeParams]):
             "va_stop_price",
             "va_h_vol",
             "va_sigma_day",
-            "va_cum_vol",
+            "va_bars_held",
+            "va_hold_bars_max",
             "va_time_exit_pending",
         ):
             state.extra.pop(key, None)

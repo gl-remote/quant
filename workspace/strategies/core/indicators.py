@@ -85,13 +85,22 @@ def daily_atr_bps_func(df: pd.DataFrame, period: int = 10) -> NDArray[np.float64
     用于 va-asymmetry-composite 策略的 A 层日线波动率基准：
     - 止损/sizing 直接消费 bps 值；
     - t-PIT 归一化中 bps 与原始 ATR 秩等价（MAD/中位数线性不变）。
+
+    2026-07-13 修正：ATR 平滑方式从 Wilder's（talib.ATR，指数衰减 α=1/N）
+    改为等权 SMA(TR, N)，与研究侧 poc_va.daily_atr_sma 对齐（诊断报告 §5
+    差异 1，影响权重 ★★★★★）。
     """
-    atr = talib.ATR(
-        np.asarray(df["high"], dtype=float),
-        np.asarray(df["low"], dtype=float),
-        np.asarray(df["close"], dtype=float),
-        timeperiod=period,
+    high = np.asarray(df["high"], dtype=float)
+    low = np.asarray(df["low"], dtype=float)
+    close = np.asarray(df["close"], dtype=float)
+    prev_close = np.concatenate([[np.nan], close[:-1]])
+    tr = np.maximum.reduce(
+        [
+            high - low,
+            np.abs(high - prev_close),
+            np.abs(low - prev_close),
+        ]
     )
-    close_arr = np.asarray(df["close"], dtype=float)
-    close_safe = np.where(close_arr > 0, close_arr, np.nan)
+    atr = pd.Series(tr).rolling(period, min_periods=period).mean().to_numpy(dtype=float)
+    close_safe = np.where(close > 0, close, np.nan)
     return atr / close_safe * 10000.0

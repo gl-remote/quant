@@ -85,4 +85,11 @@ case "$COMMAND" in
 esac
 
 # 执行命令
-(cd "$SCRIPT_DIR" && PYTHONPATH="$SCRIPT_DIR/workspace${PYTHONPATH:+:$PYTHONPATH}" uv run python main.py "$@")
+#
+# sandbox 环境兼容：沙箱注入的 PYTHONHOME(3.13)/PYTHONPATH 会与
+# 项目的 Python 3.12 venv 冲突，导致 import 失败或版本不匹配。
+# 这里在执行 uv run 之前先 unset，不影响其他系统命令。
+(cd "$SCRIPT_DIR" &&
+    unset PYTHONHOME &&
+    unset PYTHONPATH &&
+    PYTHONPATH="$SCRIPT_DIR/workspace${PYTHONPATH:+:$PYTHONPATH}" uv run python main.py "$@")
