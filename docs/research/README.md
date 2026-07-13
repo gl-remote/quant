@@ -39,8 +39,8 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-composite** | **重启开发态（v1.0 已归档 · 2026-07-10）** | [themes/va-asymmetry-composite/](./themes/va-asymmetry-composite/README.md) · [v1.0 归档](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-10-va-asymmetry-composite/) |
-| poc-value-area-asymmetry | 活跃 / 阶段 4 完成 / 分类器 v4.0 冻结 / 下游引用 | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) |
+| ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
+| poc-value-area-asymmetry | ⚠️ **数字结论作废（2026-07-13）** · 方法论遗产保留 · 分类器 v4.0 结构定义保留 | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) · [数字作废详情](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
 | structural-shaping-alpha | 活跃 / 阶段 1 完成待冻结候选 / 工具资产引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 已冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **已冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) · [freeze-summary](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
@@ -48,37 +48,29 @@ AI 接手规则。
 家族目录：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 
 活跃主题目录：
-- 主线：`docs/research/themes/va-asymmetry-composite/`（**v2.0 重启开发态**，旧 v1.0 已归档）
-- 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（分类器）
+- 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（⚠️ 数字作废，分类器 v4.0 tier 坐标结构可继承）
 - 上游工具：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因）
 
 ## 4. 当前主线摘要
 
 ```text
-value_area 家族两个主题已冻结，假设链完全崩塌；
-structural-shaping-alpha 阶段 1 证伪"塑形作为独立 alpha 源"，保留为工具资产；
-poc-value-area-asymmetry 阶段 4 冻结分类器 v4.0：9 档 A/A- tier，
-单笔 IR 0.28~0.46，品种保留 ≥ 60%，FDR ≤ 5%。
-archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 在分类器 v4.0 上完成塑形验证
-（年化净 15.45% / Sharpe 2.23 / MaxDD -7.51 / 胜率 60.3% / 盈亏比 1.41），
-alpha 变现路径 POC 通过。
+2026-07-13 重大变化：
+- va-asymmetry-composite 主题整目录已归档（archive:...leak-chain-consolidated/theme-va-asymmetry-composite）；
+- 其假设（daily 特征 spec 系列 → tier → alpha）被 4 层证据链证伪（含截断法因果判据）；
+- 07-08 ~ 07-13 共 7 个 va-asymmetry 系列批次全部合并入同一封装批次，
+  性能类数字结论作废（B0 Sharpe 2.70、63.44% 年化、P0-P9 全部数字 等）；
+- 分类器 v4.0 的 6 阵营坐标结构定义仍可作为方法论遗产继承，但归一化输入需重新设计。
 
-当前主线为 va-asymmetry-composite：经"品种筛选 × 信号强度加权 × 多空权重优化"
-三道组合关，在 100% 名义暴露约束下把单品种结果提升到
-Sharpe ≥ 2.5 / 年化净 ≥ 18% / MaxDD ≤ 8% 的实盘可上线标准。
-
-阶段 0（立题复现）待启动：精确复现 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 基准
-（分类器 v4.0 + SL1.0/TP1.4/TH8h + c_realistic），Sharpe/MDD 偏差 ≤ 5% 即通过。
+后续研究入口:
+- structural-shaping-alpha 仍是工具资产（First-Passage Designer 等）；
+- 若要延续 va-asymmetry 假设：需先重建因果版 daily 特征管道，
+  三条候选路径详见 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README §五；
+- 若要立新主题：跳过 va-asymmetry 家族，从其他 alpha 源起。
 ```
-
-> **2026-07-10 重置提示**：va-asymmetry-composite 已从 v1.0（B0 冻结版）整体重置为 v2.0 开发态，旧版整目录归档至 [2026/07/2026-07-10-va-asymmetry-composite](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-10-va-asymmetry-composite/)。B0 作为 frozen control baseline，新底层逻辑待定义。
 
 ## 5. 关键文档
 
-最新归档（当前立题起点）：
-
-- **[2026/07/2026-07-09-poc-va-shaping（组合验证 · 当前立题 POC）](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping/README.md)**
-- [2026/07/2026-07-08-poc-va-asymmetry（分类器 v4.0 验证归档）](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-08-poc-va-asymmetry/README.md)
+- **[archive:2026-07-13-va-asymmetry-leak-chain-consolidated（va-asymmetry 错误路径链条归并封装 · 必读）](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)**
 - [2026/07/2026-07-06-structural-shaping-alpha-stage1（塑形 Stage 1 归档）](../archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/README.md)
 - [2026/07/2026-07-05-value-area-rolling-reacceptance-freeze（Rolling 冻结摘要）](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
 - [Stage B v2/v3 sweep（feature-only 降级决策）](../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/README.md)
@@ -103,15 +95,17 @@ Sharpe ≥ 2.5 / 年化净 ≥ 18% / MaxDD ≤ 8% 的实盘可上线标准。
 
 ```text
 1. 先读 docs/research/strategy-current.md；
-2. 再读当前主线主题 docs/research/themes/va-asymmetry-composite/README.md
-   （会导向 strategy-math-spec.md / experiment-plan.md / parameter-selection-spec.md）；
-3. 为确认上游组件冻结状态，再读：
-   - poc-value-area-asymmetry README + stage4-findings（分类器合同）
+2. va-asymmetry 家族已作为一整条错误路径归档：archive:2026-07-13-va-asymmetry-leak-chain-consolidated
+   （必读顶层 README，了解哪些数字作废、哪些方法论可继承）；
+3. 若继续在其他主题上研究，则读：
+   - poc-value-area-asymmetry README（⚠️ 数字作废、方法论保留）
    - structural-shaping-alpha README + stage1-summary（工具合同 & 真实成本模型）
-4. 为了 Stage 0 立题复现，先精读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 的
-   stage3-shaping-result.md 与对应脚本，拿到基准 Sharpe/MDD/事件列表；
-5. 不要继续在旧 baseline 上调 reentry_take_profit_r 或 value_area 家族任何参数；
-6. 前置组件参数（分类器 tier / 塑形 SL/TP/TH / 成本模型）在新主题内视为冻结常量；
-7. 新实验过程写入 docs/workbench/va-asymmetry-composite-stage<N>-<topic>.md；
-8. 阶段稳定后再归档到 docs/archive。
+4. 若涉及 daily 特征聚合的新主题：
+   先跑一遍截断法泄漏检测（archive:...leak-chain-consolidated/
+   2026-07-13-va-asymmetry-future-info-leak/raw-scripts/verify_leak_by_truncation.py）
+   确认自己的 pipeline 无泄漏；
+5. 前置组件参数（分类器 tier 结构 / 塑形 SL/TP/TH / 成本模型）视为方法论继承，
+   但数字不复用；
+6. 新实验过程写入 docs/workbench/<theme-slug>-<topic>.md；
+7. 阶段稳定后再归档到 docs/archive。
 ```
