@@ -15,6 +15,7 @@
 | [2026-07-12-va-asymmetry-composite-mathspec](./2026-07-12-va-asymmetry-composite-mathspec/) | 07-12 | P0-P9 实验框架 + math-spec 冻结 | ❌ P0-P9 全部对照数字污染 |
 | [2026-07-13-va-asymmetry-engineering-fix](./2026-07-13-va-asymmetry-engineering-fix/) | 07-13 | MAD-fix + 工程侧对齐尝试；研究侧 63.44% 年化 / 夏普 3.47 全量回测 | ❌ 15× 差距根因误判 |
 | **[2026-07-13-va-asymmetry-future-info-leak](./2026-07-13-va-asymmetry-future-info-leak/)** | **07-13** | **4 层证据链证明泄漏；因果修复后 -38.25%/-1.60/1018 笔** | ✅ **结论正确（链条终结批次）** |
+| **[theme-va-asymmetry-composite](./theme-va-asymmetry-composite/)** | **07-13** | **原活跃主题目录整体归档**：README + research-status + strategy-math-spec + experimental-plan + archive-references + engineering-diagnosis | ❌ 假设证伪归档 |
 
 ## 二、根因（一句话）
 

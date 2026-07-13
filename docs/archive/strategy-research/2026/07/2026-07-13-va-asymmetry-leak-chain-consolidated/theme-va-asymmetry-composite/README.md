@@ -1,7 +1,13 @@
 # va-asymmetry-composite · 主题 README
 
-> 类型：Research Theme
-> 状态：**重启开发态（2026-07-10）** · 旧 v1.0 已归档
+> ⚠️ **已归档只读（2026-07-13）**：本主题假设已被 4 层证据链（含截断法因果判据）证伪，
+> 整目录整体归档进 archive:2026-07-13-va-asymmetry-leak-chain-consolidated。
+> 所有性能类数字结论作废；仅方法论（分类器 tier 结构定义等）可继承。
+> 本目录不再接受新实验或参数调整。详情见封装批次
+> [../README.md](../README.md) 与 [../2026-07-13-va-asymmetry-future-info-leak/future-info-leak-verification.md](../2026-07-13-va-asymmetry-future-info-leak/future-info-leak-verification.md)。
+>
+> 类型：Research Theme（归档态）
+> 状态：**假设证伪归档（2026-07-13）** · 原重启开发态被证明无独立 alpha
 > 上游分类器（v1.0 控制基线）：theme:poc-value-area-asymmetry#classifier-math-spec v4.0
 > 塑形参考（v1.0）：theme:structural-shaping-alpha#first-passage-designer-math-spec
 
