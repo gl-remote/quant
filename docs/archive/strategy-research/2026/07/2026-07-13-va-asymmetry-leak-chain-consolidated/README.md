@@ -16,6 +16,7 @@
 | [2026-07-13-va-asymmetry-engineering-fix](./2026-07-13-va-asymmetry-engineering-fix/) | 07-13 | MAD-fix + 工程侧对齐尝试；研究侧 63.44% 年化 / 夏普 3.47 全量回测 | ❌ 15× 差距根因误判 |
 | **[2026-07-13-va-asymmetry-future-info-leak](./2026-07-13-va-asymmetry-future-info-leak/)** | **07-13** | **4 层证据链证明泄漏；因果修复后 -38.25%/-1.60/1018 笔** | ✅ **结论正确（链条终结批次）** |
 | **[theme-va-asymmetry-composite](./theme-va-asymmetry-composite/)** | **07-13** | **原活跃主题目录整体归档**：README + research-status + strategy-math-spec + experimental-plan + archive-references + engineering-diagnosis | ❌ 假设证伪归档 |
+| **[theme-poc-value-area-asymmetry](./theme-poc-value-area-asymmetry/)** | **07-13** | **原上游分类器主题目录整体归档**：README + research-status + classifier-math-spec + experiment-plan + parameter-selection-spec + archive-references；分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | ❌ Stage 1-4 数字全部污染 |
 
 ## 二、根因（一句话）
 

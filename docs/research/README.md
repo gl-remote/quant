@@ -39,8 +39,9 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
+| **va-asymmetry-revisit** | **立题态（2026-07-13）** · 从 leak-chain 错误路径中回收可能仍具因果版验证价值的假设候选 | [themes/va-asymmetry-revisit/](./themes/va-asymmetry-revisit/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
-| poc-value-area-asymmetry | ⚠️ **数字结论作废（2026-07-13）** · 方法论遗产保留 · 分类器 v4.0 结构定义保留 | [themes/poc-value-area-asymmetry/](./themes/poc-value-area-asymmetry/README.md) · [数字作废详情](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
+| ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 / 阶段 1 完成待冻结候选 / 工具资产引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | value_area_reacceptance | 已冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **已冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) · [freeze-summary](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
@@ -48,7 +49,7 @@ AI 接手规则。
 家族目录：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
 
 活跃主题目录：
-- 上游 Alpha 源：`docs/research/themes/poc-value-area-asymmetry/`（⚠️ 数字作废，分类器 v4.0 tier 坐标结构可继承）
+- 上游 Alpha 源（**已归档**）：`archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/`（⚠️ 数字作废，分类器 v4.0 tier 坐标结构可继承）
 - 上游工具：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因）
 
 ## 4. 当前主线摘要
@@ -98,7 +99,7 @@ AI 接手规则。
 2. va-asymmetry 家族已作为一整条错误路径归档：archive:2026-07-13-va-asymmetry-leak-chain-consolidated
    （必读顶层 README，了解哪些数字作废、哪些方法论可继承）；
 3. 若继续在其他主题上研究，则读：
-   - poc-value-area-asymmetry README（⚠️ 数字作废、方法论保留）
+   - poc-value-area-asymmetry（**已归档** · 只读只做方法论参考）：archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/
    - structural-shaping-alpha README + stage1-summary（工具合同 & 真实成本模型）
 4. 若涉及 daily 特征聚合的新主题：
    先跑一遍截断法泄漏检测（archive:...leak-chain-consolidated/
