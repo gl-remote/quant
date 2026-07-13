@@ -17,7 +17,7 @@
 单笔 IR ≥ 0.30）。分类器 v4.0（6 类合并版）2026-07-08 冻结。本主题主动性研究暂停 ·
 分类器组件保留供下游策略层引用 · 完整策略（入场/出场/仓位/cost）不属本主题。
 2026-07-09 起，下游主题 va-asymmetry-composite 立题：以本分类器 v4.0 为 alpha 源，
-叠加 structural-shaping-alpha 工具 + archive:2026/07/2026-07-09-poc-va-shaping 塑形参数，
+叠加 structural-shaping-alpha 工具 + archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 塑形参数，
 探索品种筛选 / 信号强度加权 / 多空权重优化三道组合关，
 目标构建 Sharpe ≥ 2.5 · 年化净 ≥ 18% 的实盘可上线完整交易策略。**
 
@@ -351,8 +351,8 @@
 ## 下一步 · 阶段 4 · 背景分类器的使用与组合
 
 > **2026-07-09 起本主题主动性研究暂停**；下游策略层工作转移到 **[va-asymmetry-composite](../../va-asymmetry-composite/README.md)**（当前研究主线）。
-> 以下方向 A/B/C 已部分在 archive:2026/07/2026-07-09-poc-va-shaping 与 va-asymmetry-composite 立题中承接：
-> - archive:2026/07/2026-07-09-poc-va-shaping 完成"方向 B（完整策略）"的塑形 POC 验证（SL1.0/TP1.4/TH8h + c_realistic → 净 15.45% / Sharpe 2.23）
+> 以下方向 A/B/C 已部分在 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 与 va-asymmetry-composite 立题中承接：
+> - archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shaping 完成"方向 B（完整策略）"的塑形 POC 验证（SL1.0/TP1.4/TH8h + c_realistic → 净 15.45% / Sharpe 2.23）
 > - va-asymmetry-composite 承接"方向 C（多空组合对冲）+ 方向 B（完整策略）+ 组合优化"三道组合关
 > 未来若发现分类器 bug，仅在本主题 research-status / parameter-selection-spec 中登记参数变更，不重开实验。
 

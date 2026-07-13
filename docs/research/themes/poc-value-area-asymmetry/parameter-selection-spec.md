@@ -43,7 +43,7 @@
 
 ### 3.1 v3.0（10 互斥 tier · 过渡版 · 保留作诊断证据）
 
-见 archive:2026/07/2026-07-08-poc-va-asymmetry#stage4-classifier-v4 §2.4（v3.0 白名单表）。**不建议下游策略引用 v3.0** · 已被 v4.0 取代。
+见 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-08-poc-va-asymmetry#stage4-classifier-v4 §2.4（v3.0 白名单表）。**不建议下游策略引用 v3.0** · 已被 v4.0 取代。
 
 ### 3.2 v4.0（6 类合并版 · 阶段 4 v9.1 收尾冻结）⭐
 
