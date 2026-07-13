@@ -510,3 +510,159 @@ def run_param_search_parallel(
     opt_result = optimizer.optimize()
 
     return optuna_result_to_search_result(opt_result, optimizer.study_name)
+
+
+# ── 单次回测合约级并行 ────────────────────────────────────
+
+_SINGLE_WORKER_CTX: dict[str, Any] = {}
+_SINGLE_WORKER_LOGGER_ID: int | None = None
+
+
+def _cleanup_single_worker() -> None:
+    global _SINGLE_WORKER_LOGGER_ID
+    if _SINGLE_WORKER_LOGGER_ID is None:
+        return
+    try:
+        logger.remove(_SINGLE_WORKER_LOGGER_ID)
+    except Exception:
+        pass
+    finally:
+        _SINGLE_WORKER_LOGGER_ID = None
+
+
+def _init_worker_single(
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    backtest_config: BacktestConfig,
+    run_id: int,
+    data_env: str | None,
+    dump_indicators: bool,
+) -> None:
+    """单次回测子进程初始化"""
+    global _SINGLE_WORKER_CTX, _SINGLE_WORKER_LOGGER_ID
+    _SINGLE_WORKER_CTX["strategy_name"] = strategy_name
+    _SINGLE_WORKER_CTX["strategy_params"] = strategy_params
+    _SINGLE_WORKER_CTX["backtest_config"] = backtest_config
+    _SINGLE_WORKER_CTX["data_env"] = data_env
+
+    if data_env:
+        from config import ConfigManager
+        from data import DataManager
+
+        DataManager(ConfigManager(env=data_env))
+
+    from strategies.runtime.data_feed import DataFeed
+
+    DataFeed.dump_indicators_default = dump_indicators
+
+    from report.output_paths import workers_dir
+
+    logs_dir = str(workers_dir(run_id))
+    os.makedirs(logs_dir, exist_ok=True)
+    pid = os.getpid()
+    _SINGLE_WORKER_LOGGER_ID = logger.add(
+        os.path.join(logs_dir, f"single_worker_{pid}.log"),
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}",
+        enqueue=True,
+    )
+    atexit.register(_cleanup_single_worker)
+    logger.debug(f"[single worker {pid}] 初始化完成")
+
+
+def _execute_contract_chunk(
+    chunk: list[tuple[str, pd.DataFrame]],
+) -> list[Any]:
+    """子进程执行一组合约的回测（模块顶层函数，spawn 兼容 pickle）"""
+    ctx = _SINGLE_WORKER_CTX
+    from .vnpy_backtest_engine import VnpyBacktestEngine
+
+    engine = VnpyBacktestEngine(ctx["backtest_config"])
+    pairs = [(sym, df, ctx["strategy_name"], ctx["strategy_params"]) for sym, df in chunk]
+    return engine.run(pairs, batch_mode=True)
+
+
+def _chunk_list(items: list[Any], n_chunks: int) -> list[list[Any]]:
+    """将列表均分为 n_chunks 块，尽量均匀"""
+    if n_chunks <= 1 or len(items) == 0:
+        return [items]
+    chunk_size, remainder = divmod(len(items), n_chunks)
+    chunks: list[list[Any]] = []
+    start = 0
+    for i in range(n_chunks):
+        size = chunk_size + (1 if i < remainder else 0)
+        chunks.append(items[start : start + size])
+        start += size
+    return [c for c in chunks if c]
+
+
+def run_single_backtest_parallel(
+    datasets: list[tuple[str, pd.DataFrame]],
+    strategy_name: str,
+    strategy_params: dict[str, Any],
+    backtest_config: BacktestConfig,
+    data_env: str | None = None,
+    run_id: int = 0,
+    n_workers: int | None = None,
+    dump_indicators: bool = False,
+) -> list[Any]:
+    """执行单次回测的合约级并行
+
+    Args:
+        datasets: [(symbol, DataFrame), ...]
+        strategy_name: 策略名称
+        strategy_params: 策略参数
+        backtest_config: 回测配置
+        data_env: 数据环境名
+        run_id: 运行 ID（用于日志目录）
+        n_workers: 并行进程数（默认 os.cpu_count()）
+        dump_indicators: 是否导出指标
+
+    Returns:
+        list[BacktestResult] - 全部合约的回测结果（顺序可能与输入不一致）
+    """
+    n_workers = n_workers or os.cpu_count() or 4
+    actual_workers = min(n_workers, len(datasets))
+    if actual_workers <= 1:
+        from .vnpy_backtest_engine import VnpyBacktestEngine
+
+        engine = VnpyBacktestEngine(backtest_config)
+        pairs = [(sym, df, strategy_name, strategy_params) for sym, df in datasets]
+        return engine.run(pairs)
+
+    chunks = _chunk_list(datasets, actual_workers)
+    logger.info(
+        "单次回测合约级并行: {} 合约分为 {} 组, workers={}",
+        len(datasets),
+        len(chunks),
+        actual_workers,
+    )
+
+    results: list[Any] = []
+    with ProcessPoolExecutor(
+        max_workers=actual_workers,
+        mp_context=mp.get_context("spawn"),
+        initializer=cast(Any, _init_worker_single),
+        initargs=cast(
+            Any,
+            (
+                strategy_name,
+                strategy_params,
+                backtest_config,
+                run_id,
+                data_env,
+                dump_indicators,
+            ),
+        ),
+    ) as pool:
+        try:
+            with tqdm(total=len(datasets), desc="合约回测") as pbar:
+                for chunk_results in pool.map(_execute_contract_chunk, chunks):
+                    results.extend(chunk_results)
+                    pbar.update(len(chunk_results))
+        except KeyboardInterrupt:
+            logger.warning("收到中断信号，正在停止并行回测（已完成 {} 个合约）", len(results))
+            pool.shutdown(wait=False, cancel_futures=True)
+
+    logger.info("单次合约级并行完成: {} 合约结果", len(results))
+    return results

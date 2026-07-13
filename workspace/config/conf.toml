@@ -186,7 +186,7 @@ enabled = true
 # vn.py 回测配置
 # ============================================================
 [backtest]
-initial_capital = 100_000.0     # 初始资金
+initial_capital = 1_000_000.0   # 初始资金（与研究侧 EQUITY_INIT 对齐）
 commission_rate = 0.0003        # 手续费率 (0.03%)
 slippage = 1                    # 滑点 (跳)
 price_tick = 1                  # 最小价格变动

@@ -1,0 +1,38 @@
+{
+  "match_v2_counts": {
+    "research_only": 968,
+    "engine_only": 420,
+    "matched": 12
+  },
+  "metrics_research": {
+    "n": 980,
+    "ann": 1.2583362865558818,
+    "sharpe": 4.63736555333599,
+    "maxdd": -0.09629031260783583,
+    "win": 0.6357142857142857,
+    "total_pnl": 2634023.517636449,
+    "total_cost": 619165.3692947445
+  },
+  "metrics_engine_pairs": {
+    "n": 432,
+    "ann": -0.047772406012825834,
+    "sharpe": -0.22760870147347076,
+    "maxdd": -0.24207577903786126,
+    "win": 0.4791666666666667,
+    "total_pnl": -1936.3012868046644,
+    "total_cost": 0.0
+  },
+  "engine_bt_agg": {
+    "total_net_pnl": -142317.79940887855,
+    "total_commission": 139167.660435,
+    "total_slippage": 135665.0
+  },
+  "attribution": {
+    "delta_net": -2776341.3170453277,
+    "coverage_gap": -2601770.1684409007,
+    "shared_per_trade_gap": 2864.420700134626,
+    "residual_plus_extra": -177435.56930456162,
+    "r_cost_total": 619165.3692947445,
+    "e_cost_total": 274832.66043499997
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "research_cap": {
+    "ann_ret": 1.0471357073768754,
+    "sharpe": 4.500903823637002,
+    "max_dd": -0.09663938005978406,
+    "n_trades": 980,
+    "win_rate": 0.6357142857142857,
+    "total_net_pnl": 2634023.517636449,
+    "total_cost": 0.0,
+    "n_contracts": 142,
+    "n_active_days": 590,
+    "n_classified_events": 980
+  },
+  "research_no_cap": {
+    "ann_ret": 1.4757920093093606,
+    "sharpe": 4.747935050880706,
+    "max_dd": -0.09758299384761016,
+    "n_trades": 980,
+    "win_rate": 0.6357142857142857,
+    "total_net_pnl": 3723505.7309834515,
+    "total_cost": 0.0
+  },
+  "engine_pairs": {
+    "ann_ret": 0.0026780640607122655,
+    "sharpe": 0.014199275429778883,
+    "max_dd": -0.25256661303237793,
+    "n_trades": 432,
+    "win_rate": 0.4791666666666667,
+    "total_net_pnl": -1936.3012868046644,
+    "total_cost": 135035.0
+  },
+  "engine_bt_agg": {
+    "n_backtests": 145,
+    "sum_total_net_pnl": -142317.79940887855,
+    "sum_commission": 139167.660435,
+    "sum_slippage": 135665.0,
+    "sum_total_trades": 877
+  },
+  "match_stats": {
+    "matched": 8,
+    "research_only": 972,
+    "engine_only": 424
+  }
+}

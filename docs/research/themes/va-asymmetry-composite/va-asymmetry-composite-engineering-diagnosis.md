@@ -111,7 +111,7 @@ uv run python main.py backtest --mode single --strategy va_asymmetry_composite -
 
 ```bash
 cd /Users/gaolei/Documents/src/quant
-uv run python docs/workbench/va_mad_fix_full_backtest.py
+uv run python docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/scripts/va_mad_fix_full_backtest.py
 ```
 
 ### 4.2 数据流
@@ -153,7 +153,7 @@ uv run python docs/workbench/va_mad_fix_full_backtest.py
 
 ### 4.4 已有运行结果
 
-结果存档于 `docs/workbench/va_mad_fix_comparison/`：
+结果存档于 `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/`：
 
 | 指标 | 研究侧（新版） |
 |------|---------------|
@@ -259,11 +259,11 @@ def daily_atr_bps_sma(df, period=10):
 
 | 文件 | 路径 |
 |------|------|
-| 分类事件（新版） | `docs/workbench/va_mad_fix_comparison/events_new.parquet` |
-| 分类事件（旧版） | `docs/workbench/va_mad_fix_comparison/events_old.parquet` |
-| 交易记录（新版） | `docs/workbench/va_mad_fix_comparison/trades_new.parquet` |
-| 交易记录（旧版） | `docs/workbench/va_mad_fix_comparison/trades_old.parquet` |
-| 指标 JSON（新版） | `docs/workbench/va_mad_fix_comparison/metrics_new.json` |
-| 指标 JSON（旧版） | `docs/workbench/va_mad_fix_comparison/metrics_old.json` |
-| 对比总结 | `docs/workbench/va_mad_fix_comparison/summary.md` |
+| 分类事件（新版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/events_new.parquet` |
+| 分类事件（旧版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/events_old.parquet` |
+| 交易记录（新版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/trades_new.parquet` |
+| 交易记录（旧版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/trades_old.parquet` |
+| 指标 JSON（新版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/metrics_new.json` |
+| 指标 JSON（旧版） | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/metrics_old.json` |
+| 对比总结 | `docs/archive/strategy-research/2026/07/2026-07-13-va-asymmetry-engineering-fix/va_mad_fix_comparison/summary.md` |
 | 5m 行情数据 | `project_data/market_data/csv/*.tqsdk.5m.csv` |
