@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, cast
 import pandas as pd
 import pandera.pandas as pa
 from common.constants import COMMON_KLINE_INTERVALS
+from common.filename_parser import FilenameTemplateParser
 from common.schemas import KlineDataFrame, validate_backtest_consistency
 from common.types import BacktestResult
 from loguru import logger
@@ -181,32 +182,53 @@ class DataManager:
             return []
 
         data_regex = re.compile(pattern) if pattern else None
-        common_intervals = set(COMMON_KLINE_INTERVALS)
-        known_providers = set(list_sources())
+        parser = self._build_filename_parser()
 
         symbols: set[str] = set()
         for f in csv_dir.glob("*.csv"):
             if data_regex and not data_regex.search(f.name):
                 continue
-            symbols.add(self._parse_symbol_from_filename(f.stem, common_intervals, known_providers))
+            symbol = self._parse_symbol_from_filename(f.name, parser)
+            if symbol is not None:
+                symbols.add(symbol)
         return sorted(symbols)
+
+    def _build_filename_parser(self) -> FilenameTemplateParser:
+        """基于 `filename_template` 与已知 provider/interval 集合构建解析器。
+
+        `symbol` 字段本身可能含 `.`（如 `DCE.m2509`），因此需要用严格集合
+        锚定右侧字段，让正则从右向左切分。
+        """
+        template = self._get_filename_template()
+        providers = sorted(list_sources(), key=len, reverse=True)
+        intervals = sorted(COMMON_KLINE_INTERVALS, key=len, reverse=True)
+        field_patterns: dict[str, str] = {
+            # symbol 允许含 `.`，交给下游字段的严格集合锚定
+            "symbol": r".+",
+        }
+        if providers:
+            field_patterns["provider"] = "|".join(re.escape(p) for p in providers)
+        if intervals:
+            field_patterns["interval"] = "|".join(re.escape(i) for i in intervals)
+        return FilenameTemplateParser(template, field_patterns=field_patterns)
 
     def _parse_symbol_from_filename(
         self,
-        name: str,
-        common_intervals: set[str],
-        known_providers: set[str],
-    ) -> str:
-        """从文件名 stem 解析品种代码，兼容新旧 CSV 命名格式"""
-        parts3 = name.rsplit(".", 2)
-        if len(parts3) == 3 and parts3[-1] in common_intervals and parts3[1] in known_providers:
-            return parts3[0]
-
-        parts2 = name.rsplit(".", 1)
-        if len(parts2) == 2 and parts2[-1] in common_intervals:
-            return parts2[0]
-
-        return name
+        filename: str,
+        parser: FilenameTemplateParser | None = None,
+    ) -> str | None:
+        """基于 `filename_template` 反向解析品种代码；无法识别时记录日志并返回 None。"""
+        if parser is None:
+            parser = self._build_filename_parser()
+        parsed = parser.parse(filename)
+        if parsed is None or "symbol" not in parsed:
+            logger.warning(
+                "无法从模板解析文件名: {} (template={})",
+                filename,
+                parser.template,
+            )
+            return None
+        return parsed["symbol"]
 
     def get_symbol_info(self, symbol: str) -> SymbolInfo:
         """获取品种的详细元数据信息

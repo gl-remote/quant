@@ -14,6 +14,7 @@ common — 通用纯函数工具层
   - types:         全局类型别名 (TradeAction, PositionDirection)
 """
 
+from .filename_parser import FilenameTemplateParser
 from .formatting import ensure_float, format_float, format_pct
 from .formulas import calculate_fifo_profit
 from .metrics import calc_max_drawdown, calc_sharpe_ratio
@@ -43,6 +44,8 @@ __all__ = [
     "format_pct",
     "format_float",
     "ensure_float",
+    # 文件名解析
+    "FilenameTemplateParser",
     # Schema 定义
     "KlineSchema",
     "DailyReturnSchema",
