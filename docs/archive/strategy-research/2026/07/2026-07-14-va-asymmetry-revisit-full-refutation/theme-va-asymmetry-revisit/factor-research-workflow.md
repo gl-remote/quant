@@ -172,6 +172,12 @@
 - **F-10** T1 治理裁剪（P8/P9 空间接近 0）
 - **F-11** "6-tier = 6 独立信号等权" 假设（tier 间事件重叠率过高）
 - **F-12** ATR 扁平成本模型（h>12h 会翻转，被 realistic 取代）
+- **F-13** signed A3_skew 一阶方向 alpha（H-1 主假设，pooled IC 全 horizon ∈ [-0.03, 0.01]，CI 全跨 0，跨品种一致性 45–60%；kf:va-asymmetry-revisit#KF-1）
+- **F-14** signed A3_skew top/bottom 20% × ATR 三档直接下注策略（3×2×6=36 格 0 通过；kf:va-asymmetry-revisit#KF-2）
+- **F-15** 6-tier "组合等权" 复合策略（causal 修复下年化 -73% / Sharpe -0.86 / DD -178%，空头 tier 全反向拖累；kf:va-asymmetry-revisit#KF-6）
+- **F-16** va-asymmetry-composite 原空头单机制假设（S_seg12_high_dn 在 causal 版下反向：net 10h +0.29% p=0.002，"崩盘前奏"叙事不成立；kf:va-asymmetry-revisit#KF-7）
+- **F-17** Causal L_seg2 单信号 6-10h 长持仓策略（40 合约 Sharpe 1.44 但扩样至 145 合约后 Sharpe 0.08 / 年化 3.4% / DD -64.6%，被随机 40 抽样诊断证实为选样偏差极右尾；kf:va-asymmetry-revisit#KF-9）
+- **F-18** Skew 派生特征全家族（7 大类：|skew|→波动率/range/drawdown、短窗 4h/8h/24h、Δskew、cross-sectional rank、skew×trend、persistence 过滤；145 合约 55k events 上 70 组 pair 广度扫描，|IC| 最强 -0.022，通过门槛 0；kf:va-asymmetry-revisit#KF-12）
 
 出处：`archive:2026-07-13-va-asymmetry-leak-chain-consolidated` 各子批次。
 

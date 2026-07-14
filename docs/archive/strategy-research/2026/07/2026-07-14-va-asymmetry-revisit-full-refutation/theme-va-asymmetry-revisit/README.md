@@ -1,6 +1,8 @@
 # va-asymmetry-revisit · 主题目录索引
 
-> **主题定位**：从已归档的 `archive:2026-07-13-va-asymmetry-leak-chain-consolidated` 错误链条中，**分离出两份可复用资产**——(1) 一条决策链条明确的**因子研发流程**（每个节点都在这条 6 天路径上拿到过收敛证据），(2) 一份**未验证 alpha 猜想集**（去掉泄漏后仍需重做因果版验证的假设）。
+> **Frozen 2026-07-14** · 本主题连同 va-asymmetry 家族**彻底废弃**，不再作为独立候选研究方向。原目录 `docs/research/themes/va-asymmetry-revisit/` 已整包搬入本 archive 批次的 `theme-va-asymmetry-revisit/` 子目录。批次入口见上级 `README.md` / `session-summary.md` / `va-asymmetry-family-retrospective.md`。
+>
+> **主题定位（历史）**：从已归档的 `archive:2026-07-13-va-asymmetry-leak-chain-consolidated` 错误链条中，**分离出两份可复用资产**——(1) 一条决策链条明确的**因子研发流程**（每个节点都在这条 6 天路径上拿到过收敛证据），(2) 一份**未验证 alpha 猜想集**（去掉泄漏后仍需重做因果版验证的假设）。
 >
 > **前置背景**：va-asymmetry 系列（poc-value-area-asymmetry / va-asymmetry-composite / va-asymmetry-composite-mathspec）7 个批次因 daily 特征 `A3_skew_spec / daily_atr_spec / trend_ret_M_spec / close_session` 在 `event_date` merge 前未 shift(1) 而全部作废——**数字结论作废，但流程节点与部分假设不作废**。本主题只承担"资产分离"，不承担为原策略翻案。
 >

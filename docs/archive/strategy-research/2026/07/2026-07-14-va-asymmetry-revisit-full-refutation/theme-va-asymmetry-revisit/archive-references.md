@@ -4,6 +4,14 @@
 
 ## 主要参考归档
 
+### archive:2026-07-14-va-asymmetry-revisit-full-refutation
+- 关系类型：**主题自身产出批次（Self-archive）· 主题最终证伪归档**
+- 说明：本主题一日 4 轮因果版实验的完整归档，产出 KF-1~KF-12（撤销 KF-5）+ F-13~F-18 + 3 条可跨主题复用的方法论范式（因果性铁证 · 选样偏差诊断 · "含信息 ≠ 可交易 alpha" 三门槛）。本批次归档后建议整体冻结进 `themes-frozen/va-asymmetry/`。
+- 关键锚点：
+  - `archive:2026-07-14-va-asymmetry-revisit-full-refutation#session-summary` · 一日 4 轮实验顶层总览
+  - `archive:2026-07-14-va-asymmetry-revisit-full-refutation#va-asymmetry-family-retrospective` · 8+ 天全周期复盘 + 5 条系统性错误 + 6 条 skill 补丁建议
+  - `archive:2026-07-14-va-asymmetry-revisit-full-refutation#raw-workbench/expanded-report` · 因果性铁证 + 选样偏差诊断的核心报告
+
 ### archive:2026-07-13-va-asymmetry-leak-chain-consolidated
 - 关系类型：**证伪源 + 方法论遗产 + 假设候选来源**
 - 说明：本主题的**唯一直接前身**。7 个子批次的错误链条被证明因 daily 特征未来信息泄漏而作废；但本主题从中提炼出 H-系列可回收假设、F-系列已证伪档案、M-系列方法论遗产（详见 [research-status.md §5-§7](research-status.md#5-候选可回收假设清单h-系列未验证)）。
