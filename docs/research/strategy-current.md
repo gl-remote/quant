@@ -1,7 +1,7 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**va-asymmetry-revisit 立题态（2026-07-13）** · 从 leak-chain 错误路径中回收候选假设 · 尚未开始实验 · poc-value-area-asymmetry 主题已整体归档 · structural-shaping-alpha 保留为工具资产 · value-area 家族全部冻结
+> 状态：**无活跃策略主题（2026-07-14）** · va-asymmetry-revisit 已因假设全线证伪彻底废弃归档 · va-asymmetry / value-area 两大家族全部证伪 · structural-shaping-alpha 保留为工具资产
 > 最近更新：2026-07-13
 > 归档批次：[archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)（**必读**）
 > 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
@@ -52,7 +52,7 @@ previously 冻结:
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **va-asymmetry-revisit** | **立题态（2026-07-13）** · 候选假设清单已梳理，尚未开始实验 · 从 leak-chain 错误路径中回收因果版仍可能成立的想法 | [themes/va-asymmetry-revisit/](./themes/va-asymmetry-revisit/README.md) |
+| ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../archive/strategy-research/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 假设证伪归档（2026-07-13）** · 无独立 alpha · 主题目录已整体搬入归档批次 | [archive:...leak-chain-consolidated/theme-va-asymmetry-composite/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/) |
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
@@ -61,7 +61,7 @@ previously 冻结:
 
 家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md)
 
-**当前活跃策略主题**：va-asymmetry-revisit（立题态，仅候选假设清单已就绪，尚未开始实验）。工具/方法论主题保留：
+**当前活跃策略主题**：无（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。工具/方法论主题保留：
 
 - 分类器结构参考（数字作废，仅结构可继承，**已归档**）：archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/
 - 塑形工具资产：`docs/research/themes/structural-shaping-alpha/`
@@ -116,17 +116,12 @@ poc_va_asymmetry_classifier_v4
 
 ## 5. 下一步
 
-**当前活跃主题：va-asymmetry-revisit**（立题态）。近期路径：
+**当前无活跃策略主题**（va-asymmetry-revisit 于 2026-07-14 因假设全线证伪彻底废弃归档，详见 [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../archive/strategy-research/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md)）。近期路径：
 
-1. **与用户对齐候选假设首批验证优先级**：见 [theme:va-asymmetry-revisit#research-status](./themes/va-asymmetry-revisit/research-status.md) §5 候选可回收假设清单（H-1 ~ H-17 + E-1 ~ E-3 + M-系列方法论遗产）；
-2. **对齐后填充 experiment-plan.md**：确定候选矩阵与验证顺序（沿用 M-7 P0-P9 十阶段模板，轴顺序由 H-系列决定）；
-3. **必要工具**：截断法（M-3）、双管线互验（M-15）、cluster bootstrap（M-1）、FDR（M-2）、(contract, event_date) Gate 1 去重（E-1）、hourly N=1 默认粒度（E-2）；
-4. **失败回溯**：若首批候选全部 0/N 通过因果版验证，直接判死本主题并归档；不为原策略翻案。
-
-补充可能方向（当前不作为主线）：
-
-- 立新主题（跳过 va-asymmetry 家族），基于 structural-shaping-alpha 工具资产 + 全新 alpha 源；
-- 暂停策略研究，只维护现有工程侧代码基础设施与工具资产。
+1. **强烈推荐先读复盘**：[archive:2026-07-14-va-asymmetry-revisit-full-refutation#va-asymmetry-family-retrospective](../archive/strategy-research/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/va-asymmetry-family-retrospective.md) · 5 条系统性错误 + 6 条 skill 补丁建议（Barra 单因子 pipeline 局限 · 广度优先失守 · Sharpe 2.70 未触发 sanity check 等），任何新主题立题前必读；
+2. **立新主题**：跳过 va-asymmetry 家族，基于 structural-shaping-alpha 工具资产 + 全新 alpha 源；若采用 Barra 单因子路径必须先按复盘 §六 A-F 六条补丁武装；
+3. **可选替代方向**：多因子 ML 合成（30-50 raw 因子 → LightGBM → 组合优化）· 需另立新主题；
+4. **暂停策略研究**：只维护现有工程侧代码基础设施与工具资产。
 
 **任何新主题必须遵守的方法论前置约束**（继承自 value-area 家族 + va-asymmetry 家族证伪 + 前序主题教训）：
 
@@ -173,15 +168,15 @@ poc_va_asymmetry_classifier_v4
 ## 7. 给 AI 的工作规则
 
 ```text
-1. 先读本文件确认当前活跃主题为 va-asymmetry-revisit（立题态）；
-2. 必读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README
-   了解 va-asymmetry 家族错误路径的完整证伪与方法论遗产；
-3. 必读 theme:va-asymmetry-revisit#research-status
-   了解本主题当前的候选可回收假设清单与 F/M 系列档案；
+1. 先读本文件确认**当前无活跃策略主题**（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）；
+2. 必读 archive:2026-07-14-va-asymmetry-revisit-full-refutation#va-asymmetry-family-retrospective
+   了解 va-asymmetry 家族 8+ 天全周期复盘 · 5 条系统性错误 · 6 条 skill 补丁建议 · 任何新主题立题前必读；
+3. 必读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README
+   了解 va-asymmetry 家族错误路径链条与方法论遗产；
 4. 若继续研究策略：
-   - 首选：推进 va-asymmetry-revisit 主题下一步（与用户对齐候选优先级 → 填充 experiment-plan）；
-   - 若立新主题 → 跳过 va-asymmetry 家族，从其他 alpha 源起，
-     且立题第一步必须跑截断法泄漏检测；
+   - **不允许**继续 va-asymmetry 家族任何研究方向（已彻底废弃）；
+   - 立新主题必须跳过 va-asymmetry / value-area 两个家族已证伪的方向；
+   - 立题第一步必须跑截断法泄漏检测（KF-11 因果性铁证四层证据链）；
 5. 遵守 §5 的 12 条方法论前置约束（第 12 条：涉及 daily 特征聚合的必须先过截断法）；
 6. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
 7. 不要在冻结/归档主题目录下增加新实验（含
