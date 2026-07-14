@@ -220,7 +220,7 @@ description: "Quantitative strategy research methodology: validation order, evid
 
 - **poc-value-area-asymmetry KF-22**（首次论证并冻结）：分类器 rank 单位
   必须 per-contract · 严格 date-cluster bootstrap · 详见
-  `docs/workbench/poc-value-area-asymmetry-stage3-robustness.md` §12.12
+  `archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-08-poc-va-asymmetry#stage3-robustness` §12.12
 - 未来主题遇到"数据不足想池化"时 · 必须先复读 KF-22 反证实验 · 再决定
 
 ## 10. "过拟合" vs "制度依赖" 辨析
@@ -262,7 +262,7 @@ description: "Quantitative strategy research methodology: validation order, evid
 
 - **poc-value-area-asymmetry KF-23**（首次揭露）：段 3·未及前低 疑似过拟合 ·
   拆分 ATR 制度后发现在"ATR 低"下 3/3 品种保留 · 是真甜蜜点。详见
-  `docs/workbench/poc-value-area-asymmetry-stage3-robustness.md` §13
+  `archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-08-poc-va-asymmetry#stage3-robustness` §13
 - 阶段 3 揭示 · 多头存在 **5 个"分位 × ATR"稳定甜蜜点** · 而非单一主线
 - 阶段 4 起 · 分类器可细化到"分位 × 制度"tier
 

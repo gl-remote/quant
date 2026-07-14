@@ -1,11 +1,15 @@
 # poc-value-area-asymmetry · 主题
 
+> ⚠️ **已归档只读（2026-07-13）** · 本主题作为 va-asymmetry 错误链条的上游被整体归档到 `archive:2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/`。所有性能类数字结论（Stage 1-4 各 tier 单笔 IR / 品种保留率 / FDR / Bonferroni 通过量、A 级白名单 6 档、A- 级白名单 3 档）均基于 daily 特征 `A3_skew_spec / daily_atr_spec / trend_ret_M_spec` 未来信息泄漏——**数字全部作废**。可继承的仅是方法论框架（cluster bootstrap · Bonferroni · 7 层严格判据 · 分类器 v4.0 6 阵营坐标切分结构本身）。详见 [封装批次 README](../README.md) 与 [future-info-leak-verification](../2026-07-13-va-asymmetry-future-info-leak/future-info-leak-verification.md)。
+>
+> 后续研究入口：`theme:va-asymmetry-revisit`（从本错误链条中分离出的因子研发流程与未验证猜想集）。
+
 > 类型：Theme / 交易背景分类器
-> 状态：**阶段 1+2+3 完成 · 分类器契约 v2.0 冻结（数学契约与参数选择分离）· 23 条 KF · 阶段 4 待启动**
+> 状态：**已归档（2026-07-13）** · 原状态"阶段 1+2+3 完成 · 分类器契约 v2.0 冻结 · 23 KF" 数字全部作废
 > 创建时间：2026-07-07
-> 最近更新：2026-07-08
-> 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
-> 前置反例：[value-area 家族全部冻结](../../themes-frozen/value-area/README.md)
+> 最近更新：2026-07-13（归档）
+> 上游 Roadmap：[Structural Alpha 长期共识框架](../../../../../../roadmap/strategy-research-framework.md)
+> 前置反例：[value-area 家族全部冻结](../../../../../../research/themes-frozen/value-area/README.md)
 > 前置铺垫：theme:structural-shaping-alpha · archive:2026/07/2026-07-06-structural-shaping-alpha-stage1
 
 ## 1. 主题问题

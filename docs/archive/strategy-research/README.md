@@ -8,6 +8,7 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
+| 2026-07-14 | va-asymmetry-revisit | **主题最终证伪归档**：一日 4 轮因果版实验（H-1 一维 IC / Causal 6-tier / 扩样 145 合约 / Skew 派生 7 大类）· 145 合约 55,877 events · 全线证伪 · 因果性铁证 max_abs_diff=0 · 选样偏差诊断证明 L_seg2 疑似 alpha 是 top 1.5% 极右尾 · 附 8+ 天全周期复盘 + 6 条 skill 补丁建议 | ❌ 证伪 · 🧪 方法论 · ⚠️ 复盘 |
 | 2026-07-13 | va-asymmetry-composite | **⚠️ 错误路径链条归并封装**：07-08 ~ 07-13 共 7 个 va-asymmetry 系列批次因共享同一条泄漏 daily 特征管道，所有性能类数字结论作废；封装为单一批次 `2026-07-13-va-asymmetry-leak-chain-consolidated/`，顶层 README 列出保留的方法论遗产与作废清单。**引用任何子批次前必读封装 README** | ❌ 证伪 · 🧪 方法论 · 🔒 数字作废 |
 | 2026-07-06 | structural-shaping-alpha | 结构塑形阶段 1：DirRandom 下无独立 alpha 证伪；产出 9 条 KF + First-Passage Designer 工具遗产 | ❌ 证伪 · 🧪 方法论 |
 | 2026-07-05 | value-area | value-area-rolling-reacceptance 主题冻结：POC 特殊性 / rolling 独立价值 / reacceptance 触发器 / 距离档 edge 全部证伪 | ❌ 证伪 · 🧪 方法论 |
