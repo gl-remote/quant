@@ -41,9 +41,19 @@ previously 冻结:
 边界：
 
 ```text
-1. value_area_reacceptance_baseline 只保留为历史 baseline，不再作为候选策略；
-2. value_area_random_baseline 作为长期随机入场基准保留；
+1. value_area 家族（reacceptance_baseline / random_baseline / multi_attempt_poc_reversion）
+   已于 2026-07-15 从 workspace/strategies 归档到
+   archive:2026-07-05-value-area-rolling-reacceptance-freeze/raw-strategies/，
+   不再作为工程侧可运行策略；若需复现旧规则应从归档目录重新引入最小实现，
+   而不是复制回 active 目录；
+2. structural-alpha R2-R6 五个原始结构策略（prevday_reacceptance / prevday_volume_filter /
+   volume_shock_boundary / hourly_liquidity_sweep / low_volatility_restart）
+   已于 2026-07-15 归档到
+   archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/，
+   随机对照阶段已完成，不再维护；
 3. va-asymmetry-composite 主题目录已整体归档到 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/；
+   工程侧 va_asymmetry_composite_strategy.py 于 2026-07-15 一并归档到该批次的
+   2026-07-10-va-asymmetry-composite/raw-strategies/；
 4. poc-value-area-asymmetry 主题目录已整体归档到 archive:2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/，Stage 1-4 数字全部作废，仅方法论/分类器结构可作参考；
 5. 若要延续 va-asymmetry 假设，必须先重建因果版 daily 特征管道（三条候选路径见封装 README §五）。
 ```
@@ -71,28 +81,12 @@ previously 冻结:
 保留代码：
 
 ```text
-value_area_reacceptance_baseline
-- 旧 value_area_reacceptance 实现的 baseline 版本；
-- 用于历史复现（R27-R29 旧规则、结构诊断、随机基准对照）；
-- 不再代表当前候选交易策略。
-
-value_area_random_baseline
-- 长期随机入场基准；
-- 在 VA baseline 的事件、止损和退出口径上随机化入场；
-- 用于判断结构入口是否优于随机。
-
 structural_shaping_toolkit
 - structural-shaping-alpha 主题保留的工具资产（非独立策略）；
 - 包含 First-Passage Designer（SL/TP/TH 参数扫描）、ν_implied 归因、真实成本模型
   （滑点 0.15 ATR × (0.5+SlippageTier) + 手续费 0.03% 双边）、
   Cluster bootstrap、跨周期稳健性检验（KF-1 至 KF-7）；
 - 位置：research/themes/structural-shaping-alpha/ 下组件脚本。
-
-va_asymmetry_composite_strategy
-- va-asymmetry-composite 主线策略（**已证伪**，代码仍保留在
-  workspace/strategies/ 供参考实现细节 + 因果修复后回测）；
-- 状态：因果修复后 -38.25% 年化 / -1.60 夏普 / 1018 笔，无实盘上线价值；
-- 位置：workspace/strategies/va_asymmetry_composite_strategy.py。
 
 poc_va_asymmetry_classifier_v4
 - poc-value-area-asymmetry 主题（**已归档**）的分类器 v4.0 实现（组件级）；
@@ -101,6 +95,23 @@ poc_va_asymmetry_classifier_v4
   已作废（依赖泄漏的 A3_skew_spec / daily_atr_spec / trend_ret_M_spec）；
 - 位置：workspace/strategies/classifiers/poc_va.py（长期代码）。
 ```
+
+已归档策略代码（不再位于 `workspace/strategies/`，仅可从 archive 目录参考）：
+
+```text
+va_asymmetry_composite_strategy      → archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-10-va-asymmetry-composite/raw-strategies/
+value_area_reacceptance_baseline     → archive:2026-07-05-value-area-rolling-reacceptance-freeze/raw-strategies/
+value_area_random_baseline           → archive:2026-07-05-value-area-rolling-reacceptance-freeze/raw-strategies/
+value_area_multi_attempt_poc_reversion → archive:2026-07-05-value-area-rolling-reacceptance-freeze/raw-strategies/
+prevday_reacceptance                 → archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/
+prevday_volume_filter                → archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/
+volume_shock_boundary                → archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/
+hourly_liquidity_sweep               → archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/
+low_volatility_restart               → archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/
+```
+
+工程侧当前仍在 `workspace/strategies/` 长期维护的策略：`ma_strategy`、`atr_strategy`
+（骨架/示例策略，供切面 DSL 与运行时框架回归使用），以及 `classifiers/poc_va` 组件。
 
 ## 4. 关键归档结论（历史备忘）
 
