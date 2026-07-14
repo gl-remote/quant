@@ -391,12 +391,10 @@ DirRegress / overlap\_control 等）目的是**验证阶段 1 通过的组合是
 | 子条件              | 前置资源                                  | 当前状态                                  |
 | ---------------- | ------------------------------------- | ------------------------------------- |
 | 2a 方向 alpha × 塑形 | 需要"已通过 DirRandom 方向 gatekeeper"的入场事件源 | ⏸ 无（value-area 家族已冻结证伪，暂无可用 baseline） |
-| 2b 跨周期 × 塑形      | 15m / 1h / 日线数据落库（每周期 20 合约）          | ✅ 5m 全部到位，长周期需要 fetch                 |
-| 2c 波动率制度 × 塑形    | 阶段 1 主 CSV（已有） + 制度分位分层脚本             | ✅ 就绪                                  |
+| 2b 跨周期 × 塑形      | 15m / 1h / 日线数据落库（每周期 20 合约）          | ✅ **已完成 (2026-07-14 · KF-14)**            |
+| 2c 波动率制度 × 塑形    | 阶段 1 主 CSV（已有） + 制度分位分层脚本             | ✅ **已完成 (2026-07-14 · KF-11)**                     |
 
-**优先级建议**：**2c > 2b > 2a**。2c 用现成数据几秒可跑；2b 需要
-数据 fetch 但仍独立；2a 必须等到未来某个方向 alpha 主题通过 gatekeeper
-后再挂载（预计跨主题，中长期）。
+**优先级建议**（2b、2c 已完成后）：仅剩 2a，且被动依赖上游 alpha 主题事件源。
 
 ### 2a · 入场方向 alpha × 塑形交互
 
@@ -418,7 +416,19 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 **触发**：等待未来方向 alpha 主题产出可用事件源；本阶段挂起。
 
-### 2b · 跨周期 × 塑形交互（远距 tail 探索）
+### 2b · 跨周期 × 塑形交互（远距 tail 探索） ✅ 已完成 (2026-07-14)
+
+**结论**：证伪。详见 [first-passage-theory-and-evidence.md §2.10](first-passage-theory-and-evidence.md) 与 KF-14。
+
+**摘要**：tqsdk 补齐 20 合约 × {15m, 1h} 原始数据（26 次 export），boundary_explorer 加 --interval 参数在三周期上重跑 65 combo 网格。8 关键 combo × 3 周期 = 24 行归因：短期区 (K_S ≤ 1.5) 11/12 行 |z|<2 martingale 精确成立；K_S=4/RR=2 三周期 time_exit% ≈ 31.80/31.82/32.29（几乎完全一致），**塑形失效机制与周期无关**；|ν/σ| 极值 0.062 远低于 KF-9 阈值 0.10。阶段 2b 原假设"长周期 tail 放大"证伪。
+
+**脚本**：[raw-scripts/cross_period_stratifier.py](raw-scripts/cross_period_stratifier.py) · [raw-scripts/first_passage_boundary_explorer.py](raw-scripts/first_passage_boundary_explorer.py)（--interval 参数）
+**数据**：`project_data/research/first_passage_boundary/{boundary_explorer_realcost_15m,boundary_explorer_realcost_1h,cross_period_stratified}_*.{json,csv}`
+
+---
+
+<details>
+<summary>原方案（供追溯）</summary>
 
 **假设**：阶段 1 SCALE=5 已初见"远距趋势 tail 让 C/D mean 微正"的方向
 证据（realistic-cost 下 +0.01\~+0.04 ATR/笔，工业意义低）。在 5m 上远距
@@ -451,7 +461,21 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 **输出**：workbench `structural-shaping-alpha-stage2b-crossperiod.md`
 
-### 2c · 波动率制度 × 塑形交互
+</details>
+
+### 2c · 波动率制度 × 塑形交互 ✅ 已完成 (2026-07-14)
+
+**结论**：证伪。详见 [first-passage-theory-and-evidence.md §2.7](first-passage-theory-and-evidence.md) 与 KF-11。
+
+**摘要**：8 关键 combo (K_S∈{1.0,1.5,2.5,4.0} × RR∈{1.0,2.0}) × per-symbol entry_atr 分位三档 = 24 行分层统计。短期区（K_S ≤ 1.5）12/12 行 martingale 精确成立；长期区偏离全部由 time_exit% 主导（K_S=4 高波档 time_exit=27%，是低波档 5.5% 的 5 倍），非波动率制度效应；所有档 |ν/σ| ≤ 0.030 且方向为负——**没有任何一档出现真实正漂移**。塑形不是「制度过滤器」，主命题从"平均证伪"升级为"分层证伪"。
+
+**脚本**：[raw-scripts/vol_regime_stratifier.py](raw-scripts/vol_regime_stratifier.py)
+**数据**：`project_data/research/first_passage_boundary/vol_regime_stratified_20260714_200710.{json,csv}`
+
+---
+
+<details>
+<summary>原方案（供追溯）</summary>
 
 **假设**：塑形规则可能只在特定波动率制度下有效——大 K\_T 组合在高波
 动率下更容易命中止盈，紧止损组合在低波动率下更少被噪声打飞。塑形
@@ -482,6 +506,8 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 **优先级**：**最先做**——成本最低，即时结论。
 
 **输出**：workbench `structural-shaping-alpha-stage2c-volregime.md`
+
+</details>
 
 ### 阶段 2 联合判决
 
@@ -526,10 +552,10 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 | 阶段              | 状态                | 计算量                        | 预估时间              |
 | --------------- | ----------------- | -------------------------- | ----------------- |
 | 阶段 1 gatekeeper | ✅ 完成（KF-1..5）     | 140 次回测 × 3 SCALE × 2 成本模型 | 已完成               |
-| 阶段 2c 波动率制度     | 就绪待启动             | 读现成 CSV                    | **约 10 秒**        |
-| 阶段 2b 跨周期       | 待 fetch 15m/1h 数据 | 15m/1h 各 140 次 × 3 SCALE   | 数据 fetch + 约 30 秒 |
+| 阶段 2c 波动率制度     | ✅ 完成（KF-11 · 2026-07-14）     | 读现成 CSV + 分位分层             | 已完成 (~10 秒)     |
+| 阶段 2b 跨周期       | ✅ 完成（KF-14 · 2026-07-14） | 26 次 export + 3 周期 boundary explorer | 已完成 (~10 分钟) |
 | 阶段 2a 方向 × 塑形   | ⏸ 挂起（等 alpha 主题）  | 视 baseline 事件数             | 中长期               |
-| 阶段 3 稳健性        | 仅在 2a/b/c 任一通过后启动 | \~2,000 次回测                | 2-4 小时            |
+| 阶段 3 稳健性        | 仅在 2a 通过后启动 | \~2,000 次回测                | 2-4 小时            |
 
 **任一阶段判决完成后，若无通过条件，冻结主题并归档 KF**。
 
