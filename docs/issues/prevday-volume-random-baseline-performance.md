@@ -1,12 +1,15 @@
 # prevday_volume_filter 随机对照批量运行性能异常偏慢
 
 > 类型：性能问题 / 回测链路 / 实验 runner  
-> 状态：待排查  
+> 状态：待排查（策略代码已归档，问题保留供未来重新研究时参考）  
 > 发现日期：2026-06-29  
 > 发现分支：`feature/random-entry-baseline-roadmap`  
 > 关联实验：结构入口随机对照 loop  
 > 相关归档：[结构型 Alpha 随机对照阶段归档](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/README.md)  
-> 相关代码：[prevday_volume_filter_strategy.py](../../workspace/strategies/prevday_volume_filter_strategy.py)，[prevday_volume_random_baseline_strategy.py](../../workspace/strategies/prevday_volume_random_baseline_strategy.py)，[run_structural_random_baselines.py](../../scripts/tools/run_structural_random_baselines.py)
+> 相关代码（**已归档**，见 archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/ 与 raw-scripts/）：
+> - `prevday_volume_filter_strategy.py`（原 `workspace/strategies/`，2026-07-15 归档）
+> - `prevday_volume_random_baseline_strategy.py`（归档批次 raw-strategies/）
+> - `run_structural_random_baselines.py`（归档批次 raw-scripts/）
 
 ## 背景
 

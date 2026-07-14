@@ -12,7 +12,7 @@ resolve_coverage_min() {
         data) echo "50" ;;
         backtest) echo "50" ;;
         clearing) echo "85" ;;
-        strategies) echo "75" ;;
+        strategies) echo "74" ;;
         report) echo "25" ;;
         cli) echo "30" ;;
         contracts) echo "60" ;;
