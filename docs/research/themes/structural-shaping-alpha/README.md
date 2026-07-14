@@ -188,12 +188,12 @@ value-area 家族失败于此假设的反面——一直在找入场 alpha，但
 | 目的 | 文档 |
 |------|------|
 | 主题入口 | 本文件 |
+| **核心论文（理论+实证+实现）** | **[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md)** |
 | 当前研究状态 | [research-status.md](research-status.md) |
 | 实验计划 | [experiment-plan.md](experiment-plan.md) |
 | Archive 引用清单 | [archive-references.md](archive-references.md) |
-| 数学规格 | 尚未撰写（阶段 1 通过后按 quant-math-spec 补） |
 | 参数选择规格 | 尚未撰写（阶段 2 通过后补） |
-| 工程实现细节 | 尚未撰写（进入 S0-S6 后补） |
+| 工程实现细节 | 见论文 Part IV（已吸收 math-spec 实现指南） |
 | 家族反例（value-area）| [../../themes-frozen/value-area/README.md](../../themes-frozen/value-area/README.md) |
 | 长期框架 | [../../../roadmap/strategy-research-framework.md](../../../roadmap/strategy-research-framework.md) |
 
@@ -217,6 +217,8 @@ value-area 家族已证伪的四条假设：
 
 ## 11. 分支管理
 
-- 开发分支：`experiment/structural-shaping-alpha`
-- 分支基点：`dev/0.5` @ `7f9c2a9`（2026-07-05 立题时）
-- 实现提交 hash：待记录（首次实验后回填）
+| 阶段 | 开发分支 | 分支基点 | 状态 |
+|------|---------|---------|------|
+| Phase 1 gatekeeper | `experiment/structural-shaping-alpha` | `dev/0.5` @ `7f9c2a9` | ✅ 完成 · 已归档 |
+| Phase 2 (2b/2c) 重启 | `experiment/structural-shaping-alpha-phase2` | `dev/0.6` @ `294c989` | 🔄 进行中（2026-07-14 重启） |
+| Phase 2a（下游） | 由 `va-asymmetry-composite` 拉起 | — | ⏸ 挂起 |
