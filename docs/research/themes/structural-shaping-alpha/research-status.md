@@ -139,7 +139,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 | 2026-07-14 | **KF-15 Fourier 精确解四重扎实化 + KF-17 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.13 + [raw-scripts/fourier_finite_time_test.py](raw-scripts/fourier_finite_time_test.py)。用 Fourier 级数精确解 P_win(T) = (2/π) Σ (−1)^{n+1}/n · sin(nπK_S/L) · (1−exp(−n²π²σ²T/(2L²))) 替代 T=∞ 近似作为 null。K_S=0.5/RR=5 三周期有限时间修正 P_win_finiteT − P_win_∞ **全部为负**（−0.011/−0.002/−0.002）——残余真实 alpha 反而**大于** T=∞ 偏离（+0.035/+0.066/+0.054）。K_S=1/RR=1 martingale 参照实测与理论差 −0.0005（1e-3 精度），Fourier 解通过独立验证。P(τ>T) 理论 vs 实测差成为独立漂移探测器。**KF-15 强度不降反升**——Fourier + 事件级 CI + 分布 skew + Hurst 四种独立方法一致支持真实方向漂移 |
 | 2026-07-14 | **全套扎实化 + 已有结论重检**：见 [shaping-theory.md](shaping-theory.md) §2.14/§2.15/§2.16 + 3 个新脚本（recheck_kf11_fourier / drift_detector_full_scan / K_S<1 极端扫描）。**KF-11 归因语言修正**（Fourier null 下 14/24 行符号翻转，隐藏正漂移，Doob 保证 E_gross=0）；**KF-14 强化**（跨周期不变性由真实漂移主动补偿）；**KF-6 收窄**（K_S∈[1.0, 1.5] 暗物质带）；**KF-15 从边界扩展为 K_S<1 系统微 alpha 区**（60 行 5m 上 20/20 显著，z_new 极值 +105.77）；**KF-18 沉淀** 双通道漂移探测器全 195 combo 校准表。**主题最终封闭于 9 维网格**，工业结论不变 |
 | 2026-07-14 | **H4 跨周期趋势泄漏实证 + KF-19 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.17 + [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py)。读 5m trades 按 1h EMA20 判断入场时刻 1h 趋势方向，分 aligned/opposed 组重算。K_S=4/RR=2 @ 5m aligned P_win=0.2151 vs opposed=0.1789（Δ=+0.036, z=+3.19），**ΔE_gross=+0.488 ATR/笔**——6/6 关键 combo 全部显著。K_S=1/RR=1 martingale 参照 DirRandom 下精确（P_win=0.4963），方向筛选下打破（aligned=0.5461/opposed=0.4490）。**塑形从"独立 alpha"重定位为"跨周期趋势泄漏的兑现工具"**，阶段 2a 从抽象等 alpha 变为具体等一个 1h 趋势信号；工业实现需 c_side ≤ 0.15 ATR（当前 0.258） |
-| 2026-07-14 | **塑形物理本质定型 + KF-20 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.18。**塑形三定律**：（I）Doob 保守律 DirRandom 下即使零成本 E_gross≈0；（II）结构 alpha 兑现律 KF-15/16 通过塑形 barrier 从每 bar 微漂移累积到每笔 barrier 差；（III）方向 alpha 放大律 aligned 筛选打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型**：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具。主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升完成 |
+| 2026-07-14 | **塑形物理本质定型 + KF-20 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.21。**塑形三定律**：（I）Doob 保守律 DirRandom 下即使零成本 E_gross≈0；（II）结构 alpha 兑现律 KF-15/16 通过塑形 barrier 从每 bar 微漂移累积到每笔 barrier 差；（III）方向 alpha 放大律 aligned 筛选打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型**：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具。主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升完成 |
 
 ## 整合论文
 
@@ -394,7 +394,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-20 · 塑形三定律（主命题最终定型）
 - 类型：理论定型 · 主题总结
 - 状态：已证实（KF-1..19 完整证据链聚合）
-- 证据：[shaping-theory.md](shaping-theory.md) §2.18 · 主题所有前述 KF 与 §2.1-§2.17
+- 证据：[shaping-theory.md](shaping-theory.md) §2.21 · 主题所有前述 KF 与 §2.1-§2.17
 - 影响：**塑形工具的物理本质从三个层级严格定型**：
   **定律 I（Doob 保守律）**：DirRandom 方向下，任何 barrier 结构 (K_S, K_T, T) 都保证 E_gross ≈ 0。
   塑形本身不创造 alpha，即使零成本也不变（Doob 停时定理保证）。
