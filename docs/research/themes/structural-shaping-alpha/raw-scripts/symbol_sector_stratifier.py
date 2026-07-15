@@ -1,7 +1,7 @@
 """品种 / 板块归因分层器 · Symbol × Sector Attribution Stratifier.
 
 文件级元信息：
-- 创建背景：first-passage-theory-and-evidence.md §2.6.2 曾留下"per-symbol 分析列入 v2"
+- 创建背景：shaping-theory.md §2.6.2 曾留下"per-symbol 分析列入 v2"
   的欠账——现有实证是 20 品种聚合级 (n=4922)，仍需回答"是否有单一品种大幅背离
   martingale 恒等式主导了聚合结果？"以及"5 大板块是否结论一致？"。若答案都是否定的，
   主命题从"分层证伪 (vol × K_S × RR)"再升级为"品种一致证伪"。

@@ -188,7 +188,7 @@ value-area 家族失败于此假设的反面——一直在找入场 alpha，但
 | 目的 | 文档 |
 |------|------|
 | 主题入口 | 本文件 |
-| **核心论文（理论+实证+实现）** | **[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md)** |
+| **核心论文（理论+实证+实现）** | **[shaping-theory.md](shaping-theory.md)** |
 | 当前研究状态 | [research-status.md](research-status.md) |
 | 实验计划 | [experiment-plan.md](experiment-plan.md) |
 | Archive 引用清单 | [archive-references.md](archive-references.md) |

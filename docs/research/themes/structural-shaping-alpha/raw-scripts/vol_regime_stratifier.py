@@ -1,7 +1,7 @@
 """波动率制度分层器 · Volatility Regime Stratifier.
 
 文件级元信息：
-- 创建背景：first-passage-theory-and-evidence.md 已确认 FPT(λ=0) 在 20 品种聚合上
+- 创建背景：shaping-theory.md 已确认 FPT(λ=0) 在 20 品种聚合上
   精确成立（KF-10），但主命题「结构塑形无独立 alpha」仍是"平均意义证伪"。为把
   结论升级到"分层意义证伪"（排除"我们只是把 vol 档拉平均"这个 loose end），
   本脚本按 per-symbol entry_atr 分位切三档，检验各档 P_win 是否偏离 martingale。

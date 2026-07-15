@@ -418,7 +418,7 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 ### 2b · 跨周期 × 塑形交互（远距 tail 探索） ✅ 已完成 (2026-07-14)
 
-**结论**：证伪。详见 [first-passage-theory-and-evidence.md §2.10](first-passage-theory-and-evidence.md) 与 KF-14。
+**结论**：证伪。详见 [shaping-theory.md §2.10](shaping-theory.md) 与 KF-14。
 
 **摘要**：tqsdk 补齐 20 合约 × {15m, 1h} 原始数据（26 次 export），boundary_explorer 加 --interval 参数在三周期上重跑 65 combo 网格。8 关键 combo × 3 周期 = 24 行归因：短期区 (K_S ≤ 1.5) 11/12 行 |z|<2 martingale 精确成立；K_S=4/RR=2 三周期 time_exit% ≈ 31.80/31.82/32.29（几乎完全一致），**塑形失效机制与周期无关**；|ν/σ| 极值 0.062 远低于 KF-9 阈值 0.10。阶段 2b 原假设"长周期 tail 放大"证伪。
 
@@ -465,7 +465,7 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 ### 2c · 波动率制度 × 塑形交互 ✅ 已完成 (2026-07-14)
 
-**结论**：证伪。详见 [first-passage-theory-and-evidence.md §2.7](first-passage-theory-and-evidence.md) 与 KF-11。
+**结论**：证伪。详见 [shaping-theory.md §2.7](shaping-theory.md) 与 KF-11。
 
 **摘要**：8 关键 combo (K_S∈{1.0,1.5,2.5,4.0} × RR∈{1.0,2.0}) × per-symbol entry_atr 分位三档 = 24 行分层统计。短期区（K_S ≤ 1.5）12/12 行 martingale 精确成立；长期区偏离全部由 time_exit% 主导（K_S=4 高波档 time_exit=27%，是低波档 5.5% 的 5 倍），非波动率制度效应；所有档 |ν/σ| ≤ 0.030 且方向为负——**没有任何一档出现真实正漂移**。塑形不是「制度过滤器」，主命题从"平均证伪"升级为"分层证伪"。
 

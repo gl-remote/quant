@@ -129,21 +129,21 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 | 2026-07-09 | 登记下游主题 va-asymmetry-composite 引用（阶段 2a 拉起）；降级为"必要条件 + 工具资产层"；所有塑形/成本/归因参数视为 L2 冻结常量，供下游直接调用 |
 | 2026-07-14 | **重启**：阶段 1 结论（盈亏比/胜率被首达定理支配）已确认；开新分支 `experiment/structural-shaping-alpha-phase2`，启动阶段 2b（跨周期 tail）和 2c（波动率制度过滤器）扫描 |
 | 2026-07-14 | **首达定理边界探索器上线**：`raw-scripts/first_passage_boundary_explorer.py` (`schedule_barrier` → `run_barrier` 重命名)，扫描 `K_S × RR` 网格（13×5 combo × 20 品种）；双 null 框架：FPT(λ=0, P_win=1/(1+RR)) 作零假设，GBM(μ=0, λ=-1) 作对照基准；补充 μ_implied/ν_implied 反算 + T* 分区 + 双层 bootstrap CI |
-| 2026-07-14 | **双重 null 结论出炉**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) Part II + KF-10。FPT(λ=0) 全面碾压 GBM(μ=0)（50/65 combo，avg|Δ| 0.065–0.099 vs 0.141–0.333）。K_S=0.75–2.5 区间 FPT 偏差 <0.02，实测精确成立 martingale 恒等式。GBM μ=0 系统性低估 P_win（Itô 凸性 ν=−σ²/2 太负），价值仅限于作为保守下界 |
-| 2026-07-14 | **阶段 2c 波动率制度分层闭环**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.7 + KF-11。按 per-symbol entry_atr 分位切三档，8 关键 combo × 3 档 = 24 行分层统计。短期区 12/12 行 martingale 精确成立；长期区偏离全部由 time_exit% 主导，非波动率制度效应；所有档 \|ν/σ\| ≤ 0.030 且方向为负。**主命题从"平均证伪"升级为"分层证伪"**，脚本 [raw-scripts/vol_regime_stratifier.py](raw-scripts/vol_regime_stratifier.py) |
-| 2026-07-14 | **品种/板块归因闭环**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.8 + KF-12。板块级 5 sectors × 8 combo = 40 行 + 品种级 20 symbols × 8 combo = 160 行分层。板块级短期区 20/20 martingale 精确成立，长期区 5 板块**同向偏离**（|Δ| 与 time_exit% 单调正相关）；品种级 \|ν/σ\| 100% 覆盖率落在 KF-9 阈值 0.10 之内，极值 0.051。**主命题从"分层证伪"升级为"品种一致证伪"**，五维网格 (K_S × RR × vol × sector × symbol) 均无独立 alpha 生效。§2.6.2 "per-symbol v2 分析" 欠账兑现，脚本 [raw-scripts/symbol_sector_stratifier.py](raw-scripts/symbol_sector_stratifier.py) |
-| 2026-07-14 | **成本敏感性闭环**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.9 + KF-13。反算隐含单边成本 c_side≈0.258 ATR，8 关键 combo 扫描成本乘数 {0.0, 0.5, 1.0, 1.5, 2.0, 3.0}。K_S=1.0 两 combo \|mean_gross\| < 0.01 即使零成本；全部 combo breakeven 乘数 m\* < 1（当前成本已远超盈亏线，减半也救不回）；唯一零成本下 CI_lo > 0 的 K_S=4/RR=2 归因于 time_exit tail 分布，与 KF-6/KF-11 一致。**主题最终闭环于 6 维网格 (K_S × RR × vol × sector × symbol × cost_scale)**，脚本 [raw-scripts/cost_sensitivity_stratifier.py](raw-scripts/cost_sensitivity_stratifier.py) |
-| 2026-07-14 | **阶段 2b 跨周期 tail 闭环**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.10 + KF-14。tqsdk 补齐 20 合约 × {15m, 1h} 数据（26 次 export），boundary_explorer 加 --interval 参数后在三周期上重跑 65 combo 网格。8 关键 combo × 3 周期 = 24 行跨周期归因：短期区 (K_S ≤ 1.5) 11/12 行 |z| < 2 martingale 精确成立；K_S=4/RR=2 三周期 time_exit% 分别 31.80/31.82/32.29（几乎完全相同），**塑形失效机制与周期无关**——2b 原假设"长周期 tail 放大"证伪；\|ν/σ\| 极值 0.062 远低于 KF-9 阈值 0.10。**主题最终封闭于 7 维网格 (含周期维)**，脚本 [raw-scripts/cross_period_stratifier.py](raw-scripts/cross_period_stratifier.py) |
-| 2026-07-14 | **极端盈亏比补漏闭环**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.11 + KF-15。扩展 K_S × RR = {0.5..4.0} × {5, 8}，5m/15m/1h 三周期各重跑一次 boundary_explorer。12 combo × 3 周期 = 36 行归因：36/36 行 bootstrap CI 覆盖 0 → 工业级 alpha 一致证伪；但**首次记录 ν/σ = 0.117**（K_S=0.5/RR=5 @ 1h）突破 KF-9 阈值 0.10，P_win 正偏离在该通道跨三周期单调放大（z: 4.54 → 6.85 → 3.06），提示极小 barrier 下 GBM 假设本身不精确；但成本 c_side/K_S = 52% 直接吞噬所有微 edge——与 KF-8 精确对应。**主题最终封闭于 8 维网格（+极端 RR 边界维）**，脚本 [raw-scripts/extreme_rr_stratifier.py](raw-scripts/extreme_rr_stratifier.py) |
-| 2026-07-14 | **KF-15 三重扎实化 + KF-16 沉淀**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.12。三个独立扎实化脚本（kf15_significance_test / kf15_gbm_fit_test / hurst_stratifier）：(1) 事件级 cluster bootstrap 显示 K_S=0.5/RR=5 三周期 ν/σ CI 全排除 0（+0.0161/+0.0701/+0.1163）；(2) barrier 停时 skew 与 martingale 双峰理论对比，实测 skew 略小于理论（与 P_win 抬高完全自洽），证伪 GBM 伪影解释；(3) 20 合约 Hurst 指数跨周期上升（5m 0.542 → 1h 0.603，1h 上 19/20 合约 H>0.55），KF-16 "中国期货存在 Hurst 趋势凝聚"沉淀。σ 跨周期实测 3.04 < √12=3.46（子扩散）定量支持 H2。**KF-15 从"边界发现"升级为"真实微 alpha 通道"**，工业不可用条件不变 |
-| 2026-07-14 | **KF-15 Fourier 精确解四重扎实化 + KF-17 沉淀**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.13 + [raw-scripts/fourier_finite_time_test.py](raw-scripts/fourier_finite_time_test.py)。用 Fourier 级数精确解 P_win(T) = (2/π) Σ (−1)^{n+1}/n · sin(nπK_S/L) · (1−exp(−n²π²σ²T/(2L²))) 替代 T=∞ 近似作为 null。K_S=0.5/RR=5 三周期有限时间修正 P_win_finiteT − P_win_∞ **全部为负**（−0.011/−0.002/−0.002）——残余真实 alpha 反而**大于** T=∞ 偏离（+0.035/+0.066/+0.054）。K_S=1/RR=1 martingale 参照实测与理论差 −0.0005（1e-3 精度），Fourier 解通过独立验证。P(τ>T) 理论 vs 实测差成为独立漂移探测器。**KF-15 强度不降反升**——Fourier + 事件级 CI + 分布 skew + Hurst 四种独立方法一致支持真实方向漂移 |
-| 2026-07-14 | **全套扎实化 + 已有结论重检**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.14/§2.15/§2.16 + 3 个新脚本（recheck_kf11_fourier / drift_detector_full_scan / K_S<1 极端扫描）。**KF-11 归因语言修正**（Fourier null 下 14/24 行符号翻转，隐藏正漂移，Doob 保证 E_gross=0）；**KF-14 强化**（跨周期不变性由真实漂移主动补偿）；**KF-6 收窄**（K_S∈[1.0, 1.5] 暗物质带）；**KF-15 从边界扩展为 K_S<1 系统微 alpha 区**（60 行 5m 上 20/20 显著，z_new 极值 +105.77）；**KF-18 沉淀** 双通道漂移探测器全 195 combo 校准表。**主题最终封闭于 9 维网格**，工业结论不变 |
-| 2026-07-14 | **H4 跨周期趋势泄漏实证 + KF-19 沉淀**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.17 + [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py)。读 5m trades 按 1h EMA20 判断入场时刻 1h 趋势方向，分 aligned/opposed 组重算。K_S=4/RR=2 @ 5m aligned P_win=0.2151 vs opposed=0.1789（Δ=+0.036, z=+3.19），**ΔE_gross=+0.488 ATR/笔**——6/6 关键 combo 全部显著。K_S=1/RR=1 martingale 参照 DirRandom 下精确（P_win=0.4963），方向筛选下打破（aligned=0.5461/opposed=0.4490）。**塑形从"独立 alpha"重定位为"跨周期趋势泄漏的兑现工具"**，阶段 2a 从抽象等 alpha 变为具体等一个 1h 趋势信号；工业实现需 c_side ≤ 0.15 ATR（当前 0.258） |
-| 2026-07-14 | **塑形物理本质定型 + KF-20 沉淀**：见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.18。**塑形三定律**：（I）Doob 保守律 DirRandom 下即使零成本 E_gross≈0；（II）结构 alpha 兑现律 KF-15/16 通过塑形 barrier 从每 bar 微漂移累积到每笔 barrier 差；（III）方向 alpha 放大律 aligned 筛选打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型**：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具。主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升完成 |
+| 2026-07-14 | **双重 null 结论出炉**：见 [shaping-theory.md](shaping-theory.md) Part II + KF-10。FPT(λ=0) 全面碾压 GBM(μ=0)（50/65 combo，avg|Δ| 0.065–0.099 vs 0.141–0.333）。K_S=0.75–2.5 区间 FPT 偏差 <0.02，实测精确成立 martingale 恒等式。GBM μ=0 系统性低估 P_win（Itô 凸性 ν=−σ²/2 太负），价值仅限于作为保守下界 |
+| 2026-07-14 | **阶段 2c 波动率制度分层闭环**：见 [shaping-theory.md](shaping-theory.md) §2.7 + KF-11。按 per-symbol entry_atr 分位切三档，8 关键 combo × 3 档 = 24 行分层统计。短期区 12/12 行 martingale 精确成立；长期区偏离全部由 time_exit% 主导，非波动率制度效应；所有档 \|ν/σ\| ≤ 0.030 且方向为负。**主命题从"平均证伪"升级为"分层证伪"**，脚本 [raw-scripts/vol_regime_stratifier.py](raw-scripts/vol_regime_stratifier.py) |
+| 2026-07-14 | **品种/板块归因闭环**：见 [shaping-theory.md](shaping-theory.md) §2.8 + KF-12。板块级 5 sectors × 8 combo = 40 行 + 品种级 20 symbols × 8 combo = 160 行分层。板块级短期区 20/20 martingale 精确成立，长期区 5 板块**同向偏离**（|Δ| 与 time_exit% 单调正相关）；品种级 \|ν/σ\| 100% 覆盖率落在 KF-9 阈值 0.10 之内，极值 0.051。**主命题从"分层证伪"升级为"品种一致证伪"**，五维网格 (K_S × RR × vol × sector × symbol) 均无独立 alpha 生效。§2.6.2 "per-symbol v2 分析" 欠账兑现，脚本 [raw-scripts/symbol_sector_stratifier.py](raw-scripts/symbol_sector_stratifier.py) |
+| 2026-07-14 | **成本敏感性闭环**：见 [shaping-theory.md](shaping-theory.md) §2.9 + KF-13。反算隐含单边成本 c_side≈0.258 ATR，8 关键 combo 扫描成本乘数 {0.0, 0.5, 1.0, 1.5, 2.0, 3.0}。K_S=1.0 两 combo \|mean_gross\| < 0.01 即使零成本；全部 combo breakeven 乘数 m\* < 1（当前成本已远超盈亏线，减半也救不回）；唯一零成本下 CI_lo > 0 的 K_S=4/RR=2 归因于 time_exit tail 分布，与 KF-6/KF-11 一致。**主题最终闭环于 6 维网格 (K_S × RR × vol × sector × symbol × cost_scale)**，脚本 [raw-scripts/cost_sensitivity_stratifier.py](raw-scripts/cost_sensitivity_stratifier.py) |
+| 2026-07-14 | **阶段 2b 跨周期 tail 闭环**：见 [shaping-theory.md](shaping-theory.md) §2.10 + KF-14。tqsdk 补齐 20 合约 × {15m, 1h} 数据（26 次 export），boundary_explorer 加 --interval 参数后在三周期上重跑 65 combo 网格。8 关键 combo × 3 周期 = 24 行跨周期归因：短期区 (K_S ≤ 1.5) 11/12 行 |z| < 2 martingale 精确成立；K_S=4/RR=2 三周期 time_exit% 分别 31.80/31.82/32.29（几乎完全相同），**塑形失效机制与周期无关**——2b 原假设"长周期 tail 放大"证伪；\|ν/σ\| 极值 0.062 远低于 KF-9 阈值 0.10。**主题最终封闭于 7 维网格 (含周期维)**，脚本 [raw-scripts/cross_period_stratifier.py](raw-scripts/cross_period_stratifier.py) |
+| 2026-07-14 | **极端盈亏比补漏闭环**：见 [shaping-theory.md](shaping-theory.md) §2.11 + KF-15。扩展 K_S × RR = {0.5..4.0} × {5, 8}，5m/15m/1h 三周期各重跑一次 boundary_explorer。12 combo × 3 周期 = 36 行归因：36/36 行 bootstrap CI 覆盖 0 → 工业级 alpha 一致证伪；但**首次记录 ν/σ = 0.117**（K_S=0.5/RR=5 @ 1h）突破 KF-9 阈值 0.10，P_win 正偏离在该通道跨三周期单调放大（z: 4.54 → 6.85 → 3.06），提示极小 barrier 下 GBM 假设本身不精确；但成本 c_side/K_S = 52% 直接吞噬所有微 edge——与 KF-8 精确对应。**主题最终封闭于 8 维网格（+极端 RR 边界维）**，脚本 [raw-scripts/extreme_rr_stratifier.py](raw-scripts/extreme_rr_stratifier.py) |
+| 2026-07-14 | **KF-15 三重扎实化 + KF-16 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.12。三个独立扎实化脚本（kf15_significance_test / kf15_gbm_fit_test / hurst_stratifier）：(1) 事件级 cluster bootstrap 显示 K_S=0.5/RR=5 三周期 ν/σ CI 全排除 0（+0.0161/+0.0701/+0.1163）；(2) barrier 停时 skew 与 martingale 双峰理论对比，实测 skew 略小于理论（与 P_win 抬高完全自洽），证伪 GBM 伪影解释；(3) 20 合约 Hurst 指数跨周期上升（5m 0.542 → 1h 0.603，1h 上 19/20 合约 H>0.55），KF-16 "中国期货存在 Hurst 趋势凝聚"沉淀。σ 跨周期实测 3.04 < √12=3.46（子扩散）定量支持 H2。**KF-15 从"边界发现"升级为"真实微 alpha 通道"**，工业不可用条件不变 |
+| 2026-07-14 | **KF-15 Fourier 精确解四重扎实化 + KF-17 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.13 + [raw-scripts/fourier_finite_time_test.py](raw-scripts/fourier_finite_time_test.py)。用 Fourier 级数精确解 P_win(T) = (2/π) Σ (−1)^{n+1}/n · sin(nπK_S/L) · (1−exp(−n²π²σ²T/(2L²))) 替代 T=∞ 近似作为 null。K_S=0.5/RR=5 三周期有限时间修正 P_win_finiteT − P_win_∞ **全部为负**（−0.011/−0.002/−0.002）——残余真实 alpha 反而**大于** T=∞ 偏离（+0.035/+0.066/+0.054）。K_S=1/RR=1 martingale 参照实测与理论差 −0.0005（1e-3 精度），Fourier 解通过独立验证。P(τ>T) 理论 vs 实测差成为独立漂移探测器。**KF-15 强度不降反升**——Fourier + 事件级 CI + 分布 skew + Hurst 四种独立方法一致支持真实方向漂移 |
+| 2026-07-14 | **全套扎实化 + 已有结论重检**：见 [shaping-theory.md](shaping-theory.md) §2.14/§2.15/§2.16 + 3 个新脚本（recheck_kf11_fourier / drift_detector_full_scan / K_S<1 极端扫描）。**KF-11 归因语言修正**（Fourier null 下 14/24 行符号翻转，隐藏正漂移，Doob 保证 E_gross=0）；**KF-14 强化**（跨周期不变性由真实漂移主动补偿）；**KF-6 收窄**（K_S∈[1.0, 1.5] 暗物质带）；**KF-15 从边界扩展为 K_S<1 系统微 alpha 区**（60 行 5m 上 20/20 显著，z_new 极值 +105.77）；**KF-18 沉淀** 双通道漂移探测器全 195 combo 校准表。**主题最终封闭于 9 维网格**，工业结论不变 |
+| 2026-07-14 | **H4 跨周期趋势泄漏实证 + KF-19 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.17 + [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py)。读 5m trades 按 1h EMA20 判断入场时刻 1h 趋势方向，分 aligned/opposed 组重算。K_S=4/RR=2 @ 5m aligned P_win=0.2151 vs opposed=0.1789（Δ=+0.036, z=+3.19），**ΔE_gross=+0.488 ATR/笔**——6/6 关键 combo 全部显著。K_S=1/RR=1 martingale 参照 DirRandom 下精确（P_win=0.4963），方向筛选下打破（aligned=0.5461/opposed=0.4490）。**塑形从"独立 alpha"重定位为"跨周期趋势泄漏的兑现工具"**，阶段 2a 从抽象等 alpha 变为具体等一个 1h 趋势信号；工业实现需 c_side ≤ 0.15 ATR（当前 0.258） |
+| 2026-07-14 | **塑形物理本质定型 + KF-20 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.18。**塑形三定律**：（I）Doob 保守律 DirRandom 下即使零成本 E_gross≈0；（II）结构 alpha 兑现律 KF-15/16 通过塑形 barrier 从每 bar 微漂移累积到每笔 barrier 差；（III）方向 alpha 放大律 aligned 筛选打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型**：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具。主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升完成 |
 
 ## 整合论文
 
-[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) 为本主题**唯一权威文档**：整合了理论推导 + 双重 null 实验结果 + 完整实现规格（dataclass/函数签名/输出结构/单元测试基准）+ KF-1..10 + 阶段 2 路线图。
+[shaping-theory.md](shaping-theory.md) 为本主题**唯一权威文档**：整合了理论推导 + 双重 null 实验结果 + 完整实现规格（dataclass/函数签名/输出结构/单元测试基准）+ KF-1..10 + 阶段 2 路线图。
 
 ## 下一步
 
@@ -152,12 +152,12 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 **2026-07-14 重启**：新分支 `experiment/structural-shaping-alpha-phase2` @ `dev/0.6:294c989`。
 
 **优先执行顺序**：
-- **2c**（波动率制度 × 塑形）：✅ **已完成 (2026-07-14)**——证伪。所有档 |ν/σ| ≤ 0.030 且方向为负，塑形非制度过滤器。详见 [first-passage-theory-and-evidence.md §2.7](first-passage-theory-and-evidence.md) + KF-11
-- **2b**（跨周期 tail）：✅ **已完成 (2026-07-14)**——证伪。补齐 15m/1h 数据后跨三周期 martingale 一致精确成立，time_exit% 与周期无关。详见 [first-passage-theory-and-evidence.md §2.10](first-passage-theory-and-evidence.md) + KF-14
+- **2c**（波动率制度 × 塑形）：✅ **已完成 (2026-07-14)**——证伪。所有档 |ν/σ| ≤ 0.030 且方向为负，塑形非制度过滤器。详见 [shaping-theory.md §2.7](shaping-theory.md) + KF-11
+- **2b**（跨周期 tail）：✅ **已完成 (2026-07-14)**——证伪。补齐 15m/1h 数据后跨三周期 martingale 一致精确成立，time_exit% 与周期无关。详见 [shaping-theory.md §2.10](shaping-theory.md) + KF-14
 - **2a**（方向 alpha × 塑形）：挂起，等 alpha 主题事件源
 
 阶段 1 归档：`docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/`
-相关工具（First-Passage Designer）已沉 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) Part IV
+相关工具（First-Passage Designer）已沉 [shaping-theory.md](shaping-theory.md) Part IV
 + 实现脚本 `docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
 `archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables`
 - **2026-07-09 下游拉起**：[va-asymmetry-composite](../../va-asymmetry-composite/README.md) 作为当前主线，
@@ -175,7 +175,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 - 状态：已证伪（本主题核心假设）
 - 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §2-3 · §8.7
 - 影响：结构塑形不是独立 alpha 源；未来主题必须把 alpha 放在入场方向层面；
-  数学根源见 [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §1.4
+  数学根源见 [shaping-theory.md](shaping-theory.md) §1.4
   （ν=0 下 E[gross]≡0，OSt 恒等式）
 - 日期：2026-07-06
 
@@ -220,7 +220,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-6 · 近距被首达定理支配 · 远距可捕获 tail 但样本极偏
 - 类型：策略行为 · 方法论
 - 状态：已证实（跨 3 档 SCALE 实测）
-- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §1.5
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report §8.10 · [shaping-theory.md](shaping-theory.md) §1.5
 - 影响：5m × SCALE=1 (K<3 ATR) 下 A/B/C/E/G/H/I mean 恒 ≈ -2c，胜率由
   K_S/(K_S+K_T) 完全决定；SCALE=5 (K>7 ATR) 下 L/M/N mean 严格 > 0 且
   p<0.05，但 median 严重负（-7.6 ATR），是 tail 投注分布。数学分界
@@ -249,7 +249,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-9 · 归因必须用 ν = μ - σ²/2，不能用 μ
 - 类型：方法论
 - 状态：已证实（数学 + 6 场景实测反算）
-- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables 表 5 · [first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §1.2
+- 证据：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables 表 5 · [shaping-theory.md](shaping-theory.md) §1.2
 - 影响：Itô 引理下 P_win(λ) 由 λ=2ν/σ² 决定，μ=0 时 ν=-σ²/2<0（凸性修正）。
   本主题所有 combo 反算 |ν/σ|≤0.04 → **martingale 恒等式在实测精确成立**，
   所有"正 mean"都是 Itô 凸性 + 时间尺度放大 + 采样噪声，无真实市场漂移。
@@ -259,7 +259,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-10 · FPT(λ=0) 作为首达零假设碾压 GBM(μ=0)
 - 类型：方法论
 - 状态：已证实（20 品种 × 65 combo 双重 null 对比）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) Part II
+- 证据：[shaping-theory.md](shaping-theory.md) Part II
 - 影响：FPT(λ=0, P_win=1/(1+RR)) 在 K_S=0.75–2.5 区间与实测偏差 <0.02（RR=1 时 0.497 vs 0.500），
   应作为首达问题的**标准零假设**。GBM(μ=0, λ=−1) 的 Itô 凸性负漂移 ν=−σ²/2 过强，
   系统性低估 P_win（RR=1 时预测 0.27 vs 实测 0.50），唯一价值是作为保守下界。
@@ -270,7 +270,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-11 · 波动率制度分层不改变主命题
 - 类型：策略行为 · 方法论
 - 状态：已证实（8 关键 combo × 3 档 = 24 行分层统计）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.7 · [raw-scripts/vol_regime_stratifier.py](raw-scripts/vol_regime_stratifier.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.7 · [raw-scripts/vol_regime_stratifier.py](raw-scripts/vol_regime_stratifier.py)
 - 影响：按 per-symbol entry_atr 分位切三档（低/中/高波）后：短期区（K_S ≤ 1.5）12/12 行 martingale
   精确成立；长期区偏离全部由 time_exit% 主导（K_S=4 高波档 time_exit=27%，是低波档 5.5% 的 5 倍），
   非波动率制度效应；所有档 |ν/σ| ≤ 0.030 且方向为负——**没有任何一档出现真实正漂移**。
@@ -281,7 +281,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-12 · 品种/板块归因一致 martingale
 - 类型：策略行为 · 方法论
 - 状态：已证实（5 sectors × 8 combo = 40 行板块级 + 20 symbols × 8 combo = 160 行品种级分层）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.8 · [raw-scripts/symbol_sector_stratifier.py](raw-scripts/symbol_sector_stratifier.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.8 · [raw-scripts/symbol_sector_stratifier.py](raw-scripts/symbol_sector_stratifier.py)
 - 影响：板块级短期区（K_S ≤ 1.5）20/20 行 martingale 精确成立；长期区 5 板块**同向偏离**（全负 ν、
   |Δ| 与 time_exit% 单调正相关），排除板块结构差异。品种级 |ν/σ| 覆盖率 100%（160/160）落在
   KF-9 阈值 0.10 内，极值 0.051（棕榈油 p2605，样本量最小）；短期区仅 5/80 行显著偏离
@@ -293,7 +293,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-13 · 塑形跨成本模型稳健证伪
 - 类型：策略行为 · 方法论
 - 状态：已证实（8 关键 combo × 6 成本乘数扫描 + cluster bootstrap 95% CI）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.9 · [raw-scripts/cost_sensitivity_stratifier.py](raw-scripts/cost_sensitivity_stratifier.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.9 · [raw-scripts/cost_sensitivity_stratifier.py](raw-scripts/cost_sensitivity_stratifier.py)
 - 影响：反算隐含单边成本 c_side≈0.258 ATR（20 品种加权，含滑点+手续费）。扫描成本乘数
   {0.0, 0.5, 1.0, 1.5, 2.0, 3.0}：K_S=1.0 两 combo |mean_gross| < 0.01 即使零成本；全部 combo
   breakeven 乘数 m\* < 1（区间 [-0.04, +0.21]）——**当前实际成本已远超盈亏点，减半也救不回**；
@@ -306,7 +306,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-14 · 塑形失效机制与周期无关（阶段 2b 证伪）
 - 类型：策略行为 · 方法论
 - 状态：已证实（20 合约 × 3 周期 × 8 关键 combo = 24 行跨周期归因）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.10 · [raw-scripts/cross_period_stratifier.py](raw-scripts/cross_period_stratifier.py) · [raw-scripts/first_passage_boundary_explorer.py](raw-scripts/first_passage_boundary_explorer.py)（--interval 参数）
+- 证据：[shaping-theory.md](shaping-theory.md) §2.10 · [raw-scripts/cross_period_stratifier.py](raw-scripts/cross_period_stratifier.py) · [raw-scripts/first_passage_boundary_explorer.py](raw-scripts/first_passage_boundary_explorer.py)（--interval 参数）
 - 影响：补齐 20 合约 × {15m, 1h} 原始数据（26 次 tqsdk export），在三周期下重跑 65 combo 边界扫描。
   短期区 (K_S ≤ 1.5) 12 行中 11 行 |z| < 2 martingale 精确成立；K_S=4/RR=2 三周期 time_exit%
   分别为 31.80/31.82/32.29（几乎完全一致）——**塑形失效机制在物理时间上完全对称，与周期无关**。
@@ -320,7 +320,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-15 · K_S=0.5/RR=5 通道存在真实微 alpha（工业不可用）
 - 类型：策略行为 · 方法论 · 边界发现（三重扎实化）
 - 状态：已证实（事件级 CI + 分布拟合 + Hurst 三重独立验证）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.11, §2.12 · [raw-scripts/extreme_rr_stratifier.py](raw-scripts/extreme_rr_stratifier.py) · [raw-scripts/kf15_significance_test.py](raw-scripts/kf15_significance_test.py) · [raw-scripts/kf15_gbm_fit_test.py](raw-scripts/kf15_gbm_fit_test.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.11, §2.12 · [raw-scripts/extreme_rr_stratifier.py](raw-scripts/extreme_rr_stratifier.py) · [raw-scripts/kf15_significance_test.py](raw-scripts/kf15_significance_test.py) · [raw-scripts/kf15_gbm_fit_test.py](raw-scripts/kf15_gbm_fit_test.py)
 - 影响：K_S=0.5/RR=5 通道三周期一致 P_win 显著高于 FPT null（z=4.54/6.85/3.06），
   ν/σ = 0.016/0.070/0.117 随周期单调放大。**三重扎实化确认**：
   (1) 事件级 cluster bootstrap CI 全排除 0（+0.0161/+0.0701/+0.1163）；
@@ -336,7 +336,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-16 · 中国期货 5m/15m/1h 存在 Hurst 趋势凝聚 (H>0.55)
 - 类型：市场结构 · 方法论
 - 状态：已证实（20 合约 × 3 周期 R/S 分析）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.12.4 · [raw-scripts/hurst_stratifier.py](raw-scripts/hurst_stratifier.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.12.4 · [raw-scripts/hurst_stratifier.py](raw-scripts/hurst_stratifier.py)
 - 影响：20 合约跨周期 Hurst 指数 5m mean=0.542 / 15m mean=0.558 / 1h mean=0.603，
   **1h 上 19/20 合约 H > 0.55**（趋势凝聚），无任何合约 H < 0.45（均值回归）。
   Hurst 随周期单调上升，方向与 KF-15 ν/σ 放大方向完全一致。
@@ -350,7 +350,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-17 · Fourier 精确解作为 barrier 停时研究的标准 null
 - 类型：方法论 · 工具沉淀
 - 状态：已证实（K_S=1/RR=1 martingale 参照精度 1e-3；K_S=0.5/RR=5 KF-15 分解证明工具威力）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.13, §2.16 · [raw-scripts/fourier_finite_time_test.py](raw-scripts/fourier_finite_time_test.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.13, §2.16 · [raw-scripts/fourier_finite_time_test.py](raw-scripts/fourier_finite_time_test.py)
 - 影响：零漂移双 barrier + 有限时间 T 下 P_win 与 P(τ>T) 的 Fourier 级数精确解
   P_win(T) = (2/π) Σ (−1)^{n+1}/n · sin(nπK_S/L) · (1−exp(−n²π²σ²T/(2L²)))
   作为**任何 barrier 停时研究的标准 null**，替代 T=∞ 近似 P_win = K_S/L。
@@ -364,7 +364,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-18 · 双通道漂移探测器（P_win + P(τ>T)）全 combo 校准表
 - 类型：方法论 · 工具沉淀
 - 状态：已证实（全 65 combo × 3 周期 = 195 行双通道扫描）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.16 · [raw-scripts/drift_detector_full_scan.py](raw-scripts/drift_detector_full_scan.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.16 · [raw-scripts/drift_detector_full_scan.py](raw-scripts/drift_detector_full_scan.py)
 - 影响：全 195 行双通道对齐扫描：通道 A (P_win_obs vs P_win_finiteT) 71.3% 显著，
   通道 B (P_time_exit_obs vs P(τ>T)_theory) 96.9% 显著。**53 行仅 B 显著**——
   time_exit 通道**独立捕获**了 P_win 忽略的漂移信号，是下游主题重要的**双通道验证工具**。
@@ -377,7 +377,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-19 · 跨周期趋势泄漏 + 塑形放大 = 阶段 2a 潜在工业 alpha 路径
 - 类型：策略行为 · 方法论 · 阶段 2a 桥梁
 - 状态：已实证（6/6 关键 combo aligned vs opposed 全部显著）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.17 · [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py) · 关联 KF-11 (§2.14.2) / KF-16 (§2.12.4)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.17 · [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py) · 关联 KF-11 (§2.14.2) / KF-16 (§2.12.4)
 - 影响：H4 跨周期趋势泄漏假设直接被实测证实——用 1h EMA20 作为最朴素方向 alpha
   分组 5m trades，K_S=4/RR=2 aligned P_win = 0.2151 vs opposed P_win = 0.1789
   （Δ=+0.036, z=+3.19），**ΔE_gross = +0.488 ATR/笔**。6/6 关键 combo (K_S ∈ [1, 4] × RR ∈ [1, 2])
@@ -394,7 +394,7 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 ### KF-20 · 塑形三定律（主命题最终定型）
 - 类型：理论定型 · 主题总结
 - 状态：已证实（KF-1..19 完整证据链聚合）
-- 证据：[first-passage-theory-and-evidence.md](first-passage-theory-and-evidence.md) §2.18 · 主题所有前述 KF 与 §2.1-§2.17
+- 证据：[shaping-theory.md](shaping-theory.md) §2.18 · 主题所有前述 KF 与 §2.1-§2.17
 - 影响：**塑形工具的物理本质从三个层级严格定型**：
   **定律 I（Doob 保守律）**：DirRandom 方向下，任何 barrier 结构 (K_S, K_T, T) 都保证 E_gross ≈ 0。
   塑形本身不创造 alpha，即使零成本也不变（Doob 停时定理保证）。
