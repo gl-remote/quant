@@ -13,18 +13,41 @@
 
 ## 摘要
 
-### 主命题的三阶段演化（阅读路线）
+### 🎯 核心工程成果 · KF-27 参数优化器（§2.23）
 
-本主题历经 27 个 KF 关键发现，主命题经过三次跃迁——**理解这个演化弧线是通读本论文的关键**：
+**主题最重要的可交付物**——把 27 个 KF 的整条演化链凝聚成一个可直接调用的闭式函数：
+
+> **输入**：品种 |ν|/σ 分布 (μ_D, σ_D) + 周期 σ_bar + 单边成本 c_side
+> **输出**：**闭式解** (K_S\*, K_T\*, τ\*) —— 最优止损、止盈、择时门槛，以及对应 Sharpe/年、年化率、单笔 E_net、年入场数
+
+```python
+from kf26_parameter_optimizer import FoldedNormal, optimize_all
+D = FoldedNormal(mu_D=0.198, sd_D=0.108); D.fit()
+best = optimize_all(D, c_side=0.077, K_S_min=1.0, K_S_max=6.0,
+                    K_T_max=12.0, sigma_bar=1.0, year_hours=1625,
+                    objective="sharpe_year")
+# 玉米 1h 输出：K_S*=3.0, K_T*=9.0, RR*=3, τ*=前 65% 段
+#   Sharpe/年 +1.66, 年化@r=1% +20.2%（与 MC 差 3%）
+```
+
+这条路径**只需要一个上游主题**（|ν|/σ 强段识别信号），把整个"塑形研究→工程落地"链条闭环。**读者若时间有限，直接跳到 §2.23**。
+
+详细数学 backbone 与演化叙事见下方四阶段路线表。
+
+### 主命题的四阶段演化（阅读路线）
+
+本主题历经 27 个 KF 关键发现，主命题经过 **四次跃迁**——**理解这条演化弧线是通读本论文的关键**：
 
 | 阶段 | KF 覆盖 | 主命题 | 关键章节 |
 | --- | --- | --- | --- |
 | **① 证伪独立 alpha** | KF-1..18 | DirRandom 下塑形无独立 alpha；FPT(λ=0) 应作为标准零假设；市场在对数空间近似 martingale | §2.1–§2.16 |
 | **② 定型：兑现容器** | KF-19/20 | 塑形是方向 alpha 的**兑现容器**（塑形三定律）；方向 alpha 是唯一 alpha 来源 | §2.17 + §2.21 |
-| **③ 扩展：两条通道** | KF-26/27 | 塑形有**两条独立 alpha 通道**——通道 A（方向 alpha 放大）+ 通道 B（强段择时 + 非对称塑形，无需方向 alpha） | §2.22 + §2.23 |
+| **③ 扩展：两条通道** | KF-26 | 塑形有**两条独立 alpha 通道**——通道 A（方向 alpha 放大）+ 通道 B（强段择时 + 非对称塑形，无需方向 alpha） | §2.22 |
+| **④ 工程闭环：参数优化器** | KF-27 | 给定品种分布 (μ_D, σ_D) → **闭式反解** (K_S\*, K_T\*, τ\*)，主题从"研究"闭合到"工程可用"。玉米 1h 得 Sharpe/年 +1.66、年化 +20.2% | **§2.23** ⭐ |
 
 **读者路径**：
-- 只关心结论 → 阶段 ③ §2.22 KF-26 沉淀 + §2.23 KF-27 优化器
+- **要工程落地** → 直接跳 **§2.23 KF-27 参数优化器**（本主题最重要成果）
+- 只关心结论 → 阶段 ③–④ §2.22 KF-26 沉淀 + §2.23 KF-27 优化器
 - 要理解 backbone → 阶段 ①→② §2.3 双重零假设 + §2.21 三定律
 - 要独立验证 → 全文顺序阅读，从 Part I 理论基础到 Part V 路线图
 
@@ -2002,9 +2025,24 @@ $$\boxed{E_{\text{gross}}^{\text{mix}}(|\nu|/\sigma, K_S, K_T) = \tfrac{K_T + K_
 
 - [corn_1h_top_slice.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_top_slice.py) · [corn_1h_strength_three_views.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_strength_three_views.py) · [corn_1h_dirrand_grid.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_dirrand_grid.py)
 
-## 2.23 KF-27 分布输入的完整闭式解（KF-26 v2）
+## 2.23 KF-27 分布输入的完整闭式解（KF-26 v2）⭐ 主题核心工程成果
 
-§2.22.1–§2.22.8 用**单点均值 |ν|/σ=0.54** 代入公式，误差 15%。本节把 |ν|/σ 视为**分布 D(μ_D, σ_D)** 并对分布积分，把 KF-26 升级为完整参数优化器 KF-27。
+> **一句话**：**给定品种 |ν|/σ 的分布 D(μ_D, σ_D)，用一个 Python 函数闭式反解出最优塑形容器 (K_S\*, K_T\*, τ\*) 和对应的年化 Sharpe / 收益率**——把 §2.1–§2.22 的所有 27 个 KF 收敛为一个直接可用的工程接口。
+
+**为什么这一节是主题的终极兑现**：
+
+| 层面 | 意义 |
+| --- | --- |
+| **相对 §2.22 KF-26**（单点近似） | 从"用均值代入"升级为"对整条分布积分"，误差从 15% 压到 3% |
+| **相对全主题** | 唯一同时满足"数学闭式 + 数值可算 + 主题内实测验证 + 直接可调用"四条 gate 的成果 |
+| **相对下游主题** | 只要有 (μ_D, σ_D) 就能输出参数——**下游"强段识别信号"研究项目的直接接口点** |
+| **相对研究方法论** | 展示了本主题从"证伪 → 定型 → 扩展 → 兑现"的完整闭环——研究工作的终点是可交付的工程接口 |
+
+**玉米 1h 直接结论**（[corn_1h_strength_three_views.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_strength_three_views.py) 实测分布 → [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)）：
+
+$$\boxed{K_S^{\ast}=3.0\ \text{ATR}, \quad K_T^{\ast}=9.0\ \text{ATR}, \quad RR^{\ast}=3, \quad \tau^{\ast}=\text{前 65\% 段}} \quad\Longrightarrow\quad \text{Sharpe/年} = +1.66, \text{年化@r=1\%} = +20.2\%$$
+
+**背景**：§2.22.1–§2.22.8 用**单点均值 |ν|/σ=0.54** 代入公式，误差 15%。本节把 |ν|/σ 视为**分布 D(μ_D, σ_D)** 并对分布积分，把 KF-26 升级为完整参数优化器 KF-27。
 
 ### 2.23.1 分布输入下的目标函数
 
@@ -2702,7 +2740,7 @@ class FeasibleRangeResult:
 | KF-24 | σ 时变分析（ATR CV、自相关、有效宽度变化）                                | §2.20.2                  |
 | KF-25 | trailing barrier Monte Carlo（fixed vs trailing 对比）                      | §2.20.3                  |
 | KF-26 | 强段择时 + DirRandom + RR≥2 非对称塑形 = 无方向 alpha 的正期望通道（闭式 E\_gross_mix 公式） | §2.22                      |
-| KF-27 | KF-26 分布输入的完整闭式解：输入 (μ_D, σ_D) 反解 (K_S\*, K_T\*, τ\*)，玉米 1h 得 RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66 | §2.23                    |
+| **KF-27** ⭐ | **主题核心工程成果**：KF-26 分布输入的完整闭式解 + 参数优化器。输入 (μ_D, σ_D, σ_bar, c_side) → **闭式反解** (K_S\*, K_T\*, τ\*)，把研究成果收敛为可直接调用的 Python 函数。玉米 1h 得 K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66, 年化 +20.2% | **§2.23** |
 
 ## C. 关联文档
 
@@ -2737,6 +2775,7 @@ class FeasibleRangeResult:
 
 | 日期         | 变更 |
 | ---------- | ---- |
+| 2026-07-15 | **v16.1 突出 KF-27 核心成果**：(1) 摘要顶部新增"🎯 核心工程成果 · KF-27 参数优化器"横幅（含 Python 调用示例 + 玉米 1h 结论），一进文档就能看到主题终极兑现；(2) "三阶段演化"改为"**四阶段演化**"——把原阶段 ③（KF-26/27 合并）拆分为③ 扩展两条通道（KF-26）+ **④ 工程闭环：参数优化器（KF-27）**，明确 KF-27 是独立的一次跃迁而非 KF-26 的附加；(3) §2.23 章节标题加"⭐ 主题核心工程成果"，节首新增 TL;DR 一句话 + 四层意义对比表 + boxed 玉米 1h 直接结论；(4) 附录 B KF-27 行强形化并标 ⭐ |
 | 2026-07-15 | **v16 结构重构**：文档从"平铺 27 KF"重组为"三阶段演化 + 5 证据簇"叙事。(1) 摘要顶部新增"主命题的三阶段演化"路线表（阶段 ① 证伪独立 alpha / ② 定型兑现容器 / ③ 扩展两条通道）；(2) Part II 开头新增"5 证据簇路线图"表（A 基石层 / B 分层证伪 / C 微 alpha + Fourier / D H4 泄漏 + 框架扩展 / E 主命题定型 + 通道 B）；(3) 章节扁平化：原 §2.17.6/7/8（KF-21/22/23-25）从三级子节升为二级大节 §2.18/2.19/2.20；原 §2.18（塑形物理本质）→ §2.21；原 §2.19（KF-26）→ §2.22；原 §2.19.9（KF-27）从四级升为二级独立大节 §2.23。同步 27 处内部锚点与 40+ 处正文交叉引用。合并 v15/v15.1/v15.2/v15.3/v15.4 同日打磨条目为本条。**v16 累计变更**（相对 v14.1）：新增 KF-26 无方向 alpha 通道（§2.22）+ KF-27 分布输入闭式解（§2.23）+ 分布输入参数优化器 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)；文档更名 `first-passage-theory-and-evidence.md` → `shaping-theory.md`，标题 → `塑形理论：从首达定理到双通道 alpha 兑现`；主命题从"塑形是方向 alpha 兑现容器"扩展为"两条独立 alpha 通道"（通道 A 方向 alpha + 通道 B 强段择时）；玉米 1h 通道 B 实测（前 65% 段 K_S\*=3/K_T\*=9/RR\*=3）Sharpe/年 +1.66、年化@r=1% +20.2%；6 个玉米数据探针脚本 + 全文 18 处 `#L<行号>` 锚点重构为标题锚点 + §1.1.2 GBM 公式 `\mu \, dt` 修正 + 附录 B 补 KF-3..5/KF-8 索引 |
 | 2026-07-14 | v14.1 §2.21.8 下游落地方向指路：新增 5 条下游主题指引 + 一句话工作流（方向 alpha 立项 → 校准 ν/σ → 反推最优塑形参数 → 样本外验证 → 上线）。塑形工具边界明确：本主题不追求找 alpha，只提供兑现基础设施 |
 | 2026-07-14 | v14 塑形物理本质定型：新增 §2.21 塑形三定律 (KF-20)。层 1 Doob 保守律：DirRandom 下即使零成本 E\_gross≈0；层 2 结构 alpha 兑现律：K\_S<1 微 alpha 与 Hurst 趋势凝聚被塑形从每 bar 微漂移累积到每笔 barrier；层 3 方向 alpha 放大律：aligned 筛选打破 non-adapted 停时前提，Doob 保守律被突破。主命题最终定型："塑形不创造 alpha 但是方向 alpha 的兑现容器" |
