@@ -39,7 +39,7 @@
 
 **塑形物理本质定型** §2.18 把主题演化沉淀为**塑形三定律**（KF-20）：**定律 I Doob 保守律** — DirRandom 下即使零成本 E\_gross≈0，塑形本身不创造 alpha；**定律 II 结构 alpha 兑现律** — 市场结构 alpha（KF-15/16）被塑形从每 bar 微漂移累积成每笔 barrier；**定律 III 方向 alpha 放大律** — 外部方向信号打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具**。
 
-**KF-26 无方向 alpha 通道** §2.19 补上主题最后一块拼图：**如果能事前识别 |ν|/σ 的强段（但不能判方向）**，非对称塑形（RR≥2）依然产生显著正 E\_gross。闭式推导：在强段公理 + DirRandom 下，有效 λ 以 50/50 概率取 ±2|ν|/σ²，直接得 $E_{\text{gross}}^{\text{mix}} = \tfrac{K_T+K_S}{2}[P(+λ)+P(−λ)] − K_S$。玉米 1h 前 10% 段（|ν|/σ=0.54）代入 K\_S=2.75 / K\_T=5.5：推导 E\_net = +1.02 ATR/笔、Sharpe/年 +1.42、年化@r=1% +12.2%；MC 验证 +1.22 ATR/笔、Sharpe/年 +1.71、年化 +14.8%（误差 15% 内）。**主命题最终定型修正为"两条独立 alpha 通道"**：通道 A（方向 alpha 放大，KF-19）+ 通道 B（强段择时 + 非对称塑形，KF-26）。
+**KF-26 无方向 alpha 通道** §2.19 补上主题最后一块拼图：**如果能事前识别 |ν|/σ 的强段（但不能判方向）**，非对称塑形（RR≥2）依然产生显著正 E\_gross。闭式推导：在强段公理 + DirRandom 下，有效 λ 以 50/50 概率取 ±2|ν|/σ²，直接得 $E_{\text{gross}}^{\text{mix}} = \tfrac{K_T+K_S}{2}[P(+λ)+P(−λ)] − K_S$。玉米 1h 前 10% 段（|ν|/σ=0.54）代入 K\_S=2.75 / K\_T=5.5：推导 E\_net = +1.02 ATR/笔、Sharpe/年 +1.40、年化@r=1% +11.9%；MC 验证 +1.22 ATR/笔、Sharpe/年 +1.71、年化 +14.8%（误差 18% 内，主要来自闭式用均值代入 vs MC 用完整分布）。**主命题在 §2.18 后进一步扩展为"两条独立 alpha 通道"**（详见 §2.19.8）：通道 A（方向 alpha 放大，KF-19）+ 通道 B（强段择时 + 非对称塑形，KF-26）。
 
 **KF-27 分布输入的完整闭式解** §2.19.9 把 KF-26 从"用均值代入"升级为"对分布 D(μ_D, σ_D) 积分"的完整参数优化器。玉米 1h 分布（μ=0.198, σ=0.108）闭式最优：**K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段**，Sharpe/年 +1.66、年化@r=1% +20.2%——与 MC 网格差 3%，且相比 KF-26 单点近似显示两条修正："RR\* 应取 3 而非 2""τ\* 应做前 65% 段而非前 10%"。敏感性扫描：分布方差越大 Sharpe/年 越高（+1.62 → +2.03），**分布方差本身就是 KF-26 通道的 alpha 来源**。参数优化器 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py) 是 §4.1 v2 规划的直接兑现。
 
@@ -63,11 +63,11 @@
 
 价格 S\_t 满足几何布朗运动（GBM）：
 
-$$dS\_t / S\_t = \mu , dt + \sigma , dW\_t$$
+$$dS\_t / S\_t = \mu \, dt + \sigma \, dW\_t$$
 
 其中 W\_t 为标准 Wiener 过程。取对数变换（Itô 引理）：
 
-$$X\_t = \ln(S\_t/S\_0) \Rightarrow dX\_t = \nu , dt + \sigma , dW\_t, \quad \nu = \mu - \sigma^2/2$$
+$$X\_t = \ln(S\_t/S\_0) \Rightarrow dX\_t = \nu \, dt + \sigma \, dW\_t, \quad \nu = \mu - \sigma^2/2$$
 
 以入场价 S\_0 归一化，X\_0 = 0。止损下界 a = −K\_S，止盈上界 b = +K\_T（K\_S, K\_T 为 ATR 归一化距离）。
 
@@ -1744,7 +1744,7 @@ Barrier 结构保证每笔 trade 有明确的最大损失（K\_S ATR）与最大
 
 **③ 停时定理反向应用：从 P\_win 反推 ν**：
 
-Fourier 精确解 [KF-17 Fourier 精确解作为 barrier 停时研究的标准 null](#2137-kf-17-四重扎实化闭环) 提供的 P\_win\_finiteT 让我们可以从"实测 aligned P\_win"精确反推"隐含 ν/σ"，作为**方向 alpha 强度的量化诊断工具**。这为下游主题的"方向信号选优"提供了标准化度量。
+Fourier 精确解 [KF-17 Fourier 精确解作为 barrier 停时研究的标准 null](#2137-结论--kf-15-四重扎实化闭环) 提供的 P\_win\_finiteT 让我们可以从"实测 aligned P\_win"精确反推"隐含 ν/σ"，作为**方向 alpha 强度的量化诊断工具**。这为下游主题的"方向信号选优"提供了标准化度量。
 
 ### 2.18.4 martingale 恒等式的边界
 
@@ -1760,6 +1760,13 @@ Doob Optional Stopping Theorem (OST) 的适用需要两个核心前提：(1) 底
 - 塑形只是**这个"测度变化"能被兑现的载体**
 
 这在概率论中是**无条件测度 vs 条件测度**的区别——DirRandom 在原始测度 P 下 X\_t 是鞅；Aligned 在条件测度 P(· | trend\_aligned) 下 X\_t 带有条件漂移，不再满足 OST 的鞅前提。这是本主题最深的数学 backbone。
+
+**补充：强段筛选（KF-26 通道 B）打破的是"停时可测性"前提 (2) 而非"鞅性"前提 (1)**：
+
+- **方向筛选（KF-19 通道 A）**：条件化 sign(ν) 已知 → 底层过程 X\_t 在条件测度下**非鞅**（前提 1 被打破）
+- **强段筛选（KF-26 通道 B）**：条件化 |ν|/σ 已知但 sign(ν) 未知（DirRandom）→ 底层过程 X\_t 在条件测度下**仍是鞅**，但停时 τ 因**入场信息包含 |ν|/σ** 而不再是 F\_t-adapted 停时（前提 2 被打破）
+
+两条通道通过打破 Doob OST 的**不同前提**都能产生正 E\_gross。KF-26 的数学根源就是"|ν|/σ 已知 + K_T > K_S 非对称 barrier"下混合 E\_gross > 0，本质是**违反可测性**而非违反鞅性——因此不需要方向 alpha，只需强度识别信号。
 
 ### 2.18.5 KF-20 沉淀 · 塑形三定律
 
@@ -1781,15 +1788,17 @@ $$E\_{\text{gross,总}} \approx \underbrace{0}_{\text{Doob (定律 I)}} + \under
 
 1. **任何方向 alpha 主题**（value area、结构信号、机器学习方向预测）都可以接入塑形工具，把"每 bar 微 alpha"放大成"每笔 stop-out 结构化收益"
 2. **成本闸门是最后一道关**：alpha × 塑形放大后仍需 c\_side ≤ 0.15 ATR 才能工业化
-3. **Fourier + 双通道漂移探测器**（[KF-17 Fourier 标准null](#2137-kf-17-四重扎实化闭环)、[KF-18 双通道校准表](#2163-结论--校准表沉淀)）是所有 barrier 结构策略的**标准检验流程**
+3. **Fourier + 双通道漂移探测器**（[KF-17 Fourier 标准null](#2137-结论--kf-15-四重扎实化闭环)、[KF-18 双通道校准表](#2163-结论--校准表沉淀)）是所有 barrier 结构策略的**标准检验流程**
 
 ### 2.18.7 一句话总结
 
-**主命题最终定型**：
+**主命题阶段定型**（H1–H4 阶段结束时）：
 
 > **结构塑形本身不创造 alpha（Doob 保守律），但作为方向 alpha 的兑现容器，能把每 bar 的微漂移放大为每笔 stop-out 的显著收益结构。真正的 alpha 来自方向信号（trend、structure、event），塑形是让 alpha 在交易执行系统中"活下来"的必要工程工具。**
 
 这是本主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升——**塑形研究的价值不在寻找 alpha，而在建立方向 alpha 的兑现基础设施**。
+
+> **进一步扩展（KF-26/27, §2.19）**：如能事前识别 |ν|/σ 强段但**不判方向**，非对称塑形（RR≥2）仍可产生正 E\_gross——这是一条**独立于方向 alpha 的通道 B**。主命题据此在 §2.19.8 更新为**"两条独立 alpha 通道"**（通道 A 方向 alpha 放大 + 通道 B 强段择时非对称塑形）。塑形依然不"创造"alpha，但兑现路径不再唯一。
 
 ### 2.18.8 下游主题的落地方向（简要指路）
 
@@ -1833,6 +1842,10 @@ $$\boxed{P_{\text{win}}^{\text{mix}} = \tfrac{1}{2}\left[P_{\text{win}}(+\lambda
 
 $$\boxed{E_{\text{gross}}^{\text{mix}} = K_T \cdot P_{\text{win}}^{\text{mix}} - K_S \cdot (1 - P_{\text{win}}^{\text{mix}})}$$
 
+**等价展开形式**（代入 $P^{\text{mix}} = \tfrac{1}{2}(P^{+}+P^{-})$，与 §2.19.8 KF-26 沉淀公式一致）：
+
+$$E_{\text{gross}}^{\text{mix}} = \tfrac{K_T + K_S}{2}\left[P_{\text{win}}(+\lambda) + P_{\text{win}}(-\lambda)\right] - K_S$$
+
 **正 E_gross 的充分条件**（利用 λ→−λ 时 P_win 极小 vs λ→+λ 时 P_win 接近 1）：
 
 $$E_{\text{gross}}^{\text{mix}} > 0 \iff P_{\text{win}}(+\lambda) \cdot K_T > \left[2 - P_{\text{win}}(+\lambda) - P_{\text{win}}(-\lambda)\right] \cdot K_S / \text{对称项}$$
@@ -1857,9 +1870,9 @@ $$E_{\text{gross}}^{\text{mix}} > 0 \iff P_{\text{win}}(+\lambda) \cdot K_T > \l
 | $E_{\text{net}}$ (2c=0.154) | $E_{\text{gross}} - 2c$ | **+1.020** ATR |
 | σ_trade | $\sqrt{P(1-P)}(K_T+K_S)$ | ~4.12 ATR |
 | Sharpe/trade | $E_{\text{net}}/\sigma_{\text{trade}}$ | **+0.248** |
-| N_year | $0.10 \times 1625 / 4$ | ~33 笔（3 合约合并） |
-| **Sharpe/年** | $\sqrt{N} \cdot \text{Sharpe/trade}$ | **+1.42** |
-| **年化 @ r=1%** | $(E_{\text{net}}/K_S) \cdot N \cdot r$ | **+12.2%** |
+| N_year | $3 \times 0.10 \times T_{\text{year}} / E[\tau_{\text{FPT}}]$，其中 $E[\tau_{\text{FPT}}] = K_S K_T/\sigma_{\text{bar}}^2 = 15.125$h，$T_{\text{year}} = 250\times6.5 = 1625$h，3 合约并联 | ~32 笔（3 合约合并） |
+| **Sharpe/年** | $\sqrt{N} \cdot \text{Sharpe/trade}$ | **+1.40** |
+| **年化 @ r=1%** | $(E_{\text{net}}/K_S) \cdot N \cdot r$ | **+11.9%** |
 
 ### 2.19.4 蒙特卡洛验证
 
@@ -1880,7 +1893,7 @@ $$E_{\text{gross}}^{\text{mix}} > 0 \iff P_{\text{win}}(+\lambda) \cdot K_T > \l
 | P_win | 0.476 | 0.500 | 5% |
 | E_gross | +1.174 | +1.375 | 15% |
 | E_net | +1.020 | +1.221 | 16% |
-| Sharpe/年 | +1.42 | +1.71 | 17% |
+| Sharpe/年 | +1.40 | +1.71 | 18% |
 
 **残差归因**：
 
@@ -1919,7 +1932,9 @@ $$E_{\text{gross}}^{\text{mix}} > 0 \iff P_{\text{win}}(+\lambda) \cdot K_T > \l
     - 消息面 event（政策 / 库存报告 / OPEC 类）
 - **验证方法**：用 [§2.17.7 KF-22 bootstrap CI](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/first-passage-theory-and-evidence.md#L1449-L1477) 对候选信号做 aligned/opposed 分组，检验"强段命中率"是否显著 > 10%（随机基线）
 
-**信号衰减容忍度**：即使识别精度只有 30%（三分之一命中前 10%），E_net 大约打三折到 **+0.4 ATR/笔、Sharpe/年 +0.5**——**依然显著高于甜蜜区中位 +0.07 ATR**。
+**信号衰减容忍度**：本节数值按 KF-26 单点近似（前 10% 门槛）给出。若识别精度只有 30%（三分之一命中前 10%），E_net 大约打三折到 **+0.4 ATR/笔、Sharpe/年 +0.5**——**依然显著高于 §2.17 KF-19 aligned 组的中位 +0.07 ATR**。
+
+**KF-27 修正**（§2.19.9）：分布输入闭式解给出 τ\*=**前 65% 段**（P(X≥τ\*)=64.7%），比"命中前 10%"宽松得多——识别难度显著下降。KF-27 视角下的信号衰减容忍度更强：识别精度只需覆盖前 65% 分位而非前 10% 极端。
 
 ### 2.19.8 KF-26 沉淀
 
@@ -1997,7 +2012,7 @@ $$
 
 | 版本 | K_S | K_T | RR | τ 覆盖 | Sharpe/年 | 年化 |
 | --- | --- | --- | --- | --- | --- | --- |
-| KF-26 单点闭式（μ 代入） | 2.75 | 5.5 | 2.0 | 前 10% | +1.42 | +12.2% |
+| KF-26 单点闭式（μ 代入） | 2.75 | 5.5 | 2.0 | 前 10% | +1.40 | +11.9% |
 | KF-26 MC 网格 | 2.75 | 5.5 | 2.0 | 前 10% | +1.71 | +14.8% |
 | **KF-27 分布闭式** | **3.00** | **9.00** | **3.0** | 前 65% | **+1.66** | **+20.2%** |
 
@@ -2038,6 +2053,15 @@ best = optimize_all(D, c_side=0.077, K_S_min=1.0,
                     K_S_max=6.0, K_T_max=12.0,
                     sigma_bar=1.0, year_hours=1625,
                     objective="sharpe_year")
+
+# best = {"value": <目标函数最优值>, "detail": {...}}
+# best["detail"] 内含字段：K_S, K_T, tau, P_ge_tau, n_year,
+#   E_gross, E_net, sigma_trade, sharpe_trade, sharpe_year,
+#   ann_pct_r1, E_tau_hours
+best["detail"]["K_S"]         # 最优止损
+best["detail"]["K_T"]         # 最优止盈
+best["detail"]["tau"]         # 最优择时门槛 (|ν|/σ 分位)
+best["detail"]["sharpe_year"] # 年化 Sharpe
 ```
 
 **下游建议**：
@@ -2050,7 +2074,7 @@ best = optimize_all(D, c_side=0.077, K_S_min=1.0,
 **残余精度损失**（KF-27 与 MC 差 3%）归因于：
 
 - FoldedNormal 拟合的分布尾部与经验分布可能有偏差（fit 只用了前两阶矩）
-- 未纳入 Fourier 有限时间修正（[KF-17](#2137-kf-17-四重扎实化闭环)）
+- 未纳入 Fourier 有限时间修正（[KF-17](#2137-结论--kf-15-四重扎实化闭环)）
 - 未考虑 barrier 触达期与 20h 强度窗口之间的信号衰减
 
 **KF-27 与后续拓展路径**：
@@ -2061,8 +2085,8 @@ best = optimize_all(D, c_side=0.077, K_S_min=1.0,
 
 **数据文件 / 脚本**：
 
-- 参数优化器: [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)
-- 分布输入源: [corn_1h_strength_three_views.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_strength_three_views.py)
+- 参数优化器: [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)（输出打印到 stdout，未落盘 CSV；如需持久化可在 `main()` 中添加）
+- 分布输入源: [corn_1h_strength_three_views.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/corn_1h_strength_three_views.py)（产出 `corn_1h_strength_W20.csv` / `corn_1h_strength_W80.csv`，供 (μ_D, σ_D) 拟合）
 
 ***
 
@@ -2213,6 +2237,8 @@ $$K\_T^P = K\_S \cdot \frac{1 - P^{\text{target}}}{P^{\text{target}}}$$
 | 67%      | 0.75              | 2:1 |
 | 75%      | 0.5               | 3:1 |
 
+> **KF-27 视角补充**（通道 B · §2.19.9）：若接入 |ν|/σ 强段择时（非方向筛选），最优 **RR\*≈3**（对应 P^target 通过混合公式 [§2.19.2](#2192-数学推导闭式) 计算，非直接 25% 反解），择时门槛 τ\*=前 65% 段。玉米 1h 得 K\_S\*=3.0, K\_T\*=9.0（RR\*=3）；参数扫描详见 [§2.19.9](#2199-kf-27-分布输入的完整闭式解kf-26-v2) 与 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)。
+
 **K\_T^min 反解**（凯利正 edge）：E\[net] > 0 → λ=0 时恒无解 → K\_T^min = +∞（**KF-1 凯利视角**）。
 
 **K\_T^max 反解**（物理可达）：
@@ -2292,7 +2318,7 @@ $$f^\* = \frac{E\[\text{net}]}{K\_S \cdot K\_T}$$
 - ✅ E\[X\_T | τ > T] 条件期望（Fourier 工具已就绪，KF-22 实证）
 - ✅ 精确 T†（KF-22 实证：T† ≈ T/2 经验规则）
 - ✅ ν\_implied bootstrap CI（KF-22 实证）
-- ⏳ L combo 两阶段简化 trailing 的数值实现（§3.5.5 已给出数学分解）
+- ⚡ L combo 两阶段简化 trailing 的数值实现：KF-25 (§2.17.8.3) 已用 Monte Carlo 给出 fixed vs trailing 对比结论（ν=0 灾难 / ν>0.03 略优 10%），§3.5.5 两阶段闭式解仍待实现
 - ✅ 参数优化器 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)（给 (μ\_D, σ\_D), σ\_bar, c\_side → 反解最优 K\_S\*, K\_T\*, τ\*；§2.19.9 KF-27 交付，玉米 1h 与 MC 差 3%）
 
 ### v3（远期）
@@ -2509,9 +2535,10 @@ class FeasibleRangeResult:
 
 | 阶段            | 状态   | 命题              | 计算量        |
 | ------------- | ---- | --------------- | ---------- |
-| 阶段 2a 方向 × 塑形 | ⏸ 挂起 | 塑形作为 alpha 放大器？ | 等 alpha 主题 |
+| 阶段 2a · 方向 × 塑形 (通道 A) | ⏸ 挂起 | 塑形作为方向 alpha 放大器？ | 等方向 alpha 主题 |
+| 阶段 2d · \|ν\|/σ 强段识别 (通道 B) | ⏳ 待启动 | 能否事前识别 \|ν\|/σ 前 65% 强段？（KF-27 已给出参数优化器） | 波动率/结构/成交量信号研究 |
 
-**优先级**：仅剩 2a，且被动依赖上游 alpha 主题事件源；2b、2c 已闭环，从路线图中移出。
+**优先级**：2a 被动依赖上游方向 alpha 主题事件源；2d（KF-26/27 通道 B）**不依赖方向 alpha**，可直接立项"强段识别信号"研究，把分布 (μ_D, σ_D) 输入 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py) 即可反推最优塑形容器。2b、2c 已闭环，从路线图中移出。
 
 ## 5.2 阶段 2c · 波动率制度 × 塑形交互 ✅ 已完成
 
@@ -2566,7 +2593,26 @@ class FeasibleRangeResult:
 
 **状态**：⚡ H4 机制层实证 (§2.17, KF-19)，但工业实现依赖外部方向 alpha 主题或低成本环境。
 
-## 5.5 阶段 3 · 稳健性（阶段 2 任一通过后启动）
+## 5.5 阶段 2d · |ν|/σ 强段识别 × 非对称塑形 ⏳ 待启动 (通道 B)
+
+**假设**（KF-26/27, §2.19）：能事前识别 |ν|/σ 分布前 65% 段的信号系统 + RR≥2 的非对称塑形，即使方向随机也能产生正 E\_net。
+
+**已完成的理论基础**：
+
+- §2.19.2 KF-26 闭式公式 $E_{\text{gross}}^{\text{mix}} = \tfrac{K_T+K_S}{2}[P(+λ)+P(-λ)] - K_S$
+- §2.19.9 KF-27 分布输入优化器：输入 (μ_D, σ_D) 反推最优 (K_S\*, K_T\*, τ\*)
+- 玉米 1h 已跑通：闭式 Sharpe/年 +1.66、年化 +20.2%（与 MC +1.71 差 3%）
+
+**下一步路径**（不在本主题范围）：
+
+1. **候选强段识别信号立项**：波动率突破（ATR 拐点 / GARCH 制度切换）、成交量放大 + 结构突破、板块共振、消息面 event
+2. **信号命中率验证**：用候选信号做 aligned/opposed 分组重算 |ν|/σ，检验命中前 65% 段的比例是否显著 > 65%（随机基线）
+3. **多品种验证**：把玉米 1h 结论推广到主题 20 品种，输入各自 (μ_D, σ_D) 到 [kf26_parameter_optimizer.py](file:///Users/gaolei/Documents/src/quant/docs/research/themes/structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py)
+4. **信号衰减容忍**：即使识别精度打 3 折，E_net 仍显著优于甜蜜区中位（KF-27 敏感性）
+
+**状态**：⏳ 待上游"强段识别信号"主题立项。参数优化器已交付，理论闭环已完成，缺信号研究入口。
+
+## 5.6 阶段 3 · 稳健性（阶段 2 任一通过后启动）
 
 - 通过 combo + baseline 在更多周期上复跑
 - 扩至 20 品种 × 70 合约
@@ -2586,6 +2632,7 @@ class FeasibleRangeResult:
 | μ                    | GBM 漂移率      | 时间⁻¹   |
 | ν = μ − σ²/2         | 对数空间漂移率      | 时间⁻¹   |
 | σ                    | GBM 波动率      | 时间⁻¹/² |
+| σ\_bar (σ\_per\_bar) | 每 bar 波动率（本主题 5m=1/√12, 15m=0.5, 1h=1.0 ATR/√bar） | ATR·bar⁻¹/² |
 | λ = 2ν/σ²            | 无量纲漂移比       | 无量纲    |
 | K\_S                 | 止损距离 (ATR)   | ATR    |
 | K\_T                 | 止盈距离 (ATR)   | ATR    |
@@ -2600,8 +2647,10 @@ class FeasibleRangeResult:
 | ----- | ------------------------------------------------------- | -------------------------- |
 | KF-1  | 结构塑形无独立 alpha                                           | §1.4, §2.1                 |
 | KF-2  | Trailing 不改变 E\[X\_σ]                                   | §3.5.5                     |
+| KF-3..5 | 阶段 1 gatekeeper 前置结论（详见 `research-status.md` 主题内部沉淀，本论文未展开） | 阶段 1 归档                     |
 | KF-6  | 近距被首达定理支配（收窄至 K\_S∈\[1.0, 1.5] 暗物质带）                    | §1.5, §2.3, §2.14.4        |
 | KF-7  | 5m×SCALE=5 重采样伪影                                        | §2.1, §3.4.3               |
+| KF-8  | 数学正 edge ≠ 工业可用 alpha（阶段 1 gatekeeper 沉淀）              | §2.1（前置），§2.11.6           |
 | KF-9  | 归因必须用 ν 不能用 μ                                           | §1.2                       |
 | KF-10 | FPT(λ=0) 标准零假设                                          | §3.1                       |
 | KF-11 | 波动率制度分层：Doob 约束下 E\_gross 不变，P\_win 因真实漂移抬高（§2.14.2 修正） | §2.7, §2.14.2              |
@@ -2655,8 +2704,9 @@ class FeasibleRangeResult:
 
 | 日期         | 变更 |
 | ---------- | ---- |
+| 2026-07-15 | v15.2 一致性修正：(1) §1.1.2 GBM 公式 `\mu , dt` → `\mu \, dt`；(2) 三处内部锚点 `#2137-kf-17-...` → `#2137-结论--kf-15-...`；(3) §2.19.3 表 N_year 用 E[τ_FPT]=15.125h 重算，Sharpe/年 +1.42→+1.40, 年化 +12.2%→+11.9%（与 MC 差 15%→18%）；(4) §2.18.7 加"进一步扩展"提示指向 §2.19.8；(5) §5.1 路线图新增阶段 2d 通道 B；(6) §5.5 新增阶段 2d 详述，原 §5.5 阶段 3 顺延为 §5.6；(7) §3.5.2 补 KF-27 视角说明；(8) 附录 B 补 KF-3..5 / KF-8 索引条目；(9) §2.19.7 补 KF-27 修正说明；(10) §2.19.9.4 代码块补 `.detail` 返回结构；(11) §2.18.4 补 KF-26 打破"前提 2"机制说明；(12) §4.1 v2 trailing 项状态改 ⚡（KF-25 已 MC 覆盖）；(13) 附录 A 补 σ_bar 定义；(14) §2.19.2 boxed 公式补等价展开形式 |
 | 2026-07-15 | v15.1 新增 §2.19.9 KF-27 分布输入的完整闭式解：把 KF-26 从"用均值代入"升级为"对分布积分"，玉米 1h 分布 (μ=0.198, σ=0.108) 闭式给出 K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66/年化 +20.2%（与 MC 差 3%）；两条修正："RR\* 应取 3 而非 2""τ\* 应做前 65% 而非前 10%"。参数优化器 kf26_parameter_optimizer.py 兑现 §4.1 v2 规划 |
-| 2026-07-15 | v15 新增 §2.19 KF-26 无方向 alpha 通道：强段择时 + DirRandom + RR≥2 非对称塑形闭式推导 + 玉米 1h MC 验证。P_win=0.5 + RR=2 给出 E_net=+1.02 ATR/笔（推导）/+1.22 ATR/笔（MC），Sharpe/年 +1.42/+1.71，年化@r=1% +12.2%/+14.8%；推导 vs MC 误差 15% 内。主命题最终定型修正为"两条独立 alpha 通道"（通道 A 方向 alpha 放大 + 通道 B 强段择时非对称塑形） |
+| 2026-07-15 | v15 新增 §2.19 KF-26 无方向 alpha 通道：强段择时 + DirRandom + RR≥2 非对称塑形闭式推导 + 玉米 1h MC 验证。P_win=0.5 + RR=2 给出 E_net=+1.02 ATR/笔（推导）/+1.22 ATR/笔（MC），Sharpe/年 +1.40/+1.71，年化@r=1% +11.9%/+14.8%；推导 vs MC 误差 18% 内。主命题在 §2.18 后扩展为"两条独立 alpha 通道"（通道 A 方向 alpha 放大 + 通道 B 强段择时非对称塑形） |
 | 2026-07-14 | v14.1 §2.18.8 下游落地方向指路：新增 5 条下游主题指引 + 一句话工作流（方向 alpha 立项 → 校准 ν/σ → 反推最优塑形参数 → 样本外验证 → 上线）。塑形工具边界明确：本主题不追求找 alpha，只提供兑现基础设施 |
 | 2026-07-14 | v14 塑形物理本质定型：新增 §2.18 塑形三定律 (KF-20)。层 1 Doob 保守律：DirRandom 下即使零成本 E\_gross≈0；层 2 结构 alpha 兑现律：K\_S<1 微 alpha 与 Hurst 趋势凝聚被塑形从每 bar 微漂移累积到每笔 barrier；层 3 方向 alpha 放大律：aligned 筛选打破 non-adapted 停时前提，Doob 保守律被突破。主命题最终定型："塑形不创造 alpha 但是方向 alpha 的兑现容器" |
 | 2026-07-14 | v13 H4 跨周期趋势泄漏假设实验证实：新增 §2.17 + hf\_trend\_leakage\_probe.py。K\_S=4/RR=2 @ 5m aligned P\_win 0.2151 vs opposed 0.1789（Δ=+0.036, z=+3.19），ΔE\_gross=+0.488；6/6 关键 combo 全部显著；K\_S=1/RR=1 martingale 参照 aligned=0.5461 vs opposed=0.4490（martingale 在 DirRandom 下精确，方向筛选下打破）。KF-19 沉淀"跨周期趋势泄漏 + 塑形放大 = 阶段 2a 潜在工业 alpha 路径" |
