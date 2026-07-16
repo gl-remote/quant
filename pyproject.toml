@@ -107,6 +107,8 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 #   对齐数学论文的 mixedCase / snake_case_with_digits
 "workspace/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 "workspace/tests/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
+# workbench 临时研究脚本同样保留数学论文记号：
+"docs/workbench/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 
 [tool.ruff.format]
 quote-style = "double"
