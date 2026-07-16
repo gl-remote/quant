@@ -1,7 +1,9 @@
 # strength-factor-screening · 强度因子筛选主题
 
+> Frozen 2026-07-17
 > 类型：Research / 主题目录索引
-> 状态：**待启动**（2026-07-16 立题 · 尚未确定研究计划与实验矩阵）
+> 状态：**已冻结** · 核心假设证伪 · 8 候选全 L4
+> 冻结摘要：archive:2026-07-17-strength-factor-screening-freeze#freeze-summary
 > 上游：kf:structural-shaping-alpha#KF-26 · kf:structural-shaping-alpha#KF-27
 > 主题 slug：`strength-factor-screening`
 

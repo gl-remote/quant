@@ -6,7 +6,10 @@
 
 ## 1. 当前引用
 
-主题刚立题，尚未实际引用任何已归档批次。
+### archive:2026-07-17-strength-factor-screening-freeze
+- 关系类型：阶段归档 / 主题冻结
+- 说明：本主题自身的冻结归档批次 · 包含 8 个因子脚本 + JSON 输出 + 候选卡 + rejected_factors + freeze-summary
+- 相关文件：archive:2026-07-17-strength-factor-screening-freeze#freeze-summary
 
 ## 2. 潜在相关（立题扫描 · 尚未实际引用 · 供后续 pull）
 
