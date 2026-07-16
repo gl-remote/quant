@@ -42,9 +42,9 @@ $$
 | README.md | ✅ 本文 | 主题目录索引 |
 | research-status.md | ✅ 空占位 | 一句话结论 · 边界 · 下一步 · 关键发现清单（空） |
 | archive-references.md | ✅ 空占位 | 上游 shaping-theory 引用登记 |
-| screening-methodology.md | ✅ v0.5 | 筛选方法说明 · §一 证明 + §二 数学工具箱（12 项） + §三 可用工具列表（`workspace/research/`） + §四 标准因子筛选流程（Step 0–10，新增 Step 9 方向偏向审计）|
+| screening-methodology.md | ✅ v0.6 | 筛选方法说明 · §一 证明 + §二 数学工具箱（12 项） + §三 可用工具列表 + §四 标准因子筛选流程 Step 0–10 + §五 工程边界条件 + §六 双置信度视角矩阵 |
+| experiment-plan.md | ✅ v0.1 | 实验矩阵 · 12 候选清单 + Wave 1/2/3 优先级 + M1–M5 里程碑 |
 | strategy-math-spec.md | ⏳ 未建 | 需在有具体策略候选时再补（本主题以筛选为主，暂不定义策略行为） |
-| experiment-plan.md | ⏳ 未建 | 需在研究计划确定后创建 |
 | parameter-selection-spec.md | ⏳ 未建 | 需在实验后创建 |
 | implementation-notes.md | ⏳ 未建 | 需在工程实现开始时创建 |
 

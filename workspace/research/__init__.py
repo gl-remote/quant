@@ -32,7 +32,17 @@ research — 稳定下来的研究工具业务域
 from research.bootstrap import cluster_bootstrap
 from research.causality import verify_causality_by_truncation
 from research.channel_b import e_gross_mix, e_gross_mix_smallx, x_min_smallx
+from research.derived import (
+    KTFeasibleRange,
+    MuSensitivity,
+    e_gross_at_mu,
+    k_t_feasible_range,
+    kelly_position,
+    mu_sensitivity,
+    t_dagger_empirical,
+)
 from research.distribution import FoldedNormal
+from research.driftlab import DriftDetection, dual_channel_drift_test
 from research.fourier import p_tau_gt_T_fourier, p_win_finiteT_fourier
 from research.fpt import e_gross_infty, e_net_infty, e_tau_infty, p_win_infty, t_star
 from research.hurst import hurst_rs
@@ -83,4 +93,15 @@ __all__ = [
     "cluster_bootstrap",
     "hurst_rs",
     "verify_causality_by_truncation",
+    # Drift diagnostics
+    "dual_channel_drift_test",
+    "DriftDetection",
+    # Derived tools
+    "mu_sensitivity",
+    "MuSensitivity",
+    "k_t_feasible_range",
+    "KTFeasibleRange",
+    "kelly_position",
+    "t_dagger_empirical",
+    "e_gross_at_mu",
 ]
