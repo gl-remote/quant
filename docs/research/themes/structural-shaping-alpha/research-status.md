@@ -1,20 +1,35 @@
 # structural-shaping-alpha · Research Status
 
 > 类型：Research Status
-> 状态：**塑形三定律定型（KF-20）· 主题完整认识跃升 · 主命题最终定型**
-> 最近更新：2026-07-14（§2.18 塑形物理本质：不创造 alpha 但是方向 alpha 的兑现容器）
+> 状态：**通道 B 兑现工具已落地 · 参数优化器已交付 · v16.4（2026-07-15）**
+> 最近更新：2026-07-15（KF-26/27 双通道命题定型 + 参数优化器交付 + 通用筛选因子框架 § 2.23.6）
 > 主题 README：[README.md](README.md)
 > 实验计划：[experiment-plan.md](experiment-plan.md)
-> 下游引用主题：[va-asymmetry-composite](../../va-asymmetry-composite/README.md)（塑形工具 / 真实成本模型 / ν_implied 归因 / KF 方法论 · 当前研究主线）
+> 下游引用主题：[va-asymmetry-composite](../../va-asymmetry-composite/README.md)（塑形工具 / 真实成本模型 / ν_implied 归因 / KF 方法论 · 当前研究主线）；下游"强段识别信号"主题待立题（需 se ≤ se_target 的识别器）
 
 ## 一句话结论
 
+**主命题历经四阶段跃迁，最终定型于"两条独立 alpha 通道 + 一个工程可用参数优化器"**：
+
+- **阶段 ① 证伪独立 alpha（KF-1..18）**：DirRandom 下塑形无独立 alpha；FPT(λ=0) 作为标准零假设，市场在对数空间近似 martingale。
+- **阶段 ② 定型兑现容器（KF-19/20）**：塑形三定律沉淀——塑形是方向 alpha 的**兑现容器**，真正 alpha 来自方向信号（trend / structure / event）。
+- **阶段 ③ 扩展两条通道（KF-26）**：通道 A（方向 alpha 放大）+ 通道 B（强段择时 + 非对称塑形，**无需方向 alpha**）。KF-26 闭式推导 $E_{\text{gross}}^{\text{mix}} = (K_T+K_S)/2 \cdot [P^+(2x)+P^-(2x)] - K_S$，玉米 1h MC 验证 P_win=0.5 + RR=2 给出 E_net = +1.22 ATR/笔、Sharpe/年 +1.71、年化 +14.8%。
+- **阶段 ④ 工程闭环（KF-27）**：**参数优化器** [kf26_parameter_optimizer.py](raw-scripts/kf26_parameter_optimizer.py) 输入品种 (μ_D, σ_D, σ_bar, c_side) → **闭式反解** (K_S\*, K_T\*, τ\*)。玉米 1h 得 K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66, 年化 +20.2%。
+
+**通用筛选因子框架**（[shaping-theory.md §2.23.6](shaping-theory.md)）：把 KF-27 玉米 1h 具体数值升级为品种无关闭式公式 $x_{\min} = \sqrt{6c/(K_S^3 R(R-1))}$，$R \to 1$ 时 $x_{\min} \to \infty$ 严格映射 Doob 保守律；下游研究项目的核心 KPI 是识别器 se ≤ $(x^\ast - x_{\min})/1.645$（玉米 1h 得 se ≤ 0.046）。
+
+**信号强度要求 vs 置信度要求双视角**（§2.23.6.7）：两者是核心不等式 $\hat{x} \geq x_{\min} + z_\alpha \cdot \text{se}$ 的两个投影，互为倒数关系；不要问"我的信号强不强"，问"识别器 se 有多大"——se ≤ target 就上，超标就先降 se 而不是抬门槛硬扛。
+
+## 历史一句话结论（v14 阶段，2026-07-14）
+
 **在 DirRandom no-signal baseline 下，7 个行业共识组合 + 8 个探索性 combo
 （A-N）全部未通过 mean 显著正 + realistic-cost + 15m 跨周期护栏**——
-**结构塑形不构成独立 alpha 源**。5m × SCALE=5 下 L/M/N 曾 mean 显著正，
+**结构塑形不构成独立 alpha 源**（阶段 ①）。5m × SCALE=5 下 L/M/N 曾 mean 显著正，
 但 15m 复核仅 L 保留（mean=+0.041, p=0.060），且 μ_implied 反算的
 ν_implied ≈ 0（martingale 恒等式精确成立），正 mean 主要来自 Itô 凸性
 + 时间尺度放大 + 采样噪声，非"市场有真实趋势"。
+
+**上述结论仍是通道 A 的基础**，v16 阶段的通道 B 突破在"能事前识别强段"这一附加公理下成立，并未推翻通道 A 的证伪。
 
 **2026-07-14 分层证伪补充**：进一步按 per-symbol entry_atr 分位切三档（低/中/高波），
 8 关键 combo × 3 档 = 24 行分层统计确认**塑形不是「制度过滤器」**——短期区 12/12 行
@@ -140,6 +155,9 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 | 2026-07-14 | **全套扎实化 + 已有结论重检**：见 [shaping-theory.md](shaping-theory.md) §2.14/§2.15/§2.16 + 3 个新脚本（recheck_kf11_fourier / drift_detector_full_scan / K_S<1 极端扫描）。**KF-11 归因语言修正**（Fourier null 下 14/24 行符号翻转，隐藏正漂移，Doob 保证 E_gross=0）；**KF-14 强化**（跨周期不变性由真实漂移主动补偿）；**KF-6 收窄**（K_S∈[1.0, 1.5] 暗物质带）；**KF-15 从边界扩展为 K_S<1 系统微 alpha 区**（60 行 5m 上 20/20 显著，z_new 极值 +105.77）；**KF-18 沉淀** 双通道漂移探测器全 195 combo 校准表。**主题最终封闭于 9 维网格**，工业结论不变 |
 | 2026-07-14 | **H4 跨周期趋势泄漏实证 + KF-19 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.17 + [raw-scripts/hf_trend_leakage_probe.py](raw-scripts/hf_trend_leakage_probe.py)。读 5m trades 按 1h EMA20 判断入场时刻 1h 趋势方向，分 aligned/opposed 组重算。K_S=4/RR=2 @ 5m aligned P_win=0.2151 vs opposed=0.1789（Δ=+0.036, z=+3.19），**ΔE_gross=+0.488 ATR/笔**——6/6 关键 combo 全部显著。K_S=1/RR=1 martingale 参照 DirRandom 下精确（P_win=0.4963），方向筛选下打破（aligned=0.5461/opposed=0.4490）。**塑形从"独立 alpha"重定位为"跨周期趋势泄漏的兑现工具"**，阶段 2a 从抽象等 alpha 变为具体等一个 1h 趋势信号；工业实现需 c_side ≤ 0.15 ATR（当前 0.258） |
 | 2026-07-14 | **塑形物理本质定型 + KF-20 沉淀**：见 [shaping-theory.md](shaping-theory.md) §2.21。**塑形三定律**：（I）Doob 保守律 DirRandom 下即使零成本 E_gross≈0；（II）结构 alpha 兑现律 KF-15/16 通过塑形 barrier 从每 bar 微漂移累积到每笔 barrier 差；（III）方向 alpha 放大律 aligned 筛选打破 non-adapted 停时前提，让塑形容器承载 +0.25 ATR/笔量级 alpha。**主命题最终定型**：塑形不创造 alpha，但作为方向 alpha 的兑现容器，是让 alpha 在交易执行系统"活下来"的必要工程工具。主题从"证伪独立 alpha"到"识别兑现工具"的完整认识跃升完成 |
+| 2026-07-15 | **KF-26 无方向 alpha 通道 + KF-27 参数优化器 + 文档更名**：见 [shaping-theory.md](shaping-theory.md) §2.22/§2.23 + [raw-scripts/kf26_parameter_optimizer.py](raw-scripts/kf26_parameter_optimizer.py)。**KF-26**（§2.22）：强段择时 + DirRandom + RR≥2 非对称塑形闭式推导 $E_{\text{gross}}^{\text{mix}} = (K_T+K_S)/2 \cdot [P^+(2x)+P^-(2x)] - K_S$，玉米 1h MC 验证 P_win=0.5 + RR=2 给出 E_net = +1.22 ATR/笔、Sharpe/年 +1.71、年化 +14.8%——**在事前不知道方向、只知强度的情况下依然产生显著正 E_gross**。**KF-27**（§2.23）：分布输入闭式解 + 参数优化器，输入品种 (μ_D, σ_D, σ_bar, c_side) → 闭式反解 (K_S\*, K_T\*, τ\*) 与 Sharpe/年、年化率；玉米 1h 得 K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66, 年化 +20.2%（与 MC 差 3%）。**主命题最终扩展为"两条独立 alpha 通道"**：通道 A（方向 alpha 放大）+ 通道 B（强段择时 + 非对称塑形）。文档更名 `first-passage-theory-and-evidence.md` → `shaping-theory.md`；标题更新为"塑形理论：从首达定理到双通道 alpha 兑现" |
+| 2026-07-15 | **v16 结构重构**：文档从"平铺 27 KF"重组为"四阶段演化 + 5 证据簇"叙事。(1) 摘要顶部新增"主命题的四阶段演化"路线表（证伪独立 alpha / 定型兑现容器 / 扩展两条通道 / 工程闭环）；(2) 摘要顶部新增"🎯 核心工程成果 · KF-27 参数优化器"横幅（Python 调用示例 + 玉米 1h 结论）；(3) Part II 开头新增"5 证据簇路线图"表（A 基石层 / B 分层证伪 / C 微 alpha + Fourier / D H4 泄漏 + 框架扩展 / E 主命题定型 + 通道 B）；(4) 章节扁平化：原 §2.17.6/7/8（KF-21/22/23-25）从三级子节升为二级大节 §2.18/2.19/2.20；原 §2.19.9（KF-27）从四级子节升为二级独立大节 §2.23。同步 27 处内部锚点 + 40+ 处正文交叉引用 + 18 处 `#L<行号>` 锚点重构为标题锚点 |
+| 2026-07-15 | **v16.2/16.3/16.4 · §2.23.5 置信度门槛 + §2.23.6 通用筛选因子框架 + §2.23.6.7 双视角**：见 [shaping-theory.md](shaping-theory.md) §2.23.5/§2.23.6/§2.23.6.7。**§2.23.5**：把"识别器测量误差 se"引入 KF-27 框架，玉米 1h 得盈亏平衡下界 \|ν\|/σ ≥ 0.055 / KF-27 最优工作点 ≥ 0.13（前 65%）/ 窗口回归 se=0.224 需点估计 ≥ 0.42（前 3%）不可行；**下游 KPI 定义 se ≤ 0.05**。**§2.23.6**：把 §2.23.5 玉米 1h 具体数值升级为品种无关闭式公式，$P^+(λ) + P^-(λ)$ 小 λ 展开 O(λ³) 奇数项对消，得 $E_{\text{gross}}^{\text{mix}} \approx x^2 K_S^3 R(R-1)/3$ → $x_{\min} = \sqrt{6c/(K_S^3 R(R-1))}$（★），R → 1 时 x_min → ∞ 严格映射 Doob 保守律；se 目标通用公式 $(x^\ast_{\text{KF-27}} - x_{\min})/1.645$；五大品种类别 se 目标预估表（农产品 0.047 / 黑色 0.054 / 有色 0.033 / 能化 0.019 / 贵金属 0.020）；新品种上线 4 步 Python 工作流 + 3-gate 验收（se ≤ target / 覆盖率 ≥ 70% / rank correlation ≥ 0.4）。**§2.23.6.7**：信号强度要求 vs 置信度要求双视角对照矩阵（9 档 se 对应最低信号强度 / 分位 / 年入场数 / 单笔 E_net / 年化 / 达标状态），操作原则"不要问信号强不强，问识别器 se 多大" |
 
 ## 整合论文
 
@@ -409,6 +427,60 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
   接入塑形工具，把"每 bar 微 alpha"放大成"每笔 stop-out 结构化收益"；本主题的 barrier explorer、
   Fourier 精确解、双通道漂移探测器构成完整的"方向 alpha 兑现基础设施"
 - 日期：2026-07-14
+
+### KF-21 · ν≠0 时 FPT 方程定量预测验证
+
+- 类型：理论定量验证
+- 状态：已证实
+- 证据：[shaping-theory.md](shaping-theory.md) §2.18 · [raw-scripts/fpt_nu_nonzero_validation.py](raw-scripts/fpt_nu_nonzero_validation.py)
+- 影响：给定 aligned 组反算的 ν_implied，用完整 FPT(λ≠0) 公式预测 P_win 与 P(τ>T)，实测与预测 CI 全交，5 关键 combo 4/5 通过 τ 分布 KS 检验；证明"方向筛选下 FPT(λ≠0) 是精确 null，不是启发式"
+- 日期：2026-07-14
+
+### KF-22 · ν_implied 不确定性量化 + time_exit 条件期望分析
+
+- 类型：方法论 + 敏感性
+- 状态：已证实
+- 证据：[shaping-theory.md](shaping-theory.md) §2.19
+- 影响：cluster bootstrap CI 覆盖 ν_implied 反算的样本波动；time_exit 条件下 E[X_τ | τ_time_exit] 表明有限时间修正在 K_S=4/RR=2 尾部主导；为 KF-19 的"aligned alpha 强度估计"提供不确定性区间
+- 日期：2026-07-14
+
+### KF-23/24/25 · 塑形框架扩展（跳空 / σ 时变 / trailing）
+
+- 类型：框架扩展 + 边界修正
+- 状态：已证实（三个独立扎实化实验）
+- 证据：[shaping-theory.md](shaping-theory.md) §2.20 · [raw-scripts/fpt_framework_extensions.py](raw-scripts/fpt_framework_extensions.py)
+- 影响：
+  - **KF-23（跳空下界）**：Bates 跳扩散修正，K_S_min 与周期挂钩（5m: 2.60 / 1h: 1.00 / 日: 0.40 ATR），保证 barrier 触发不被跳空吞噬
+  - **KF-24（σ 时变）**：分段-const σ 的 patch，允许时变波动率下的 FPT 精确解
+  - **KF-25（trailing MC）**：trailing barrier Monte Carlo（fixed vs trailing 对比），trailing 在 ν=0.06 就已放大 gross expectation +10%
+- 日期：2026-07-14
+
+### KF-26 · 无方向 alpha 通道（强段择时 + 非对称塑形）
+
+- 类型：主命题扩展 · 主题第二次跃迁
+- 状态：已证实（闭式推导 + 玉米 1h MC 验证）
+- 证据：[shaping-theory.md](shaping-theory.md) §2.22 · [raw-scripts/corn_1h_dirrand_grid.py](raw-scripts/corn_1h_dirrand_grid.py)
+- 影响：
+  - **闭式推导**：DirRandom + 强段筛选公理下，有效 λ 以 50/50 概率取 ±2\|ν\|/σ²，$E_{\text{gross}}^{\text{mix}}(x) = (K_T+K_S)/2 \cdot [P^+(2x)+P^-(2x)] - K_S$
+  - **玉米 1h MC 验证**：K_S=2.75/K_T=5.5（RR=2），前 10% 段（\|ν\|/σ=0.54）P_win=0.5, E_net=+1.22 ATR/笔, Sharpe/年 +1.71, 年化 +14.8%——**事前不知道方向、只知强度的情况下依然产生显著正 E_gross**
+  - **主命题扩展**：塑形有**两条独立 alpha 通道**——通道 A（方向 alpha 放大, KF-19）+ 通道 B（强段择时 + 非对称塑形, KF-26），后者不依赖方向 alpha
+  - **数学根源**：强段筛选打破 Doob 保守律的"入场无条件"前提，让 λ 的正负不对称在 RR>1 塑形容器中被放大
+- 日期：2026-07-15
+
+### KF-27 · 分布输入的完整闭式解 + 参数优化器 ⭐ 主题核心工程成果
+
+- 类型：主命题工程闭环 · 主题第三次跃迁 · 唯一交付的可调用工具
+- 状态：已证实并已交付 [kf26_parameter_optimizer.py](raw-scripts/kf26_parameter_optimizer.py)
+- 证据：[shaping-theory.md](shaping-theory.md) §2.23 · §2.23.5 · §2.23.6
+- 影响：
+  - **闭式接口**：把 KF-26 从"用单点均值 \|ν\|/σ 代入"升级为"对分布 D(μ_D, σ_D) 完整积分"，把研究成果收敛为一个可直接调用的 Python 函数：输入品种 (μ_D, σ_D, σ_bar, c_side) → 输出 (K_S\*, K_T\*, τ\*, Sharpe/年, 年化率)
+  - **玉米 1h 完整闭式最优**：K_S\*=3, K_T\*=9, RR\*=3, τ\*=前 65% 段, Sharpe/年 +1.66, 年化@r=1% +20.2%（与 MC 差 3%）
+  - **两条相比 KF-26 单点近似的修正**：RR\* 应取 3 而非 2（分布凸性）；τ\* 应做前 65% 段而非前 10%（√N 频率溢价）
+  - **§2.23.5 置信度门槛推导**：把"识别器测量误差 se"引入框架，玉米 1h 得盈亏平衡下界 \|ν\|/σ ≥ 0.055 / KF-27 最优工作点 ≥ 0.13（前 65%）/ 窗口回归 se=0.224 需点估计 ≥ 0.42（前 3%）不可行；**下游 KPI 定义 se ≤ 0.05**
+  - **§2.23.6 通用筛选因子框架**：把玉米 1h 数值升级为品种无关闭式公式 $x_{\min} = \sqrt{6c/(K_S^3 R(R-1))}$，$R \to 1$ 时 $x_{\min} \to \infty$ 严格映射 Doob 保守律；se 目标通用公式 $(x^\ast - x_{\min})/1.645$
+  - **§2.23.6.7 双视角**：信号强度要求 vs 置信度要求是同一不等式 $\hat{x} \geq x_{\min} + z_\alpha \cdot \text{se}$ 的两个投影
+  - **下游研究项目的接口点**：任何"|ν|/σ 强段识别信号"研究项目直接把分布输入 [kf26_parameter_optimizer.py](raw-scripts/kf26_parameter_optimizer.py) 拿到最优塑形容器；识别器合格线由 se_target 决定
+- 日期：2026-07-15
 
 ## 立题日期
 

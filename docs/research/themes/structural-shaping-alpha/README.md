@@ -1,10 +1,12 @@
 # structural-shaping-alpha · 主题
 
-> 类型：Theme / 假设生成期
-> 状态：立题（2026-07-05）· 假设待广度扫描 · spec/plan/code 尚未撰写
+> 类型：Theme / **通道 B 兑现工具已落地 · 参数优化器已交付**
+> 状态：立题（2026-07-05）· 三阶段完整闭环 · v16.4（2026-07-15）
 > 创建时间：2026-07-05
 > 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 > 前置反例：[value-area 家族全部冻结](../../themes-frozen/value-area/README.md)
+> **核心成果**：**KF-27 参数优化器**（[shaping-theory.md §2.23](shaping-theory.md)）——把 27 个 KF 的完整演化链凝聚为一个可直接调用的 Python 函数，输入品种 |ν|/σ 分布 (μ_D, σ_D) 即可闭式反解最优塑形容器 (K_S\*, K_T\*, τ\*) 与 Sharpe/年、年化率
+> **下游 KPI**：识别器目标 se ≤ se_target（详见 [§2.23.6](shaping-theory.md)），配合 3-gate 验收（se ≤ target / 覆盖率 ≥ 70% / rank correlation ≥ 0.4）
 
 ## 1. 主题问题
 
@@ -13,6 +15,17 @@ alpha？** 即：在**无入场方向 alpha**（随机入场 / 均匀入场 / no
 baseline）的前提下，仅通过精细化的结构塑形，能否产生显著正期望？
 
 这是一个**从"入场找信号"到"结构塑形本身作为信号"的范式反转**。
+
+**主命题四阶段演化结论**（详见 [shaping-theory.md](shaping-theory.md) 摘要）：
+
+| 阶段 | KF 覆盖 | 结论 |
+| --- | --- | --- |
+| **① 证伪独立 alpha** | KF-1..18 | DirRandom 下塑形无独立 alpha；FPT(λ=0) 作为标准零假设 |
+| **② 定型：兑现容器** | KF-19/20 | 塑形是方向 alpha 的**兑现容器**（塑形三定律） |
+| **③ 扩展：两条通道** | KF-26 | 塑形有**两条独立 alpha 通道**——通道 A（方向 alpha 放大）+ 通道 B（强段择时 + 非对称塑形，无需方向 alpha） |
+| **④ 工程闭环** | KF-27 | 分布输入闭式解 + 参数优化器：给定品种 (μ_D, σ_D)，闭式反解 (K_S\*, K_T\*, τ\*) 与年化率 |
+
+**主题最终结论**：**"结构塑形是否有独立 alpha"这个原问题得到"是**（**通道 B 存在**）"的答案，但需依赖"强段可事前识别"的上游公理——下游研究项目的核心 KPI 是识别器 se ≤ 目标值。
 
 ## 2. 动机
 
@@ -220,5 +233,7 @@ value-area 家族已证伪的四条假设：
 | 阶段 | 开发分支 | 分支基点 | 状态 |
 |------|---------|---------|------|
 | Phase 1 gatekeeper | `experiment/structural-shaping-alpha` | `dev/0.5` @ `7f9c2a9` | ✅ 完成 · 已归档 |
-| Phase 2 (2b/2c) 重启 | `experiment/structural-shaping-alpha-phase2` | `dev/0.6` @ `294c989` | 🔄 进行中（2026-07-14 重启） |
-| Phase 2a（下游） | 由 `va-asymmetry-composite` 拉起 | — | ⏸ 挂起 |
+| Phase 2 (2b/2c) 重启 | `experiment/structural-shaping-alpha-phase2` | `dev/0.6` @ `294c989` | ✅ 完成（2026-07-14） |
+| Phase 3 通道 B + 参数优化器（KF-26/27） | `dev/0.6` | `dev/0.6` @ `24d0468`（v16 重构起点）| ✅ 完成（2026-07-15，v16.4） |
+| Phase 2a（下游）| 由 `va-asymmetry-composite` 拉起 | — | ⏸ 挂起 |
+| Phase 2d（识别器主题）| 待独立立题：强段识别信号 | — | 🕐 未启动，需要 se ≤ target 的识别器（详见 [shaping-theory.md §5.5](shaping-theory.md)）|

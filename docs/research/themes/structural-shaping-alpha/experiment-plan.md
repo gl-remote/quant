@@ -1,15 +1,17 @@
 # structural-shaping-alpha · 实验计划
 
 > 类型：Experiment Plan
-> 状态：v2.3（2026-07-06 追加 Combo L 作为跨周期候选）
+> 状态：**v2.4 已被实际研究超越（2026-07-15）** · 保留为阶段 1 gatekeeper 的历史记录
 > 主题 README：[README.md](README.md)
-> 研究状态：[research-status.md](README.md)
+> 研究状态：[research-status.md](research-status.md)
+> **权威论文（当前状态）**：[shaping-theory.md](shaping-theory.md)——本主题从 v2.3 阶段 1 gatekeeper 一路发展到 v16.4 双通道 alpha + 参数优化器，实际研究路径远超本计划书。**读者当前主题状态请以 [shaping-theory.md](shaping-theory.md) 与 [research-status.md](research-status.md) 为准**，本计划书仅保留作为"阶段 1 立题时的初始设计"参考。
 > 变更记录：
 >
 > - v1 → v2 阶段 1 从单维度扫描改为行业共识组合 gatekeeper
 > - v2 → v2.1（2026-07-06）追加 Combo D2 参数补丁，用于区分 D 的参数病 vs 命题病
 > - v2.1 → v2.2（2026-07-06）阶段 1 完成后阶段 2/3/4 全面重构：从"验证塑形独立 alpha"改为"扫描塑形受益条件"
 > - v2.2 → v2.3（2026-07-06）追加 Combo L 到 §1.1 作为跨周期候选主 combo（workbench §8.8 / §8.11 实证支持）；M/N/G-K 探索性 combo 保留在 workbench 不入主计划
+> - v2.3 → v2.4（2026-07-15）**主题已完成三阶段闭环**：阶段 1 gatekeeper 证伪独立 alpha（KF-1..18）→ 阶段 2 定型兑现容器（KF-19/20 塑形三定律）→ 阶段 3 扩展两条通道 + 参数优化器（KF-26/27，v16.4）。**本计划书 §2-4 的"扫描塑形受益条件"路径已被 KF-19（跨周期趋势泄漏）+ KF-26/27（强段择时通道 B）取代**，不再作为实验主线。后续新品种上线通道 B 的标准流程见 [shaping-theory.md §2.23.6.6](shaping-theory.md)
 
 本计划检验"结构塑形本身是否具有独立 alpha"的命题。v2 按对话讨论结果，
 将阶段 1 从"逐维度扫描"改为"行业共识最优组合直接对比"，大幅降低计算量
