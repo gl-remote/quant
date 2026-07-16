@@ -107,6 +107,13 @@ repos:
         files: ^(workspace/packages/python-contracts/|workspace/tests/contracts/)
         pass_filenames: false
 
+      - id: verify-research
+        name: verify research (scripts/test.sh all research)
+        entry: bash scripts/test.sh all research
+        language: system
+        files: ^(workspace/research/|workspace/tests/research/)
+        pass_filenames: false
+
       - id: verify-tests-shared
         name: verify shared tests (scripts/test.sh)
         entry: bash scripts/test.sh

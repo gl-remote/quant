@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 全量 mypy 范围（不传 domain 时使用，与历史 pre-commit 保持一致）
-MYPY_TARGETS=(workspace/common/ workspace/data/ workspace/backtest/ workspace/clearing/ workspace/strategies/)
+MYPY_TARGETS=(workspace/common/ workspace/data/ workspace/backtest/ workspace/clearing/ workspace/strategies/ workspace/research/)
 
 # 业务域 coverage 阈值。按域设置，不使用全仓库总阈值。
 # 阈值先按当前基线下沿设置，确保今天不会因既有覆盖率阻塞；后续再逐步提高。
@@ -16,6 +16,7 @@ resolve_coverage_min() {
         report) echo "25" ;;
         cli) echo "30" ;;
         contracts) echo "60" ;;
+        research) echo "85" ;;
         *) echo "" ;;
     esac
 }
@@ -23,7 +24,7 @@ resolve_coverage_min() {
 # 业务域 → 源码路径（lint/format/type 的目标）
 resolve_src() {
     case "$1" in
-        common|config|data|backtest|clearing|strategies|cli) echo "workspace/$1/" ;;
+        common|config|data|backtest|clearing|strategies|cli|research) echo "workspace/$1/" ;;
         report) echo "workspace/report/" ;;
         contracts) echo "workspace/packages/python-contracts/src/" ;;
         *) echo "" ;;
@@ -33,7 +34,7 @@ resolve_src() {
 # 业务域 → 测试路径（unit 的目标）
 resolve_test() {
     case "$1" in
-        common|config|data|backtest|clearing|strategies|report|cli) echo "workspace/tests/$1/" ;;
+        common|config|data|backtest|clearing|strategies|report|cli|research) echo "workspace/tests/$1/" ;;
         contracts) echo "workspace/packages/python-contracts/tests/" ;;
         *) echo "" ;;
     esac
@@ -45,6 +46,7 @@ resolve_test() {
 COVERED_PREFIXES=(
     "workspace/common/" "workspace/config/" "workspace/data/" "workspace/backtest/"
     "workspace/clearing/" "workspace/strategies/" "workspace/cli/" "workspace/report/"
+    "workspace/research/"
     "workspace/tests/"                                # 测试自身改动由对应域 hook（含 tests/<domain>/）覆盖
     "workspace/packages/python-contracts/"    # contracts 域
 )

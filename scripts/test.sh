@@ -19,7 +19,7 @@
 #       例: bash scripts/test.sh lint backtest   只 ruff check backtest/
 #           bash scripts/test.sh unit strategies 只 pytest tests/strategies/
 #   <stage>  = lint | format | type | unit | integration | slow | local-data | coverage | all（缺省 all）
-#   <domain> = common|config|data|backtest|clearing|strategies|report|cli|contracts|report-web
+#   <domain> = common|config|data|backtest|clearing|strategies|report|cli|contracts|research|report-web
 #              （可选，缺省全量 Python；report-web 走前端工具链 eslint/tsc/vitest）
 #
 # ----------------------------------------------------------------------------
@@ -90,7 +90,7 @@ if [ -n "$DOMAIN" ]; then
     SRC="$(resolve_src "$DOMAIN")"
     if [ -z "$SRC" ]; then
         echo -e "${RED}未知业务域: $DOMAIN${NC}"
-        echo "可选: common|config|data|backtest|clearing|strategies|report|cli|contracts"
+        echo "可选: common|config|data|backtest|clearing|strategies|report|cli|contracts|research"
         exit 1
     fi
     TST="$(resolve_test "$DOMAIN")"
@@ -123,6 +123,7 @@ case "$STAGE" in
             run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
             run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
             run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/
+            run_coverage workspace/research "$(resolve_coverage_min research)" workspace/tests/research/
             run_coverage src "$(resolve_coverage_min contracts)" workspace/packages/python-contracts/tests/
         else
             run_coverage "$SRC" "$COVERAGE_MIN" "${TEST_PATHS[@]}"
@@ -175,6 +176,7 @@ case "$STAGE" in
             run_coverage workspace/strategies "$(resolve_coverage_min strategies)" workspace/tests/strategies/
             run_coverage workspace/report "$(resolve_coverage_min report)" workspace/tests/report/
             run_coverage workspace/cli "$(resolve_coverage_min cli)" workspace/tests/cli/
+            run_coverage workspace/research "$(resolve_coverage_min research)" workspace/tests/research/
             run_coverage src "$(resolve_coverage_min contracts)" workspace/packages/python-contracts/tests/
         else
             run_unit "${TEST_PATHS[@]}"
