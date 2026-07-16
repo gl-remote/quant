@@ -95,6 +95,7 @@ Wave 1 有 accept → 启动 Wave 2；全部 reject → 复盘归因决定是否
 - [ ] **Step 2** · Gate 0 · `verify_causality_by_truncation`
 - [ ] **Step 3** · 真值构造（$W = 20$，1h）
 - [ ] **Step 4** · Gate 1 · 视角 A 命中率 / 视角 B se 精度（含 bootstrap 严格版）
+- [ ] **Step 4.5** · Gate 1.5 · 分布对齐（C1 均值 / C2 尺度 / C3 尾部 / C4 KS）
 - [ ] **Step 5** · Gate 2 · 覆盖率 $N_{\text{year}} \ge 0.70 \cdot N_{\text{year}}^\ast$
 - [ ] **Step 6** · Gate 3 · Spearman r（视角 B 才有）
 - [ ] **Step 7** · 终审 `run_screening()`

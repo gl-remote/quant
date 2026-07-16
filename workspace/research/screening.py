@@ -12,6 +12,7 @@
 
 三层 gate 定义（screening-methodology §一 · 五）：
   Gate 1（se 精度）:    √mean((x̂ - x^真)²) ≤ se_target
+  Gate 1.5（分布对齐）: 均值/尺度/尾部/KS 四项检验（screening-methodology §四 Step 4.5）
   Gate 2（覆盖率）:    N_year(f) ≥ 0.70 · N_year*
   Gate 3（秩相关）:    Spearman(x̂, x^真) ≥ 0.40 ∧ CI_2.5 > 0
 """
@@ -76,6 +77,44 @@ class Gate1Result:
 
 
 @dataclass
+class Gate1_5Result:
+    """Gate 1.5（分布对齐）诊断 · screening-methodology §四 Step 4.5。
+
+    检验因子输出 x̂ 与真值代理 x^真 的分布是否在合理边界内对齐——
+    避免"se 数值上过 gate 但分布位置/形态错位"的静默失效。
+
+    四项检验：
+        C1 · 一阶矩：|E[x̂] - E[x^真]| / E[x^真] ≤ mean_rel_thresh（默认 0.20）
+        C2 · 尺度：sd(x̂) / sd(x^真) ∈ std_ratio_range（默认 [0.5, 1.5]）
+        C3 · 尾部：|Q_p(x̂) - Q_p(x^真)| / Q_p(x^真) ≤ q_tail_rel_thresh（默认 0.30, p=0.90）
+        C4 · KS 双样本统计量：D_KS ≤ ks_thresh（默认 0.15）
+
+    Attributes:
+        mean_rel_error: 均值相对偏差
+        std_ratio: sd(x̂) / sd(x^真)
+        q_tail_rel_error: 上分位（默认 90%）相对偏差
+        ks_statistic: KS 双样本统计量 D
+        c1_passed / c2_passed / c3_passed / c4_passed: 四项子判据
+        passed: 四项综合（AND）
+        reasons: 若 passed=False · 列出失败项名称
+        remedy_hint: "rescale"（量纲错位）· "reweight_tail"（尾部错位）·
+                     "degenerate"（sd→0 点分布）· "reject_dist_error"（严重不对齐）· None
+    """
+
+    mean_rel_error: float
+    std_ratio: float
+    q_tail_rel_error: float
+    ks_statistic: float
+    c1_passed: bool
+    c2_passed: bool
+    c3_passed: bool
+    c4_passed: bool
+    passed: bool
+    reasons: list[str]
+    remedy_hint: str | None
+
+
+@dataclass
 class Gate2Result:
     """Gate 2（覆盖率）诊断。
 
@@ -113,8 +152,9 @@ class ScreeningResult:
 
     Attributes:
         accepted: 是否通过全部 gate
-        reject_reason: 若 rejected，第一个失败的 gate（Gate1 / Gate2 / Gate3）
+        reject_reason: 若 rejected，第一个失败的 gate（Gate1 / Gate1_5 / Gate2 / Gate3）
         gate1: Gate 1 诊断
+        gate1_5: Gate 1.5 分布对齐诊断（可选 · 若未提供 x_truth 分布无法算则为 None）
         gate2: Gate 2 诊断
         gate3: Gate 3 诊断
     """
@@ -122,6 +162,7 @@ class ScreeningResult:
     accepted: bool
     reject_reason: str | None
     gate1: Gate1Result
+    gate1_5: Gate1_5Result | None
     gate2: Gate2Result
     gate3: Gate3Result
 
@@ -157,6 +198,158 @@ def gate1_se_precision(
     passed = se_hat <= se_target_value
     margin = se_target_value - se_hat
     return Gate1Result(se_hat=se_hat, se_target_value=se_target_value, passed=passed, margin=margin)
+
+
+def _quantile(values: Sequence[float], p: float) -> float:
+    """线性插值分位数（与 numpy 默认 'linear' 一致）。"""
+    if not values:
+        raise ValueError("values must be non-empty")
+    if not 0.0 <= p <= 1.0:
+        raise ValueError(f"p must be in [0, 1], got {p}")
+    sorted_v = sorted(values)
+    n = len(sorted_v)
+    if n == 1:
+        return sorted_v[0]
+    h = p * (n - 1)
+    lo = int(math.floor(h))
+    hi = int(math.ceil(h))
+    if lo == hi:
+        return sorted_v[lo]
+    return sorted_v[lo] + (h - lo) * (sorted_v[hi] - sorted_v[lo])
+
+
+def _ks_two_sample(a: Sequence[float], b: Sequence[float]) -> float:
+    """双样本 KS 统计量 D = sup_x |F_a(x) - F_b(x)|。"""
+    if not a or not b:
+        raise ValueError("both samples must be non-empty")
+    sorted_a = sorted(a)
+    sorted_b = sorted(b)
+    na, nb = len(sorted_a), len(sorted_b)
+    all_vals = sorted(set(sorted_a) | set(sorted_b))
+    d_max = 0.0
+    for v in all_vals:
+        # 经验 CDF：|{x ≤ v}| / n
+        fa = sum(1 for x in sorted_a if x <= v) / na
+        fb = sum(1 for x in sorted_b if x <= v) / nb
+        d = abs(fa - fb)
+        if d > d_max:
+            d_max = d
+    return d_max
+
+
+def gate1_5_distribution_alignment(
+    x_hat: Sequence[float],
+    x_truth: Sequence[float],
+    mean_rel_thresh: float = 0.20,
+    std_ratio_range: tuple[float, float] = (0.5, 1.5),
+    q_tail_rel_thresh: float = 0.30,
+    q_tail_p: float = 0.90,
+    ks_thresh: float = 0.15,
+) -> Gate1_5Result:
+    """Gate 1.5：分布对齐门槛（screening-methodology §四 Step 4.5）。
+
+    检验因子输出 x̂ 与真值代理 x^真 的分布是否在合理边界内对齐。
+    该 gate 弥补 Gate 1（SE）只测一阶矩误差、Gate 3（Spearman）不敏感于分布形态的盲区。
+
+    四项子判据：
+        C1 · 一阶矩：|mean(x̂) - mean(x^真)| / mean(x^真) ≤ mean_rel_thresh
+        C2 · 尺度：sd(x̂) / sd(x^真) ∈ std_ratio_range
+        C3 · 尾部：|Q_p(x̂) - Q_p(x^真)| / Q_p(x^真) ≤ q_tail_rel_thresh
+        C4 · KS 双样本：sup_x |F_x̂(x) - F_x^真(x)| ≤ ks_thresh
+
+    Args:
+        x_hat: 因子输出序列
+        x_truth: 真值代理序列
+        mean_rel_thresh: C1 阈值，默认 0.20
+        std_ratio_range: C2 (lo, hi) 区间，默认 (0.5, 1.5)
+        q_tail_rel_thresh: C3 阈值，默认 0.30
+        q_tail_p: C3 分位点，默认 0.90
+        ks_thresh: C4 阈值，默认 0.15
+
+    Returns:
+        Gate1_5Result · 若 passed=False，reasons 列出失败项，remedy_hint 给修正方向
+
+    Raises:
+        ValueError: 序列长度不匹配 · 空序列 · x_truth 均值/上分位为 0（无法算相对偏差）
+    """
+    if len(x_hat) != len(x_truth):
+        raise ValueError(f"Length mismatch: x_hat={len(x_hat)}, x_truth={len(x_truth)}")
+    if len(x_hat) < 3:
+        raise ValueError(f"Need at least 3 samples, got {len(x_hat)}")
+    lo, hi = std_ratio_range
+    if not (0 < lo < hi):
+        raise ValueError(f"std_ratio_range must satisfy 0 < lo < hi, got {std_ratio_range}")
+
+    n = len(x_hat)
+    mean_hat = sum(x_hat) / n
+    mean_truth = sum(x_truth) / n
+    # 方差用总体（分母 n · 与 numpy 默认 ddof=0 一致）
+    var_hat = sum((v - mean_hat) ** 2 for v in x_hat) / n
+    var_truth = sum((v - mean_truth) ** 2 for v in x_truth) / n
+    sd_hat = math.sqrt(max(var_hat, 0.0))
+    sd_truth = math.sqrt(max(var_truth, 0.0))
+
+    # C1 · 均值相对偏差
+    if abs(mean_truth) < 1e-12:
+        raise ValueError("mean(x_truth) is 0; cannot compute relative mean error")
+    mean_rel_err = abs(mean_hat - mean_truth) / abs(mean_truth)
+    c1 = mean_rel_err <= mean_rel_thresh
+
+    # C2 · 尺度比 · sd_truth=0 时视为病态
+    if sd_truth < 1e-12:
+        raise ValueError("sd(x_truth) is 0; truth series is degenerate")
+    std_ratio = sd_hat / sd_truth
+    c2 = lo <= std_ratio <= hi
+
+    # C3 · 上分位相对偏差
+    q_hat = _quantile(list(x_hat), q_tail_p)
+    q_truth = _quantile(list(x_truth), q_tail_p)
+    if abs(q_truth) < 1e-12:
+        raise ValueError(f"Q_{q_tail_p}(x_truth) is 0; cannot compute relative tail error")
+    q_tail_rel_err = abs(q_hat - q_truth) / abs(q_truth)
+    c3 = q_tail_rel_err <= q_tail_rel_thresh
+
+    # C4 · KS 双样本
+    d_ks = _ks_two_sample(list(x_hat), list(x_truth))
+    c4 = d_ks <= ks_thresh
+
+    passed = c1 and c2 and c3 and c4
+    reasons: list[str] = []
+    remedy_hint: str | None = None
+
+    if not c1:
+        reasons.append(f"C1_mean: rel_err={mean_rel_err:.3f} > {mean_rel_thresh:.3f}")
+    if not c2:
+        reasons.append(f"C2_scale: sd_ratio={std_ratio:.3f} not in [{lo}, {hi}]")
+    if not c3:
+        reasons.append(f"C3_tail: q{int(q_tail_p * 100)}_rel_err={q_tail_rel_err:.3f} > {q_tail_rel_thresh:.3f}")
+    if not c4:
+        reasons.append(f"C4_ks: D={d_ks:.3f} > {ks_thresh:.3f}")
+
+    # 修正提示：优先按主导症状分派
+    if not passed:
+        if std_ratio < lo * 0.5:
+            remedy_hint = "degenerate"
+        elif (not c1) and mean_rel_err > 3 * mean_rel_thresh:
+            remedy_hint = "rescale"
+        elif (not c3) and q_tail_rel_err > 2 * q_tail_rel_thresh:
+            remedy_hint = "reweight_tail"
+        else:
+            remedy_hint = "reject_dist_error"
+
+    return Gate1_5Result(
+        mean_rel_error=mean_rel_err,
+        std_ratio=std_ratio,
+        q_tail_rel_error=q_tail_rel_err,
+        ks_statistic=d_ks,
+        c1_passed=c1,
+        c2_passed=c2,
+        c3_passed=c3,
+        c4_passed=c4,
+        passed=passed,
+        reasons=reasons,
+        remedy_hint=remedy_hint,
+    )
 
 
 def gate2_coverage(
@@ -261,11 +454,18 @@ def run_screening(
     z: float = 1.645,
     coverage_ratio: float = 0.70,
     rank_threshold: float = 0.40,
+    run_gate1_5: bool = True,
+    mean_rel_thresh: float = 0.20,
+    std_ratio_range: tuple[float, float] = (0.5, 1.5),
+    q_tail_rel_thresh: float = 0.30,
+    q_tail_p: float = 0.90,
+    ks_thresh: float = 0.15,
 ) -> ScreeningResult:
-    """执行完整三层 gate 筛选。
+    """执行完整筛选流程（含 Gate 1.5）。
 
     数学根据（screening-methodology §一 · 五）：
         Gate 1 反解阈值：θ_thresh = x_min + z · se_hat
+        Gate 1.5 · 分布对齐（均值/尺度/尾部/KS · §四 Step 4.5）
         Gate 2 用 θ_thresh 算 fire 事件数
         Gate 3 全序列上的 Spearman r
         任一 gate 失败即 reject（早停）
@@ -281,6 +481,9 @@ def run_screening(
         z: 单侧置信 z 值
         coverage_ratio: Gate 2 覆盖率下限（默认 0.70）
         rank_threshold: Gate 3 秩相关下限（默认 0.40）
+        run_gate1_5: 是否执行 Gate 1.5（默认 True）· 关闭时 gate1_5=None
+        mean_rel_thresh / std_ratio_range / q_tail_rel_thresh / q_tail_p / ks_thresh:
+            Gate 1.5 四项阈值
 
     Returns:
         ScreeningResult · 若任一 gate 失败，后续 gate 仍会计算但 accepted=False
@@ -288,12 +491,26 @@ def run_screening(
     se_target_value = se_target(x_star, x_min, z)
     g1 = gate1_se_precision(x_hat, x_truth, se_target_value)
 
+    g1_5: Gate1_5Result | None = None
+    if run_gate1_5:
+        g1_5 = gate1_5_distribution_alignment(
+            x_hat,
+            x_truth,
+            mean_rel_thresh=mean_rel_thresh,
+            std_ratio_range=std_ratio_range,
+            q_tail_rel_thresh=q_tail_rel_thresh,
+            q_tail_p=q_tail_p,
+            ks_thresh=ks_thresh,
+        )
+
     threshold = x_min + z * g1.se_hat
     g2 = gate2_coverage(x_hat, threshold, n_bars_total, year_bars, n_year_star, coverage_ratio)
     g3 = gate3_rank_correlation(x_hat, x_truth, rank_threshold)
 
     if not g1.passed:
         reason: str | None = "Gate1"
+    elif g1_5 is not None and not g1_5.passed:
+        reason = "Gate1_5"
     elif not g2.passed:
         reason = "Gate2"
     elif not g3.passed:
@@ -305,6 +522,7 @@ def run_screening(
         accepted=(reason is None),
         reject_reason=reason,
         gate1=g1,
+        gate1_5=g1_5,
         gate2=g2,
         gate3=g3,
     )

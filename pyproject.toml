@@ -103,9 +103,10 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 # strategies/__init__.py 的 import 顺序不能改（避免循环导入）
 "workspace/strategies/__init__.py" = ["I001"]
 # research/ 业务域刻意保留 shaping-theory 论文原始记号：
-# - N802/N803/N806: mu_D / sd_D / P_win_finiteT / R_equals_1 等对齐数学论文的 mixedCase
-"workspace/research/**/*.py" = ["N802", "N803", "N806", "N815"]
-"workspace/tests/research/**/*.py" = ["N802", "N803", "N806", "N815"]
+# - N801/N802/N803/N806/N815: Gate1_5Result / mu_D / sd_D / P_win_finiteT / R_equals_1 等
+#   对齐数学论文的 mixedCase / snake_case_with_digits
+"workspace/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
+"workspace/tests/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 
 [tool.ruff.format]
 quote-style = "double"

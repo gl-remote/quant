@@ -48,10 +48,12 @@ from research.fpt import e_gross_infty, e_net_infty, e_tau_infty, p_win_infty, t
 from research.hurst import hurst_rs
 from research.optimizer import KF27Params, KF27Result, optimize_kf27
 from research.screening import (
+    Gate1_5Result,
     Gate1Result,
     Gate2Result,
     Gate3Result,
     ScreeningResult,
+    gate1_5_distribution_alignment,
     gate1_se_precision,
     gate2_coverage,
     gate3_rank_correlation,
@@ -82,10 +84,12 @@ __all__ = [
     # Screening
     "se_target",
     "gate1_se_precision",
+    "gate1_5_distribution_alignment",
     "gate2_coverage",
     "gate3_rank_correlation",
     "run_screening",
     "Gate1Result",
+    "Gate1_5Result",
     "Gate2Result",
     "Gate3Result",
     "ScreeningResult",

@@ -482,7 +482,7 @@ from research import (
 | **§2.10** Cluster Bootstrap | `research.bootstrap` | `cluster_bootstrap(events, cluster_key, statistic, n_boot=5000, seed=None)` → `BootstrapResult` | `TestClusterBootstrap` |
 | **§2.11** 截断法泄漏检测 | `research.causality` | `verify_causality_by_truncation(factor, history, sample_indices, tolerance=1e-9)` → `CausalityResult` | `TestCausality` |
 | **§2.12** KF-27 参数优化器 | `research.optimizer` + `research.distribution` | `FoldedNormal(mu_D, sd_D).fit()` `KF27Params(...)` `optimize_kf27(params, objective="sharpe_year")` → `KF27Result` | `test_distribution_optimizer.py :: TestFoldedNormal / TestKF27Optimizer` |
-| **筛选流程** 完整三层 gate | `research.screening` | `run_screening(x_hat, x_truth, x_min, x_star, n_bars_total, year_bars, n_year_star)` → `ScreeningResult` `gate1_se_precision`, `gate2_coverage`, `gate3_rank_correlation` 三个独立门 | `test_screening.py :: 全部` |
+| **筛选流程** 完整三层 gate | `research.screening` | `run_screening(x_hat, x_truth, x_min, x_star, n_bars_total, year_bars, n_year_star)` → `ScreeningResult` `gate1_se_precision`, `gate1_5_distribution_alignment`, `gate2_coverage`, `gate3_rank_correlation` 四个独立门 | `test_screening.py :: 全部` |
 
 ### 3.2 典型调用链
 
@@ -714,6 +714,74 @@ gate1_strong = boot.ci_high <= se_tgt
 > 仅 $> 3.0 \cdot se_{\text{target}}$ 才真正归 **L4** 反例登记。
 > 因此 Gate 1 的"失败"更准确的读法是"降级"而非"淘汰"。
 
+### Step 4.5 · Gate 1.5 · 分布对齐
+
+**动机**：Gate 1 只测**一阶矩误差**（RMSE），无法察觉三种静默失效：
+
+1. **量纲错位**：因子输出的数值范围与 $|\nu|/\sigma$ 完全不在同一量级
+   （比如 $\hat{x} \in [0, 100]$ 但真值 $\in [0, 0.5]$）——$\widehat{se}$ 会爆炸，但更本质的问题是"归一化没做"
+2. **点分布退化**：因子大部分时刻输出常数、只在极少数点突跳——$\text{Var}(\hat{x}) \approx 0$，
+   Gate 3 秩相关大量并列、bootstrap CI 失灵
+3. **尾部错位**：因子均值/尺度对齐，但 fire 阈值 $\theta_{\text{thresh}}$ 附近的分位（$Q_{0.90}$）
+   与真值差距很大——**fire 事件抓错分位**，实盘触发的是"因子内部的伪尾部"
+
+**判据**：$\hat{x}$ 与 $x^{\text{真}}$ 分布须同时通过四项检验：
+
+$$
+\begin{aligned}
+\text{C1 (一阶矩)}:& \quad \frac{|E[\hat{x}] - E[x^{\text{真}}]|}{E[x^{\text{真}}]} \le 0.20 \\
+\text{C2 (尺度)}:& \quad \frac{\text{sd}(\hat{x})}{\text{sd}(x^{\text{真}})} \in [0.5,\; 1.5] \\
+\text{C3 (尾部)}:& \quad \frac{|Q_{0.90}(\hat{x}) - Q_{0.90}(x^{\text{真}})|}{Q_{0.90}(x^{\text{真}})} \le 0.30 \\
+\text{C4 (KS 双样本)}:& \quad D_{\text{KS}} = \sup_x |F_{\hat{x}}(x) - F_{x^{\text{真}}}(x)| \le 0.15
+\end{aligned}
+$$
+
+**执行**：
+
+```python
+from research import gate1_5_distribution_alignment
+
+g1_5 = gate1_5_distribution_alignment(
+    x_hat=x_hat_series,
+    x_truth=x_truth_series,
+    mean_rel_thresh=0.20,
+    std_ratio_range=(0.5, 1.5),
+    q_tail_rel_thresh=0.30,
+    q_tail_p=0.90,
+    ks_thresh=0.15,
+)
+# g1_5.passed / g1_5.c1_passed / c2 / c3 / c4
+# g1_5.mean_rel_error / std_ratio / q_tail_rel_error / ks_statistic
+# g1_5.reasons · 失败项列表
+# g1_5.remedy_hint ∈ {"rescale", "reweight_tail", "degenerate", "reject_dist_error", None}
+```
+
+**失败修正提示**（`remedy_hint`）：
+
+| hint | 主导症状 | 建议动作 |
+|---|---|---|
+| `rescale` | C1 严重失败（均值偏差 > 3 × 阈值） | 归一化因子输出（除以 $\sigma_{\text{bar}}$ 或 rank 变换后再乘 $\hat{x}^\ast$）· 重跑 Step 4 |
+| `degenerate` | C2 尺度比 < 0.25 · $\text{sd}(\hat{x}) \to 0$ | 因子表达力不足 · 表明该因子是"点分布"型 · 需换真正连续的估计器 |
+| `reweight_tail` | C3 严重失败（尾部偏差 > 2 × 阈值） | 尾部错位 · 检查是否有 winsorize / clipping · 或换 rank 归一后按目标分布反变换 |
+| `reject_dist_error` | 综合失败 | 分布形态本质不对 · 归 L4 反例登记 |
+
+**登记内容**：四项指标数值、`c1/c2/c3/c4` 布尔、`remedy_hint`、bootstrap CI（若做严格版）。
+全部写入候选登记档 Step 4.5 参数块。
+
+**失败处理**（配合 §七 分级）：
+
+- `remedy_hint = "rescale"` → 修正后重跑 Step 0（视为新候选）· 不占分级配额
+- `remedy_hint = "reweight_tail"` → 修正后重跑 Step 0 · 若修正后 C3 通过则正常走 Step 5-10
+- `remedy_hint = "degenerate"` → **直接归 L4**（表达力不足是结构性问题）
+- `remedy_hint = "reject_dist_error"` → **降级到 L3**（可作辅助过滤 · 若 Gate 3 秩相关 ≥ 0.20）
+
+**与其他 gate 的关系**：
+
+- **上游**：Gate 1 的 $\widehat{se}$ 只是一阶矩误差；Gate 1.5 把二阶矩（尺度）、尾部分位、KS 分布形态全部覆盖
+- **下游**：Gate 2 触发阈值 $\theta_{\text{thresh}}$ 在 $Q_{0.90}$ 附近激活——**若 C3 不过、Gate 2 的 fire 事件就在错的地方**，即使 Gate 2 数值上通过也是伪信号
+
+**为什么放在 Step 4 之后**：需要 $\widehat{se}$（Step 4 已算），且必须早于 Gate 2（Gate 2 依赖 $\theta_{\text{thresh}}$ 的分位定位）。
+
 ### Step 5 · Gate 2 · 覆盖率
 
 ```python
@@ -800,6 +868,7 @@ verdict = run_screening(
 |---|---|---|
 | True | None | `research-status.md` 关键发现清单追加一条 KF · 因子成为下游子主题种子 |
 | False | Gate1 | `docs/workbench/strength-factor-screening/rejected_factors.md` · 附差距 |
+| False | Gate1_5 | 同上 · 附四项 C1/C2/C3/C4 数值 + `remedy_hint` |
 | False | Gate2 | 同上 · 附 $N_{\text{year}}$ 与 ratio |
 | False | Gate3 | 同上 · 附 $\widehat{r}$，并追加 "精度好但方向错" 标签 |
 
@@ -1249,6 +1318,7 @@ $x_{\min} = 0.055$，$z_{0.95} = 1.645$：
 | 前文写法 | 分级管理下读作 |
 |---|---|
 | Gate 1 失败 → reject | 若差距 < 1.2× → **降级到 L2**；1.2-3× → **降级到 L3**；> 3× → **L4** |
+| **Gate 1.5 失败 → reject** | remedy=`rescale`/`reweight_tail` → 修正后重跑（**不占配额**）· remedy=`degenerate` → **L4** · remedy=`reject_dist_error` → **L3** |
 | Gate 2 失败 → reject | 覆盖率过低本身可通过融合稀释解决 → **降级到 L2**（有条件融合） |
 | Gate 3 失败 → reject | $r < 0.40$ 但 $> 0.20$ → **L3**（方向对但精度不足）· $r \le 0.20$ → **L4**（真"精度好但方向错"）|
 | Step 9 方向审计失败 → reject | 转投通道 A · 本主题内**L4**（作为强度因子不适用） |

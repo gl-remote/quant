@@ -34,8 +34,13 @@ class TestDualChannelDrift:
         构造 n_win=31, n_time_exit=37 让两通道 z 都接近 0。
         """
         result = dual_channel_drift_test(
-            n_win=31, n_time_exit=37, n_total=100,
-            k_s=1.0, k_t=1.0, sigma=1.0, t_horizon=1.0,
+            n_win=31,
+            n_time_exit=37,
+            n_total=100,
+            k_s=1.0,
+            k_t=1.0,
+            sigma=1.0,
+            t_horizon=1.0,
         )
         assert result.b_channel_valid
         assert result.verdict == "no_drift"
@@ -49,8 +54,13 @@ class TestDualChannelDrift:
         n_time_exit=5（远低于 37）。
         """
         result = dual_channel_drift_test(
-            n_win=80, n_time_exit=5, n_total=100,
-            k_s=1.0, k_t=1.0, sigma=1.0, t_horizon=1.0,
+            n_win=80,
+            n_time_exit=5,
+            n_total=100,
+            k_s=1.0,
+            k_t=1.0,
+            sigma=1.0,
+            t_horizon=1.0,
         )
         assert result.b_channel_valid
         assert result.z_a > 2.0
@@ -61,8 +71,13 @@ class TestDualChannelDrift:
         """T 足够大 · p_tau_theory < 1e-3 时通道 B 应标记 invalid。"""
         # K_S=1, K_T=1, sigma=1, T=100 (远大于 T*=1) · p_tau→0
         result = dual_channel_drift_test(
-            n_win=55, n_time_exit=0, n_total=100,
-            k_s=1.0, k_t=1.0, sigma=1.0, t_horizon=100.0,
+            n_win=55,
+            n_time_exit=0,
+            n_total=100,
+            k_s=1.0,
+            k_t=1.0,
+            sigma=1.0,
+            t_horizon=100.0,
         )
         assert not result.b_channel_valid
         # 只用通道 A · z_A ≈ (0.55 - 0.5) / 0.0497 ≈ 1.0 · 未过 threshold
@@ -72,8 +87,13 @@ class TestDualChannelDrift:
         """B 不 valid 但 A 显著正 → 'channel_a_only'。"""
         # 构造 n_win 让 z_A 显著（>2），T 大让 B invalid
         result = dual_channel_drift_test(
-            n_win=90, n_time_exit=0, n_total=100,
-            k_s=1.0, k_t=1.0, sigma=1.0, t_horizon=100.0,
+            n_win=90,
+            n_time_exit=0,
+            n_total=100,
+            k_s=1.0,
+            k_t=1.0,
+            sigma=1.0,
+            t_horizon=100.0,
         )
         assert not result.b_channel_valid
         assert result.z_a > 2.0
