@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # where=["workspace"] 把 workspace 作为源码根自动发现并映射，无需手写 packages/package-dir。
 # include 限定只打包这几个业务域，排除 packages（跨语言共享契约，独立 member）、tests、tools、docs。
 where = ["workspace"]
-include = ["cli*", "common*", "config*", "data*", "backtest*", "strategies*", "report*"]
+include = ["cli*", "common*", "config*", "data*", "backtest*", "strategies*", "report*", "research*"]
 
 [tool.uv.workspace]
 # packages/python-contracts 是跨业务域、跨语言复用的共享契约包，保持独立 member。
@@ -102,6 +102,10 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 [tool.ruff.lint.per-file-ignores]
 # strategies/__init__.py 的 import 顺序不能改（避免循环导入）
 "workspace/strategies/__init__.py" = ["I001"]
+# research/ 业务域刻意保留 shaping-theory 论文原始记号：
+# - N802/N803/N806: mu_D / sd_D / P_win_finiteT / R_equals_1 等对齐数学论文的 mixedCase
+"workspace/research/**/*.py" = ["N802", "N803", "N806", "N815"]
+"workspace/tests/research/**/*.py" = ["N802", "N803", "N806", "N815"]
 
 [tool.ruff.format]
 quote-style = "double"
