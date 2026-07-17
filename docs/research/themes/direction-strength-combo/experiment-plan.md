@@ -14,9 +14,9 @@
 
 | 方向信号 | 描述 | 数据来源 | 优先级 |
 |----------|------|----------|--------|
-| **va_asymmetry_tier** | poc_va.py 的 tier 分类器（L_* → long，S_* → short） | 已实现 | P0（主方向） |
-| **ema_cross** | EMA20 上穿/下穿 EMA60 | 待构造 | P1（替代方向） |
-| **rsi_signal** | RSI(14) > 70 → short，RSI < 30 → long | 待构造 | P2（替代方向） |
+| **ema_cross** | EMA20 上穿/下穿 EMA60 | 待构造 | P0（主方向） |
+| **rsi_signal** | RSI(14) > 70 → short，RSI < 30 → long | 待构造 | P0（主方向） |
+| **ma_cross** | MA50 上穿/下穿 MA200 | 待构造 | P1（替代方向） |
 
 ### 2.2 强度条件来源
 
@@ -31,20 +31,21 @@
 
 | 编号 | 方向信号 | 强度条件 | 模式 | 优先级 | 预期结果 |
 |------|----------|----------|------|--------|----------|
-| C1 | va_asymmetry_tier | atr_rank | 模式 B | P0 | 高 ATR 时段方向信号更有效 |
-| C2 | va_asymmetry_tier | skew_abs_rank | 模式 A | P0 | skew 大时方向信号更有效 |
-| C3 | va_asymmetry_tier | volume_rank | 模式 B | P1 | 高成交量时段方向信号更有效 |
-| C4 | va_asymmetry_tier | composite_strength | 模式 C | P2 | 综合强度高时方向信号更有效 |
-| C5 | ema_cross | atr_rank | 模式 B | P1 | 验证配合效应是否普适 |
-| C6 | rsi_signal | atr_rank | 模式 B | P2 | 验证配合效应是否普适 |
+| C1 | ema_cross | atr_rank | 模式 B | P0 | 高 ATR 时段方向信号更有效 |
+| C2 | ema_cross | skew_abs_rank | 模式 A | P0 | skew 大时方向信号更有效 |
+| C3 | rsi_signal | atr_rank | 模式 B | P0 | 高 ATR 时段方向信号更有效 |
+| C4 | rsi_signal | skew_abs_rank | 模式 A | P0 | skew 大时方向信号更有效 |
+| C5 | ema_cross | volume_rank | 模式 B | P1 | 高成交量时段方向信号更有效 |
+| C6 | ema_cross | composite_strength | 模式 C | P2 | 综合强度高时方向信号更有效 |
 
 ## 三、验证顺序
 
 ### 3.1 第一阶段：模式 A + B（基础验证）
 
-1. **C1**：va_asymmetry_tier + atr_rank
-2. **C2**：va_asymmetry_tier + skew_abs_rank
-3. **C3**：va_asymmetry_tier + volume_rank
+1. **C1**：ema_cross + atr_rank
+2. **C2**：ema_cross + skew_abs_rank
+3. **C3**：rsi_signal + atr_rank
+4. **C4**：rsi_signal + skew_abs_rank
 
 **判定标准**：
 - 任一组合通过 Gate 1+2 → 进入第二阶段
@@ -52,20 +53,12 @@
 
 ### 3.2 第二阶段：模式 C（综合验证）
 
-4. **C4**：va_asymmetry_tier + composite_strength
+5. **C5**：ema_cross + volume_rank
+6. **C6**：ema_cross + composite_strength
 
 **判定标准**：
 - 配合增益是否高于单因子
 - 是否稳定
-
-### 3.3 第三阶段：普适性验证
-
-5. **C5**：ema_cross + atr_rank
-6. **C6**：rsi_signal + atr_rank
-
-**判定标准**：
-- 配合效应是否只在 va_asymmetry 分类器上存在
-- 是否跨方向信号类型普适
 
 ## 四、判定标准
 
@@ -105,10 +98,12 @@
 
 | 参数 | 值 | 来源 |
 |------|-----|------|
-| skew_rank_win | 10 | va-asymmetry spec |
-| atr_rank_win | 10 | va-asymmetry spec |
-| trend_win | 10 | va-asymmetry spec |
+| atr_rank_win | 10 | 经验值 |
+| skew_rank_win | 10 | 经验值 |
 | volume_rank_win | 20 | 经验值 |
+| ema_short | 20 | 经验值 |
+| ema_long | 60 | 经验值 |
+| rsi_period | 14 | 经验值 |
 
 ## 六、实验输出
 

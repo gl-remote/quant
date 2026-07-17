@@ -101,8 +101,9 @@ Step 5：Gate 判决（见 §四）
 
 方向信号 $d_t$ 可以来自：
 
-1. **va-asymmetry 分类器**：使用 `poc_va.py` 的 tier 输出（L_* → long，S_* → short）
-2. **自定义方向特征**：如 EMA 交叉、RSI 超买超卖等
+1. **EMA 交叉**：EMA20 上穿 → long，下穿 → short
+2. **RSI 超买超卖**：RSI(14) < 30 → long，RSI(14) > 70 → short
+3. **MA 交叉**：MA50 上穿/下穿 MA200
 
 ### 3.3 强度条件构造
 
@@ -187,7 +188,6 @@ Step 5：Gate 判决（见 §四）
 | kf:structural-shaping-alpha#KF-26 | 数学基础 | E_gross^mix 公式 |
 | kf:structural-shaping-alpha#KF-27 | 工程接口 | 参数优化器 |
 | kf:strength-factor-screening#KF-B6 | 边界约束 | |ν|/σ 不可精确预测 → 改用粗粒度分档 |
-| theme:va-asymmetry-composite | 分类器 | tier 分类器作为方向信号来源 |
 
 ---
 
