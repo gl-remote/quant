@@ -4,7 +4,7 @@
 > 状态：立题（2026-07-05）· 三阶段完整闭环 · v16.4（2026-07-15）
 > 创建时间：2026-07-05
 > 上游 Roadmap：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
-> 前置反例：[value-area 家族全部冻结](../../themes-frozen/value-area/README.md)
+> 前置反例：[value-area 家族全部冻结](../../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 > **核心成果**：**KF-27 参数优化器**（[shaping-theory.md §2.23](shaping-theory.md)）——把 27 个 KF 的完整演化链凝聚为一个可直接调用的 Python 函数，输入品种 |ν|/σ 分布 (μ_D, σ_D) 即可闭式反解最优塑形容器 (K_S\*, K_T\*, τ\*) 与 Sharpe/年、年化率
 > **下游 KPI**：识别器目标 se ≤ se_target（详见 [§2.23.6](shaping-theory.md)），配合 3-gate 验收（se ≤ target / 覆盖率 ≥ 70% / rank correlation ≥ 0.4）
 
@@ -207,7 +207,7 @@ value-area 家族失败于此假设的反面——一直在找入场 alpha，但
 | Archive 引用清单 | [archive-references.md](archive-references.md) |
 | 参数选择规格 | 尚未撰写（阶段 2 通过后补） |
 | 工程实现细节 | 见论文 Part IV（已吸收 math-spec 实现指南） |
-| 家族反例（value-area）| [../../themes-frozen/value-area/README.md](../../themes-frozen/value-area/README.md) |
+| 家族反例（value-area）| [../../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md](../../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
 | 长期框架 | [../../../roadmap/strategy-research-framework.md](../../../roadmap/strategy-research-framework.md) |
 
 ## 10. 立题声明（why-not-value-area）

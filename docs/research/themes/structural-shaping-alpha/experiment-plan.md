@@ -574,7 +574,7 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 ## 7. 关联主题
 
-- **反例（同家族）**：[value-area 家族](../../themes-frozen/value-area/README.md)
+- **反例（同家族）**：[value-area 家族](../../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 - **方法论继承**：value-area 家族的四大约束（ATR / 期望净值 / 多层对照 / cluster bootstrap）
 - **上游 Roadmap**：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 

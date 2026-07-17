@@ -4,7 +4,7 @@
 > 状态：**无活跃策略主题（2026-07-14）** · va-asymmetry-revisit 已因假设全线证伪彻底废弃归档 · va-asymmetry / value-area 两大家族全部证伪 · structural-shaping-alpha 保留为工具资产
 > 最近更新：2026-07-13
 > 归档批次：[archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)（**必读**）
-> 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
+> 家族归档：[archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
 
 ## 1. 当前一句话结论
@@ -67,10 +67,10 @@ previously 冻结:
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
 | ~~strength-factor-screening~~ | **冻结归档（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [archive:2026-07-17-strength-factor-screening-freeze](../archive/strategy-research/2026/07/2026-07-17-strength-factor-screening-freeze/freeze-summary.md) |
-| value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
-| value_area_rolling_reacceptance | **冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
+| ~~value_area_reacceptance~~ | **冻结归档（2026-07-03）** / feature-only 降级 | [archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
+| ~~value_area_rolling_reacceptance~~ | **冻结归档（2026-07-05）** / 主题假设完全证伪 | [archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
 
-家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) · [themes-frozen/structural-shaping-alpha/README.md](./themes-frozen/structural-shaping-alpha/README.md)
+家族总结：[archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [themes-frozen/structural-shaping-alpha/README.md](./themes-frozen/structural-shaping-alpha/README.md)
 
 **当前活跃策略主题**：无（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。工具/方法论主题保留：
 
@@ -154,7 +154,7 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 ```
 
 详见：
-- [themes-frozen/value-area/README.md #共同教训](./themes-frozen/value-area/README.md)
+- [archive:2026-07-17-value-area-family-consolidated#共同教训](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 - [archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)
 
 ## 6. 文档地图
@@ -165,9 +165,9 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 | **va-asymmetry 错误路径归并封装（必读）** | [archive:...leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
 | poc-value-area-asymmetry（**已归档** · 只读只做方法论参考） | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha（塑形工具资产 · 上游） | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
-| value_area 家族总结（冻结） | [themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) |
-| value_area_reacceptance（冻结） | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
-| value_area_rolling_reacceptance（冻结） | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
+| value_area 家族总结（**已归档**） | [archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
+| value_area_reacceptance（**已归档**） | [archive:2026-07-17-value-area-family-consolidated/value-area-reacceptance/](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/value-area-reacceptance/README.md) |
+| value_area_rolling_reacceptance（**已归档**） | [archive:2026-07-17-value-area-family-consolidated/value-area-rolling-reacceptance/](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/value-area-rolling-reacceptance/README.md) |
 | Rolling 冻结摘要 | [freeze-summary.md](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
 | structural-shaping Stage 1（归档） | [2026/07/2026-07-06-structural-shaping-alpha-stage1](../archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/) |
 | Stage B 归档 | [stage-b-sweep-summary.md](../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/stage-b-sweep-summary.md) |
@@ -184,7 +184,7 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 3. 必读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README
    了解 va-asymmetry 家族错误路径链条与方法论遗产；
 4. 遵守 §5 的 12 条方法论前置约束（第 12 条：涉及 daily 特征聚合的必须先过截断法）；
-5. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
+5. 需要 value-area 家族历史细节时读 archive:2026-07-17-value-area-family-consolidated/ 与对应 archive；
 6. 不要在冻结/归档主题目录下增加新实验（含
    archive:...leak-chain-consolidated/theme-va-asymmetry-composite/）；
 7. 若发现数据周期、成交配对、成本口径、事件时间对齐问题，

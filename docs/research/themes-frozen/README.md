@@ -7,7 +7,7 @@
 
 | 家族 | 成员数 | 状态 | 目录 |
 | --- | --- | --- | --- |
-| value-area | 2 | 全部冻结（1 feature-only 降级 + 1 假设完全证伪）| [value-area/](value-area/README.md) |
+| structural-shaping-alpha | 1 | strength-factor-screening 已冻结归档 | [structural-shaping-alpha/](structural-shaping-alpha/README.md) |
 
 ## 引用规则
 
