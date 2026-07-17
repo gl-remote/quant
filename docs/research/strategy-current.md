@@ -1,7 +1,7 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**活跃（2026-07-17）** · 新主题 direction-strength-combo 已立题 · 研究方向+强度配合效应 · va-asymmetry / value-area 两大家族全部证伪 · structural-shaping-alpha 保留为工具资产
+> 状态：**无活跃策略主题（2026-07-14）** · va-asymmetry-revisit 已因假设全线证伪彻底废弃归档 · va-asymmetry / value-area 两大家族全部证伪 · structural-shaping-alpha 保留为工具资产
 > 最近更新：2026-07-13
 > 归档批次：[archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)（**必读**）
 > 家族归档：[themes-frozen/value-area/](./themes-frozen/value-area/README.md)
@@ -66,14 +66,13 @@ previously 冻结:
 | ~~va-asymmetry-composite~~ | **⚠️ 假设证伪归档（2026-07-13）** · 无独立 alpha · 主题目录已整体搬入归档批次 | [archive:...leak-chain-consolidated/theme-va-asymmetry-composite/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/) |
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 · 阶段 1 完成待冻结候选 · 工具资产保留供引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
-| direction-strength-combo | **待启动** · 方向+强度配合 · 三种配合模式 · 6 候选矩阵 | [themes/direction-strength-combo/](./themes/direction-strength-combo/README.md) |
 | strength-factor-screening | **冻结（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [themes-frozen/structural-shaping-alpha/strength-factor-screening/](./themes-frozen/structural-shaping-alpha/strength-factor-screening/README.md) |
 | value_area_reacceptance | 冻结 / feature-only 降级 | [themes-frozen/value-area/value-area-reacceptance/](./themes-frozen/value-area/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance | **冻结（2026-07-05）** / 主题假设完全证伪 | [themes-frozen/value-area/value-area-rolling-reacceptance/](./themes-frozen/value-area/value-area-rolling-reacceptance/README.md) |
 
 家族总结：[themes-frozen/value-area/README.md](./themes-frozen/value-area/README.md) · [themes-frozen/structural-shaping-alpha/README.md](./themes-frozen/structural-shaping-alpha/README.md)
 
-**当前活跃策略主题**：direction-strength-combo（方向+强度配合）。工具/方法论主题保留：
+**当前活跃策略主题**：无（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。工具/方法论主题保留：
 
 - 分类器结构参考（数字作废，仅结构可继承，**已归档**）：archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/
 - 塑形工具资产：`docs/research/themes/structural-shaping-alpha/`
@@ -129,11 +128,10 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 
 ## 5. 下一步
 
-**当前活跃策略主题**：direction-strength-combo（方向+强度配合）。近期路径：
+**当前状态**：无活跃策略主题（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。近期路径：
 
-1. **执行第一阶段实验**（C1-C3）：va_asymmetry_tier + atr_rank / skew_abs_rank / volume_rank
-2. **根据结果决定**是否进入第二阶段（综合强度）和第三阶段（普适性验证）
-3. **同步维护**塑形工具资产（structural-shaping-alpha）
+1. **等待新研究方向**：direction-strength-combo 主题已删除，等待新方向立题
+2. **同步维护**塑形工具资产（structural-shaping-alpha）
 
 **任何新主题必须遵守的方法论前置约束**（继承自 value-area 家族 + va-asymmetry 家族证伪 + 前序主题教训）：
 
@@ -180,21 +178,17 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 ## 7. 给 AI 的工作规则
 
 ```text
-1. 先读本文件确认**当前活跃策略主题**：direction-strength-combo（方向+强度配合）；
+1. 先读本文件确认**当前活跃策略主题**：无（direction-strength-combo 已删除）；
 2. 必读 archive:2026-07-14-va-asymmetry-revisit-full-refutation#va-asymmetry-family-retrospective
    了解 va-asymmetry 家族 8+ 天全周期复盘 · 5 条系统性错误 · 6 条 skill 补丁建议；
 3. 必读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README
    了解 va-asymmetry 家族错误路径链条与方法论遗产；
-4. 新主题 direction-strength-combo 研究方向+强度配合效应：
-   - 使用 va-asymmetry 分类器作为方向信号来源
-   - 使用粗粒度强度分档（ATR / skew_abs / volume）作为强度条件
-   - 验证配合增益是否显著
-5. 遵守 §5 的 12 条方法论前置约束（第 12 条：涉及 daily 特征聚合的必须先过截断法）；
-6. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
-7. 不要在冻结/归档主题目录下增加新实验（含
+4. 遵守 §5 的 12 条方法论前置约束（第 12 条：涉及 daily 特征聚合的必须先过截断法）；
+5. 需要 value-area 家族历史细节时读 themes-frozen/value-area/ 与对应 archive；
+6. 不要在冻结/归档主题目录下增加新实验（含
    archive:...leak-chain-consolidated/theme-va-asymmetry-composite/）；
-8. 若发现数据周期、成交配对、成本口径、事件时间对齐问题，
+7. 若发现数据周期、成交配对、成本口径、事件时间对齐问题，
    先写 docs/issues 并暂停受影响实验；
-9. 所有结论需同时给出"不压缩名义 / 2× 压缩 / 4× 压缩"三档夏普/回撤/换手对照，
+8. 所有结论需同时给出"不压缩名义 / 2× 压缩 / 4× 压缩"三档夏普/回撤/换手对照，
    避免用无约束杠杆美化结果。
 ```
