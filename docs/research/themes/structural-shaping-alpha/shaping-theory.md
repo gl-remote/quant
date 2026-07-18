@@ -185,16 +185,16 @@ $$X\_t = \ln(S\_t/S\_0) \Rightarrow dX\_t = \nu \, dt + \sigma \, dW\_t, \quad \
 首达止盈概率：
 
 $$
-\boxed{P\_{\text{win}}^{\infty}(\lambda; K\_S, K\_T) =
+\boxed{P_{\text{win}}^{\infty}(\lambda; K_S, K_T) =
 \begin{cases}
-\dfrac{e^{\lambda K\_T} \cdot (1 - e^{-\lambda K\_S})}{e^{\lambda K\_T} - e^{-\lambda K\_S}} & \lambda \ne 0 \\\[10pt]
-\dfrac{K\_S}{K\_S + K\_T} & \lambda = 0
+\dfrac{e^{\lambda K_T} \cdot (1 - e^{-\lambda K_S})}{e^{\lambda K_T} - e^{-\lambda K_S}} & \lambda \ne 0 \\[10pt]
+\dfrac{K_S}{K_S + K_T} & \lambda = 0
 \end{cases}}
 $$
 
 其中 λ = 2ν/σ²。定义 R:R = RR = K\_T/K\_S，则 λ=0 时：
 
-$$P\_{\text{win}}^{\infty}(\lambda=0) = \frac{1}{1 + RR}$$
+$$P_{\text{win}}^{\infty}(\lambda=0) = \frac{1}{1 + RR}$$
 
 **这是本文核心恒等式：无漂移下，胜率 = 1/(1+RR)。**
 
@@ -213,21 +213,21 @@ GBM μ=0（λ=−1）的 P\_win 远低于 FPT λ=0，因为 Itô 凸性 ν=−σ
 
 ### Gross 期望
 
-$$E\[\text{gross}] = P\_{\text{win}}^{\infty} \cdot K\_T - P\_{\text{loss}}^{\infty} \cdot K\_S$$
+$$E[\text{gross}] = P_{\text{win}}^{\infty} \cdot K_T - P_{\text{loss}}^{\infty} \cdot K_S$$
 
 ### λ=0 恒等式（KF-1 数学根源）
 
-$$\boxed{E\[\text{gross}]\big|\_{\lambda=0} \equiv 0}$$
+$$\boxed{E[\text{gross}]\big|_{\lambda=0} \equiv 0}$$
 
 **推广**：由 Optional Stopping Theorem，任何有限 stopping time 出场规则（time exit / trailing / breakeven）都有 E\[X\_σ] = 0。
 
 ### Net 期望
 
-$$E\[\text{net}] = E\[\text{gross}] - 2c$$
+$$E[\text{net}] = E[\text{gross}] - 2c$$
 
 λ=0 时：
 
-$$\boxed{E\[\text{net}]\big|\_{\lambda=0} \equiv -2c}$$
+$$\boxed{E[\text{net}]\big|_{\lambda=0} \equiv -2c}$$
 
 **含义**：无漂移假设下，任何 barrier 组合在扣除成本后期望恒负。结构塑形不创造 gross 期望，只塑造期望分布。
 
@@ -237,7 +237,7 @@ $$\boxed{E\[\text{net}]\big|\_{\lambda=0} \equiv -2c}$$
 
 ### 定义
 
-$$\boxed{T^\* := \frac{\[\max(K\_S, K\_T)]^2}{\sigma^2}}$$
+$$\boxed{T^* := \frac{[\max(K_S, K_T)]^2}{\sigma^2}}$$
 
 T\* 是"无漂移下平均触达 barrier 所需时间"的量级。
 
@@ -1840,7 +1840,7 @@ Doob Optional Stopping Theorem (OST) 的适用需要两个核心前提：(1) 底
 
 三定律联合表述（示意分解，各项非严格独立可加）：
 
-$$E\_{\text{gross,总}} \approx \underbrace{0}_{\text{Doob (定律 I)}} + \underbrace{\text{市场结构 alpha}}_{\text{定律 II · KF-15/16}} + \underbrace{\text{方向 alpha × 塑形放大}}\_{\text{定律 III · KF-19}}$$
+$$E_{\text{gross,总}} \approx \underbrace{0}_{\text{Doob (定律 I)}} + \underbrace{\text{市场结构 alpha}}_{\text{定律 II - KF-15/16}} + \underbrace{\text{方向 alpha x 塑形放大}}_{\text{定律 III - KF-19}}$$
 
 ### 2.21.6 对下游主题的意义
 
@@ -2326,7 +2326,7 @@ $$\boxed{E_{\text{gross}}^{\text{mix}}(x) \approx \frac{x^2 \cdot K_S^3 \cdot R(
 
 **盈亏平衡门槛 E_net = 0**：
 
-$$\boxed{x_{\min} = \sqrt{\frac{6c}{K_S^3 \cdot R(R-1)}}} \tag{\star}$$
+$$\boxed{x_{\min} = \sqrt{\frac{6c}{K_S^3 \cdot R(R-1)}}} \tag{*}$$
 
 **四条重要性质**：
 
@@ -2597,7 +2597,7 @@ $$\boxed{\text{任何品种/周期通道 B 的可行性 = } \sqrt{\frac{6c}{K_S^
 
 给定 (K\_S, K\_T, T, σ, c)，E\[net] 作为 μ 的函数：
 
-$$E[\text{net}](\mu) = E[\text{gross}](\lambda\(\mu\)) - 2c$$
+$$E[\text{net}](\mu) = E[\text{gross}](\lambda(\mu)) - 2c$$
 
 对 μ ∈ {−σ, −0.5σ, 0, +0.5σ, +σ} 输出 5 档敏感性表。
 
@@ -2643,7 +2643,7 @@ $$K\_T^{\max} = k \cdot \sigma \sqrt{T}$$
 | 2 | ≈95%       | ✅ 推荐 |
 | 3 | ≈99.7%     | —    |
 
-**综合判决**：$K\_T \in \[K\_T^{\min}, K\_T^{\max}]$
+**综合判决**：$K_T \in [K_T^{\min}, K_T^{\max}]$
 
 | 情况      | 条件                        | 决策           |
 | ------- | ------------------------- | ------------ |
@@ -2651,15 +2651,15 @@ $$K\_T^{\max} = k \cdot \sigma \sqrt{T}$$
 | **窄区间** | K\_T^max / K\_T^min < 1.5 | 慎选（高敏感）      |
 | **宽区间** | K\_T^max / K\_T^min > 3   | 强候选 → 进实测    |
 
-推荐取值：$K\_T^{\text{推荐}} = \sqrt{K\_T^{\min} \cdot K\_T^{\max}}$
+推荐取值：$K_T^{\text{推荐}} = \sqrt{K_T^{\min} \cdot K_T^{\max}}$
 
 ### 3.5.3 凯利仓位
 
-$$f^\* = \frac{E\[\text{net}]}{K\_S \cdot K\_T}$$
+$$f^* = \frac{E[\text{net}]}{K_S \cdot K_T}$$
 
-部分凯利（避免破产）：$f\_{\text{Kelly}} = \alpha \cdot f^\*$，$\alpha \in \[0.25, 0.5]$
+部分凯利（避免破产）：$f_{\text{Kelly}} = \alpha \cdot f^*$，$\alpha \in [0.25, 0.5]$
 
-最终仓位：$f\_{\text{final}} = \min(f\_{\text{Kelly}}, f\_{\max})$
+最终仓位：$f_{\text{final}} = \min(f_{\text{Kelly}}, f_{\max})$
 
 若 f\* ≤ 0：**不该开仓**。
 
@@ -2667,8 +2667,8 @@ $$f^\* = \frac{E\[\text{net}]}{K\_S \cdot K\_T}$$
 
 在 barrier 未触达样本中，条件期望浮盈达到最大的时刻。
 
-- λ=0 对称（K\_S=K\_T）：$E\[X\_t \mid \tau > t] \equiv 0$ → **T† 不存在**
-- λ>0：先升后降 → $T^\dagger \approx K\_T / \mu \cdot k\_{\text{drift}}$，$k\_{\text{drift}} \approx 0.5$
+- λ=0 对称（K\_S=K\_T）：$E[X_t \mid \tau > t] \equiv 0$ → **T† 不存在**
+- λ>0：先升后降 → $T^\dagger \approx K_T / \mu \cdot k_{\text{drift}}$，$k_{\text{drift}} \approx 0.5$
 - 决策：$t < T^\dagger$ 保持，$t \ge T^\dagger$ 无条件离场
 
 精确解需有限时间 Fourier 级数（v2 实现）。
