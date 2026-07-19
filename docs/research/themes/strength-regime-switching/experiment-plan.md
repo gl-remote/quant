@@ -1,6 +1,8 @@
 # Experiment Plan
 
 > 所有实验步骤均对三组品种（玉米、玉米淀粉、豆粕）并行执行，产出三组结果做交叉对比。
+>
+> **关于算法路线**：当前计划以**多分辨率共识 CUSUM + 状态机 RLL**（路线 A）为主线。实际存在 6 条备选路线，P1 实证结果将决定最终选择。参见 [`design-alternatives.md`](./design-alternatives.md) 的 P1 分叉决策树。
 
 ## P0: 前期准备 — 三组品种 $|\nu|/\sigma$ 分布测绘 ✅ 完成
 
@@ -10,7 +12,7 @@
 
 ## P1: $|\nu|/\sigma$ 时间序列自相关与 regime 持续性分析（Gatekeeper）
 
-验证 $|\nu|/\sigma$ 是否存在可预测的 temporal structure，并对比三组的差异。
+验证 $|\nu|/\sigma$ 是否存在可预测的 temporal structure，并对比三组的差异。**P1 产出是路线选择的决策依据**（参见 [`design-alternatives.md`](./design-alternatives.md#p1-分叉决策树) 的 P1 分叉决策树）。
 
 - 对每个品种计算 $\hat{x}_{W=80}(t)$ 序列的 ACF/PACF，滞后 240h（10天）
 - Ljung-Box 检验：$H_0: \text{白噪声}$
@@ -18,7 +20,9 @@
 - 计算三组间 $\hat{x}$ 序列的交叉相关性（玉米↔淀粉、玉米↔豆粕）
 - **Gate**：若三品种 Ljung-Box p 均 > 0.05 且平均停留时间均 < 20h，放弃研究
 
-## P2: 多分辨率 CUSUM 断点检测
+## P2: 多分辨率 CUSUM 断点检测（路线 A / E）
+
+> 此步骤对应 [`design-alternatives.md`](./design-alternatives.md) 的**路线 A（共识 CUSUM）**。如 P1 决策选择其他路线，此步骤将被替换为对应方案。
 
 独立/联合两种检测模式：
 
@@ -28,7 +32,9 @@
 
 **验证**：在仿真 GBM（常数 $\nu/\sigma$）上的误检率
 
-## P3: 状态机 RLL（Run-Length Limiting）
+## P3: 状态机 RLL（Run-Length Limiting）（路线 A）
+
+> 此步骤对应 [`design-alternatives.md`](./design-alternatives.md) 的**路线 A（状态机 RLL）**。如选择路线 B (BOCPD) 或 C (HMM)，此步骤将被概率化后验/转移矩阵替代。
 
 三品种各自独立训练/独立运行的分位阈值：
 
