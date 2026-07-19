@@ -12,10 +12,25 @@ $$H_0: \text{Regime 切换检测无法提升 KF-27 静态最优的绩效}$$
 
 $$H_1: \text{分层参数适配 + 时间择时可在同等破产风险下提升 Sharpe ≥ 0.3}$$
 
+## 品种对照设计
+
+三组品种分为强关联与弱关联两条对照链路：
+
+| 组 | 符号 | 相关性 | 研究角色 |
+|---|---|---|---|
+| **玉米 (Corn)** | DCE.c2601/03/05 | — | 基准组（上游已建成 $|\nu|/\sigma$ 分布） |
+| **玉米淀粉 (Corn Starch)** | DCE.cs2601/03/05 | 强关联（原料→产品） | 复制验证：结果应与玉米高度相似；如果不同→有额外 alpha |
+| **豆粕 (Soybean Meal)** | DCE.m2601/03/05 | 弱关联（同板块不同驱动） | 差异对照：$|\nu|/\sigma$ 分布、regime 持续性、最优参数应显著不同于玉米 |
+
+**三条对照问题**：
+
+1. **分布可比性**：三组的 $|\nu|/\sigma$ 分布参数 $(\mu_D, \sigma_D)$ 是否一致？玉米 vs 豆粕 KS 检验是否显著？
+2. **regime 协同性**：玉米进入 HIGH regime 时，淀粉同步进入的概率是多少？豆粕同步的概率是多少？
+3. **参数通用性**：玉米上最优的 KF-27 参数直接套用到淀粉会损失多少绩效？套到豆粕呢？
+
 ## 上游依赖
 
 - `../structural-shaping-alpha/shaping-theory.md` — KF-27 闭式接口、$|\nu|/\sigma$ 分布参数
-- `../structural-shaping-alpha/raw-scripts/corn_1h_strength_three_views.py` — 强度探测标准脚本
 - `../structural-shaping-alpha/raw-scripts/kf26_parameter_optimizer.py` — 参数优化器
 
 ## 关键 KPI
