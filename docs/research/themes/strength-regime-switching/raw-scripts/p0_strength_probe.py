@@ -27,6 +27,11 @@ SYMBOL_GROUPS = {
     "soybean_meal":   ["DCE.m2601", "DCE.m2603", "DCE.m2605"],
     "palm_oil":       ["DCE.p2405", "DCE.p2409", "DCE.p2501", "DCE.p2505", "DCE.p2509", "DCE.p2601", "DCE.p2605"],
     "iron_ore":       ["DCE.i2509", "DCE.i2601"],
+    "cotton":         ["CZCE.CF509", "CZCE.CF601"],
+    "sugar":          ["CZCE.SR601", "CZCE.SR605"],
+    "pta":            ["CZCE.TA509", "CZCE.TA601"],
+    "rubber":         ["SHFE.rb2601", "SHFE.rb2605"],
+    "crude_oil":      ["INE.sc2509", "INE.sc2512"],
 }
 
 WINDOWS_HOURS = [20, 40, 80, 160]
