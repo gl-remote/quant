@@ -22,12 +22,14 @@ OUT_DIR = REPO / "project_data" / "research" / "strength_regime_switching"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SYMBOL_GROUPS = {
-    "corn":       ["DCE.c2601", "DCE.c2603", "DCE.c2605"],
-    "corn_starch":["DCE.cs2601", "DCE.cs2603", "DCE.cs2605"],
-    "soybean_meal":["DCE.m2601", "DCE.m2603", "DCE.m2605"],
+    "corn":           ["DCE.c2601", "DCE.c2603", "DCE.c2605"],
+    "corn_starch":    ["DCE.cs2601", "DCE.cs2603", "DCE.cs2605"],
+    "soybean_meal":   ["DCE.m2601", "DCE.m2603", "DCE.m2605"],
+    "palm_oil":       ["DCE.p2405", "DCE.p2409", "DCE.p2501", "DCE.p2505", "DCE.p2509", "DCE.p2601", "DCE.p2605"],
+    "iron_ore":       ["DCE.i2509", "DCE.i2601"],
 }
 
-WINDOWS_HOURS = [20, 80]
+WINDOWS_HOURS = [20, 40, 80, 160]
 STRIDE = 4
 
 
