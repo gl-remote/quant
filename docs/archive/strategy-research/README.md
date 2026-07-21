@@ -39,3 +39,4 @@
 4. 决定是否登记到主题的 `archive-references.md`（"引用触发登记"原则）。
 
 **归档者**：新归档批次时追加一行，按日期倒序排列。
+2026-07-21 | strength-regime-switching | strength-regime-switching | 完整阶段归档 | 🧪 方法论 · ⚠️ 分流

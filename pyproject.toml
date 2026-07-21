@@ -56,6 +56,7 @@ dev = [
     "ruff>=0.6",
     "jsonschema>=4.0",
     "quantsmith-contracts",
+    "statsmodels>=0.14.6",
 ]
 
 [tool.uv.sources]
