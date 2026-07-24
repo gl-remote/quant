@@ -8,16 +8,19 @@ description: "Rules for quant research document layout: theme directory, workben
 本 skill 覆盖 quant 项目所有研究文档的**目录布局与跨文档流程**，包括：
 
 - 主题目录（`docs/research/themes/<theme-name>/`）的固定布局与文件分工；
+- **定理目录（`docs/research/theorems/<theme-slug>/`）的稳定数学结论存放规则**；
 - workbench / archive / issues / roadmap 各自的边界与写法；
-- 主题目录初始化、workbench 归档、issues 处理等跨文档流程。
+- 主题目录初始化、workbench 归档、issues 处理、spec 提炼为 theorem 等跨文档流程。
 
-`strategy-math-spec.md` 本身的写法（结构、数学记号、静态一致性检查）由 `quant-math-spec` 负责，本 skill 不重复。
+`strategy-math-spec.md`（活跃期）与 `theorems/<slug>/*.md`（稳定期）本身的写法（结构、数学记号、静态一致性检查）由 `quant-math-spec` 负责，本 skill 不重复。
 
 ## 触发时机
 
 - 新建一个策略主题目录；
 - 修改主题目录内除 `strategy-math-spec.md` 之外的任意文档；
-- 判断某段内容应放到 workbench / theme / archive / issues 中哪个位置；
+- **判断某段稳定数学结论应放到 `themes/<slug>/strategy-math-spec.md` 还是 `theorems/<slug>/*.md`**；
+- **从主题 spec 提炼稳定内核到 theorems，或反向调整**；
+- 判断某段内容应放到 workbench / theme / theorems / archive / issues 中哪个位置；
 - **归档主题研究成果**：以当前 git 分支相对基线（master/main）的 ALL 差异文件为归档范围，识别并归档与主题相关的 workbench / 临时脚本 / 临时策略 / 数据产出（不仅是未提交的 workbench 文件）；
 - 发现底层框架问题需要开 issue；
 - 修 roadmap 或 research 目录索引文件。
@@ -27,8 +30,9 @@ description: "Rules for quant research document layout: theme directory, workben
 | 目录 | 用途 | 允许放什么 | 禁止放什么 |
 |---|---|---|---|
 | `docs/roadmap/` | 阶段规划、评价标准 | 阶段目标、候选方向、评价指标 | 具体实验方向、分支 hash、参数对照、中间结果 |
-| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/` | 具体实验流水 |
-| `docs/research/themes/` | **活跃**策略主题（研究中 / 待启动 / 阶段性暂停但可能恢复） | 见"主题目录布局" | 已冻结的主题 |
+| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/`、`theorems/<theme-slug>/` | 具体实验流水 |
+| `docs/research/themes/` | **活跃**策略主题（研究中 / 待启动 / 阶段性暂停但可能恢复） | 见"主题目录布局" | 已冻结的主题、稳定数学定理集 |
+| **`docs/research/theorems/`** ⭐ | **稳定数学定理集**：从主题 spec 提炼、独立成篇的定理/命题/引理 | 见"定理目录布局" | 实证结果、参数扫描、KF 演化叙事、工程实现 |
 | `docs/workbench/` | 当前研究中的实验流水 | 实验问题、临时参数对照、中间结果、临时结论 | 长期规格、策略契约 |
 | `docs/issues/` | 底层框架问题 | 引擎 / 数据管道 / CLI / 成本口径等非策略问题 | 策略结论 |
 | `docs/archive/strategy-research/` | 已完成阶段的压缩摘要 | 核心问题、实验定义、固定参数、关键结果、结论 | 过程性计划、过期工具限制 |
@@ -80,12 +84,121 @@ docs/research/themes/<theme-name>/
 
 ### 命名唯一性硬约束（命名引用协议的基础）
 
-- **主题 slug 全局唯一**：`docs/research/themes/*` 不得出现同名 slug；
+- **主题 slug 全局唯一**：`docs/research/themes/*` 与 `docs/research/theorems/*` 使用**同一命名空间**（不允许 themes/foo 与 theorems/foo 同时指向不同主题），slug 共享；
+- **theorem 文档文件名在主题内唯一**：`docs/research/theorems/<slug>/<file-stem>.md` 不得同名；跨主题可重名（因命名引用带 slug）；
 - **archive 批次目录名全局唯一**（自然满足：日期前缀 + slug）；
 - **workbench 文件名 / 主题内多文件时的子目录名全局唯一**：`docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`；
 - **issue 文件名全局唯一**：`docs/issues/<slug>.md`。
 
 **立题 / 建家族 / 归档新批次前**：`grep -r "<候选 slug>" docs/research docs/archive docs/workbench` 一次，确认无重名。发现冲突时 slug 加限定后缀（如 `value-area-reacceptance-2`）而不是复用。
+
+## 定理目录布局（theorems/）
+
+**定位**：`docs/research/theorems/<theme-slug>/` 承载**稳定、独立成篇、可长期引用**的**纯数学结论**（定义 / 命题 / 引理 / 定理 / 推论 / 证明）。它与 `themes/<slug>/strategy-math-spec.md` 的分工是：
+
+- **spec（活跃期）**：主题研究中的数学契约，跟随 KF 演化；包含实证锚点、参数扫描、决策阈值等；
+- **theorem（稳定期）**：从 spec 里提炼出来的、**不再随实验演化**的数学骨架；剥离所有实证与工程近似，只保留可对外展示、可跨主题复用的定理集。
+
+### 目录结构
+
+```text
+docs/research/theorems/
+├── README.md                        # 顶层总入口 + 收录表
+├── <theme-slug-1>/
+│   ├── README.md                    # 该主题的定理集索引 + 阅读顺序
+│   ├── <topic-1>.md                 # 一份文档 = 一个大结论 或 一个自洽结论簇
+│   ├── <topic-2>.md
+│   └── ...
+└── <theme-slug-2>/
+    └── ...
+```
+
+### 什么进 theorems/（四条硬约束）
+
+1. **数学纯粹**：只承载定义 / 命题 / 引理 / 定理 / 推论 / 证明；不承载参数扫描、实证数字、KF 演化叙事、工程实现。
+2. **闭合自洽**：记号在文档内自我定义，读者不需要打开 spec / KF 才能理解。
+3. **可对外展示**：若删掉主题上下文，仍是一篇有独立价值的数学短文（可对同行展示、可投稿、可教学）。
+4. **稳定**：结论已通过至少一次归档 / 复审，短期内不会因新实验而重写。
+
+**明确不进 theorems/**（即使已经确定）：
+- 参数最优值、决策阈值等**实证结果**——留在 spec 或 parameter-selection-spec；
+- KF 演化史、反转记录、方法论纠错——留在 research-status；
+- 工程近似（Fourier 截断项数、数值 quadrature 网格）——留在 implementation-notes；
+- 数据锚点（品种、时间粒度、样本量）——留在 spec 或 parameter-selection-spec。
+
+### 文档命名（AI 友好）
+
+**文件名 = "AI 检索关键词 + 回答的问题"**，遵循三层语义：
+1. **问题类型词**：`when-...`（存在性 / 充分条件）、`how-...`（构造 / 算法）、`why-...`（机制解释）、`<topic>-tradeoff`（权衡分析）；
+2. **研究对象**：如 `barrier-shaping`、`winrate-payoff`、`sharpe-statistics`；
+3. **修饰词**：如 `-under-frictions`、`-with-noise`、`-in-log-space`。
+
+**好命名示例**：
+- `when-barrier-shaping-yields-alpha.md` — 存在性问题
+- `winrate-payoff-tradeoff-under-frictions.md` — 权衡分析
+- `doob-two-premises-duality.md` — 数学对偶结构
+- `sharpe-standard-error-bounds.md` — 界定命题
+
+**坏命名（禁止）**：
+- `theorem.md` / `spec.md` / `math.md` — 过于泛化，无法 grep 命中意图
+- `chapter-1.md` — 顺序命名，无法反映内容
+- `notes.md` — 语义不明
+
+### 文档头部元数据
+
+每份 theorem 文档头部必须包含元数据 blockquote：
+
+```markdown
+# <文档标题>
+
+> **文档定位**：本文回答一个数学问题——**<核心问题一句话>**。<方法论 / 结论 / 贡献一句话>。
+>
+> **稳定性**：入库日期 YYYY-MM-DD · <是否来自 spec 提炼 / 一致性检查状态>。
+>
+> **对外可用**：是 / 否（若否说明未闭合项）。
+>
+> **与本主题的关系**：<与主题内其他文档、其他 theorem 的分工关系>。
+>
+> **命名引用**：`theorem:<slug>#<file-stem>`
+```
+
+### 每份 theorem 文档的推荐结构
+
+```text
+1. 记号与前提（本文档独立定义所需的所有符号）
+2. 定义
+3. 定理与证明（每条 **命题/引理/定理 X.Y**：... **证明.** ... $\blacksquare$）
+4. 推论与讨论
+5. 文献对照（可选，见 quant-math-spec）
+6. 与主题的关系（对应哪个 KF / 哪一章；主题实证如何验证该定理）
+```
+
+数学记号、证明格式、静态一致性检查规则由 `quant-math-spec` 提供，本 skill 不重复。
+
+### 迁移与新增流程
+
+**从 spec 提炼稳定内核到 theorems**：
+1. 判断成熟度：主题至少经过一次归档 / 冻结，或明确进入"稳定期"（KF 不再增加）；
+2. 拆分：
+   - **稳定内核**（定义 / 命题 / 引理 / 定理 / 证明 / 附录级方法论） → 迁移到 `theorems/<slug>/<file>.md`；
+   - **实证锚点、参数扫描、决策阈值** → 留在 spec；
+3. spec 里改为 `theorem:<slug>#<file>` 命名引用（禁止复述定理内容）；
+4. 更新 `theorems/<slug>/README.md` 文档地图；
+5. 更新 `theorems/README.md` 顶层收录表；
+6. 主题 `research-status.md` 的 KF 条目里，把证据字段中的 spec 引用升级为 `theorem:` 引用（当适用时）。
+
+**新增一份 theorem 文档**：
+- 从 workbench 直接产出的**新数学结果**：先写 workbench，通过 review 后可直接立卷进 theorems；
+- 从主题 spec 提炼：见上；
+- 跨主题的方法论定理（如 Sharpe SE、Doob OST 通用推论）：可以不属于任何 theme slug，放到 `theorems/_general/` 或以方法论 slug 命名（如 `theorems/sharpe-statistics/`）。
+
+### 跨文档硬约束
+
+- `theorems/<slug>/*.md` **不承载**策略行为的**实证结果**——那是 `themes/<slug>/*` 的职责；
+- 若定理需要引用主题实证锚点作为例子，在**证明外**用命名引用（`kf:<slug>#KF-N`）或散文注解，不进入定理正文；
+- `themes/<slug>/strategy-math-spec.md` 允许引用 `theorems/<slug>/*.md` 作为已证结论的复用（**只引用不复述**）；
+- 一份 theorem 文档**允许**被多个主题 spec 引用（跨主题共用的数学工具）；
+- **theorem 文档一旦入库不轻易改**——重要修改需在文档头部元数据"稳定性"字段追加"复审 YYYY-MM-DD"记录，说明为什么改。
 
 ## 命名引用协议（Named Reference Protocol）
 
@@ -99,6 +212,8 @@ docs/research/themes/<theme-name>/
 | `archive:` | `archive:<name>#<file-stem>` | `docs/archive/strategy-research/<name>/<file-stem>.md` | 指向批次内某具体报告 |
 | `theme:` | `theme:<slug>` | `docs/research/themes/<slug>/` | 主题目录本身 |
 | `theme:` | `theme:<slug>#<file-stem>` | 上述目录下 `<file-stem>.md` | 主题内某文档 |
+| `theorem:` ⭐ | `theorem:<slug>#<file-stem>` | `docs/research/theorems/<slug>/<file-stem>.md` | 稳定数学定理文档 |
+| `theorem:` ⭐ | `theorem:<slug>#<file-stem>#命题X.Y` | 文档内定理/命题的章节锚点 | 定位到具体命题 |
 | `workbench:` | `workbench:<name>` | `docs/workbench/<name>.md` **或** `docs/workbench/<theme-slug>/<name>.md`（后者若首段等于某 theme-slug） | workbench 报告 |
 | `kf:` | `kf:<theme-slug>#KF-<N>` | 主题 `research-status.md` 中 KF-N 条目 | 关键发现锚点 |
 | `issue:` | `issue:<slug>` | `docs/issues/<slug>.md` | 底层框架 issue |
