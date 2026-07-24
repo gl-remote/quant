@@ -240,7 +240,12 @@ $$
 
 **含义**：**塑形本身不创造 alpha**——这是塑形三定律的第一定律。
 
-> **📚 文献批注（保守律的先驱）**：本推论与 **Rogers & Imkeller (2001)** 的核心结论一致——他们证明"**已知漂移下最优止损不存在**"（"for reasonable model parameters, it is never optimal to place trading stops when the drift of the P&L is known"，转引自 Di Graziano 2014）。**Di Graziano (2014)** 在 Markov-modulated diffusion 框架下把这一结论推广到随机漂移，并首次用效用函数（CARA）方法反解闭式 $\varphi(a,b)$。**Glynn & Iglehart (1995)** 对 trailing stop 版本证明了相似结论。本主题的推论 5.2 是 GBM + 有限成本下的直接实例；不同点：本主题不引入效用函数，只用 Doob OST + 成本簿记，因此结论对**任意风险偏好**（不必 CARA）都成立。
+> **⚠️ 适用边界（2026-07-24 增补）**：推论 5.2 的成立需要**三个条件同时满足**：(a) 价格过程为 GBM 且漂移 $\nu$ 为**常数**；(b) 目标函数是**期望值** $\mathbb{E}[X_\tau]$ 而非效用；(c) 无摩擦或摩擦仅以固定成本 $2c$ 计。放松任意一条，"塑形不创造 alpha" 都可能失效：
+> - **regime-switching 反例**：**Zhang (2001, SIAM J. Control Optim. 40, 64-87)** 证明漂移在有限状态 Markov 链上切换时，**最优止损与止盈存在且非平凡**；**Guo & Zhang (2005, Math. Finance 15, 213-244)** 给出闭式 barrier 使 $\mathbb{E}[X_\tau] > 0$；**Dai, Zhang, Zhu (2010, SIAM J. Financial Math.)** 把双 barrier 结论推广到 trend-following。这与主题 §5.2 保守律**不冲突**——因为它们放松了条件 (a)（常数漂移）。
+> - **效用函数反例**：**Detemple & Sundaresan (1999)**、**Karatzas & Wang (2000)** 证明即便 $X_t$ 是鞅、$\mathbb{E}[X_\tau] = 0$，止损仍能**改进 CRRA/CARA 效用**（因为塑形改变高阶矩）。这放松了条件 (b)。
+> - **控制成本反例**：**Rogers (2004, Math. Finance 14, 419-441)** 在比例交易成本下证明最优 barrier 宽度 scaling 为 $c^{1/3}$ 而非本主题定理 11.3 的 $c^{1/2}$——因为连续再平衡问题的目标函数是长期平均收益率而非首达期望。这放松了条件 (b)+(c)。
+>
+> **📚 文献批注（保守律的先驱）**：本推论与 **Rogers & Imkeller (2001)** 的核心结论一致——他们证明"**已知常数漂移下最优止损不存在**"（"for reasonable model parameters, it is never optimal to place trading stops when the drift of the P&L is known"，转引自 Di Graziano 2014）。**Di Graziano (2014)** 在 Markov-modulated diffusion 框架下把这一结论推广到随机漂移，并首次用效用函数（CARA）方法反解闭式 $\varphi(a,b)$。**Glynn & Iglehart (1995)** 对 trailing stop 版本证明了相似结论。本主题的推论 5.2 是 GBM + 有限成本 + 期望值目标下的直接实例；不同点：本主题不引入效用函数，只用 Doob OST + 成本簿记，因此结论对**任意风险偏好**（不必 CARA）都成立，但**仅在上述三条件同时满足时**成立。
 
 ### 5.3 期望收益的一般式
 
@@ -377,13 +382,23 @@ $$
 
 **证明.** 直接代入命题 9.2。$\blacksquare$
 
-> **📚 文献批注（通道 B 的文献空白）**：**这是本主题最强的原创点**。综合检索的 barrier 型策略文献均**假设方向已知**：
-> - **Akyildirim et al. (2021)** · Statistical Arbitrage — 单边 "long-until-barrier"；
-> - **Leung & Li (2015)** · OU pairs trading — 已知均值回归方向；
-> - **Leung & Zhang (2019)** · Trailing stop — 已知多头；
-> - **Ekström & Lindberg (2011)** · Momentum — 已知多头（漂移正）。
+> **📚 文献批注（通道 B 的先驱与主题定位 · 2026-07-24 修订）**：**先前版本声称"未在文献中找到对应结果"过强**，实际上"漂移方向未知、$|\nu|$ 已知或 Bayesian 先验对称"的最优停时问题在**检测理论 + 未知漂移最优停时**领域已有大量先驱工作：
+> - **Shepp (1969), Ann. Math. Statist. 40, 993-1010** — 首次给出 "Brownian motion with unknown drift **sign**（$\mu \in \{+1, -1\}$ 各占先验 $1/2$）"下最优停时问题的显式解。**这是通道 B 混合期望公式（命题 9.2）的直接先驱**。
+> - **Beibel & Lerche (1997), Statistica Sinica 7, 93-108**；**Beibel (1996), Ann. Statist.** — 未知漂移下 Brownian motion 的 optimal stopping，含双 barrier 情形。
+> - **Peskir & Shiryaev (2006), *Optimal Stopping and Free-Boundary Problems*, Ch. VI §22** — "Bayesian sequential testing of the drift of a Brownian motion" 章节完整覆盖 "$|\mu|$ 已知、方向未知" 情形。
+> - **Ekström & Lindberg (2013), Math. Finance 23, 361-382** — Bayesian prior 关于漂移对称时仍给出闭式最优 barrier。
+> - **Karatzas & Zhao (2001), Ann. Appl. Probab. 11, 1425-1451** — partial-information 下最优交易，覆盖"方向不确定"。
+> - **Décamps, Mariotti, Villeneuve (2005), Math. Oper. Res. 30, 472-500** — investment under drift uncertainty with symmetric prior。
 >
-> **主题的通道 B 结构**（"只知 $|\nu|/\sigma$ 强段，方向随机 + 非对称 barrier"）**在检索到的文献中未找到对应结果**。数学根源上，它对应 Doob OST 的 P2 前提（可测停时）失效——这一分类在文献中亦未被显式提出。**这是主题相对现有 barrier 策略理论的第一条独立贡献**。
+> **其他 barrier 型策略文献确实假设方向已知**：Akyildirim et al. (2021) 单边 long-until-barrier；Leung & Li (2015) OU 均值回归已知方向；Leung & Zhang (2019) trailing stop 已知多头；Ekström & Lindberg (2011) Momentum 已知漂移正。
+>
+> **主题通道 B 的实际原创点（弱化后）**：并非"方向未知的最优停时"这一**结构**是新的（Shepp 1969 已有），而是**在如下具体组合**下把混合期望写为闭式并纳入工程决策：
+>   1. 双吸收 barrier $(K_S, K_T)$ 而非单边；
+>   2. 目标是"混合首达期望净收益 $E_{\text{gross}}^{\text{mix}} - 2c$"而非"最大化清仓价"；
+>   3. 强度识别器 $f$ 输出 $|s|$ 分布 $D$（KF-27），非单点先验；
+>   4. 用 Doob OST 的 P2 前提失效解释而非贝叶斯滤波语言。
+>
+> 这**组合形式**在检索文献中未见完整对应；但把它定位为"结构上的空白"是**不准确的**——数学根源可回溯至 Shepp-Beibel-Peskir 框架。
 
 ---
 
@@ -467,7 +482,18 @@ $$
 
 **推论 11.4（Doob 保守律的严格映射）**：$R \to 1 \Rightarrow x_{\min} \to \infty$——对称塑形下不存在有限强度可覆盖成本，与推论 5.2 一致。
 
-> **📚 文献批注（品种无关下界的对照）**：**Di Graziano (2014)** 在 CARA 效用下给出闭式 $\varphi(a, b)$，但形式依赖风险厌恶参数 $\gamma$，不是"品种无关下界"。**Leung & Li (2015)** 给出"higher stop-loss level implies lower take-profit level"的定性结论，与本主题的 $x_{\min} \propto K_S^{-3/2}$ 单调关系方向一致，但未给出闭式。**本主题的原创点**：$x_{\min}$ 只依赖 $(c, K_S, R)$、不依赖风险偏好或分布尾部，是**跨品种可直接比较**的最简下界公式；小 $\lambda$ 二阶展开是把 KF-26 混合公式（命题 9.2）与 §7.2 通道 B 数学根源结合的直接推论。
+> **📚 文献批注（品种无关下界的对照 · 2026-07-24 修订）**：**Di Graziano (2014)** 在 CARA 效用下给出闭式 $\varphi(a, b)$，但形式依赖风险厌恶参数 $\gamma$，不是"品种无关下界"。**Leung & Li (2015)** 给出"higher stop-loss level implies lower take-profit level"的定性结论，与本主题的 $x_{\min} \propto K_S^{-3/2}$ 单调关系方向一致，但未给出闭式。
+>
+> **⚠️ 与不同框架的 scaling 对照**：本主题下界 $x_{\min} \propto c^{1/2}$ 的 scaling 是**首达期望值框架**下的正确结果；但它并非唯一的成本-barrier 关系：
+> - **Rogers (2004), Math. Finance 14, 419-441** "Why is the effect of proportional transaction costs $O(\lambda^{2/3})$?" — 在**连续控制 + 长期平均收益率**框架下，最优 barrier 宽度 scaling 为 $c^{1/3}$；
+> - **Whalley & Wilmott (1997), Math. Finance 7, 307-324** — 期权对冲 no-trade region 的 $c^{1/3}$ 渐近展开；
+> - **Merton (1971), Magill-Constantinides (1976)** 给出无量纲比 $2c/(\sigma^2 K_S)$ 作为等价规范化。
+>
+> **两种 scaling 对应不同问题**：本主题 $c^{1/2}$ 描述"单笔首达期望覆盖固定成本 $2c$ 的最小强度"；Rogers/Whalley-Wilmott 的 $c^{1/3}$ 描述"连续再平衡下 no-trade region 的最优宽度"。两者不冲突。
+>
+> **"品种无关"的确切含义**：$K_S$ 已以 ATR 归一化，因此在原始价格坐标下 $x_{\min}$ 仍隐含 $\sigma$ 依赖，只是**规范化后 $\sigma$ 消失**。这是跨品种可直接比较的最简下界，但**"品种无关"应理解为"ATR 规范化后无关"**。
+>
+> **本主题的原创点（弱化后）**：$x_{\min}$ 在**首达期望框架 + ATR 规范化 + Doob OST + 命题 9.2 的具体形式**下，只依赖 $(c, K_S, R)$、不依赖风险偏好或分布尾部；小 $\lambda$ 二阶展开是把 KF-26 混合公式（命题 9.2）与 §7.2 通道 B 数学根源结合的直接推论。
 
 ### 11.4 识别器 se 目标
 
@@ -621,6 +647,19 @@ $$
 | **双 barrier 首达** | [Wang & Yin (2008)](https://www.researchgate.net/publication/23636264_Moments_of_the_first_passage_time_of_one-dimensional_diffusion_with_two-sided_barriers) · Moments of first passage time with two-sided barriers | 一维扩散双 barrier 停时矩的一般理论；命题 4.3 的推广 |
 | **双 barrier 首达** | [Xu & Zhu (2013)](https://pdfs.semanticscholar.org/b511/76ae9f35e123aeadd91bc2c9dceb36f584f7.pdf) · First exit time with double linear time-dependent barriers | Girsanov 变换给出时变 barrier 密度；主题 barrier 拓展 |
 | **双 barrier 首达** | Alachal (1990–1996) · Integrated Brownian Motion | 停时 + 终末位置联合分布；主题"barrier 触达 + 累积浮盈"未来拓展 |
+| **未知漂移最优停时（通道 B 先驱）** | Shepp (1969), Ann. Math. Statist. 40, 993-1010 | 首次给出漂移符号未知（$\mu \in \{\pm 1\}$ 各半）下 Brownian motion 最优停时的显式解——**通道 B 命题 9.2 的结构先驱** |
+| **未知漂移最优停时** | Beibel & Lerche (1997), Statistica Sinica 7, 93-108；Beibel (1996), Ann. Statist. | 未知漂移下 Brownian motion 最优停止，含双 barrier |
+| **未知漂移最优停时** | Peskir & Shiryaev (2006), *Optimal Stopping and Free-Boundary Problems*, Ch. VI §22 | Bayesian sequential testing of the drift of a Brownian motion——覆盖"$|\mu|$ 已知、方向未知" |
+| **未知漂移最优停时** | Ekström & Lindberg (2013), Math. Finance 23, 361-382 | 对称先验下漂移不确定的最优 barrier 闭式 |
+| **partial information 交易** | Karatzas & Zhao (2001), Ann. Appl. Probab. 11, 1425-1451 | partial-information 下最优交易，方向不确定 |
+| **partial information 交易** | Décamps, Mariotti, Villeneuve (2005), Math. Oper. Res. 30, 472-500 | Investment under drift uncertainty with symmetric prior |
+| **Regime-switching 反例（§5.2 边界）** | Zhang (2001), SIAM J. Control Optim. 40, 64-87 | 漂移在 Markov 链切换下最优止损存在——保守律的常数漂移假设放松后失效 |
+| **Regime-switching 反例** | Guo & Zhang (2005), Math. Finance 15, 213-244 | Regime-switching 下 optimal selling rule 闭式，$\mathbb{E}[X_\tau] > 0$ |
+| **Regime-switching 反例** | Dai, Zhang, Zhu (2010), SIAM J. Financial Math. | Trend-following 双 barrier 在 regime switching 下最优 |
+| **效用函数反例（§5.2 边界）** | Detemple & Sundaresan (1999)；Karatzas & Wang (2000) | 鞅价格 + CRRA/CARA 效用下止损仍能改进效用——目标函数改变则保守律失效 |
+| **成本 scaling 反例（§11.3 边界）** | Rogers (2004), Math. Finance 14, 419-441 | 连续控制 + 长期平均收益率下最优 barrier scaling 为 $c^{1/3}$ 而非本主题的 $c^{1/2}$ |
+| **成本 scaling** | Whalley & Wilmott (1997), Math. Finance 7, 307-324 | 期权对冲 no-trade region 的 $c^{1/3}$ 渐近展开 |
+| **成本规范化** | Merton (1971)；Magill & Constantinides (1976) | 无量纲比 $2c/(\sigma^2 K_S)$ 作为等价规范化 |
 
 ### C.2 主题各节的先驱贡献者对照
 
@@ -628,32 +667,32 @@ $$
 |--------------|--------|-----------|
 | §3.3 市场强度 $s = \nu/\sigma$ | Sharpe (1966)；Itô (1951) | 首次把 $s$ 单独立义为"决策变量"而非"过程参数" |
 | §4.2 首达闭式 $P_\text{win}^\infty$ | 经典结果（Karlin-Taylor 教材） | 与 Akyildirim (2021) 相同；主题给出 Doob 鞅化的简证 |
-| §5.2 Doob 保守律（推论 5.2） | Rogers & Imkeller (2001), Di Graziano (2014) | 剥离效用函数依赖，对任意风险偏好成立 |
+| §5.2 Doob 保守律（推论 5.2） | Rogers & Imkeller (2001), Di Graziano (2014) | 剥离效用函数依赖，对任意风险偏好成立；**边界**：仅在 GBM + 常数漂移 + 期望值目标下成立（放松见 Zhang 2001、Detemple-Sundaresan 1999、Rogers 2004） |
 | §6.1 Fourier 精确解 | Wang & Yin (2008), 经典热方程谱分解 | 首次把 Fourier 解沉淀为 barrier 策略的"标准 null"（KF-17 方法论） |
-| §7.2 两通道对偶（P1 / P2） | 无直接对应 | **原创**：把 alpha 通道分类归结为 Doob OST 前提失效 |
+| §7.2 两通道对偶（P1 / P2） | P1 侧 Rogers-Imkeller；P2 侧 Shepp (1969), Beibel-Lerche (1997), Peskir-Shiryaev (2006) | **原创点**：把 alpha 通道分类归结为 Doob OST 两前提失效的**对偶完备分类** |
 | §8.2 通道 A 分解 | Rogers-Imkeller Bayesian 未知漂移；Ekström-Lindberg quickest detection；Lopez de Prado Meta-Labeling | 显式给出 P1 失效的严格数学表述 |
-| §9.2 通道 B 混合公式 | 无直接对应 | **原创**：文献均假设方向已知；本主题的"只知强度不知方向"是新方向 |
+| §9.2 通道 B 混合公式 | **Shepp (1969)** 未知漂移符号最优停时（结构先驱）；Beibel-Lerche (1997), Peskir-Shiryaev (2006) | **具体形式组合原创**：双吸收 barrier + 首达期望净收益 + 强度分布 $D$ + Doob OST P2 语言 |
 | §10 KF-27 分布输入 | Akyildirim (2021) 点估计 | **原创**：升级为分布积分 $\int f_D(x) g(x) dx$ |
-| §11.3 品种无关下界 $x_\min$ | Di Graziano (2014) CARA 闭式 | **原创**：不依赖效用函数的最简下界 $\sqrt{6c/(K_S^3 R(R-1))}$ |
+| §11.3 品种无关下界 $x_\min$ | Di Graziano (2014) CARA 闭式；Rogers (2004) $c^{1/3}$ scaling | **具体形式原创**：ATR 规范化 + 首达期望框架下最简下界 $\sqrt{6c/(K_S^3 R(R-1))}$；与 Rogers 的 $c^{1/3}$ 分属不同框架，两者不冲突 |
 | §11.5 Sharpe 标准误 | Lo (2002), Benhamou (2018) | 直接引用 Lo 结果作为 $\text{se}^\text{目标}$ KPI 的数学根据 |
 
-### C.3 主题相对文献的四条原创贡献
+### C.3 主题相对文献的四条原创贡献（2026-07-24 修订）
 
 $$
 \boxed{
 \begin{aligned}
 &\textbf{① Doob OST 两前提作为对偶轴（§7.2）} \\
-&\textbf{② 通道 B 混合期望公式（命题 9.2，KF-26）} \\
+&\textbf{② 通道 B 混合期望公式（命题 9.2，KF-26）· 具体形式组合原创} \\
 &\textbf{③ 分布输入闭式解（§10，KF-27）} \\
-&\textbf{④ 品种无关下界 } x_\min = \sqrt{6c/(K_S^3 R(R-1))} \text{（定理 11.3）}
+&\textbf{④ 品种无关下界 } x_\min = \sqrt{6c/(K_S^3 R(R-1))} \text{（定理 11.3）· ATR 规范化 + 首达期望框架下最简形式}
 \end{aligned}
 }
 $$
 
-- **①** 文献分别研究过 P1 失效（Rogers-Imkeller, Di Graziano）与 P2 失效（未见），但**没有把它们放在同一对偶框架**下作为"塑形 alpha 只有两条来源"的完备分类。
-- **②** 检索到的所有 barrier 策略文献（Akyildirim, Leung 系列, Ekström-Lindberg）**均假设方向已知**；"只知 $\|\nu\|/\sigma$ 强段" 的混合公式在文献中未见。
+- **①** 文献分别研究过 P1 失效（Rogers-Imkeller, Di Graziano）与 P2 失效（Shepp 1969, Beibel-Lerche 1997, Peskir-Shiryaev 2006 已在检测理论框架下处理），但**没有把它们放在同一对偶框架**下作为"塑形 alpha 只有两条来源"的完备分类。
+- **②（弱化）** "方向未知的最优停时"**结构上**并非空白——Shepp (1969) 已给出显式解，Beibel-Lerche (1997)、Peskir-Shiryaev (2006) 已覆盖类似问题。主题贡献是**具体形式组合**：双吸收 barrier + 首达期望净收益目标 + 强度分布 $D$ 输入 + Doob OST P2 语言（而非贝叶斯滤波语言）。
 - **③** Akyildirim (2021) 是最接近的对照，但用点估计；主题对分布积分是**从 KF-26 到 KF-27 的独立跨越**。
-- **④** Di Graziano 的 CARA 闭式依赖 $\gamma$；本主题的 $x_\min$ 只依赖 $(c, K_S, R)$，是**跨品种可直接比较**的最简形式。
+- **④（弱化）** Di Graziano 的 CARA 闭式依赖 $\gamma$；本主题的 $x_\min$ 只依赖 $(c, K_S, R)$，是**ATR 规范化 + 首达期望框架下**跨品种可直接比较的最简形式。**不同框架**下（Rogers 2004 连续控制、Whalley-Wilmott 1997 期权对冲）scaling 变为 $c^{1/3}$，两者不冲突。
 
 ### C.4 主题的已知乐观偏差与文献补丁路线
 
