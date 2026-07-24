@@ -68,7 +68,7 @@ description: "Runs branch, commit, archive, merge, and push workflow. Invoke whe
    - `git log --oneline -5`
 2. 分类本次文件：
    - 应保留：已验证功能代码、测试、长期有效的流程文档、已修复 issue 记录。
-   - 应归档：已完成且有未来参考价值的实验摘要，从 `docs/workbench/` 移到 `docs/archive/strategy-research/`。
+   - 应归档：已完成且有未来参考价值的实验摘要，从 `docs/workbench/` 移到 `docs/research/archived-notes/`。
    - 应删除：未通过实验的临时策略代码、不可维护的一次性脚本、过期复现命令、会污染长期目录的实验产物。
 3. 清理后修正文档链接：
    - workbench → archive 后，所有相对链接必须重算。
@@ -97,7 +97,7 @@ description: "Runs branch, commit, archive, merge, and push workflow. Invoke whe
    移动到：
 
    ```text
-   docs/archive/strategy-research/<name>.md
+   docs/research/archived-notes/<name>.md
    ```
 
 3. 修改文档 meta：
@@ -107,7 +107,7 @@ description: "Runs branch, commit, archive, merge, and push workflow. Invoke whe
 4. 修正相对链接：
    - archive 到 roadmap：`../../roadmap/...`
    - archive 到 issues：`../../issues/...`
-   - issue 到 archive：`../archive/strategy-research/...`
+   - issue 到 archive：`../research/archived-notes/...`
 5. 提交归档变更。
 
 ## 合并回 dev 流程

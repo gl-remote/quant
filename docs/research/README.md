@@ -39,15 +39,15 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../archive/strategy-research/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
-| ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
-| ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
+| ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
+| ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
+| ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
 | structural-shaping-alpha | 活跃 / 阶段 1 完成待冻结候选 / 工具资产引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
-| ~~strength-factor-screening~~ | **已冻结归档（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [archive:2026-07-17-strength-factor-screening-freeze](../archive/strategy-research/2026/07/2026-07-17-strength-factor-screening-freeze/freeze-summary.md) |
-| ~~value_area_reacceptance~~ | **已冻结归档（2026-07-03）** / feature-only 降级 | [archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
-| ~~value_area_rolling_reacceptance~~ | **已冻结归档（2026-07-05）** / 主题假设完全证伪 | [archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [freeze-summary](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
+| ~~strength-factor-screening~~ | **已冻结归档（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [archive:2026-07-17-strength-factor-screening-freeze](../research/archived-notes/2026/07/2026-07-17-strength-factor-screening-freeze/freeze-summary.md) |
+| ~~value_area_reacceptance~~ | **已冻结归档（2026-07-03）** / feature-only 降级 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
+| ~~value_area_rolling_reacceptance~~ | **已冻结归档（2026-07-05）** / 主题假设完全证伪 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [freeze-summary](../research/archived-notes/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
 
-家族目录：[archive:2026-07-17-value-area-family-consolidated](../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [themes-frozen/structural-shaping-alpha/](./themes-frozen/structural-shaping-alpha/README.md)
+家族目录：[archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [themes-frozen/structural-shaping-alpha/](./themes-frozen/structural-shaping-alpha/README.md)
 
 活跃主题目录：
 - 上游 Alpha 源（**已归档**）：`archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/`（⚠️ 数字作废，分类器 v4.0 tier 坐标结构可继承）
@@ -72,24 +72,24 @@ AI 接手规则。
 
 ## 5. 关键文档
 
-- **[archive:2026-07-13-va-asymmetry-leak-chain-consolidated（va-asymmetry 错误路径链条归并封装 · 必读）](../archive/strategy-research/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)**
-- [2026/07/2026-07-06-structural-shaping-alpha-stage1（塑形 Stage 1 归档）](../archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/README.md)
-- [2026/07/2026-07-05-value-area-rolling-reacceptance-freeze（Rolling 冻结摘要）](../archive/strategy-research/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
-- [Stage B v2/v3 sweep（feature-only 降级决策）](../archive/strategy-research/2026/07/2026-07-03-value-area-reacceptance-stage-b/README.md)
-- [R29 扩样与随机基准复验](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
-- [R28 value_area_reacceptance 结构诊断](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
-- [R27 扩样复验](../archive/strategy-research/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md)
+- **[archive:2026-07-13-va-asymmetry-leak-chain-consolidated（va-asymmetry 错误路径链条归并封装 · 必读）](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)**
+- [2026/07/2026-07-06-structural-shaping-alpha-stage1（塑形 Stage 1 归档）](../research/archived-notes/2026/07/2026-07-06-structural-shaping-alpha-stage1/README.md)
+- [2026/07/2026-07-05-value-area-rolling-reacceptance-freeze（Rolling 冻结摘要）](../research/archived-notes/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md)
+- [Stage B v2/v3 sweep（feature-only 降级决策）](../research/archived-notes/2026/07/2026-07-03-value-area-reacceptance-stage-b/README.md)
+- [R29 扩样与随机基准复验](../research/archived-notes/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r29-expanded-validation.md)
+- [R28 value_area_reacceptance 结构诊断](../research/archived-notes/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r28-structure-diagnosis.md)
+- [R27 扩样复验](../research/archived-notes/2026/07/2026-07-02-value-area-reacceptance-expansion/value-area-reacceptance-r27-expanded-sample.md)
 
 更早归档：
 
-- [value_area_reacceptance POC / VA 质量诊断阶段归档](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md)
-- [R1~R15 原始实验记录](../archive/strategy-research/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/)
-- [结构型 Alpha 随机对照阶段归档](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/README.md)
+- [value_area_reacceptance POC / VA 质量诊断阶段归档](../research/archived-notes/2026/07/2026-07-01-value-area-reacceptance-quality/value-area-reacceptance-quality-summary.md)
+- [R1~R15 原始实验记录](../research/archived-notes/2026/07/2026-07-01-value-area-reacceptance-quality/raw-workbench/)
+- [结构型 Alpha 随机对照阶段归档](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/README.md)
 
 如果需要追溯上一阶段详细实验过程，再从归档目录进入：
 
-- [raw-roadmap](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/raw-roadmap/README.md)
-- [raw-workbench](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/raw-workbench/README.md)
+- [raw-roadmap](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/raw-roadmap/README.md)
+- [raw-workbench](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/raw-workbench/README.md)
 
 ## 6. 给 AI 的阅读顺序
 

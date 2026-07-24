@@ -5,7 +5,7 @@
 > 发现日期：2026-06-29  
 > 发现分支：`feature/random-entry-baseline-roadmap`  
 > 关联实验：结构入口随机对照 loop  
-> 相关归档：[结构型 Alpha 随机对照阶段归档](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/README.md)  
+> 相关归档：[结构型 Alpha 随机对照阶段归档](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/README.md)  
 > 相关代码（**已归档**，见 archive:2026-06-29-structural-alpha-random-baseline/raw-strategies/ 与 raw-scripts/）：
 > - `prevday_volume_filter_strategy.py`（原 `workspace/strategies/`，2026-07-15 归档）
 > - `prevday_volume_random_baseline_strategy.py`（归档批次 raw-strategies/）
@@ -23,8 +23,8 @@
 
 相关记录：
 
-- [随机对照阶段摘要](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/random-baseline-experiment-summary.md)
-- [raw workbench: r3 entry routes loop](../archive/strategy-research/2026/06/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-random-baseline-r3-entry-routes-loop.md)
+- [随机对照阶段摘要](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/random-baseline-experiment-summary.md)
+- [raw workbench: r3 entry routes loop](../research/archived-notes/2026/06/2026-06-29-structural-alpha-random-baseline/raw-workbench/structural-alpha-random-baseline-r3-entry-routes-loop.md)
 
 ## 现象
 

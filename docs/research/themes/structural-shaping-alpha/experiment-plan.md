@@ -520,7 +520,7 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 | 2a 通过 | 塑形是 alpha 放大器     | 挂到源 alpha 主题作为增强模块                    |
 | 2b 通过 | 塑形在长周期有独立价值       | 独立主题 `structural-shaping-crossperiod` |
 | 2c 通过 | 塑形是制度过滤器          | 独立主题 `structural-shaping-regime`      |
-| 全部不通过 | KF-1..5 加固 · 主题冻结 | 归档到 `docs/archive/strategy-research/` |
+| 全部不通过 | KF-1..5 加固 · 主题冻结 | 归档到 `docs/research/archived-notes/` |
 
 **关键**：阶段 2 不再是"阶段 1 通过后的自动延续"，而是**阶段 1 证伪
 基础上的正向探索**。三个子条件都不通过是可接受结局——那时冻结主题会
@@ -567,14 +567,14 @@ CI 排除 0，且跨采样策略 ≥3 种稳健。
 
 - 阶段 1：archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#stage1-gatekeeper-report（原 `docs/workbench/structural-shaping-alpha-gatekeeper.md` · 已归档）
 - 阶段 2+：workbench 报告 `docs/workbench/structural-shaping-alpha-stageN-<topic>.md`
-- 主题稳定后归档到 `docs/archive/strategy-research/`
+- 主题稳定后归档到 `docs/research/archived-notes/`
 - 通过后撰写 strategy-math-spec.md
 
 ***
 
 ## 7. 关联主题
 
-- **反例（同家族）**：[value-area 家族](../../archive/strategy-research/2026/07/2026-07-17-value-area-family-consolidated/README.md)
+- **反例（同家族）**：[value-area 家族](../../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 - **方法论继承**：value-area 家族的四大约束（ATR / 期望净值 / 多层对照 / cluster bootstrap）
 - **上游 Roadmap**：[Structural Alpha 长期共识框架](../../../roadmap/strategy-research-framework.md)
 

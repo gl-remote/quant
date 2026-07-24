@@ -22,12 +22,13 @@
 |------|------|
 | `aspects/` | 方向/风控切面 DSL 体系 |
 | `backtest/` | 回测链路重构与优化 |
-| `strategy-research/` | 策略研究复盘与阶段性结论 |
+| ~~`strategy-research/`~~ | **已迁移至 [`docs/research/archived-notes/`](../research/archived-notes/)**（2026-07 起策略研究归档与工程归档分离） |
 | `strategy/` | 策略工程设计改进 |
 | `infra/` | 基础设施、报告模块、目录规划 |
 | `deprecated/` | 已废弃的历史方案（仅供参考） |
 
 新增归档文件时放入对应目录，若无对应目录则创建新的业务域目录。
+**策略研究类归档**（研究笔记 md + raw-workbench + raw-scripts + raw-strategies + raw-outputs）走 [`docs/research/archived-notes/`](../research/archived-notes/)，不再放入本目录。
 
 ### metadata header
 
@@ -64,10 +65,12 @@
 
 ### strategy-research/ — 策略研究复盘
 
-| 文件 | 类型 | 状态 | 完成日期 | 说明 |
+**已迁移至 [`docs/research/archived-notes/`](../research/archived-notes/)**（2026-07 起策略研究归档与工程归档分离）。历史条目：
+
+| 文件（现位置） | 类型 | 状态 | 完成日期 | 说明 |
 |------|------|------|---------|------|
-| [ma-positive-expectancy.md](strategy-research/2026/06/2026-06-26-indicator-baseline/ma-positive-expectancy.md) | 策略研究复盘 | 主触发方向暂停 | 2026-06-26 | MA baseline 正期望研究复盘，保留 `ma8` baseline |
-| [strategy-atr-tuning.md](strategy-research/2026/06/2026-06-26-indicator-baseline/strategy-atr-tuning.md) | 策略研究复盘 | 主触发方向降级 | 2026-06-27 | ATR 主触发方向降级，保留 ATR 风控模块 |
+| [ma-positive-expectancy.md](../research/archived-notes/2026/06/2026-06-26-indicator-baseline/ma-positive-expectancy.md) | 策略研究复盘 | 主触发方向暂停 | 2026-06-26 | MA baseline 正期望研究复盘，保留 `ma8` baseline |
+| [strategy-atr-tuning.md](../research/archived-notes/2026/06/2026-06-26-indicator-baseline/strategy-atr-tuning.md) | 策略研究复盘 | 主触发方向降级 | 2026-06-27 | ATR 主触发方向降级，保留 ATR 风控模块 |
 
 ### infra/ — 基础设施
 

@@ -174,9 +174,9 @@ archive:2026-07-13-va-asymmetry-leak-chain-consolidated/2026-07-09-poc-va-shapin
 - **2b**（跨周期 tail）：✅ **已完成 (2026-07-14)**——证伪。补齐 15m/1h 数据后跨三周期 martingale 一致精确成立，time_exit% 与周期无关。详见 [shaping-theory.md §2.10](shaping-theory.md) + KF-14
 - **2a**（方向 alpha × 塑形）：挂起，等 alpha 主题事件源
 
-阶段 1 归档：`docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/`
+阶段 1 归档：`docs/research/archived-notes/2026/07/2026-07-06-structural-shaping-alpha-stage1/`
 相关工具（First-Passage Designer）已沉 [shaping-theory.md](shaping-theory.md) Part IV
-+ 实现脚本 `docs/archive/strategy-research/2026/07/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
++ 实现脚本 `docs/research/archived-notes/2026/07/2026-07-06-structural-shaping-alpha-stage1/raw-scripts/first_passage_designer.py`（增强版，含 query 模式）+ 对照表
 `archive:2026/07/2026-07-06-structural-shaping-alpha-stage1#first-passage-lookup-tables`
 - **2026-07-09 下游拉起**：[va-asymmetry-composite](../../va-asymmetry-composite/README.md) 作为当前主线，
   承接"方向 alpha × 塑形工具 × 组合优化"全链路，本主题仅被动提供工具资产，不再独立发起实验。

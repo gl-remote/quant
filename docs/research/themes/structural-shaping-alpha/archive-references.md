@@ -4,7 +4,7 @@
 > 状态：初始（2026-07-06）
 > 主题 README：theme:structural-shaping-alpha#README
 
-本文件回答一个问题：**`docs/archive/strategy-research/` 中哪些目录与本
+本文件回答一个问题：**`docs/research/archived-notes/` 中哪些目录与本
 主题相关？各自是什么关系？**
 
 只登记"命名引用 + 关系标签"，不复述归档内容、不承载策略公式、不承载实验流水。

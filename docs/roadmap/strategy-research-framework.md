@@ -3,7 +3,7 @@
 > 类型：Roadmap / 长期研究共识  
 > 状态：指导后续策略实验  
 > 创建日期：2026-06-27  
-> 相关归档：[MA 策略正期望优化复盘](../archive/strategy-research/2026/06/2026-06-26-indicator-baseline/ma-positive-expectancy.md)、[ATR 策略研究复盘](../archive/strategy-research/2026/06/2026-06-26-indicator-baseline/strategy-atr-tuning.md)、[历史短期实验规划](../archive/strategy-research/2026/06/2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
+> 相关归档：[MA 策略正期望优化复盘](../research/archived-notes/2026/06/2026-06-26-indicator-baseline/ma-positive-expectancy.md)、[ATR 策略研究复盘](../research/archived-notes/2026/06/2026-06-26-indicator-baseline/strategy-atr-tuning.md)、[历史短期实验规划](../research/archived-notes/2026/06/2026-06-27-low-validation-cost/low-validation-cost-short-term-plan.md)  
 > 短期执行：[策略短期研究计划](./strategy-short-term-plan.md)
 
 ## 1. 核心共识
@@ -635,15 +635,15 @@ Price Action、Wyckoff、Market Profile、均值回归、突破交易、Scalping
 当一个短期研究阶段结束时，不再把归档重点放在单个历史计划文件名上，而是把该阶段的短期计划、实验归档和相关复盘统一放入带日期和主题的目录：
 
 ```text
-docs/archive/strategy-research/<YYYY-MM-DD>-<阶段主题>/
+docs/research/archived-notes/<YYYY-MM-DD>-<阶段主题>/
 ```
 
 示例：
 
 ```text
-docs/archive/strategy-research/2026/06/2026-06-27-low-validation-cost/
-docs/archive/strategy-research/2026-06-28-structural-alpha/
-docs/archive/strategy-research/2026-07-xx-auction-structure/
+docs/research/archived-notes/2026/06/2026-06-27-low-validation-cost/
+docs/research/archived-notes/2026-06-28-structural-alpha/
+docs/research/archived-notes/2026-07-xx-auction-structure/
 ```
 
 目录内文件按内容命名即可，不要求某个文件承担强索引职责：
@@ -659,7 +659,7 @@ docs/archive/strategy-research/2026-07-xx-auction-structure/
 | 路径 | 含义 |
 |------|------|
 | `docs/roadmap/strategy-short-term-plan.md` | 当前活跃短期研究计划 |
-| `docs/archive/strategy-research/<YYYY-MM-DD>-<阶段主题>/` | 某个历史研究阶段的归档集合 |
+| `docs/research/archived-notes/<YYYY-MM-DD>-<阶段主题>/` | 某个历史研究阶段的归档集合 |
 
 因此，后续归档短期计划时，应先根据该阶段的核心研究主题建立 `<YYYY-MM-DD>-<阶段主题>` 目录，再把该阶段相关计划、实验摘要和必要复盘放入该目录，并同步修正长期框架、实验归档和 issues 中的相对链接。
 

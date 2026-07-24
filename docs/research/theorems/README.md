@@ -14,7 +14,7 @@
 |------|------|--------|
 | `docs/research/themes/<slug>/` | 活跃研究：math-spec + 实验计划 + KF 演化 + 参数选择 + 工程实现 | 中（随实验演化） |
 | **`docs/research/theorems/<slug>/`** ⭐ | **稳定数学契约**：从主题里提炼出来的、已不再随实验流水演化的**结论集** | **高**（一旦入库不轻易改） |
-| `docs/archive/strategy-research/<batch>/` | 冻结历史：一次归档批次的原始过程与压缩摘要 | 高（历史证据不变） |
+| `docs/research/archived-notes/<batch>/` | 冻结历史：一次归档批次的原始过程与压缩摘要 | 高（历史证据不变） |
 | `docs/roadmap/` | 阶段规划与评价标准 | 中 |
 
 `theorems/` 与 `themes/` 的分工：
