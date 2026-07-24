@@ -42,7 +42,7 @@ AI 接手规则。
 | ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
-| structural-shaping-alpha | 活跃 / 阶段 1 完成待冻结候选 / 工具资产引用 | [themes/structural-shaping-alpha/](./themes/structural-shaping-alpha/README.md) |
+| ~~structural-shaping-alpha~~ | **已冻结归档（2026-07-24）** · 主命题完成四阶段跃迁 · 通道 A/B 双通道兑现 + KF-27 参数优化器交付 · 稳定内核已提炼至 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md) | [archive:2026-07-24-structural-shaping-alpha-freeze](../research/archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/freeze-summary.md) |
 | ~~strength-factor-screening~~ | **已冻结归档（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [archive:2026-07-17-strength-factor-screening-freeze](../research/archived-notes/2026/07/2026-07-17-strength-factor-screening-freeze/freeze-summary.md) |
 | ~~value_area_reacceptance~~ | **已冻结归档（2026-07-03）** / feature-only 降级 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
 | ~~value_area_rolling_reacceptance~~ | **已冻结归档（2026-07-05）** / 主题假设完全证伪 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [freeze-summary](../research/archived-notes/2026/07/2026-07-05-value-area-rolling-reacceptance-freeze/freeze-summary.md) |
@@ -51,7 +51,7 @@ AI 接手规则。
 
 活跃主题目录：
 - 上游 Alpha 源（**已归档**）：`archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/`（⚠️ 数字作废，分类器 v4.0 tier 坐标结构可继承）
-- 上游工具：`docs/research/themes/structural-shaping-alpha/`（塑形 / 成本 / 归因）
+- 上游塑形工具（**已归档**）：`archive:2026-07-24-structural-shaping-alpha-freeze`（塑形 / 成本 / 归因）；稳定数学契约保留在 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md)
 
 ## 4. 当前主线摘要
 

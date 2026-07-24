@@ -2,7 +2,7 @@
 
 > **文档定位**：本文回答一个数学问题——**在什么条件下，一个双 barrier 塑形容器 $(K_S, K_T, T)$ 能够满足 $\mathbb{E}[E_{\text{net}}] > 0$？** 从 Sharpe 借鉴定义"市场强度" $s := \nu/\sigma$ 出发，通过 Doob OST 两前提对偶结构给出**完备的充分条件分类**，闭式最优参数与盈亏下界。
 >
-> **稳定性**：入库日期 2026-07-24 · 从 [theme:structural-shaping-alpha](../../themes/structural-shaping-alpha/) 的活跃 spec 提炼；已通过一致性检查（附录 B）。
+> **稳定性**：入库日期 2026-07-24 · 从主题 `structural-shaping-alpha` 的活跃 spec 提炼；主题已于 2026-07-24 冻结归档至 [archive:2026-07-24-structural-shaping-alpha-freeze](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)；已通过一致性检查（附录 B）。
 >
 > **对外可用**：是（独立成篇、逻辑闭合、记号自洽）。
 >

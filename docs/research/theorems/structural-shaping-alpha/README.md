@@ -1,7 +1,8 @@
 # Theorems · structural-shaping-alpha
 
 > **主题定位**：`structural-shaping-alpha` 主题的**稳定数学结论集**。
-> 从 [theme:structural-shaping-alpha](../../themes/structural-shaping-alpha/) 的活跃 math-spec 提炼；只承载数学骨架 + 严格证明，不承载实证锚点、参数扫描、KF 演化叙事。
+> 从主题活跃期 spec 提炼；只承载数学骨架 + 严格证明，不承载实证锚点、参数扫描、KF 演化叙事。
+> **主题已于 2026-07-24 冻结归档**：[archive:2026-07-24-structural-shaping-alpha-freeze](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)（含完整 KF-1..27 演化史、22 个研究脚本、shaping-theory 完整叙事）。本目录内容作为主题稳定内核**长期保留**。
 
 ---
 
@@ -25,12 +26,12 @@
 
 ---
 
-## 与活跃主题的关系
+## 与已归档主题的关系
 
-- [theme:structural-shaping-alpha#strategy-math-spec](../../themes/structural-shaping-alpha/) 的旧数学契约已迁移至本目录；
-- 主题活跃期新增的实证结果（品种参数锚点、决策阈值）仍留在 `themes/structural-shaping-alpha/`；
-- 若定理需要迭代（更严格证明、更好记号、新推论），修改本目录文档；
-- 若主题产生新的稳定数学结论，追加新文件到本目录（一份文件 = 一个大结论 或 一个自洽结论簇）。
+- 主题 `structural-shaping-alpha` 的活跃期 math-spec 已迁移至本目录（`when-barrier-shaping-yields-alpha.md` + `winrate-payoff-tradeoff-under-frictions.md`）；
+- 主题目录本身于 2026-07-24 冻结归档：[archive:2026-07-24-structural-shaping-alpha-freeze](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)（含 README / research-status / experiment-plan / archive-references / shaping-theory + 22 个研究脚本）；
+- 若定理需要迭代（更严格证明、更好记号、新推论），在本目录直接修改；
+- 若未来发现新的 alpha 通道或稳定数学结论（P1/P2 之外的第三条 Doob OST 前提失效路径），追加新文件到本目录。
 
 ---
 
