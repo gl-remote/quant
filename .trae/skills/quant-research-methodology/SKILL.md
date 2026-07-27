@@ -15,6 +15,7 @@ description: "Quantitative strategy research methodology: validation order, evid
 - 规划跨品种扩样时
 - 准备写 math spec 或工程化之前
 - 需要判断"当前做到哪一步了、下一步该做什么"时
+- **引用既有 archived 主题结论作为新实验的假设基础前**——必须先按 `quant-project` skill 的"归档文档引用规则"完成 4 步域内 / 域外检查，禁止仅凭加粗金句直接推广到新周期 / 新仓位管理 / 新品种
 
 ## 与其他 skill 的边界
 

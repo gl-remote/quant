@@ -20,6 +20,8 @@ description: "Rules for quant research document layout: theme directory, workben
 
 `strategy-math-spec.md`（活跃期）与 `theorems/<slug>/*.md`（稳定期）本身的写法（结构、数学记号、静态一致性检查）由 `quant-math-spec` 负责，本 skill 不重复。
 
+**引用 archived-notes 结论到新场景时必须先跑护栏检查**：`archived-notes/**` 下的结论（尤其加粗总结句）在被引用/推广前必须先回溯适用域并判定域内/域外，详见 `quant-project` skill 的"归档文档引用规则"章节。本 skill 只管归档产物的**位置与目录布局**，不管**引用护栏**。
+
 ## 触发时机
 
 - 新建一个策略主题目录；
