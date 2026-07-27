@@ -1,8 +1,8 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**无活跃策略主题（2026-07-14）** · va-asymmetry-revisit 已因假设全线证伪彻底废弃归档 · va-asymmetry / value-area 两大家族全部证伪 · structural-shaping-alpha 保留为工具资产
-> 最近更新：2026-07-13
+> 状态：**活跃主题：time-barrier-selection（2026-07-28 立题）** · 从 `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` 派生 · 单合约持仓周期 $T$ 决策变量研究 · 首个实验：玉米 DCE.c 5m
+> 最近更新：2026-07-28
 > 归档批次：[archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)（**必读**）
 > 家族归档：[archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
@@ -62,6 +62,7 @@ previously 冻结:
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
+| **time-barrier-selection** | **活跃（2026-07-28 立题）** · 从塑形理论派生 · 单合约 5m 持仓周期 $T$ 决策变量研究 · 首个实验：玉米 DCE.c 5m 广度扫描 | [theme:time-barrier-selection](./themes/time-barrier-selection/README.md) |
 | ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 假设证伪归档（2026-07-13）** · 无独立 alpha · 主题目录已整体搬入归档批次 | [archive:...leak-chain-consolidated/theme-va-asymmetry-composite/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/) |
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
@@ -72,7 +73,7 @@ previously 冻结:
 
 家族总结：[archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) · [themes-frozen/structural-shaping-alpha/README.md](./themes-frozen/structural-shaping-alpha/README.md)
 
-**当前活跃策略主题**：无（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。工具/方法论主题保留：
+**当前活跃策略主题**：`time-barrier-selection`（2026-07-28 立题）——从塑形理论 `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` 派生，专注单合约时间维 $T$ 决策，首个实验对象玉米 5m。工具/方法论主题保留：
 
 - 分类器结构参考（数字作废，仅结构可继承，**已归档**）：archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/
 - 塑形工具资产（**已归档**）：`archive:2026-07-24-structural-shaping-alpha-freeze`（稳定数学契约见 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md)）
@@ -129,10 +130,10 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 
 ## 5. 下一步
 
-**当前状态**：无活跃策略主题（va-asymmetry-revisit 已于 2026-07-14 彻底废弃归档）。近期路径：
+**当前状态**：活跃主题 `time-barrier-selection`（2026-07-28 立题）。近期路径：
 
-1. **等待新研究方向**：direction-strength-combo 主题已删除，等待新方向立题
-2. **同步维护**塑形工具资产（structural-shaping-alpha）
+1. **Stage 1 玉米 5m 持仓周期扫描**：详见 [theme:time-barrier-selection#experiment-plan](./themes/time-barrier-selection/experiment-plan.md)
+2. **同步维护**塑形工具资产（structural-shaping-alpha 已冻结归档，稳定数学契约在 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md)）
 
 **任何新主题必须遵守的方法论前置约束**（继承自 value-area 家族 + va-asymmetry 家族证伪 + 前序主题教训）：
 
@@ -179,7 +180,7 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 ## 7. 给 AI 的工作规则
 
 ```text
-1. 先读本文件确认**当前活跃策略主题**：无（direction-strength-combo 已删除）；
+1. 先读本文件确认**当前活跃策略主题**：time-barrier-selection（2026-07-28 立题）；
 2. 必读 archive:2026-07-14-va-asymmetry-revisit-full-refutation#va-asymmetry-family-retrospective
    了解 va-asymmetry 家族 8+ 天全周期复盘 · 5 条系统性错误 · 6 条 skill 补丁建议；
 3. 必读 archive:2026-07-13-va-asymmetry-leak-chain-consolidated#README
