@@ -8,6 +8,8 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
+| 2026-07-31 | time-barrier-selection | **主题最终冻结**：三轮实证闭环——跨周期（Stage 2）/ 跨品种 c/m/rb（Stage 3）/ KF-27 参数喂入（Stage 4）；μ_D 0.04–0.07 量级一致；最优塑形参数 (K_S=4, RR=3, τ=0.1) 通吃；方向概率 p=0.60 是实盘拐点；p-混合闭式沉淀到 theorem §10.5 · 时间维 T 非独立 alpha 来源 | 🧪 方法论 · ✅ 通过 · 🔁 沉淀 theorem |
+| 2026-07-31 | time-barrier-selection | **Stage 1 方向修正归档**：5m \|s\|(T) 形态扫描测量目标错误（是统计收敛非市场结构），整批冻结，方法论遗产（cluster 按周、末 bar 归属简化）保留 | ❌ 方向修正 · 🧪 方法论 |
 | 2026-07-14 | va-asymmetry-revisit | **主题最终证伪归档**：一日 4 轮因果版实验（H-1 一维 IC / Causal 6-tier / 扩样 145 合约 / Skew 派生 7 大类）· 145 合约 55,877 events · 全线证伪 · 因果性铁证 max_abs_diff=0 · 选样偏差诊断证明 L_seg2 疑似 alpha 是 top 1.5% 极右尾 · 附 8+ 天全周期复盘 + 6 条 skill 补丁建议 | ❌ 证伪 · 🧪 方法论 · ⚠️ 复盘 |
 | 2026-07-13 | va-asymmetry-composite | **⚠️ 错误路径链条归并封装**：07-08 ~ 07-13 共 7 个 va-asymmetry 系列批次因共享同一条泄漏 daily 特征管道，所有性能类数字结论作废；封装为单一批次 `2026-07-13-va-asymmetry-leak-chain-consolidated/`，顶层 README 列出保留的方法论遗产与作废清单。**引用任何子批次前必读封装 README** | ❌ 证伪 · 🧪 方法论 · 🔒 数字作废 |
 | 2026-07-06 | structural-shaping-alpha | 结构塑形阶段 1：DirRandom 下无独立 alpha 证伪；产出 9 条 KF + First-Passage Designer 工具遗产 | ❌ 证伪 · 🧪 方法论 |
