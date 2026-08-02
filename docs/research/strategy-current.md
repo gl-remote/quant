@@ -1,13 +1,27 @@
 # 策略当前研究进度
 
 > 类型：Research / 当前策略研究状态
-> 状态：**活跃主题：time-barrier-selection（2026-07-28 立题）** · 从 `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` 派生 · 单合约持仓周期 $T$ 决策变量研究 · 首个实验：玉米 DCE.c 5m
-> 最近更新：2026-07-28
+> 状态：**活跃主题：mean-reversion-barrier-duality（2026-08-02 立题）、time-barrier-selection（2026-07-28 立题）** · mean-reversion 为 structural-shaping-alpha 的镜像，研究低盈亏比/高胜率（$R<1$）在均值回归漂移下何时最优（阶段 0：OU 数值+闭式已验证）；time-barrier 为单合约持仓周期 $T$ 决策研究
+> 最近更新：2026-08-02
 > 归档批次：[archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md)（**必读**）
 > 家族归档：[archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md)
 > 长期框架：[策略长期共识：共识价格区间下的账户风险结构塑形框架](../roadmap/strategy-research-framework.md)
 
 ## 1. 当前一句话结论
+
+```text
+2026-08-02 · 新立题 mean-reversion-barrier-duality:
+补上 structural-shaping-alpha 遗漏的另一半——低盈亏比/高胜率（R<1）何时最优。
+阶段 0（OU 合成数据 + 小 κ 闭式）结论：
+- 鞅过程（Doob 保守律）下 R<1 必亏，必须有真实均值回归型条件漂移；
+- OU（入场于偏离处、漂移指向均衡）下 E_gross ∝ κ·K_T·K_S·(2K_T+K_S)/3，对任意 R>0 为正，
+  与趋势通道 E∝R(R-1)（需 R>1）对偶；
+- 固定容器宽度下最优 R* 随回归强度 κ 单调下降，κ≈0.7–1.0 时跌破 1
+  （弱回归用 R>1 低胜率，强回归用 R<1 高胜率）；
+- 纯反持续（H<1/2 无回归漂移）单独不产生 alpha；
+- R<1 严格最优依赖强回归 / 按时间成本 / 下行敏感 / 紧止损约束之一。
+真实数据未验证，下一步阶段 1 多品种广度扫描（真实成本 + 随机对照）。
+```
 
 ```text
 2026-07-13 · va-asymmetry 系列（07-08 ~ 07-13 共 7 个批次 + 主题目录）
@@ -62,6 +76,7 @@ previously 冻结:
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
+| **mean-reversion-barrier-duality** | **活跃（2026-08-02 立题）** · structural-shaping-alpha 的镜像 · 低盈亏比/高胜率（$R<1$）在均值回归漂移下何时最优 · 阶段 0：OU 首达 ODE + 小 κ 闭式已验证 · KF-1..6 | [theme:mean-reversion-barrier-duality](./themes/mean-reversion-barrier-duality/README.md) |
 | **time-barrier-selection** | **活跃（2026-07-28 立题）** · 从塑形理论派生 · 单合约 5m 持仓周期 $T$ 决策变量研究 · 首个实验：玉米 DCE.c 5m 广度扫描 | [theme:time-barrier-selection](./themes/time-barrier-selection/README.md) |
 | ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 假设证伪归档（2026-07-13）** · 无独立 alpha · 主题目录已整体搬入归档批次 | [archive:...leak-chain-consolidated/theme-va-asymmetry-composite/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/) |
