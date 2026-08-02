@@ -39,7 +39,7 @@ AI 接手规则。
 
 | 主题 | 状态 | 文档 |
 | --- | --- | --- |
-| **mean-reversion-barrier-duality** | **活跃（2026-08-02 立题）** · structural-shaping-alpha 的镜像 · 研究低盈亏比/高胜率（$R<1$）在均值回归漂移下何时最优 · 阶段 0（OU 数值+闭式已验证） | [theme:mean-reversion-barrier-duality](./themes/mean-reversion-barrier-duality/README.md) |
+| ~~mean-reversion-barrier-duality~~ | **已冻结归档（2026-08-02）** · 数学内核沉淀为 `theorem:structural-shaping-alpha#factor-filtering-and-dgp-boundary` · 方向性单品种 $R<1$ 可交易性被怀疑先验否证 | [archive:2026-08-02-mean-reversion-barrier-duality-freeze](../research/archived-notes/2026/08/2026-08-02-mean-reversion-barrier-duality-freeze/freeze-summary.md) |
 | **time-barrier-selection** | **活跃（2026-07-28 立题）** · 从塑形理论派生 · 单合约 5m 持仓周期研究 · 首个实验：玉米 DCE.c 5m | [theme:time-barrier-selection](./themes/time-barrier-selection/README.md) |
 | ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 已证伪归档（2026-07-13）** · 假设由未来信息泄漏支撑 · 无独立 alpha | [archive:2026-07-13-va-asymmetry-leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |

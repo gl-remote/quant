@@ -1,9 +1,10 @@
 # mean-reversion-barrier-duality
 
-> **主题定位**：回答一个对偶问题——**在什么市场结构与约束下，低盈亏比 / 高胜率（$R<1$）会成为 barrier 塑形的最优选择？** 它是已冻结主题 `structural-shaping-alpha`（结论偏向"强段择时 → 非对称塑形 $R>1$ 最优"）的**镜像补全**。
+> **主题状态：已冻结归档（2026-08-02）**。数学内核（OU/GMB 对偶、DGP 适用边界）已沉淀为 `theorem:structural-shaping-alpha#factor-filtering-and-dgp-boundary`；方向性单品种 $R<1$ 可交易性被怀疑先验否证，不进入真实数据阶段。冻结摘要见 [freeze-summary.md](freeze-summary.md)。
 >
-> **状态**：立题（2026-08-02）· 阶段 0（核心假设已用 OU 首达 ODE 数值 + 小 κ 闭式验证，尚未上真实数据）。
-> **开发分支**：`experiment/low-payoff-high-winrate-optimality`（从 `dev/0.6` @ `3b0a727` 开出）。
+> **原主题定位**：回答一个对偶问题——**在什么市场结构与约束下，低盈亏比 / 高胜率（$R<1$）会成为 barrier 塑形的最优选择？** 它是已冻结主题 `structural-shaping-alpha` 的镜像补全。
+>
+> **开发分支**：`experiment/low-payoff-high-winrate-optimality`（从 `dev/0.6` @ `3b0a727` 开出，已合并）。
 
 ---
 
