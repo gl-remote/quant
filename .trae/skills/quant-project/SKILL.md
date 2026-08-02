@@ -91,7 +91,7 @@ CLI 固定参数回测：
 - Profile：`project_data/profiles/`
 - Coverage：`project_data/coverage/`
 
-**AI 生成的临时研究资产统一放到 `docs/workbench/`**（包括临时脚本、临时策略、临时中间数据/图表），不再使用 `scripts/ai_tmp/` 与 `project_data/ai_tmp/`。归档规则详见 `quant-research-layout` skill。
+**AI 生成的临时研究资产统一放到 `docs/workbench/`**（包括临时脚本、临时策略、临时中间数据/图表）。归档规则详见 `quant-research-layout` skill。
 
 统一路径函数在 `workspace/data/output_paths.py` 与 `workspace/report/output_paths.py`。业务代码不要硬编码本地数据子路径。
 

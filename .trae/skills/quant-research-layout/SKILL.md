@@ -345,7 +345,7 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 - 受框架 issue 影响的部分；
 - 临时结论。
 
-**AI 生成的临时研究资产也全部写入 `docs/workbench/`**，取代旧的 `scripts/ai_tmp/` 与 `project_data/ai_tmp/`：
+**AI 生成的临时研究资产也全部写入 `docs/workbench/`**：
 
 - 临时分析 / debug / 探查脚本：`docs/workbench/<theme-slug>/scripts/*.py`（或大主题下 `docs/workbench/<theme-slug>-<topic>/scripts/`）；
 - 临时策略代码（未进入 `workspace/strategies/` 长期目录的实验策略）：`docs/workbench/<theme-slug>/strategies/*.py`；
