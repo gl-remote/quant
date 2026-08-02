@@ -99,35 +99,35 @@ $$E_{\text{gross}}^{\text{trend}} \sim \tfrac{x^2}{3} K_S^3 R(R-1),$$
 ### KF-1 · 鞅过程下 $R<1$ 不存在生存区
 - 类型：策略行为 / 假设证伪
 - 状态：已证实（Doob OST + 数值）
-- 证据：workbench:low-payoff-high-winrate-optimality/objectives_study（BM $\kappa=0$，所有 $R$ 的 $E_{\text{gross}}=0$，扣成本后全亏）
+- 证据：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary（BM $\kappa=0$，所有 $R$ 的 $E_{\text{gross}}=0$，扣成本后全亏；raw-scripts/objectives_study.py）
 - 影响：任何"低盈亏比高胜率"策略必须以真实均值回归型条件漂移为前提；纯反持续 / 纯噪声不够。
 - 日期：2026-08-02
 
 ### KF-2 · OU 均值回归下小 κ 闭式胜率与正期望
 - 类型：策略行为
 - 状态：已证实（ODE 数值与闭式吻合，$\kappa=0.1$ 误差 <0.001）
-- 证据：workbench:low-payoff-high-winrate-optimality/verify_ou_analytic
+- 证据：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary（ODE 数值与闭式吻合，κ=0.1 误差 <0.001；raw-scripts/verify_ou_analytic.py）
 - 影响：给出 $R<1$ 正期望的数学根源——$E_{\text{gross}}\propto\kappa K_TK_S(2K_T+K_S)$，对任意 $R>0$ 为正，与趋势通道 $R(R-1)$ 对偶。
 - 日期：2026-08-02
 
 ### KF-3 · 最优盈亏比 $R^\ast$ 随回归强度单调下降
 - 类型：策略行为
 - 状态：已证实（数值，固定 $L=2$；解析单调性待补）
-- 证据：workbench:low-payoff-high-winrate-optimality/kappa_threshold_study（$\kappa=0.1\!\to\!5$，$R^\ast$ 从 4.0 降到 0.15）
+- 证据：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary（$\kappa=0.1\!\to\!5$，$R^\ast$ 从 4.0 降到 0.15；raw-scripts/kappa_threshold_study.py）
 - 影响：把"趋势用 $R>1$、回归用 $R<1$"统一为一条以 $\kappa$ 为轴的单调律；$\kappa\approx0.7\text{–}1.0$ 为 $R^\ast=1$ 交叉点。
 - 日期：2026-08-02
 
 ### KF-4 · 纯反持续增量（无回归漂移）不产生 $R<1$ alpha
 - 类型：方法论 / 假设证伪
 - 状态：已证实（AR(1) 增量 $\rho=-0.3$ 数值，$E\approx0$）
-- 证据：workbench:low-payoff-high-winrate-optimality/r_optimality_regimes
+- 证据：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary（AR(1) 增量 $\rho=-0.3$ 数值，$E\approx0$；raw-scripts/r_optimality_regimes.py）
 - 影响：fBm $H<1/2$ 的反持续性本身不足以支撑 $R<1$ 策略；必须有指向均衡的条件漂移（OU 的 $-\kappa x$）。这把"反持续"与"均值回归"两个常被混淆的概念区分开。
 - 日期：2026-08-02
 
 ### KF-5 · $R<1$ 严格最优依赖四类约束之一
 - 类型：策略行为 / 边界
 - 状态：边界待定（四条充分条件已数值验证，精确阈值待真实数据）
-- 证据：workbench:low-payoff-high-winrate-optimality/r_optimality_regimes、objectives_study
+- 证据：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary（四条充分条件已数值验证，精确阈值待真实数据；raw-scripts/r_optimality_regimes.py、objectives_study.py）
 - 影响：$R<1$ 不是无条件最优；在"固定宽度 + 单笔 Sharpe + 弱回归"下最优在 $R\approx1\text{–}1.7$。研究与宣传时不得把 $R<1$ 普适化。
 - 日期：2026-08-02
 

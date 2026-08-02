@@ -66,7 +66,7 @@
 ### 阶段 0（已完成，合成数据）
 
 - OU 首达 ODE 数值 + 小 κ 闭式，验证 KF-1..6；
-- 产出：`docs/workbench/low-payoff-high-winrate-optimality/*.py`。
+- 产出：archive:2026-08-02-mean-reversion-barrier-duality-stage0（`raw-scripts/` 9 个脚本 + stage0-summary）。
 
 ### 阶段 1 · 广度扫描（存在性）
 
@@ -125,10 +125,11 @@
 
 ## 7. 复现资产
 
-- 合成数据验证脚本：`docs/workbench/low-payoff-high-winrate-optimality/`
+- 合成数据验证脚本：archive:2026-08-02-mean-reversion-barrier-duality-stage0（`raw-scripts/`，9 个脚本）
   - `explore_ou_duality.py`：OU vs BM、长空头混合、R 扫描
   - `verify_ou_analytic.py`：ODE 数值 vs 小 κ 闭式
   - `r_optimality_regimes.py`：固定止损 / 时间成本 / fBm 代理三大约束
   - `objectives_study.py`：多目标（Sharpe / Kelly / 下行惩罚）
   - `kappa_threshold_study.py`：$R^\ast(\kappa)$ 交叉点定位
-- 真实数据阶段脚本阶段 1 启动后写入同目录 `scripts/`。
+  - `regime_realism_check.py` / `equilibrium_error_check.py` / `timescale_competition.py` / `r_optimality_study.py`：成本、regime 破裂、均衡误差、Péclet 数压力测试
+- 真实数据阶段脚本阶段 1 启动后写入 `docs/workbench/<theme-slug>/scripts/`。

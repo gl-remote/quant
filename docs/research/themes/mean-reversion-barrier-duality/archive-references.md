@@ -8,6 +8,12 @@
 
 ## 相关归档批次
 
+### archive:2026-08-02-mean-reversion-barrier-duality-stage0
+
+- 关系类型：**阶段归档（自登记）**
+- 说明：本主题阶段 0（合成数据）的归档批次。含 OU 首达闭式、小 κ 展开、$R^\ast(\kappa)$ 单调性、Péclet 数判据、成本/regime/均衡误差三类压力测试的完整原始脚本（9 个），以及 KF-1..6 的证据源。阶段 1 真实数据启动后引用此批次作为方法论与数学基础。
+- 相关文件：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary
+
 ### archive:2026-07-24-structural-shaping-alpha-freeze
 
 - 关系类型：**对偶 + 方法论遗产**
