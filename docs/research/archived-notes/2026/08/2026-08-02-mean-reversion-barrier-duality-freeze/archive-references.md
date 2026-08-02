@@ -10,15 +10,9 @@
 
 ### archive:2026-08-02-mean-reversion-barrier-duality-freeze
 
-- 关系类型：**主题冻结（自登记）**
-- 说明：本主题目录的冻结批次。阶段 0 OU 数学闭合 + 讨论深化后，内核沉淀为 `theorem:structural-shaping-alpha#factor-filtering-and-dgp-boundary`，方向性单品种 $R<1$ 可交易性被怀疑先验否证，不进入真实数据阶段 1。冻结摘要列出 KF-1..6、未闭合项（$R^\ast$ 解析单调性、有限 T 解）与三个可能成立但已偏离原问题域的形态（市场中性配对 / 事件短窗 / 微结构）。
-- 相关文件：archive:2026-08-02-mean-reversion-barrier-duality-freeze#freeze-summary
-
-### archive:2026-08-02-mean-reversion-barrier-duality-stage0
-
-- 关系类型：**阶段归档（自登记）**
-- 说明：本主题阶段 0（合成数据）的归档批次。含 OU 首达闭式、小 κ 展开、$R^\ast(\kappa)$ 单调性、Péclet 数判据、成本/regime/均衡误差三类压力测试的完整原始脚本（9 个），以及 KF-1..6 的证据源。阶段 1 真实数据启动后引用此批次作为方法论与数学基础。
-- 相关文件：archive:2026-08-02-mean-reversion-barrier-duality-stage0#stage0-summary
+- 关系类型：**主题冻结 + 阶段 0（自登记）**
+- 说明：本主题目录的冻结批次，含原阶段 0（合成数据）归档。阶段 0 给出 OU 首达闭式、小 κ 展开、$R^\ast(\kappa)$ 单调性、Péclet 数判据、成本/regime/均衡误差三类压力测试的完整原始脚本（9 个）；讨论深化后内核沉淀为 `theorem:structural-shaping-alpha#factor-filtering-and-dgp-boundary`，方向性单品种 $R<1$ 可交易性被怀疑先验否证，不进入真实数据阶段 1。冻结摘要列出 KF-1..6、未闭合项与三个可能成立但已偏离原问题域的形态（市场中性配对 / 事件短窗 / 微结构）。
+- 相关文件：archive:2026-08-02-mean-reversion-barrier-duality-freeze#freeze-summary · archive:2026-08-02-mean-reversion-barrier-duality-freeze#stage0-summary
 
 ### archive:2026-07-24-structural-shaping-alpha-freeze
 

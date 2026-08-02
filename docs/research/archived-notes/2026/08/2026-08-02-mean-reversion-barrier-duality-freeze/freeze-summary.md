@@ -84,7 +84,7 @@ $\kappa=0$（鞅）下 $E_{\text{gross}}\equiv0$，扣成本后所有 $R$ 都亏
 | KF-5 | $R<1$ 严格最优依赖四类约束之一，非无条件 | 边界待定 |
 | KF-6 | 高胜率易被"扛单 + 紧止盈"伪造，需固定 T + 随机对照 | 方法论 |
 
-证据源：archive:2026-08-02-mean-reversion-barrier-duality-stage0（9 个原始脚本已归档于该批次 raw-scripts/）。
+证据源：本批次 `raw-scripts/`（9 个原始脚本）与 `stage0-summary.md`（阶段 0 合成数据摘要，已并入本冻结批次）。
 
 ---
 
@@ -108,6 +108,8 @@ $\kappa=0$（鞅）下 $E_{\text{gross}}\equiv0$，扣成本后所有 $R$ 都亏
 | strategy-math-spec.md | OU 首达闭式、小 κ 展开、四条充分条件 |
 | experiment-plan.md | 阶段 1–4 实验设计（未执行阶段 1） |
 | parameter-selection-spec.md / implementation-notes.md | 占位（未推进） |
-| archive-references.md | 与 structural-shaping-freeze / stage0 的关系 |
+| archive-references.md | 与 structural-shaping-freeze 的关系 |
+| stage0-summary.md | 阶段 0 合成数据压缩摘要 |
+| raw-scripts/ | 阶段 0 原始脚本（9 个：OU 对偶、闭式验证、κ 阈值、多目标、约束 regime、真实化压力测试等） |
 
 稳定数学内核见 `theorem:structural-shaping-alpha#factor-filtering-and-dgp-boundary` 与 `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha`。
