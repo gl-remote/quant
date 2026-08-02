@@ -1,0 +1,38 @@
+[
+  {
+    "group": "corn",
+    "n_breakpoints_total_by_w": {
+      "20": 7,
+      "40": 1,
+      "80": 1,
+      "160": 0
+    },
+    "n_breakpoints_consensus": 1,
+    "breakpoint_interval_mean_h": NaN,
+    "breakpoint_interval_median_h": NaN
+  },
+  {
+    "group": "corn_starch",
+    "n_breakpoints_total_by_w": {
+      "20": 8,
+      "40": 3,
+      "80": 1,
+      "160": 0
+    },
+    "n_breakpoints_consensus": 2,
+    "breakpoint_interval_mean_h": 45.0,
+    "breakpoint_interval_median_h": 45.0
+  },
+  {
+    "group": "soybean_meal",
+    "n_breakpoints_total_by_w": {
+      "20": 5,
+      "40": 2,
+      "80": 0,
+      "160": 0
+    },
+    "n_breakpoints_consensus": 2,
+    "breakpoint_interval_mean_h": 252.0,
+    "breakpoint_interval_median_h": 252.0
+  }
+]

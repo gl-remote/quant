@@ -1,0 +1,35 @@
+{
+  "gatekeeper": {
+    "corn": {
+      "ljung_box_p": 0.0,
+      "mean_half_life_h": 19.44
+    },
+    "corn_starch": {
+      "ljung_box_p": 0.0,
+      "mean_half_life_h": 13.64
+    },
+    "soybean_meal": {
+      "ljung_box_p": 0.0,
+      "mean_half_life_h": 23.23
+    }
+  },
+  "decision_tree": {
+    "ar1_threshold_0.5": {},
+    "spearman_threshold_0.7": {},
+    "corn": {
+      "ar1": 0.8321,
+      "half_life_h": 19.44,
+      "spearman_corr_x_vs_sigma": -0.178
+    },
+    "corn_starch": {
+      "ar1": 0.828,
+      "half_life_h": 13.64,
+      "spearman_corr_x_vs_sigma": -0.112
+    },
+    "soybean_meal": {
+      "ar1": 0.8271,
+      "half_life_h": 23.23,
+      "spearman_corr_x_vs_sigma": 0.36
+    }
+  }
+}

@@ -1,0 +1,573 @@
+{
+  "config": {
+    "intervals": [
+      "5m",
+      "15m",
+      "1h"
+    ],
+    "symbols": [
+      "rb2601",
+      "rb2605",
+      "i2601",
+      "i2509",
+      "cu2601",
+      "cu2509",
+      "al2601",
+      "al2509",
+      "sc2512",
+      "sc2509",
+      "TA601",
+      "TA509",
+      "m2601",
+      "m2605",
+      "p2601",
+      "p2605",
+      "SR601",
+      "SR605",
+      "CF601",
+      "CF509"
+    ]
+  },
+  "results": [
+    {
+      "sector": "black",
+      "symbol": "rb2601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.5284069013760976,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5386501224224721,
+      "n_windows": 8,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.5921030883530631,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2605",
+      "interval": "5m",
+      "n_bars": 3879,
+      "hurst": 0.5629779270673356,
+      "n_windows": 11,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2605",
+      "interval": "15m",
+      "n_bars": 1293,
+      "hurst": 0.5924078317227149,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "rb2605",
+      "interval": "1h",
+      "n_bars": 394,
+      "hurst": 0.5747738870775017,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.5256603888368399,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5265477143672106,
+      "n_windows": 8,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.5808627184626323,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2509",
+      "interval": "5m",
+      "n_bars": 4322,
+      "hurst": 0.534047378529734,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2509",
+      "interval": "15m",
+      "n_bars": 1440,
+      "hurst": 0.5619775536763217,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "black",
+      "symbol": "i2509",
+      "interval": "1h",
+      "n_bars": 438,
+      "hurst": 0.5743248541425539,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2601",
+      "interval": "5m",
+      "n_bars": 5571,
+      "hurst": 0.5718413290249239,
+      "n_windows": 12,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2601",
+      "interval": "15m",
+      "n_bars": 1857,
+      "hurst": 0.57655321703516,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2601",
+      "interval": "1h",
+      "n_bars": 540,
+      "hurst": 0.5796280914883118,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2509",
+      "interval": "5m",
+      "n_bars": 5810,
+      "hurst": 0.5388739887872441,
+      "n_windows": 12,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2509",
+      "interval": "15m",
+      "n_bars": 1936,
+      "hurst": 0.5330568005404535,
+      "n_windows": 9,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "metals",
+      "symbol": "cu2509",
+      "interval": "1h",
+      "n_bars": 562,
+      "hurst": 0.5563504475446087,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2601",
+      "interval": "5m",
+      "n_bars": 5571,
+      "hurst": 0.5429419622135827,
+      "n_windows": 12,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2601",
+      "interval": "15m",
+      "n_bars": 1857,
+      "hurst": 0.552991966522674,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2601",
+      "interval": "1h",
+      "n_bars": 540,
+      "hurst": 0.5671308324720451,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2509",
+      "interval": "5m",
+      "n_bars": 5810,
+      "hurst": 0.559997295866908,
+      "n_windows": 12,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2509",
+      "interval": "15m",
+      "n_bars": 1936,
+      "hurst": 0.5629219893845531,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "metals",
+      "symbol": "al2509",
+      "interval": "1h",
+      "n_bars": 562,
+      "hurst": 0.6206175783211186,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2512",
+      "interval": "5m",
+      "n_bars": 6623,
+      "hurst": 0.5440188766879205,
+      "n_windows": 12,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2512",
+      "interval": "15m",
+      "n_bars": 2207,
+      "hurst": 0.579781068602399,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2512",
+      "interval": "1h",
+      "n_bars": 656,
+      "hurst": 0.6272017109969825,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2509",
+      "interval": "5m",
+      "n_bars": 6926,
+      "hurst": 0.5546848762102431,
+      "n_windows": 12,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2509",
+      "interval": "15m",
+      "n_bars": 2308,
+      "hurst": 0.5558051998816207,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "sc2509",
+      "interval": "1h",
+      "n_bars": 686,
+      "hurst": 0.5751593916330076,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.5237439580614414,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.540474334629996,
+      "n_windows": 8,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.5844225497024699,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA509",
+      "interval": "5m",
+      "n_bars": 5742,
+      "hurst": 0.5339063143925992,
+      "n_windows": 12,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA509",
+      "interval": "15m",
+      "n_bars": 1914,
+      "hurst": 0.5468016635148091,
+      "n_windows": 9,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "energy_chem",
+      "symbol": "TA509",
+      "interval": "1h",
+      "n_bars": 583,
+      "hurst": 0.618374731516976,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.5440846111571013,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5081365089001613,
+      "n_windows": 8,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.576068769816915,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2605",
+      "interval": "5m",
+      "n_bars": 3879,
+      "hurst": 0.5645319780202595,
+      "n_windows": 11,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2605",
+      "interval": "15m",
+      "n_bars": 1293,
+      "hurst": 0.5990916427843522,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "m2605",
+      "interval": "1h",
+      "n_bars": 394,
+      "hurst": 0.6835765324635485,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.555225426386836,
+      "n_windows": 11,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5932519866266305,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.6147787684505079,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2605",
+      "interval": "5m",
+      "n_bars": 3879,
+      "hurst": 0.5317007597728642,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2605",
+      "interval": "15m",
+      "n_bars": 1293,
+      "hurst": 0.5511866934230617,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_dce",
+      "symbol": "p2605",
+      "interval": "1h",
+      "n_bars": 394,
+      "hurst": 0.5439469125507331,
+      "n_windows": 5,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.550950624555629,
+      "n_windows": 11,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5805851642647788,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.7332815157330371,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR605",
+      "interval": "5m",
+      "n_bars": 5906,
+      "hurst": 0.5375011627924831,
+      "n_windows": 12,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR605",
+      "interval": "15m",
+      "n_bars": 1293,
+      "hurst": 0.5566539643638553,
+      "n_windows": 8,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "SR605",
+      "interval": "1h",
+      "n_bars": 394,
+      "hurst": 0.5799656024894846,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF601",
+      "interval": "5m",
+      "n_bars": 4155,
+      "hurst": 0.4799020904678061,
+      "n_windows": 11,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF601",
+      "interval": "15m",
+      "n_bars": 1385,
+      "hurst": 0.5185737722395428,
+      "n_windows": 8,
+      "interpretation": "random-walk"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF601",
+      "interval": "1h",
+      "n_bars": 422,
+      "hurst": 0.5666625916609602,
+      "n_windows": 5,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF509",
+      "interval": "5m",
+      "n_bars": 5742,
+      "hurst": 0.5588563077307717,
+      "n_windows": 12,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF509",
+      "interval": "15m",
+      "n_bars": 1914,
+      "hurst": 0.5886848685086233,
+      "n_windows": 9,
+      "interpretation": "trend-persistent"
+    },
+    {
+      "sector": "agri_czce",
+      "symbol": "CF509",
+      "interval": "1h",
+      "n_bars": 583,
+      "hurst": 0.7050692667262266,
+      "n_windows": 6,
+      "interpretation": "trend-persistent"
+    }
+  ]
+}
