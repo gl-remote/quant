@@ -22,9 +22,9 @@
 
 这些文件即 `shaping-theory.md` 中各 KF 数据文件字段（`project_data/research/first_passage_boundary/<name>.{json,csv}`）所指对象。
 
-## 2. 仅登记未入库的大文件（10 个逐笔明细 CSV）
+## 2. 逐笔大 CSV（已删除，仅留指纹）
 
-`boundary_explorer_trades_realcost_*.csv` 是逐笔成交明细，单文件 0.8–26MB（合计约 76MB），超过仓库跟踪文件体量上限，**不搬入 git**，仍保留在原位置 `project_data/research/first_passage_boundary/`。md5 + 行数登记如下，如需复现可按 hash 校验：
+`boundary_explorer_trades_realcost_*.csv` 是逐笔成交明细，单文件 0.8–26MB（合计约 75MB），超过仓库跟踪文件体量上限，原位于 `project_data/research/first_passage_boundary/`，已于 2026-08-02 清理（该目录为无主历史数据）。这些文件由 `raw-scripts/first_passage_boundary_explorer.py` 可再生；下表保留 md5 + 行数作为历史指纹，复现后可按 hash 校验：
 
 | 文件 | md5 | 行数 |
 |---|---|---|
