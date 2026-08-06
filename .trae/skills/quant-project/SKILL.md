@@ -84,7 +84,7 @@ CLI 固定参数回测：
 ## 本地数据目录
 
 - CSV：`project_data/market_data/csv/`
-- SQLite：`project_data/database/quant_shared.db`
+- SQLite：`project_data/database/<environment>/quant.db`（默认 backtest：`project_data/database/backtest/quant.db`）
 - Reports：`project_data/reports/`
 - Raw logs：`project_data/logs/`
 - Caches：`project_data/cache/`
@@ -186,4 +186,4 @@ TypeScript 示例：
 - `--mode single` 不存在或 `--strategy-params` 不识别：检查是否在包含 single backtest parameter overrides 的提交之后。
 - `--strategy-params` JSON 报错：检查 shell 引号，推荐外层单引号、内部双引号。
 - `not a valid Exchange`：检查项目格式 `EXCHANGE.SYMBOL` 与 vnpy 格式 `SYMBOL.EXCHANGE` 是否混用。
-- `no such table`：检查 `project_data/database/quant_shared.db` 是否存在、迁移是否完成。
+- `no such table`：检查当前环境对应的 `project_data/database/<environment>/quant.db` 是否存在、迁移是否完成；默认 backtest 环境是 `project_data/database/backtest/quant.db`。

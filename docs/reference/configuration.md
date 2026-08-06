@@ -7,9 +7,12 @@
 ## 配置文件结构
 
 ```
-config/
-├── conf.toml          # 基础配置（提交版本控制）
-└── conf.local.toml    # 本地覆盖（不提交，包含敏感信息）
+workspace/config/
+├── conf.toml                  # 基础配置（提交版本控制）
+├── conf.backtest.toml         # 回测环境配置
+├── conf.test.toml             # 测试环境配置
+├── conf.live.toml             # 实盘环境配置
+└── conf.*.local.toml          # 本地覆盖（不提交，包含敏感信息）
 ```
 
 ---
@@ -18,9 +21,10 @@ config/
 
 | 层级 | 文件 | 优先级 | 是否提交 |
 |------|------|--------|----------|
-| 基础 | `conf.toml` | 低 | ✅ |
-| 本地 | `conf.local.toml` | 中 | ❌ |
-| 环境变量 | `TQSDK_API_KEY` 等 | 高 | - |
+| 基础 | `workspace/config/conf.toml` | 低 | ✅ |
+| 环境 | `workspace/config/conf.<env>.toml` | 中 | ✅ |
+| 本地 | `workspace/config/conf.<env>.local.toml` | 高 | ❌ |
+| 环境变量 | `TQSDK_API_KEY` 等 | 最高 | - |
 
 ---
 
@@ -31,56 +35,35 @@ config/
 ```toml
 [app]
 name = "策略工具箱"
-version = "0.2.0-dev"
-log_level = "INFO"
+version = "0.6.0-dev"
+mode = "backtest"
 
-[backtest]
-initial_capital = 100000.0
-commission_rate = 0.0003
-slippage = 0.1
-
-[backtest.split]
-train_ratio = 0.6
-val_ratio = 0.2
-test_ratio = 0.2
+[environment]
+name = "backtest"
+debug = true
 
 [data]
 provider = "tqsdk"
-cache_enabled = false
+environment = "backtest"
 base_dir = "project_data"
 export_dir = "project_data/market_data/csv"
-db_path = "project_data/database/quant_shared.db"
+database_path = "project_data/database/backtest/quant.db"
 filename_template = "{symbol}.{provider}.{interval}.csv"
-
-[optimizer]
-enabled = true
-engine = "bayesian"
-n_trials = 50
-
-[optimizer.search_space]
-sma_short = { type = "int", low = 5, high = 30, step = 5 }
-sma_long = { type = "int", low = 30, high = 200, step = 10 }
-
-[strategies]
-enabled = ["ma"]
-
-[[strategies.items]]
-name = "ma"
-enabled = true
-sma_short = 5
-sma_long = 60
-stop_loss_ratio = 0.02
-take_profit_ratio = 0.05
-position_ratio = 0.5
-
-[third_party]
-[[third_party.services]]
-name = "tqsdk"
-provider = "tqsdk"
-enabled = false
 ```
 
-### 本地配置文件 (`conf.local.toml`)
+### 环境配置文件 (`conf.<env>.toml`)
+
+```toml
+[environment]
+name = "backtest"
+debug = true
+
+[data]
+environment = "backtest"
+database_path = "project_data/database/backtest/quant.db"
+```
+
+### 本地配置文件 (`conf.<env>.local.toml`)
 
 ```toml
 [third_party]
@@ -130,10 +113,11 @@ enabled = true
 
 ## 配置加载流程
 
-1. 读取 `conf.toml`
-2. 读取 `conf.local.toml`（覆盖）
-3. 解析环境变量（最高优先级）
-4. Pydantic 模型校验
+1. 读取 `workspace/config/conf.toml`
+2. 读取 `workspace/config/conf.<env>.toml`（环境覆盖）
+3. 读取 `workspace/config/conf.<env>.local.toml`（本地覆盖）
+4. 解析环境变量（最高优先级）
+5. Pydantic 模型校验
 
 ---
 

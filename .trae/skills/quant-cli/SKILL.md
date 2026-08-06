@@ -82,7 +82,7 @@ uv run python main.py export --symbol DCE.m2601 --start 2025-01-01
 检查数据库：
 
 ```bash
-sqlite3 project_data/database/quant_shared.db ".tables"
+sqlite3 project_data/database/backtest/quant.db ".tables"
 ```
 
 ## 验证命令
@@ -111,4 +111,4 @@ uv run mypy workspace/cli
 - `--mode single` 不存在或 `--strategy-params` 不识别：检查是否在包含 single backtest parameter overrides 的提交之后。
 - `--strategy-params` JSON 报错：检查 shell 引号。
 - `not a valid Exchange`：检查项目格式 `EXCHANGE.SYMBOL` 与 vnpy 格式 `SYMBOL.EXCHANGE` 是否混用。
-- `no such table`：检查 `project_data/database/quant_shared.db` 是否存在、迁移是否完成。
+- `no such table`：检查当前环境对应的 `project_data/database/<environment>/quant.db` 是否存在、迁移是否完成；默认 backtest 环境是 `project_data/database/backtest/quant.db`。
