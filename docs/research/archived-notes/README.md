@@ -8,6 +8,7 @@
 
 | 日期 | 家族 slug | Topic 一句话 | 结论标签 |
 |------|----------|-------------|---------|
+| 2026-08-06 | volume-spike-oi | **OI 增量过滤器证伪**：接入 open_oi/close_oi 后，放量+OI 减仓看似更强反转（-5.5% vs -2.6%），但排除 sc2509/2025-06 单一行情后效应消失、OOS 反转；方法论遗产：事件重叠会让一段行情被重复计数，cluster bootstrap 在主导 cluster 过大时不够，必须做品种/月份贡献度和 LOPO | ❌ 证伪 · 🧪 方法论 · 🔁 基础设施保留 |
 | 2026-08-05 | volume-spike | **主题冻结归档**：1h 成交量放量不是独立 alpha；MADEV 主导、极端放量触发均线双向回归；裸空证伪；30 因子和 Skew 均收敛为 MADEV 投影/微调；蒸馏为 factor-library/volume-spike | ❌ 独立 alpha 证伪 · ✅ 条件因子成立 · 🔁 转 factor-library |
 | 2026-08-02 | mean-reversion-barrier-duality | **主题冻结（含阶段 0）**：OU 均值回归下 R<1 何时最优的对偶数学已闭合，含原始脚本 9 个；内核沉淀为 theorem `factor-filtering-and-dgp-boundary`（GBM 闭式 iff b_A 常数，Green 核统一 GBM/OU）；方向性单品种 R<1 可交易性被怀疑先验否证（可交易尺度 κ≈0/H>0.5，唯一 κ 够大的微结构不可交易），不进真实数据阶段，可能成立的配对/事件/微结构三形态另立主题 | 🧪 方法论 · 🔁 沉淀 theorem · ❌ 证伪（原问题域） |
 | 2026-07-31 | time-barrier-selection | **主题最终冻结**：三轮实证闭环——跨周期（Stage 2）/ 跨品种 c/m/rb（Stage 3）/ KF-27 参数喂入（Stage 4）；μ_D 0.04–0.07 量级一致；最优塑形参数 (K_S=4, RR=3, τ=0.1) 通吃；方向概率 p=0.60 是实盘拐点；p-混合闭式沉淀到 theorem §10.5 · 时间维 T 非独立 alpha 来源 | 🧪 方法论 · ✅ 通过 · 🔁 沉淀 theorem |

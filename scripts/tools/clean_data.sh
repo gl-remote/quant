@@ -1,6 +1,6 @@
 #!/bin/bash
 # 分层清理 project_data — 默认保留行情 CSV / 数据库 metadata
-# 用法: ./clean_data.sh [backtests|reports|cache|logs|runtime]
+# 用法: ./clean_data.sh [backtests|reports|cache|logs|runtime|all]
 
 set -euo pipefail
 
@@ -93,9 +93,6 @@ case "$TARGET" in
     logs)
         clean_dir "clean-logs" "$PROJECT_DATA/logs"
         ;;
-    research)
-        clean_dir "clean-research" "$PROJECT_DATA/research"
-        ;;
     runtime)
         clean_dir "clean-reports" "$PROJECT_DATA/reports"
         clean_dir "clean-cache" "$PROJECT_DATA/cache"
@@ -103,18 +100,17 @@ case "$TARGET" in
         clean_dir "clean-coverage" "$PROJECT_DATA/coverage"
         ;;
     all)
-        # 一次性清空所有回测衍生物：DB 业务表 + reports/cache/logs/profiles/coverage/research
+        # 一次性清空所有回测衍生物：DB 业务表 + reports/cache/logs/profiles/coverage
         clean_backtests
         clean_dir "clean-reports" "$PROJECT_DATA/reports"
         clean_dir "clean-cache" "$PROJECT_DATA/cache"
         clean_dir "clean-logs" "$PROJECT_DATA/logs"
         clean_dir "clean-profiles" "$PROJECT_DATA/profiles"
         clean_dir "clean-coverage" "$PROJECT_DATA/coverage"
-        clean_dir "clean-research" "$PROJECT_DATA/research"
         ;;
     *)
         echo "未知清理目标: $TARGET" >&2
-        echo "可选: backtests | reports | cache | logs | research | runtime | all" >&2
+        echo "可选: backtests | reports | cache | logs | runtime | all" >&2
         exit 1
         ;;
 esac

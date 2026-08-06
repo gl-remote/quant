@@ -54,9 +54,6 @@ clean-cache: ## 只清 project_data/cache
 clean-logs: ## 只清 project_data/logs
 	bash scripts/tools/clean_data.sh logs
 
-clean-research: ## 只清 project_data/research（脚本产出的 JSON 摘要）
-	bash scripts/tools/clean_data.sh research
-
 clean-runtime: ## 清 reports/cache/profiles/coverage，保留 market_data/database
 	bash scripts/tools/clean_data.sh runtime
 

@@ -1,0 +1,196 @@
+{
+  "root": "docs/research/archived-notes/2026/08/2026-08-05-volume-spike-regime-shift/raw-outputs",
+  "count": 38,
+  "files": [
+    {
+      "name": "1h_calibration.json",
+      "size": 4779,
+      "md5": "a8f5c1b02692e0686b8de99316e7c813"
+    },
+    {
+      "name": "1h_full_grid.csv",
+      "size": 10398,
+      "md5": "601457ea151d6ac5b778e7026820f7e0"
+    },
+    {
+      "name": "1h_oos_main.json",
+      "size": 11015,
+      "md5": "c3d9831d8f758188f53b8c30e3f30b64"
+    },
+    {
+      "name": "1h_param_grid.csv",
+      "size": 22296,
+      "md5": "c82926c809a64401eef128b62bef7d47"
+    },
+    {
+      "name": "1h_stable_zone.json",
+      "size": 14632,
+      "md5": "3da83897ec6ca685b8451de0c8f92279"
+    },
+    {
+      "name": "1h_stratification.json",
+      "size": 4855,
+      "md5": "f6ad7fd49d3501b15081ce17b8188d2e"
+    },
+    {
+      "name": "bear_regime_scan.csv",
+      "size": 48796,
+      "md5": "b6ebee4e2f82afee5998cbc482d6336d"
+    },
+    {
+      "name": "condition_comparison.csv",
+      "size": 2048,
+      "md5": "55b5203ae64b9e714f8237d7a08a8cd4"
+    },
+    {
+      "name": "daily_events.parquet",
+      "size": 189350,
+      "md5": "857962f56d46f9360e4868edc065677a"
+    },
+    {
+      "name": "daily_oos_cost.json",
+      "size": 7790,
+      "md5": "db4306d8dd792b5ec70e56ce72278e98"
+    },
+    {
+      "name": "daily_summary.json",
+      "size": 9063,
+      "md5": "34192eb01e0d242722886b7000ee97f0"
+    },
+    {
+      "name": "extreme_threshold_scan.json",
+      "size": 17182,
+      "md5": "510a9f13096dbaa97e5ea3d280fce6f5"
+    },
+    {
+      "name": "low_s_events.parquet",
+      "size": 981968,
+      "md5": "11b1a49446d1ab11d7ad6f10e2fb6e0e"
+    },
+    {
+      "name": "momentum_factor_interaction.csv",
+      "size": 21747,
+      "md5": "1bcf7c14a440b675ed44ff8cf2d0f860"
+    },
+    {
+      "name": "momentum_factor_regression.csv",
+      "size": 4963,
+      "md5": "ebafe9d70990ef1bcb47ff61c30d7b6b"
+    },
+    {
+      "name": "r2_deep_analysis.csv",
+      "size": 1262531,
+      "md5": "6045fde54bb4983aa48470e96d3f7140"
+    },
+    {
+      "name": "r2_h1_low_volume.csv",
+      "size": 1488,
+      "md5": "d94a9f7c790f53d7e56543daba4b754b"
+    },
+    {
+      "name": "r2_main_dataset.csv",
+      "size": 319330,
+      "md5": "f897f712846209cf534b200e75b2fd68"
+    },
+    {
+      "name": "r2_mean_reversion_test.csv",
+      "size": 1875352,
+      "md5": "2fd9c14b3e142a87d2e8e30003a9c084"
+    },
+    {
+      "name": "reversal_volume_factor_interaction.csv",
+      "size": 11653,
+      "md5": "bd41d2a672a9581f716405d59c245d7f"
+    },
+    {
+      "name": "stage0_audit.json",
+      "size": 36811,
+      "md5": "3b225efe1f51824778157f45743720f6"
+    },
+    {
+      "name": "stage1_5_calibration.json",
+      "size": 124125,
+      "md5": "cae856e2af51c24423ea483081bb3e2f"
+    },
+    {
+      "name": "stage1_events.parquet",
+      "size": 1335990,
+      "md5": "4f3e272368a0ba75263c6847367c0c2d"
+    },
+    {
+      "name": "stage1_summary.json",
+      "size": 53160,
+      "md5": "6421737c7e7b05d79af42e6476f47606"
+    },
+    {
+      "name": "stage2_5_events.parquet",
+      "size": 2291937,
+      "md5": "0c4380f4fa75aa94070ec8c9d2a23ca6"
+    },
+    {
+      "name": "stage2_5_summary.json",
+      "size": 17651,
+      "md5": "cfc2d88e747e93377e4efc0d168243a0"
+    },
+    {
+      "name": "stage2_events.parquet",
+      "size": 266169,
+      "md5": "a9d90cb14fb9e298f226d0c0696c7eb4"
+    },
+    {
+      "name": "stage2_summary.json",
+      "size": 8337,
+      "md5": "7903453211883475877cb441e6b23b1a"
+    },
+    {
+      "name": "stage3_path_analysis.json",
+      "size": 10128,
+      "md5": "e3ce0be200ffd106f495ad20eebdb44e"
+    },
+    {
+      "name": "stage3_paths.npz",
+      "size": 162592,
+      "md5": "e26696b6c505fdee04d94b9d8fe43e04"
+    },
+    {
+      "name": "stage3_paths.parquet",
+      "size": 432044,
+      "md5": "9911386938176aef8735d197d823829a"
+    },
+    {
+      "name": "stage4_oos.json",
+      "size": 15906,
+      "md5": "9d31a86050c104b22a5930e9dfbf187f"
+    },
+    {
+      "name": "stage567_events.parquet",
+      "size": 506834,
+      "md5": "0a4e3ed84e94f6c26cf0ea46551cb4bc"
+    },
+    {
+      "name": "stage567_summary.json",
+      "size": 6575,
+      "md5": "41d1e3bf3c6a2d648f4dc0e1ee28f95d"
+    },
+    {
+      "name": "stageA_events.parquet",
+      "size": 418038,
+      "md5": "91ed649ac90c2025add07553df7f8d2a"
+    },
+    {
+      "name": "stageA_hypotheses.json",
+      "size": 6373,
+      "md5": "7002e80c6e951f837afc12a1cc533f73"
+    },
+    {
+      "name": "vol_liq_factor_interaction.csv",
+      "size": 5734,
+      "md5": "d3a7fa13d9ec6a204ab263c57b14e6a3"
+    },
+    {
+      "name": "volume_skew_events.csv",
+      "size": 1277271,
+      "md5": "9a68534ed61b8408812699de5e1ef4a4"
+    }
+  ]
+}

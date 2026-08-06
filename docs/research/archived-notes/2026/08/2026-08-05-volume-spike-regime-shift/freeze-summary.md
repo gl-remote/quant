@@ -65,7 +65,7 @@ MADEV 是主导变量：高 s_pre 样本消融 R² 中，MADEV only=0.118，Z on
 
 满足任一条件可重启，不需要重复 r1/r2 已证伪方向：
 
-1. 获得 OI（持仓量）数据，可区分放量增仓 vs 放量减仓；
+1. ~~获得 OI（持仓量）数据，可区分放量增仓 vs 放量减仓~~ → 已在后续批次 `archive:2026-08-06-volume-spike-oi` 检验，结论为当前数据范围内 OI 过滤器证伪；
 2. 获得更长历史（建议覆盖 2020–2023）或更多品种，解决样本量和年度衰减；
 3. 将该过滤器叠加在基础趋势策略上，完成 walk-forward 组合 P&L 回测；
 4. 获得 tick/订单流数据，可区分主动买卖方向。
@@ -79,4 +79,8 @@ MADEV 是主导变量：高 s_pre 样本消融 R² 中，MADEV only=0.118，Z on
 - Skew 数学规格：`volume-spike-skew-spec.md`
 - 关键发现清单：`research-status.md`（KF-1 至 KF-31）
 - r1/r2 原始报告和脚本：`raw-workbench/`
+- 项目数据产出：`raw-outputs/`，共 38 个文件、约 11MB；文件清单和 MD5 见 [`raw-outputs-manifest.json`](raw-outputs-manifest.json)
+  - 包含 stage0–stageA、1h calibration、daily OOS、r2 主数据集、skew events、路径数据等 JSON/CSV/Parquet/NPZ 产物；
+  - 原路径 `project_data/research/volume-spike-regime-shift/` 已清空并移除；
+  - 复现注意：归档脚本仍保留原始输出路径，若重跑会重新创建 `project_data/research/volume-spike-regime-shift/`，需要手动将新产物与本批次 `raw-outputs/` 对齐。
 - 因子库蒸馏：`theorems/factor-library/volume-spike/`
