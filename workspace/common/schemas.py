@@ -52,6 +52,8 @@ class KlineSchema(pa.DataFrameModel):
         low: 最低价
         close: 收盘价
         volume: 成交量
+        open_oi: K线开始时刻持仓量（可选）
+        close_oi: K线结束时刻持仓量（可选）
     """
 
     datetime: Series[pd.Timestamp] = pa.Field(unique=True)
@@ -60,6 +62,9 @@ class KlineSchema(pa.DataFrameModel):
     low: Series[float] = pa.Field(ge=0.0)
     close: Series[float] = pa.Field(ge=0.0)
     volume: Series[int] = pa.Field(ge=0)
+    # 持仓量（nullable：旧 CSV / akshare 可能不提供，tqsdk 提供 open_oi/close_oi）
+    open_oi: Series[float] = pa.Field(ge=0, nullable=True)
+    close_oi: Series[float] = pa.Field(ge=0, nullable=True)
 
     @pa.dataframe_check
     def check_high_greater_than_open_close(self, df: pd.DataFrame) -> bool:  # type: ignore[misc]

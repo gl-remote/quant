@@ -14,7 +14,18 @@ import pandas as pd
 from loguru import logger
 
 # amount = 成交额，源数据有则保留原始值，无则留空字符串
-Qlib_COLUMNS: list[str] = ["datetime", "open", "high", "low", "close", "volume", "amount"]
+# open_oi / close_oi = 持仓量（K线开始/结束时刻），源数据有则保留，无则填 0.0
+Qlib_COLUMNS: list[str] = [
+    "datetime",
+    "open",
+    "high",
+    "low",
+    "close",
+    "volume",
+    "amount",
+    "open_oi",
+    "close_oi",
+]
 
 
 class BaseDataSource(ABC):
@@ -40,11 +51,16 @@ class BaseDataSource(ABC):
             源数据提供了 amount 列 → 保留原始值
             源数据未提供 → 留空字符串 ""
 
+        open_oi / close_oi (持仓量) 处理规则：
+            源数据提供了 → 保留原始值
+            源数据未提供 → 填 0.0
+
         Args:
             raw_df: 原始 DataFrame，需包含 datetime/open/high/low/close/volume 列
 
         Returns:
-            标准格式 DataFrame，列顺序: datetime/open/high/low/close/volume/amount
+            标准格式 DataFrame，列顺序:
+            datetime/open/high/low/close/volume/amount/open_oi/close_oi
         """
         if raw_df.empty:
             return pd.DataFrame(columns=Qlib_COLUMNS)
@@ -57,11 +73,18 @@ class BaseDataSource(ABC):
         else:
             df["amount"] = ""
 
+        # open_oi / close_oi：源数据提供了就保留，没提供就填 0.0
+        for oi_col in ("open_oi", "close_oi"):
+            if oi_col in df.columns:
+                df[oi_col] = pd.to_numeric(df[oi_col], errors="coerce").fillna(0.0)
+            else:
+                df[oi_col] = 0.0
+
         # 选择并排序可用列
         available_cols = [c for c in Qlib_COLUMNS if c in df.columns]
         df = df[available_cols]
 
-        # 补充缺失列（amount 已在上面处理，不会走到这里）
+        # 补充缺失列（amount/OI 已在上面处理，不会走到这里）
         for col in Qlib_COLUMNS:
             if col not in df.columns:
                 df[col] = 0.0
@@ -122,7 +145,7 @@ class BaseDataSource(ABC):
 
         Returns:
             标准 Qlib 格式 DataFrame
-            列: datetime, open, high, low, close, volume, amount (成交额)
+            列: datetime, open, high, low, close, volume, amount, open_oi, close_oi
         """
         ...
 

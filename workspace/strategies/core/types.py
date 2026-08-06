@@ -40,6 +40,8 @@ class Bar:
     low: float = 0.0
     close: float = 0.0
     volume: float = 0.0
+    open_oi: float = 0.0  # K线开始时刻持仓量（可选，数据源不提供时为 0）
+    close_oi: float = 0.0  # K线结束时刻持仓量（可选，数据源不提供时为 0）
 
 
 @dataclass

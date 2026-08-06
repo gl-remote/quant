@@ -296,6 +296,10 @@ class DataManager:
         try:
             df = pd.read_csv(filepath)
             df["datetime"] = pd.to_datetime(df["datetime"])
+            # 补充可能缺失的可选列（旧 CSV 没有持仓量）
+            for optional_col in ("open_oi", "close_oi"):
+                if optional_col not in df.columns:
+                    df[optional_col] = 0.0
             validated_df = KlineSchema.validate(df)
             return validated_df
         except pa.errors.SchemaError as e:

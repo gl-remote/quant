@@ -228,6 +228,9 @@ class TqSdkDataSource(BaseDataSource):
             raw_low = klines["low"]
             raw_close = klines["close"]
             raw_volume = klines["volume"]
+            # 持仓量：tqsdk K线序列提供 open_oi / close_oi
+            raw_open_oi = klines["open_oi"] if "open_oi" in klines.columns else None
+            raw_close_oi = klines["close_oi"] if "close_oi" in klines.columns else None
 
             raw_lens = [len(x) for x in [raw_datetime, raw_open, raw_high, raw_low, raw_close, raw_volume]]
             if len(set(raw_lens)) != 1:
@@ -237,16 +240,19 @@ class TqSdkDataSource(BaseDataSource):
 
             logger.debug(f"_fetch_once: {symbol} 原始 klines 行数 = {raw_lens[0]}")
 
-            kline_df = pd.DataFrame(
-                {
-                    "datetime": list(raw_datetime),
-                    "open": list(raw_open),
-                    "high": list(raw_high),
-                    "low": list(raw_low),
-                    "close": list(raw_close),
-                    "volume": list(raw_volume),
-                }
-            )
+            kline_data: dict[str, list[Any]] = {
+                "datetime": list(raw_datetime),
+                "open": list(raw_open),
+                "high": list(raw_high),
+                "low": list(raw_low),
+                "close": list(raw_close),
+                "volume": list(raw_volume),
+            }
+            if raw_open_oi is not None and raw_close_oi is not None:
+                kline_data["open_oi"] = list(raw_open_oi)
+                kline_data["close_oi"] = list(raw_close_oi)
+
+            kline_df = pd.DataFrame(kline_data)
             api.close()
         except Exception as e:
             # 已到期合约 / 数据不可用 / tqsdk 内部问题等，返回空，由 _do_fetch 决定是否推进重试
@@ -288,19 +294,28 @@ class TqSdkDataSource(BaseDataSource):
             logger.debug(f"_fetch_once: {symbol} 全部数据在 2000 年之前，返回空")
             return empty_result
 
-        # volume 转整数
+        # volume 转整数，OI 转数值
         try:
             kline_df["volume"] = kline_df["volume"].fillna(0).astype(int)
         except (ValueError, TypeError):
             logger.warning(f"_fetch_once: {symbol} volume 列转 int 失败，置 0")
             kline_df["volume"] = 0
 
+        for oi_col in ("open_oi", "close_oi"):
+            if oi_col in kline_df.columns:
+                try:
+                    kline_df[oi_col] = pd.to_numeric(kline_df[oi_col], errors="coerce").fillna(0)
+                except (ValueError, TypeError):
+                    logger.warning(f"_fetch_once: {symbol} {oi_col} 列转数值失败，置 0")
+                    kline_df[oi_col] = 0
+
         kline_df = (
             kline_df.sort_values("datetime").drop_duplicates(subset="datetime", keep="last").reset_index(drop=True)
         )
 
         logger.debug(f"_fetch_once: {symbol} 返回 {len(kline_df)} 行")
-        # 返回原始列（datetime/open/high/low/close/volume），amount 由 _to_standard_df 统一添加
+        # 返回原始列（datetime/open/high/low/close/volume[/open_oi/close_oi]），
+        # amount 由 _to_standard_df 统一添加
         return kline_df
 
     @staticmethod

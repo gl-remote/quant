@@ -491,6 +491,8 @@ class TqsdkStrategyBridge(Generic[T]):  # noqa: UP046
             low=float(klines.low.iloc[idx]),
             close=float(klines.close.iloc[idx]),
             volume=float(klines.volume.iloc[idx]),
+            open_oi=float(klines.open_oi.iloc[idx]) if "open_oi" in klines.columns else 0.0,
+            close_oi=float(klines.close_oi.iloc[idx]) if "close_oi" in klines.columns else 0.0,
         )
 
     # ------------------------------------------------------------------ #

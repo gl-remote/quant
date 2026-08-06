@@ -84,10 +84,19 @@ class AkShareDataSource(BaseDataSource):
         import akshare as ak
 
         if interval == "1d":
-            return self._fetch_daily(ak, akshare_symbol, start_date, end_date)
+            df = self._fetch_daily(ak, akshare_symbol, start_date, end_date)
         else:
             period = _MINUTE_PERIOD_MAP[interval]
-            return self._fetch_minute(ak, akshare_symbol, period, start_date, end_date)
+            df = self._fetch_minute(ak, akshare_symbol, period, start_date, end_date)
+
+        # 新浪接口返回 hold 列（当前持仓量），映射为 close_oi；
+        # open_oi 用前一根 K 线的 close_oi 填充（第一根填 0）
+        if "hold" in df.columns:
+            df = df.rename(columns={"hold": "close_oi"})
+            df["close_oi"] = pd.to_numeric(df["close_oi"], errors="coerce").fillna(0)
+            df["open_oi"] = df["close_oi"].shift(1).fillna(0)
+
+        return df
 
     @staticmethod
     def _fetch_minute(

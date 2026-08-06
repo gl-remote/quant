@@ -274,6 +274,8 @@ class VnpyBacktestBridge(CtaTemplate):
             low=float(getattr(bar, "low_price", 0)),
             close=close_price,
             volume=float(getattr(bar, "volume", 0)),
+            open_oi=float(getattr(bar, "open_interest", 0)),
+            close_oi=float(getattr(bar, "open_interest", 0)),
         )
 
         # 动态构造 BarContext

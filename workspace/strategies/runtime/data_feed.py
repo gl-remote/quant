@@ -292,6 +292,8 @@ class DataFeed:
             low=float(rows["low"].min()),
             close=float(rows["close"].iloc[-1]),
             volume=float(rows["volume"].sum()),
+            open_oi=float(rows["open_oi"].iloc[0]) if "open_oi" in rows.columns else 0.0,
+            close_oi=float(rows["close_oi"].iloc[-1]) if "close_oi" in rows.columns else 0.0,
         )
 
     def _aggregate_period(
