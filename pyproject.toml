@@ -57,13 +57,14 @@ dev = [
     "jsonschema>=4.0",
     "quantsmith-contracts",
     "statsmodels>=0.14.6",
+    "scikit-learn>=1.4",
 ]
 
 [tool.uv.sources]
 quantsmith-contracts = { workspace = true }
 
 [[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
 
 [tool.pytest.ini_options]
