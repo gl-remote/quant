@@ -1,0 +1,25 @@
+{
+  "n_episodes": 68,
+  "duration_distribution": {
+    "short_1_2": 20,
+    "mid_3_5": 14,
+    "long_6_plus": 34
+  },
+  "short_pulse": {
+    "n": 20,
+    "confirm_rate": 0.45,
+    "ret20": 0.017584010441773306,
+    "win_rate": 0.85
+  },
+  "long_sustained": {
+    "n": 34,
+    "confirm_rate": 0.2647058823529412,
+    "ret20": -0.0023021042180532856,
+    "win_rate": 0.5
+  },
+  "mechanism_counts": {
+    "unknown": 35,
+    "oversold_bounce": 20,
+    "trend_start": 13
+  }
+}

@@ -112,6 +112,6 @@ implementation-notes.md       实现层的工程细节（供 rolling 版本参�
 - **本主题冻结后禁止**：修改 strategy-math-spec.md、新增 experiment-plan
   条目、扩展策略代码；如需修改，走后继主题；
 - **允许**：修 typo / 补充历史注解 / 归档链接更新；
-- Stage B 结果稳定后可从 `docs/workbench/` 归档到
+- Stage B 结果稳定后可从 `docs/research/workbench/` 归档到
   `docs/research/archived-notes/`，同时更新
   [research-status.md](research-status.md) 的关联链接。

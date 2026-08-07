@@ -1,0 +1,93 @@
+{
+  "n_compress_segments": 1123,
+  "n_reached_expand": 987,
+  "expand_rate": 0.8788958147818343,
+  "path_distribution": {
+    "H_path": 0.5699020480854853,
+    "direct": 0.18165627782724844,
+    "L_path": 0.12733748886910062,
+    "no_expand": 0.12110418521816563
+  },
+  "via_distribution": {
+    "H_path": 0.6484295845997974,
+    "direct": 0.2066869300911854,
+    "L_path": 0.14488348530901723
+  },
+  "comparison": [
+    {
+      "path": "H_path",
+      "n": 640,
+      "compress_dur_mean": 15.6890625,
+      "bars_to_expand_mean": 13.0484375,
+      "bars_to_expand_median": 6.0,
+      "pre_vol_pct": 0.5372458314313252,
+      "exit_vol_pct": 0.5841702127423019,
+      "expand_vol_pct": 0.6195884748131936,
+      "post20_vol_pct": 0.5872616129854025,
+      "vol_change_pct": 19.88174822710185,
+      "ret_20_pct": -0.19758645038058217,
+      "ret_60_pct": -0.2891978043026039,
+      "win_rate_60": 0.50625
+    },
+    {
+      "path": "L_path",
+      "n": 143,
+      "compress_dur_mean": 5.153846153846154,
+      "bars_to_expand_mean": 12.3006993006993,
+      "bars_to_expand_median": 5.0,
+      "pre_vol_pct": 0.6022686029110607,
+      "exit_vol_pct": 0.6154248942271474,
+      "expand_vol_pct": 0.6510352312323904,
+      "post20_vol_pct": 0.6251821246196952,
+      "vol_change_pct": 4.68916266967491,
+      "ret_20_pct": 0.159596915622371,
+      "ret_60_pct": 0.84104287781856,
+      "win_rate_60": 0.6223776223776224
+    },
+    {
+      "path": "direct",
+      "n": 204,
+      "compress_dur_mean": 8.137254901960784,
+      "bars_to_expand_mean": 0.0,
+      "bars_to_expand_median": 0.0,
+      "pre_vol_pct": 0.5041129920006101,
+      "exit_vol_pct": 0.5778164344580898,
+      "expand_vol_pct": 0.5778164344580898,
+      "post20_vol_pct": 0.5568866073898489,
+      "vol_change_pct": 27.518670514957062,
+      "ret_20_pct": -0.22370462719354303,
+      "ret_60_pct": 0.2706052897716492,
+      "win_rate_60": 0.5392156862745098
+    }
+  ],
+  "regime_distribution": {
+    "H_path": {
+      "熊市": 0.5625823451910409,
+      "牛市": 0.5851648351648352
+    },
+    "L_path": {
+      "熊市": 0.15151515151515152,
+      "牛市": 0.07692307692307693
+    },
+    "direct": {
+      "熊市": 0.19894598155467721,
+      "牛市": 0.14560439560439561
+    },
+    "no_expand": {
+      "熊市": 0.08695652173913043,
+      "牛市": 0.19230769230769232
+    }
+  },
+  "failed_paths": [
+    {
+      "first_exit": "H_only",
+      "n": 129,
+      "ret_60_pct": 0.48418671233258226
+    },
+    {
+      "first_exit": "L_only",
+      "n": 7,
+      "ret_60_pct": 1.0343681778397047
+    }
+  ]
+}

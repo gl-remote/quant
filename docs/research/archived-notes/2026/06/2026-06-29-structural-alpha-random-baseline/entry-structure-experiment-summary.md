@@ -7,7 +7,7 @@
 
 ## 1. 阶段背景
 
-本摘要压缩 `docs/workbench` 中结构型 alpha 第一批入口实验，覆盖：
+本摘要压缩 `docs/research/workbench` 中结构型 alpha 第一批入口实验，覆盖：
 
 ```text
 IB 重新接受；

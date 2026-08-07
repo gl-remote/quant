@@ -1,0 +1,48 @@
+{
+  "n_rows": 33996,
+  "n_symbols": 52,
+  "date_range": [
+    "2022-05-12 21:00:00",
+    "2026-04-01 14:00:00"
+  ],
+  "regimes": {
+    "熊市": 16085,
+    "震荡": 5104,
+    "牛市": 12807
+  },
+  "state_pct": {
+    "co_compress": 0.516354865278268,
+    "H_only": 0.08053888692787387,
+    "L_only": 0.06700788328038593,
+    "co_expand": 0.3360983645134722
+  },
+  "rbar_median": 1.8441595297538012,
+  "rbar_acf1_median": 0.8075838944567234,
+  "rbar_half_life_median": 3.2436856333727198,
+  "transition_1step": {
+    "co_compress": {
+      "co_compress": 0.932,
+      "H_only": 0.231,
+      "L_only": 0.192,
+      "co_expand": 0.011
+    },
+    "H_only": {
+      "co_compress": 0.047,
+      "H_only": 0.602,
+      "L_only": 0.015,
+      "co_expand": 0.02
+    },
+    "L_only": {
+      "co_compress": 0.009,
+      "H_only": 0.011,
+      "L_only": 0.604,
+      "co_expand": 0.063
+    },
+    "co_expand": {
+      "co_compress": 0.012,
+      "H_only": 0.155,
+      "L_only": 0.188,
+      "co_expand": 0.907
+    }
+  }
+}

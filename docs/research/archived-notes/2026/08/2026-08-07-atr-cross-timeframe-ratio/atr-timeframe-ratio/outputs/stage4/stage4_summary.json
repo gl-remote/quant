@@ -1,0 +1,32 @@
+{
+  "n_H_only": 1197,
+  "n_confirmed": 255,
+  "n_failed": 942,
+  "confirm_rate_by_trend_group": [
+    {
+      "trend_group": "downtrend_strong",
+      "n": 212,
+      "confirm_rate": 0.1509433962264151
+    },
+    {
+      "trend_group": "downtrend_weak",
+      "n": 323,
+      "confirm_rate": 0.11764705882352941
+    },
+    {
+      "trend_group": "flat",
+      "n": 29,
+      "confirm_rate": 0.034482758620689655
+    },
+    {
+      "trend_group": "uptrend_strong",
+      "n": 313,
+      "confirm_rate": 0.25559105431309903
+    },
+    {
+      "trend_group": "uptrend_weak",
+      "n": 320,
+      "confirm_rate": 0.325
+    }
+  ]
+}

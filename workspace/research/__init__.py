@@ -9,7 +9,7 @@ research — 稳定下来的研究工具业务域
 - 用途：研究工具的长期库。零 I/O、零副作用、只做数学计算与统计验证。
 - 注意事项：本域不承载"策略行为"（那是 workspace/strategies/ 的活）。
   任何进入本域的函数必须：(1) 有 docstring 说明公式与出处；(2) 有单元测试；
-  (3) 无实验性质代码——那些应留在 docs/workbench/ 或 raw-scripts/。
+  (3) 无实验性质代码——那些应留在 docs/research/workbench/ 或 raw-scripts/。
   与 workspace/common/ 的边界：common 是全项目通用纯函数（成本、绩效、格式化），
   research 是研究方法专用（首达定理、混合期望、bootstrap 统计检验）。
 

@@ -22,7 +22,7 @@
 
 ### 3.1 raw-docs/
 
-- `experiment-plan.md` —— Stage 1 旧实验计划（5m $|s|(T)$ 形态扫描的设计、判据、验证顺序）；已冻结，新方向计划见 `docs/workbench/time-barrier-selection/cross-period-plan.md`
+- `experiment-plan.md` —— Stage 1 旧实验计划（5m $|s|(T)$ 形态扫描的设计、判据、验证顺序）；已冻结，新方向计划见 `docs/research/workbench/time-barrier-selection/cross-period-plan.md`
 
 ### 3.2 raw-workbench/
 
@@ -52,10 +52,10 @@
 
 新方向（待启动）的文件将放在 workbench 下，**新文件名前缀 `cross-period-`**，避免与本批次混淆：
 
-- `docs/workbench/time-barrier-selection/cross-period-plan.md`
-- `docs/workbench/time-barrier-selection/scripts/cross_period_strength.py`
-- `docs/workbench/time-barrier-selection/cross-period-report.md`
-- `docs/workbench/time-barrier-selection/outputs/cross_period_*.{csv,json}`
+- `docs/research/workbench/time-barrier-selection/cross-period-plan.md`
+- `docs/research/workbench/time-barrier-selection/scripts/cross_period_strength.py`
+- `docs/research/workbench/time-barrier-selection/cross-period-report.md`
+- `docs/research/workbench/time-barrier-selection/outputs/cross_period_*.{csv,json}`
 
 ## 6. 命名引用
 

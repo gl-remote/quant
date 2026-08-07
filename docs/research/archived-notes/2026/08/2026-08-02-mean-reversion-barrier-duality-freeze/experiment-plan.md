@@ -132,4 +132,4 @@
   - `objectives_study.py`：多目标（Sharpe / Kelly / 下行惩罚）
   - `kappa_threshold_study.py`：$R^\ast(\kappa)$ 交叉点定位
   - `regime_realism_check.py` / `equilibrium_error_check.py` / `timescale_competition.py` / `r_optimality_study.py`：成本、regime 破裂、均衡误差、Péclet 数压力测试
-- 真实数据阶段脚本阶段 1 启动后写入 `docs/workbench/<theme-slug>/scripts/`。
+- 真实数据阶段脚本阶段 1 启动后写入 `docs/research/workbench/<theme-slug>/scripts/`。

@@ -38,11 +38,11 @@ description: "Rules for quant research document layout: theme directory, workben
 | 目录 | 用途 | 允许放什么 | 禁止放什么 |
 |---|---|---|---|
 | `docs/roadmap/` | 阶段规划、评价标准 | 阶段目标、候选方向、评价指标 | 具体实验方向、分支 hash、参数对照、中间结果 |
-| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/`、`theorems/<theme-slug>/`、`archived-notes/` | 具体实验流水 |
+| `docs/research/` | 研究总入口与主题目录 | `strategy-current.md`（全局入口）、`README.md`、`themes/<theme-name>/`、`theorems/<theme-slug>/`、`workbench/`、`archived-notes/` | 具体实验流水 |
 | `docs/research/themes/` | **活跃**策略主题（研究中 / 待启动 / 阶段性暂停但可能恢复） | 见"主题目录布局" | 已冻结的主题、稳定数学定理集 |
 | **`docs/research/theorems/`** ⭐ | **稳定数学定理集**：从主题 spec 提炼、独立成篇的定理/命题/引理 | 见"定理目录布局" | 实证结果、参数扫描、KF 演化叙事、工程实现 |
 | **`docs/research/archived-notes/`** ⭐ | **研究笔记归档**：已完成阶段的压缩摘要 + 原始 workbench / 脚本 / 策略 / 数据产出 | 核心问题、实验定义、固定参数、关键结果、结论、raw-* 子目录 | 过程性计划、过期工具限制 |
-| `docs/workbench/` | 当前研究中的实验流水 | 实验问题、临时参数对照、中间结果、临时结论 | 长期规格、策略契约 |
+| **`docs/research/workbench/`** ⭐ | 当前研究中的实验流水 | 实验问题、临时参数对照、中间结果、临时结论 | 长期规格、策略契约 |
 | `docs/issues/` | 底层框架问题 | 引擎 / 数据管道 / CLI / 成本口径等非策略问题 | 策略结论 |
 | `docs/archive/` | **工程类**归档（非策略研究）：aspects / backtest / infra / deprecated 等历史技术方案 | 框架、基础设施、旧架构重构记录 | 策略研究归档（走 `research/archived-notes/`） |
 
@@ -71,7 +71,7 @@ docs/research/themes/<theme-name>/
 | research-status.md | 主题当下的一句话结论、边界、下一步、**关键发现清单** | 策略研究者 | 结论变化时 / 每次得到关键发现时 |
 | strategy-math-spec.md | 策略"是什么"（数学契约） | 策略研究者 | 行为变更前 |
 | experiment-plan.md | "怎么验证"（候选矩阵、验证顺序、判据） | 策略研究者 | 实验路径变化时 |
-| parameter-selection-spec.md | "怎么选参数"（分层、判据、流程、回填格式） | 策略研究者 | 实验后 |
+| parameter-selection-spec.md | "怎么选参数"（分层 / 判据 / 流程、回填格式） | 策略研究者 | 实验后 |
 | implementation-notes.md | "怎么实现"（工程细节、优化选择、性能数据） | 实现者 | 实现开始 / 完成时 |
 | archive-references.md | 与本主题相关的 archive 目录清单及关系（继承 / 反例 / 数据 / 代码复用） | 主题维护者 | 立题时 / 每次归档新增批次 / 引用/继承关系变化时 |
 
@@ -83,7 +83,7 @@ docs/research/themes/<theme-name>/
 - `experiment-plan.md` 与 `parameter-selection-spec.md` 都可以引用 spec，但不能复述完整策略公式。
 - `research-status.md` 只承载"结论、边界、下一步、关键发现清单"，不承载策略公式，不承载实验流水，不承载工程细节。
 - 主题目录中的文档**不允许**依赖 workbench 中的临时文件；workbench 的稳定结论必须归档到 archive，主题目录再引用 archive。
-- **workbench 目录只有一个，位于 `docs/workbench/`**（顶层）。**禁止**在主题目录（`docs/research/themes/<theme-name>/`）下再建 `workbench/` 子目录。所有实验流水、临时报告、driver 输出统一写到 `docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`（大主题内多份文件时才建子目录，且该子目录必须直属 `docs/workbench/`）。
+- **workbench 目录只有一个，位于 `docs/research/workbench/`**（研究目录下）。**禁止**在主题目录（`docs/research/themes/<theme-name>/`）下再建 `workbench/` 子目录。所有实验流水、临时报告、driver 输出统一写到 `docs/research/workbench/<theme-slug>-<topic>.md` 或 `docs/research/workbench/<theme-slug>/<topic>.md`（大主题内多份文件时才建子目录，且该子目录必须直属 `docs/research/workbench/`）。
 
 ### 命名规则
 
@@ -96,10 +96,10 @@ docs/research/themes/<theme-name>/
 - **主题 slug 全局唯一**：`docs/research/themes/*` 与 `docs/research/theorems/*` 使用**同一命名空间**（不允许 themes/foo 与 theorems/foo 同时指向不同主题），slug 共享；
 - **theorem 文档文件名在主题内唯一**：`docs/research/theorems/<slug>/<file-stem>.md` 不得同名；跨主题可重名（因命名引用带 slug）；
 - **archive 批次目录名全局唯一**（自然满足：日期前缀 + slug）；
-- **workbench 文件名 / 主题内多文件时的子目录名全局唯一**：`docs/workbench/<theme-slug>-<topic>.md` 或 `docs/workbench/<theme-slug>/<topic>.md`；
+- **workbench 文件名 / 主题内多文件时的子目录名全局唯一**：`docs/research/workbench/<theme-slug>-<topic>.md` 或 `docs/research/workbench/<theme-slug>/<topic>.md`；
 - **issue 文件名全局唯一**：`docs/issues/<slug>.md`。
 
-**立题 / 建家族 / 归档新批次前**：`grep -r "<候选 slug>" docs/research docs/archive docs/workbench` 一次，确认无重名。发现冲突时 slug 加限定后缀（如 `value-area-reacceptance-2`）而不是复用。
+**立题 / 建家族 / 归档新批次前**：`grep -r "<候选 slug>" docs/research docs/archive docs/research/workbench` 一次，确认无重名。发现冲突时 slug 加限定后缀（如 `value-area-reacceptance-2`）而不是复用。
 
 ## 定理目录布局（theorems/）
 
@@ -223,7 +223,7 @@ docs/research/theorems/
 | `theme:` | `theme:<slug>#<file-stem>` | 上述目录下 `<file-stem>.md` | 主题内某文档 |
 | `theorem:` ⭐ | `theorem:<slug>#<file-stem>` | `docs/research/theorems/<slug>/<file-stem>.md` | 稳定数学定理文档 |
 | `theorem:` ⭐ | `theorem:<slug>#<file-stem>#命题X.Y` | 文档内定理/命题的章节锚点 | 定位到具体命题 |
-| `workbench:` | `workbench:<name>` | `docs/workbench/<name>.md` **或** `docs/workbench/<theme-slug>/<name>.md`（后者若首段等于某 theme-slug） | workbench 报告 |
+| `workbench:` | `workbench:<name>` | `docs/research/workbench/<name>.md` **或** `docs/research/workbench/<theme-slug>/<name>.md`（后者若首段等于某 theme-slug） | workbench 报告 |
 | `kf:` | `kf:<theme-slug>#KF-<N>` | 主题 `research-status.md` 中 KF-N 条目 | 关键发现锚点 |
 | `issue:` | `issue:<slug>` | `docs/issues/<slug>.md` | 底层框架 issue |
 | `roadmap:` | `roadmap:<slug>` | `docs/roadmap/<slug>.md` | 路线图文档 |
@@ -322,8 +322,8 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 
 1. `mkdir docs/research/themes/<theme-name>/`
 2. 从 workbench 迁移已有的数学规格与实验计划：
-   - `git mv docs/workbench/<...spec>.md docs/research/themes/<theme-name>/strategy-math-spec.md`
-   - `git mv docs/workbench/<...plan>.md docs/research/themes/<theme-name>/experiment-plan.md`
+   - `git mv docs/research/workbench/<...spec>.md docs/research/themes/<theme-name>/strategy-math-spec.md`
+   - `git mv docs/research/workbench/<...plan>.md docs/research/themes/<theme-name>/experiment-plan.md`
 3. 若旧主题现状文件（例如 `docs/research/themes/<theme-name>.md`）存在，`git mv` 到 `research-status.md`。
 4. 新建 `README.md, parameter-selection-spec.md, implementation-notes.md`（后两者可先建占位版）。
 5. 修正六份文档的相对路径：
@@ -336,7 +336,7 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 
 ## Workbench 写法
 
-实验过程默认先写入 `docs/workbench/`：
+实验过程默认先写入 `docs/research/workbench/`：
 
 - 实验问题；
 - 结构塑形定义；
@@ -345,12 +345,12 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 - 受框架 issue 影响的部分；
 - 临时结论。
 
-**AI 生成的临时研究资产也全部写入 `docs/workbench/`**：
+**AI 生成的临时研究资产也全部写入 `docs/research/workbench/`**：
 
-- 临时分析 / debug / 探查脚本：`docs/workbench/<theme-slug>/scripts/*.py`（或大主题下 `docs/workbench/<theme-slug>-<topic>/scripts/`）；
-- 临时策略代码（未进入 `workspace/strategies/` 长期目录的实验策略）：`docs/workbench/<theme-slug>/strategies/*.py`；
-- 临时中间数据 / 图表 / parquet / csv 产出：`docs/workbench/<theme-slug>/outputs/`；
-- 单文件主题可放在 `docs/workbench/<theme-slug>-<topic>.md` 同级或改用子目录形式；大主题多组件时建议直接使用子目录布局 `docs/workbench/<theme-slug>/`。
+- 临时分析 / debug / 探查脚本：`docs/research/workbench/<theme-slug>/scripts/*.py`（或大主题下 `docs/research/workbench/<theme-slug>-<topic>/scripts/`）；
+- 临时策略代码（未进入 `workspace/strategies/` 长期目录的实验策略）：`docs/research/workbench/<theme-slug>/strategies/*.py`；
+- 临时中间数据 / 图表 / parquet / csv 产出：`docs/research/workbench/<theme-slug>/outputs/`；
+- 单文件主题可放在 `docs/research/workbench/<theme-slug>-<topic>.md` 同级或改用子目录形式；大主题多组件时建议直接使用子目录布局 `docs/research/workbench/<theme-slug>/`。
 
 工作原则：
 
@@ -366,10 +366,10 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 
 | 类别 | 路径模式（按主题 slug / 关键词匹配） | 归档后位置 |
 |:---|:---|:---|
-| workbench 实验流水 | `docs/workbench/<theme-slug>-*.md` 或 `docs/workbench/<theme-slug>/*.md` | `<batch>/` 根目录（压缩版）+ `<batch>/raw-workbench/`（原始版，若需保留多份） |
-| 临时分析脚本 | `docs/workbench/<theme-slug>/scripts/` · 或分支中新增/修改且仅服务于该主题的脚本 | `<batch>/raw-scripts/` |
-| 临时策略代码 | `docs/workbench/<theme-slug>/strategies/` · 分支中新增且未进入 `workspace/strategies/` 长期目录的临时策略；或 `workspace/strategies/*<theme-slug>*` 中未通过验证的临时策略 | `<batch>/raw-strategies/` |
-| 临时中间数据 | `docs/workbench/<theme-slug>/outputs/` 下由本次实验产生的 parquet / csv / 图像（大文件不移动，只在 README 登记路径） | **不移动文件本身**，只在 `<batch>/README.md` 登记绝对路径和文件 hash / 行数 |
+| workbench 实验流水 | `docs/research/workbench/<theme-slug>-*.md` 或 `docs/research/workbench/<theme-slug>/*.md` | `<batch>/` 根目录（压缩版）+ `<batch>/raw-workbench/`（原始版，若需保留多份） |
+| 临时分析脚本 | `docs/research/workbench/<theme-slug>/scripts/` · 或分支中新增/修改且仅服务于该主题的脚本 | `<batch>/raw-scripts/` |
+| 临时策略代码 | `docs/research/workbench/<theme-slug>/strategies/` · 分支中新增且未进入 `workspace/strategies/` 长期目录的临时策略；或 `workspace/strategies/*<theme-slug>*` 中未通过验证的临时策略 | `<batch>/raw-strategies/` |
+| 临时中间数据 | `docs/research/workbench/<theme-slug>/outputs/` 下由本次实验产生的 parquet / csv / 图像（大文件不移动，只在 README 登记路径） | **不移动文件本身**，只在 `<batch>/README.md` 登记绝对路径和文件 hash / 行数 |
 | 主题目录长期文档（experiment-plan / research-status 等） | 不归档，保留在 `docs/research/themes/<theme-slug>/` | — |
 | 框架 issue | `docs/issues/` 不移动，archive 只做命名引用 | — |
 
@@ -406,11 +406,11 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 
 ```text
 （分支相关文件）
-  docs/workbench/<name>.md
+  docs/research/workbench/<name>.md
     -> <archive-batch>/<compressed-name>.md （压缩版，根目录）
     -> <archive-batch>/raw-workbench/<name>.md （原始版，多文件时）
-  docs/workbench/<theme>/scripts/*     -> <archive-batch>/raw-scripts/
-  docs/workbench/<theme>/strategies/*  -> <archive-batch>/raw-strategies/
+  docs/research/workbench/<theme>/scripts/*     -> <archive-batch>/raw-scripts/
+  docs/research/workbench/<theme>/strategies/*  -> <archive-batch>/raw-strategies/
   workspace/strategies/*<theme>*       -> <archive-batch>/raw-strategies/（仅未通过验证的临时策略）
   （数据文件不搬运，只登记）
 ```
@@ -421,7 +421,7 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
 
 - archive → roadmap：`../../roadmap/...`
 - archive → issues：`../../issues/...`
-- archive → 主题目录 README：`../../research/themes/<theme-name>/README.md`
+- archive → 主题目录 README：`../../themes/<theme-name>/README.md`
 - issue → archive：`../research/archived-notes/<archive-batch>/...`
 
 若主题目录里的某份文件（例如 `research-status.md`）引用 archive，**优先使用命名引用 `archive:<batch>#<file>`**；确需相对路径时用 `../../archived-notes/...`（源在 `docs/research/themes/<slug>/`，目标在 `docs/research/archived-notes/`，共同祖先是 `docs/research/`，故 `../../` 层足够）。
@@ -439,7 +439,7 @@ archive 顶层索引 [`docs/research/archived-notes/README.md`](../../docs/resea
    - workbench 按"删除清单"清理废话/弯路/无价值信息；已足够精炼可跳过压缩直接搬运；
    - 临时脚本和策略 · 检查是否有外部依赖需要记录在 README 的复现备注。
 3. **Step 2 · 移动/拷贝文件到批次子目录**：
-   - `git mv docs/workbench/<name>.md <archive-batch>/<compressed-name>.md`（压缩版放根目录）；
+   - `git mv docs/research/workbench/<name>.md <archive-batch>/<compressed-name>.md`（压缩版放根目录）；
    - 若归档文件数 ≥ 3（多 workbench / 多脚本）· 建 `raw-workbench/` `raw-scripts/` `raw-strategies/` 三个子目录存放原始版；
    - 共用脚本（非专属）不移动，在 README 注明引用路径。
 4. **Step 3 · 修正 archive 内部相对链接**（roadmap / issues / 主题 README）· 将 markdown 相对路径链接升级为命名引用。

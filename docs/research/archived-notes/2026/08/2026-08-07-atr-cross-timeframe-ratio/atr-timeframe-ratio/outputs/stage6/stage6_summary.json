@@ -1,0 +1,9 @@
+{
+  "n_symbols": 33,
+  "n_rows": 12527,
+  "n_H_only_full": 1213,
+  "n_confirmed_full": 256,
+  "n_episodes_first": 68,
+  "n_daily_dedup": 409,
+  "overlap_ratio": 17.83823529411765
+}

@@ -1,0 +1,42 @@
+{
+  "n_rows": 12167,
+  "n_symbols": 32,
+  "n_dates": 435,
+  "date_range": [
+    "2024-01-12 21:00:00",
+    "2026-03-27 21:00:00"
+  ],
+  "state_counts": {
+    "co_compress": 6909,
+    "co_expand": 3493,
+    "H_only": 1197,
+    "L_only": 568
+  },
+  "core_metrics": {
+    "H_only_n": 1197,
+    "H_only_confirm_rate_5": 0.21303258145363407,
+    "co_compress_n": 6909,
+    "co_compress_abs_ret_20": 0.011273843954685572,
+    "uncond_abs_ret_20": 0.011899195587980147,
+    "co_compress_ret_20": 0.0024263590714105623,
+    "co_expand_ret_20": 0.0019615145525680553,
+    "co_expand_abs_ret_20": 0.013121629600391113,
+    "H_only_ret_20": 0.0011422394683560945,
+    "H_only_abs_ret_20": 0.011893649020360811,
+    "L_only_ret_20": 0.0018555870458351617,
+    "L_only_abs_ret_20": 0.011999955571291852
+  },
+  "params": {
+    "H_SHORT": 14,
+    "H_LONG": 50,
+    "L_SHORT": 56,
+    "L_LONG": 200,
+    "FWD_HORIZONS": [
+      5,
+      20,
+      100
+    ],
+    "BOOT_N": 1000,
+    "MIN_N": 30
+  }
+}

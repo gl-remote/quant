@@ -13,7 +13,7 @@
 本文件记录 R30 策略从 [strategy-math-spec.md](strategy-math-spec.md) 落到代码时的**工程选择与优化细节**，只涉及"怎么实现"，不改变"是什么"：
 
 - **不定义任何策略行为**——策略行为由 strategy-math-spec.md 唯一确定；
-- **不记录实验流水**——实验结果写在 `docs/workbench/` 或归档；
+- **不记录实验流水**——实验结果写在 `docs/research/workbench/` 或归档；
 - **不覆盖参数选择流程**——参数选择规则见 parameter-selection-spec.md；
 - **只回答**：给定 spec，代码层应如何组织数据结构、事件调度、缓存策略、成交模型桥接、精度处理、性能优化，才能既正确又高效。
 
@@ -237,7 +237,7 @@ signal 时间 (bar 收盘)         = time(bar_t)
 ## 3. 与其他文档的边界
 
 - 本文件不定义**任何**策略行为；如需改变行为，先改 [strategy-math-spec.md](strategy-math-spec.md)。
-- 本文件不记录**任何**实验结果；实验流水写到 `docs/workbench/`。
+- 本文件不记录**任何**实验结果；实验流水写到 `docs/research/workbench/`。
 - 本文件不给出**任何**参数选择判据；判据见 [parameter-selection-spec.md](parameter-selection-spec.md)。
 - 本文件不重述 [experiment-plan.md](experiment-plan.md) 的候选矩阵。
 

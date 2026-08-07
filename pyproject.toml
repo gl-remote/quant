@@ -57,13 +57,14 @@ dev = [
     "jsonschema>=4.0",
     "quantsmith-contracts",
     "statsmodels>=0.14.6",
+    "scikit-learn>=1.4",
 ]
 
 [tool.uv.sources]
 quantsmith-contracts = { workspace = true }
 
 [[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+url = "https://mirrors.aliyun.com/pypi/simple"
 default = true
 
 [tool.pytest.ini_options]
@@ -109,7 +110,7 @@ exclude = [".git", "__pycache__", ".venv", "htmlcov"]
 "workspace/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 "workspace/tests/research/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 # workbench 临时研究脚本同样保留数学论文记号：
-"docs/workbench/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
+"docs/research/workbench/**/*.py" = ["N801", "N802", "N803", "N806", "N815"]
 
 [tool.ruff.format]
 quote-style = "double"

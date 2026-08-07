@@ -106,7 +106,7 @@ Phase 4: 按标的 / 环境自适应
 ## 3. 与其他文档的边界
 
 - 本文件**不定义**任何策略行为——策略行为一律以 [strategy-math-spec.md](strategy-math-spec.md) 为准；
-- 本文件**不记录**实验结果——实验结果写在 `docs/workbench/` 或归档到 `docs/archive/`；
+- 本文件**不记录**实验结果——实验结果写在 `docs/research/workbench/` 或归档到 `docs/research/archived-notes/`；
 - 本文件**只回答**"给定 spec，如何在多样本上选定一组默认参数"。
 
 ## 4. 更新触发条件

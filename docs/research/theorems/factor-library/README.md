@@ -13,6 +13,7 @@
 
 | 因子 | 一句话 | 状态 | 目录 |
 |---|---|---|---|
+| ATR Cross-Timeframe Ratio | 跨周期 ATR 比（1h/15m）做四象限状态分类；稳健的风险制度标签，不是方向 alpha | 已归档（商品期货 1h, 2022–2026） | [atr-cross-timeframe-ratio/](atr-cross-timeframe-ratio/) |
 | Volume Spike × MADEV | 价格远离长期均线时，放量触发向均线的双向回归；适合作为趋势持仓减仓过滤器，不是独立 alpha | 已归档（商品期货 1h, 2024–2026） | [volume-spike/](volume-spike/) |
 
 ---
