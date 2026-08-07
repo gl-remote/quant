@@ -6,7 +6,7 @@
 > 发现分支：`experiment/structural-alpha-r1-ib-reacceptance`  
 > 发现基准 hash：`af09c3d`  
 > 修复提交 hash：待补  
-> 关联实验：[structural-alpha-r1：Initial Balance 假突破重新接受 / 拒绝](../workbench/structural-alpha-r1-ib-reacceptance.md)  
+> 关联实验：[structural-alpha-r1：Initial Balance 假突破重新接受 / 拒绝](../research/workbench/structural-alpha-r1-ib-reacceptance.md)
 > 相关代码：[main.py](../../main.py)，[pyproject.toml](../../pyproject.toml)
 
 ## 背景

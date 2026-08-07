@@ -46,9 +46,13 @@ quant/
 │   └── tests/              # 测试
 ├── docs/
 │   ├── roadmap/            # 阶段规划、研究方向、评价标准
-│   ├── workbench/          # 当前研究中的实验记录、临时结论，以及 AI 生成的临时研究脚本 / 策略 / 中间数据（详见 quant-research-layout skill）
+│   ├── research/           # 研究总入口（主题 / 定理 / workbench / 归档，详见 quant-research-layout skill）
+│   │   ├── themes/         # 活跃策略主题长期文档
+│   │   ├── theorems/       # 稳定数学定理集
+│   │   ├── workbench/      # 当前研究中的实验记录、临时结论，以及 AI 生成的临时研究脚本 / 策略 / 中间数据
+│   │   └── archived-notes/ # 已稳定、可长期引用的研究归档文档
 │   ├── issues/             # 实验中发现的底层框架问题
-│   └── archive/            # 已稳定、可长期引用的归档文档
+│   └── archive/            # 工程类（非策略研究）归档：aspects / backtest / infra / deprecated 等历史技术方案
 ├── scripts/
 │   ├── analysis/           # 简单数据分析工具，从 csv / 输出数据快速得到结论
 │   ├── test/               # 测试自动化内部模块，由 scripts/test.sh source
@@ -91,7 +95,7 @@ CLI 固定参数回测：
 - Profile：`project_data/profiles/`
 - Coverage：`project_data/coverage/`
 
-**AI 生成的临时研究资产统一放到 `docs/workbench/`**（包括临时脚本、临时策略、临时中间数据/图表）。归档规则详见 `quant-research-layout` skill。
+**AI 生成的临时研究资产统一放到 `docs/research/workbench/`**（包括临时脚本、临时策略、临时中间数据/图表）。归档规则详见 `quant-research-layout` skill。
 
 统一路径函数在 `workspace/data/output_paths.py` 与 `workspace/report/output_paths.py`。业务代码不要硬编码本地数据子路径。
 

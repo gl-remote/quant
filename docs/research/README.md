@@ -13,8 +13,8 @@
 | 目录 | 用途 |
 |------|------|
 | `docs/roadmap` | 阶段规划、未来计划、评价标准 |
-| `docs/workbench` | 当前实验过程记录、参数对照、临时结论 |
-| `docs/archive` | 已结题阶段归档、压缩复盘 |
+| `docs/research/workbench` | 当前实验过程记录、参数对照、临时结论 |
+| `docs/research/archived-notes` | 已结题阶段归档、压缩复盘 |
 | `docs/issues` | 回测、数据、框架、统计口径等问题 |
 | `docs/research` | 当前研究状态、主题主线、已确认成果、下一步入口 |
 
@@ -111,6 +111,6 @@ AI 接手规则。
    确认自己的 pipeline 无泄漏；
 5. 前置组件参数（分类器 tier 结构 / 塑形 SL/TP/TH / 成本模型）视为方法论继承，
    但数字不复用；
-6. 新实验过程写入 docs/workbench/<theme-slug>-<topic>.md；
-7. 阶段稳定后再归档到 docs/archive。
+6. 新实验过程写入 docs/research/workbench/<theme-slug>-<topic>.md；
+7. 阶段稳定后再归档到 docs/research/archived-notes。
 ```
