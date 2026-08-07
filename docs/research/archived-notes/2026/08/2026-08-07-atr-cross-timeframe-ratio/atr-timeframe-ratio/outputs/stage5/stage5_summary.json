@@ -1,0 +1,27 @@
+{
+  "n_panel": 12167,
+  "n_H_only": 1197,
+  "n_confirmed": 255,
+  "n_failed": 942,
+  "cv_auc": {
+    "cv_auc_mean": 0.5306392691040168,
+    "cv_auc_std": 0.03210274763042071,
+    "full_auc": 0.5906914782898297,
+    "n_samples": 1197,
+    "n_confirmed": 255,
+    "n_failed": 942
+  },
+  "candidate_predictors": [
+    "vol_ratio",
+    "vol_ratio_5",
+    "vol_pct_100",
+    "vol_chg_1",
+    "vol_slope_5",
+    "oi_pct_100",
+    "dLogOI_5",
+    "dLogOI_20",
+    "oi_chg_bar",
+    "gap_atr",
+    "gap_filled"
+  ]
+}
