@@ -2,7 +2,7 @@
 
 > **文档定位**：本文回答一个跨越百年的实证问题——**趋势策略（barrier 塑形 + 顺势方向选择）在 1920s–2020s 的 alpha 生态如何随市场 Hurst 指数 $H$ 单调衰减？** 从 fractional Brownian motion (fBm) 的自相关-顺势概率映射出发，把 $H$ 到"顺势入场概率"、$H$ 到"barrier 塑形 $P_{\text{win}}$ 抬升"、$H$ 到"$\nu/\sigma$ 跨周期放大速率"三条链路解析化，用 137 年 CTA 实证数据 + Bouchaud 订单流长记忆理论校准，给出"Hurst 高值时代 → HFT 时代 → 现代残留通道"的三阶段生态演化命题。
 >
-> **稳定性**：入库日期 2026-07-29 · 从 `structural-shaping-alpha` 主题冻结后的历史生态讨论提炼；主题已于 2026-07-24 冻结归档至 [archive:2026-07-24-structural-shaping-alpha-freeze](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)（KF-16 实测 $H_{\text{1h}} \approx 0.60$、KF-19 方向 alpha 泄漏、KF-20 塑形三定律）。
+> **稳定性**：入库日期 2026-07-29 · 从 `structural-shaping-alpha` 主题冻结后的历史生态讨论提炼；主题已于 2026-07-24 冻结归档至 [archive:2026-07-24-structural-shaping-alpha-freeze](../../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)（KF-16 实测 $H_{\text{1h}} \approx 0.60$、KF-19 方向 alpha 泄漏、KF-20 塑形三定律）。
 >
 > **对外可用**：是（独立成篇，含定义、命题、实证锚点、参考文献）。
 >
@@ -166,7 +166,7 @@ $$
 
 | 时代 | $H$ | $\delta(H)$ | 估计 $\Delta P_{\text{win}}$ | 主题实测 |
 |------|-----|------------|-------------------------------|---------|
-| 2020s（本主题 KF-15）| 0.60 | 0.048 | +0.034 | +0.035 ~ +0.066（[archive §2.13.7](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/shaping-theory.md)）|
+| 2020s（本主题 KF-15）| 0.60 | 0.048 | +0.034 | +0.035 ~ +0.066（[archive §2.13.7](../../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/shaping-theory.md)）|
 | 1980s（Turtle Traders 时代）| 0.68 | 0.097 | ≈ +0.069 | — |
 | **1920s（Livermore 时代）**| **0.75** | **0.136** | **≈ +0.097** | — |
 
@@ -183,7 +183,7 @@ $$
 >
 > $$\frac{\sigma_{\tau_2}}{\sigma_{\tau_1}} = \left(\frac{\tau_2}{\tau_1}\right)^H$$
 
-**主题 KF-17 实证锚点**（[archive §2.12.5](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/shaping-theory.md)）：$\sigma_{1h} / \sigma_{5m} = 3.04$，理论 GBM 预测 $\sqrt{12} = 3.464$；反算 $H = \ln(3.04) / \ln(12) \approx 0.448$——**注意与 R/S 分析的 $H \approx 0.60$ 存在方法论差异**，这一分歧本身是研究开放问题（详见附录 C）。
+**主题 KF-17 实证锚点**（[archive §2.12.5](../../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/shaping-theory.md)）：$\sigma_{1h} / \sigma_{5m} = 3.04$，理论 GBM 预测 $\sqrt{12} = 3.464$；反算 $H = \ln(3.04) / \ln(12) \approx 0.448$——**注意与 R/S 分析的 $H \approx 0.60$ 存在方法论差异**，这一分歧本身是研究开放问题（详见附录 C）。
 
 ### 5.2 信噪比跨周期放大
 

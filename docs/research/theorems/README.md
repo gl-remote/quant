@@ -149,6 +149,6 @@ docs/research/theorems/
 
 | 主题 slug | 文档 | 入库日期 |
 |-----------|------|---------|
-| [structural-shaping-alpha](structural-shaping-alpha/) | [when-barrier-shaping-yields-alpha.md](structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) | 2026-07-24 |
-| [structural-shaping-alpha](structural-shaping-alpha/) | [winrate-payoff-tradeoff-under-frictions.md](structural-shaping-alpha/winrate-payoff-tradeoff-under-frictions.md) | 2026-07-24 |
+| [structural-shaping-alpha](theory-library/structural-shaping-alpha/) | [when-barrier-shaping-yields-alpha.md](theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) | 2026-07-24 |
+| [structural-shaping-alpha](theory-library/structural-shaping-alpha/) | [winrate-payoff-tradeoff-under-frictions.md](theory-library/structural-shaping-alpha/winrate-payoff-tradeoff-under-frictions.md) | 2026-07-24 |
 

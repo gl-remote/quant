@@ -2,7 +2,7 @@
 
 > **文档定位**：本文回答 alpha 兑现层的仓位管理问题——**给定单笔胜率 $p$ 与盈亏比 $b$，在乘性会计（每笔按当前本金重估仓位）、加性会计（每笔锁定绝对金额风险）、以及"每 $k$ 笔重估一次"的分段静态凯利之间，长期对数增长率、短期胜负概率、参数噪声鲁棒性、极端回撤保护如何权衡？** 从离散凯利 $f^* = (pb-q)/b$ 与连续凯利 $f^* = (\mu - r)/\sigma^2$ 的等价出发，通过 Itô 凸性的对数展开与二项分布的 CLT 上界给出**"平庸区间"判据**、**加性甜点区**、**最优 rebalance 窗口** $k^\ast \approx 1/f_{\text{Kelly}}$ 三条闭式结论。
 >
-> **稳定性**：入库日期 2026-07-27 · 从 `structural-shaping-alpha` 主题冻结后的仓位管理讨论提炼；主题已于 2026-07-24 冻结归档至 [archive:2026-07-24-structural-shaping-alpha-freeze](../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)。
+> **稳定性**：入库日期 2026-07-27 · 从 `structural-shaping-alpha` 主题冻结后的仓位管理讨论提炼；主题已于 2026-07-24 冻结归档至 [archive:2026-07-24-structural-shaping-alpha-freeze](../../../archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/)。
 >
 > **对外可用**：是（独立成篇、逻辑闭合、记号自洽）。
 >

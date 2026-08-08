@@ -6,7 +6,7 @@
 >
 > **起源**：研究者命题"高跨期波动率比值说明长周期波动率远大于短周期，那么至少存在一个特定周期，市场强度是高的"。
 >
-> **与已有定理的关系**：与 [theorem:structural-shaping-alpha#hurst-evolution-and-trend-alpha-decay](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) 互补——后者在单一 $H$ 假设下推导 $H \to s_{\text{eff}}$ 的显式映射；本文放宽为尺度依赖 $H(\tau)$，用纯数学给出存在性命题。
+> **与已有定理的关系**：与 [theorem:structural-shaping-alpha#hurst-evolution-and-trend-alpha-decay](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) 互补——后者在单一 $H$ 假设下推导 $H \to s_{\text{eff}}$ 的显式映射；本文放宽为尺度依赖 $H(\tau)$，用纯数学给出存在性命题。
 
 ---
 
@@ -27,7 +27,7 @@
 
 ## 1. 动机与核心命题
 
-研究者观察到：在 ATR 跨周期比值研究中，$R_{\text{bar}} = \text{ATR}_{1h} / \text{ATR}_{15m}$ 的中位数 1.82 小于理论 GBM 值 2.0（[factor-library/atr-cross-timeframe-ratio/evidence.md](../theorems/factor-library/atr-cross-timeframe-ratio/evidence.md)）。这说明主流市场平均而言呈现波动率子扩散（$H < 1/2$）。
+研究者观察到：在 ATR 跨周期比值研究中，$R_{\text{bar}} = \text{ATR}_{1h} / \text{ATR}_{15m}$ 的中位数 1.82 小于理论 GBM 值 2.0（[factor-library/atr-cross-timeframe-ratio/evidence.md](../../../../theorems/factor-library/atr-cross-timeframe-ratio/evidence.md)）。这说明主流市场平均而言呈现波动率子扩散（$H < 1/2$）。
 
 但反过来问：**如果 $R > R_{\text{GBM}}$，是否能推出"市场强度"非零？**
 
@@ -59,7 +59,7 @@ $$
 - $H > 1/2$：该尺度上增量正相关（persistent，趋势凝聚）；
 - $H < 1/2$：该尺度上增量负相关（anti-persistent，均值回归）。
 
-**注 2.2**：单一 $H$ 的 fBm 是 $H(\tau) \equiv H$ 的特例。实际市场的 $H(\tau)$ 通常非恒定（如 [hur...](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) §2.5 的时代演化，或同一时点不同尺度上的子扩散/趋势凝聚共存）。
+**注 2.2**：单一 $H$ 的 fBm 是 $H(\tau) \equiv H$ 的特例。实际市场的 $H(\tau)$ 通常非恒定（如 [hur...](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) §2.5 的时代演化，或同一时点不同尺度上的子扩散/趋势凝聚共存）。
 
 ### 2.3 跨周期波动率比
 
@@ -259,7 +259,7 @@ $$\boxed{\;\overline{H}(a, b) \ge H^\ast(c) + L \cdot \tilde{d}(c) \;\Longrighta
 
 ### 5.1 广义市场强度
 
-为避免与 [structural-shaping-alpha#when-barrier-shaping-yields-alpha §3.3](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的 $s = \nu/\sigma$ 混淆，本文定义基于自相关的广义市场强度。
+为避免与 [structural-shaping-alpha#when-barrier-shaping-yields-alpha §3.3](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的 $s = \nu/\sigma$ 混淆，本文定义基于自相关的广义市场强度。
 
 **定义 5.1（广义市场强度）**：在尺度 $\tau$ 上，设 lag-1 增量自相关为 $\rho_1(\tau)$，定义
 
@@ -269,7 +269,7 @@ $$
 
 $\mathcal{S} = 0$ 对应独立增量；$\mathcal{S} > 0$ 对应趋势凝聚；$\mathcal{S} < 0$ 对应均值回归。
 
-**注 5.2（与顺势概率的关系）**：由 [引理 3.1 Sheppard 公式](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L103)，$P_{\text{顺}}(\tau) = 1/2 + \mathcal{S}(\tau)$。故 $\mathcal{S} > 0 \Leftrightarrow P_{\text{顺}} > 1/2$。
+**注 5.2（与顺势概率的关系）**：由 [引理 3.1 Sheppard 公式](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L103)，$P_{\text{顺}}(\tau) = 1/2 + \mathcal{S}(\tau)$。故 $\mathcal{S} > 0 \Leftrightarrow P_{\text{顺}} > 1/2$。
 
 ### 5.2 局部 Hurst 到自相关
 
@@ -320,7 +320,7 @@ $$
 
 这是最关键的区分：
 
-- **$s = \nu/\sigma$**（[when-barrier-shaping §3.3](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md)）：捕获**常数漂移**。纯 fBm 在 $\nu = 0$ 时 $s = 0$，即便 $H > 1/2$ 也是如此。
+- **$s = \nu/\sigma$**（[when-barrier-shaping §3.3](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md)）：捕获**常数漂移**。纯 fBm 在 $\nu = 0$ 时 $s = 0$，即便 $H > 1/2$ 也是如此。
 - **$\mathcal{S} = \arcsin(\rho_1)/\pi$**（本文）：捕获**增量自相关**带来的趋势凝聚。在 fBm 框架下 $\nu = 0$ 但 $H > 1/2$ 时 $\mathcal{S} > 0$。
 
 $\mathcal{S}$ 是比 $s$ 更本源的市场强度度量——它能在 $\nu = 0$ 的纯 fBm 框架下识别趋势凝聚，而 $s$ 不能。
@@ -348,9 +348,9 @@ $R = R_{\text{GBM}}$ 不能推出存在 $\tau^\ast$。反例：$H(\tau) = 1/2 + 
 
 ## 8. 与 GBM 翻译的桥接
 
-若要把本文的 $\mathcal{S}$ 翻译为 [structural-shaping-alpha](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 框架的 $s_{\text{eff}}$，需引入工程近似。
+若要把本文的 $\mathcal{S}$ 翻译为 [structural-shaping-alpha](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 框架的 $s_{\text{eff}}$，需引入工程近似。
 
-**假设 8.1（短窗累积近似）**：即 [hurst-evolution §4.1 假设 4.1](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L138)——在 barrier 触达时窗内，fBm 的方向凝聚可用等价 GBM 漂移 $s_{\text{eff}}$ 近似。
+**假设 8.1（短窗累积近似）**：即 [hurst-evolution §4.1 假设 4.1](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L138)——在 barrier 触达时窗内，fBm 的方向凝聚可用等价 GBM 漂移 $s_{\text{eff}}$ 近似。
 
 **推论 8.2（等价 GBM 翻译）**：在假设 8.1 下，
 
@@ -358,9 +358,9 @@ $$
 s_{\text{eff}}(\tau^\ast) \approx \sqrt{2\pi} \cdot \mathcal{S}(\tau^\ast) / \sqrt{\tau^\ast} > 0
 $$
 
-使该尺度上的 barrier 塑形产生正的 $\Delta P_{\text{win}}$（[推论 4.3](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L156)）。
+使该尺度上的 barrier 塑形产生正的 $\Delta P_{\text{win}}$（[推论 4.3](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L156)）。
 
-**注 8.3**：此步**不是纯数学**——假设 8.1 是"$H \ne 1/2$ 的 fBm barrier 问题无闭式，需与等价 GBM 拟合"的工程近似（见 [Molchan 2003](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) fBm 首达无闭式解的证明）。
+**注 8.3**：此步**不是纯数学**——假设 8.1 是"$H \ne 1/2$ 的 fBm barrier 问题无闭式，需与等价 GBM 拟合"的工程近似（见 [Molchan 2003](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md) fBm 首达无闭式解的证明）。
 
 ---
 
@@ -379,7 +379,7 @@ $$
 
 ### 9.2 与 when-barrier-shaping-yields-alpha 的连接
 
-- **$s = \nu/\sigma$** 是 [when-barrier §3.3](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的决策变量；
+- **$s = \nu/\sigma$** 是 [when-barrier §3.3](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的决策变量；
 - **$\mathcal{S}$** 是本文定义的更本源度量，在 $\nu = 0$ 时仍能识别趋势凝聚；
 - 在 $\nu \ne 0$ 且 $H > 1/2$ 时两者都为正，$s$ 来自漂移、$\mathcal{S}$ 来自自相关，互不替代。
 
@@ -387,9 +387,9 @@ $$
 
 ### 9.3 与 atr-cross-timeframe-ratio 因子的连接
 
-[因子库 atr-cross-timeframe-ratio/definition.md](../theorems/factor-library/atr-cross-timeframe-ratio/definition.md) 的 $R_{\text{bar}} = \text{ATR}_{1h} / \text{ATR}_{15m}$ 是本文 $R(\tau_1, \tau_2)$ 在 $\tau_1 = 15\text{m}, \tau_2 = 1\text{h}$ 的工程实现。
+[因子库 atr-cross-timeframe-ratio/definition.md](../../../../theorems/factor-library/atr-cross-timeframe-ratio/definition.md) 的 $R_{\text{bar}} = \text{ATR}_{1h} / \text{ATR}_{15m}$ 是本文 $R(\tau_1, \tau_2)$ 在 $\tau_1 = 15\text{m}, \tau_2 = 1\text{h}$ 的工程实现。
 
-该因子的"共振扩张"象限（$S_H \ge 1 \wedge S_L \ge 1$，见 [definition.md](../theorems/factor-library/atr-cross-timeframe-ratio/definition.md) 四象限定义）对应 $R$ 偏离 GBM 基线的方向性状态。
+该因子的"共振扩张"象限（$S_H \ge 1 \wedge S_L \ge 1$，见 [definition.md](../../../../theorems/factor-library/atr-cross-timeframe-ratio/definition.md) 四象限定义）对应 $R$ 偏离 GBM 基线的方向性状态。
 
 按本文主定理：
 - "共振扩张"象限若 $R > R_{\text{GBM}}$（需用实际 ATR 窗口换算验证），蕴含某尺度 $\tau^\ast \in (15\text{m}, 1\text{h})$ 上 $\mathcal{S} > 0$；
@@ -401,13 +401,13 @@ $$
 
 1. **$\tau^\ast$ 的定位**：本定理只给存在性，不给 $\tau^\ast$ 的显式值。定位需对 $H(\tau)$ 做非参数估计（如多尺度 R/S 或小波方差）。
 
-2. **从 $\mathcal{S} > 0$ 到可交易 alpha**：$\mathcal{S} > 0$ 只说明存在趋势凝聚，不说明可交易。barrier 塑形的可交易性需通过假设 8.1 翻译为 $s_{\text{eff}}$ 后用 [when-barrier §11](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的盈亏下界 $x_{\min}$ 检验。
+2. **从 $\mathcal{S} > 0$ 到可交易 alpha**：$\mathcal{S} > 0$ 只说明存在趋势凝聚，不说明可交易。barrier 塑形的可交易性需通过假设 8.1 翻译为 $s_{\text{eff}}$ 后用 [when-barrier §11](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的盈亏下界 $x_{\min}$ 检验。
 
-3. **$H(\tau)$ 估计器分歧**：[hurst-evolution 附录 B.6](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 指出 R/S 估计 $H \approx 0.60$ 与波动率子扩散反算 $H_\sigma \approx 0.448$ 存在分歧。本文 $H(\tau)$ 依赖 $\sigma_\tau$ 的导数，更接近 $H_\sigma$ 口径——这意味着本文存在性定理的触发条件（$R > R_{\text{GBM}}$）与 R/S 口径下 $H > 1/2$ 不直接等价。
+3. **$H(\tau)$ 估计器分歧**：[hurst-evolution 附录 B.6](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 指出 R/S 估计 $H \approx 0.60$ 与波动率子扩散反算 $H_\sigma \approx 0.448$ 存在分歧。本文 $H(\tau)$ 依赖 $\sigma_\tau$ 的导数，更接近 $H_\sigma$ 口径——这意味着本文存在性定理的触发条件（$R > R_{\text{GBM}}$）与 R/S 口径下 $H > 1/2$ 不直接等价。
 
 4. **多周期联合**：本文只考虑单一 $[\tau_1, \tau_2]$ 区间。若同时观测多个区间 $[\tau_1, \tau_2], [\tau_2, \tau_3], \dots$，可构造更精细的 $\tau^\ast$ 定位——但需新的定理形式。
 
-5. **非平稳性**：本文假设 $\sigma_\tau$ 是过程的稳态性质。实际市场 $H(\tau)$ 时变（见 [hur... §2.5 时代演化](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md)）。本文定理在每个时点局部成立，但跨时点比较需额外假设。
+5. **非平稳性**：本文假设 $\sigma_\tau$ 是过程的稳态性质。实际市场 $H(\tau)$ 时变（见 [hur... §2.5 时代演化](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md)）。本文定理在每个时点局部成立，但跨时点比较需额外假设。
 
 ---
 
@@ -423,7 +423,7 @@ $$
 
 沿用前文记号：区间 $[a, b]$，比值 $r := R(a, b) = \sigma_b / \sigma_a$，GBM 基线 $r_0 := \sqrt{b/a}$。
 
-引入 [when-barrier §11.3](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的盈亏下界：
+引入 [when-barrier §11.3](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的盈亏下界：
 
 $$
 x_{\min}(c_{\text{cost}}, K_S, R) = \sqrt{\frac{6 c_{\text{cost}}}{K_S^3 \, R(R-1)}}
@@ -436,7 +436,7 @@ $$
 | 层次 | 条件 | 来源 |
 |------|------|------|
 | 存在性 | $r > r_0 = \sqrt{b/a}$ | §4 主定理 |
-| 可盈利 | $s_{\text{eff}}(c) \ge x_{\min}$ | [when-barrier §11.3](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) |
+| 可盈利 | $s_{\text{eff}}(c) \ge x_{\min}$ | [when-barrier §11.3](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) |
 
 $r > r_0$ 只保证 $\exists c \in (a, b): H(c) > 1/2$，但 $H(c)$ 可以**任意接近 $1/2$**（当 $r$ 任意接近 $r_0$ 时），此时 $s_{\text{eff}} \to 0$，覆盖不了成本。
 
@@ -452,7 +452,7 @@ $r > r_0$ 只保证 $\exists c \in (a, b): H(c) > 1/2$，但 $H(c)$ 可以**任�
 
 设 $H(\tau) \equiv H$ 恒定（fBm 假设），则 $H = \overline{H} = \ln r / \ln(b/a)$，可直接反算。
 
-由 [hurst-evolution 命题 4.2](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L145)：
+由 [hurst-evolution 命题 4.2](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L145)：
 
 $$
 s_{\text{eff}}(H, c) \approx \frac{\sqrt{2\pi} \cdot \delta(H)}{\sqrt{c}}, \qquad \delta(H) = \frac{\arcsin(2^{2H-1} - 1)}{\pi}
@@ -528,7 +528,7 @@ $$
 
 **关键陷阱**：上述分析假设 $x_{\min}$ 与 $c$ 独立，但实际并非如此。
 
-由 [when-barrier §2.4](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的量纲约定，$K_S, K_T, c_{\text{cost}}$ 均以 ATR 归一化。若在尺度 $c$ 上做 barrier 塑形：
+由 [when-barrier §2.4](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的量纲约定，$K_S, K_T, c_{\text{cost}}$ 均以 ATR 归一化。若在尺度 $c$ 上做 barrier 塑形：
 
 - $K_S^{(c)}$ 按 $c$-bar 的 ATR 归一化，$K_S^{(c)} \propto \sigma_c \sqrt{c}$；
 - $c_{\text{cost}}^{(c)}$（单边成本）也按 $c$-bar 的 ATR 归一化。

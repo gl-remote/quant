@@ -175,4 +175,4 @@ $$\lambda := \frac{P(Y=1 \mid R > r^\ast, \mathbf{z} \in \mathcal{Z})}{P(Y=1 \mi
 - 实证简报：[hurst-vs-rbar-briefing.md](../../../archived-notes/2026/08/2026-08-08-vol-ratio-implies-market-strength/hurst-vs-rbar-briefing.md)
 - 假设检验蓝图：[hurst-shape-assumptions-testability.md](../../../archived-notes/2026/08/2026-08-08-vol-ratio-implies-market-strength/hurst-shape-assumptions-testability.md)
 - 实验设计：[hurst-shape-experiment-design.md](../../../archived-notes/2026/08/2026-08-08-vol-ratio-implies-market-strength/hurst-shape-experiment-design.md)
-- 相关定理：[theorems/structural-shaping-alpha/](../../structural-shaping-alpha/)
+- 相关定理：[theorems/theory-library/structural-shaping-alpha/](../../theory-library/structural-shaping-alpha/)

@@ -100,7 +100,7 @@ $$r > r^\ast \;\wedge\; \mathbf{z} \in \mathcal{Z} \;\Rightarrow\; H(c) > H^\ast
 
 本研究的成果已蒸馏到因子库：
 
-- **[application.md](../../theorems/factor-library/atr-cross-timeframe-ratio/application.md)**：新增，记录因子的应用条件与可盈利门槛
+- **[application.md](../../../../theorems/factor-library/atr-cross-timeframe-ratio/application.md)**：新增，记录因子的应用条件与可盈利门槛
 - 因子库 README 更新：三件套扩展为四件套（application 可选）
 - 因子索引表更新：atr-cross-timeframe-ratio 状态标记为"已归档 + 应用条件"
 
@@ -121,5 +121,5 @@ $$r > r^\ast \;\wedge\; \mathbf{z} \in \mathcal{Z} \;\Rightarrow\; H(c) > H^\ast
 | 研究 | 关系 |
 |------|------|
 | [2026-08-07-atr-cross-timeframe-ratio](../2026-08-07-atr-cross-timeframe-ratio/) | 上游：R_bar 作为描述性因子的证据基础 |
-| [structural-shaping-alpha](../../theorems/structural-shaping-alpha/) | 理论根基：市场强度 s、Hurst 演化、barrier 塑形 |
-| [volume-spike](../../theorems/factor-library/volume-spike/) | 方法论借鉴：筛选因子思路（s_pre + MADEV） |
+| [structural-shaping-alpha](../../../../theorems/theory-library/structural-shaping-alpha/) | 理论根基：市场强度 s、Hurst 演化、barrier 塑形 |
+| [volume-spike](../../../../theorems/factor-library/volume-spike/) | 方法论借鉴：筛选因子思路（s_pre + MADEV） |

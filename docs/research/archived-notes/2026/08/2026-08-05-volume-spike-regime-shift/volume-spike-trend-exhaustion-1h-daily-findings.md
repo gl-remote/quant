@@ -94,7 +94,7 @@ $$
 
 ### 2.5 用市场强度 s = ν/σ 替代绝对涨幅（与塑形理论对接）
 
-前几节用 pre100（前 100 根 bar 绝对累计涨幅）定义 regime，但绝对涨幅无法区分"低波动慢牛"和"高波动疯涨"。改用塑形理论 [when-barrier-shaping-yields-alpha.md](../../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) §3.3 定义的**对数空间市场强度**：
+前几节用 pre100（前 100 根 bar 绝对累计涨幅）定义 regime，但绝对涨幅无法区分"低波动慢牛"和"高波动疯涨"。改用塑形理论 [when-barrier-shaping-yields-alpha.md](../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) §3.3 定义的**对数空间市场强度**：
 
 $$s_{\text{pre}} := \frac{\nu}{\sigma} = \frac{\text{mean}(r_{t-100:t})}{\text{std}(r_{t-100:t})}$$
 

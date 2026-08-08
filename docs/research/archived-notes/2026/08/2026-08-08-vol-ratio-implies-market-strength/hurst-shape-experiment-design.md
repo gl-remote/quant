@@ -370,7 +370,7 @@ $$x_{\min} = \sqrt{\frac{6 c_{\text{cost}}}{K_S^3 R(R-1)}}$$
 
 ### 7.3 基准参数集
 
-参考 [when-barrier §2.4](../theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的 ATR 归一化约定：
+参考 [when-barrier §2.4](../../../../theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) 的 ATR 归一化约定：
 
 | 参数 | 基准值 | 来源 |
 |------|--------|------|

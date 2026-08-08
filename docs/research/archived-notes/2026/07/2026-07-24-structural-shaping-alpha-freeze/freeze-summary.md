@@ -14,7 +14,7 @@
 
 ## 二、主题最终定型
 
-**Doob OST 两前提对偶结构**（[theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha](../../../../research/theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md)）：
+**Doob OST 两前提对偶结构**（[theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha](../../../../research/theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md)）：
 
 | 通道 | 打破的前提 | 数学机制 | 兑现规模（玉米 1h） |
 |------|-----------|---------|------|
@@ -58,8 +58,8 @@
 
 | 文档 | 承载内容 | 位置 |
 |------|---------|------|
-| [when-barrier-shaping-yields-alpha.md](../../../../research/theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) | 从 Sharpe 借鉴市场强度 $s := \nu/\sigma$ + Doob OST 两前提对偶 + 通道 A/B 数学 + KF-27 参数优化 + 盈亏下界 $x_\min$ + 附录 A（KF 对应表）B（一致性检查）C（文献对照） | `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` |
-| [winrate-payoff-tradeoff-under-frictions.md](../../../../research/theorems/structural-shaping-alpha/winrate-payoff-tradeoff-under-frictions.md) | 胜率-盈亏比权衡 + 摩擦成本修正 + 凯利仓位与破产风险 + 8 章论文式框架 | `theorem:structural-shaping-alpha#winrate-payoff-tradeoff-under-frictions` |
+| [when-barrier-shaping-yields-alpha.md](../../../../research/theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md) | 从 Sharpe 借鉴市场强度 $s := \nu/\sigma$ + Doob OST 两前提对偶 + 通道 A/B 数学 + KF-27 参数优化 + 盈亏下界 $x_\min$ + 附录 A（KF 对应表）B（一致性检查）C（文献对照） | `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` |
+| [winrate-payoff-tradeoff-under-frictions.md](../../../../research/theorems/theory-library/structural-shaping-alpha/winrate-payoff-tradeoff-under-frictions.md) | 胜率-盈亏比权衡 + 摩擦成本修正 + 凯利仓位与破产风险 + 8 章论文式框架 | `theorem:structural-shaping-alpha#winrate-payoff-tradeoff-under-frictions` |
 
 未来所有 barrier 型策略研究应先阅读 theorems/，其内容不再随实验演化。
 

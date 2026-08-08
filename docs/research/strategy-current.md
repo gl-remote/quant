@@ -79,7 +79,7 @@ previously 冻结:
 | ~~va-asymmetry-revisit~~ | **⚠️ 已彻底废弃归档（2026-07-14）** · 一日 4 轮因果版实验全线证伪 · pipeline 因果性完好但假设无 alpha · 原主题目录整包搬入 archive | [archive:2026-07-14-va-asymmetry-revisit-full-refutation](../research/archived-notes/2026/07/2026-07-14-va-asymmetry-revisit-full-refutation/README.md) |
 | ~~va-asymmetry-composite~~ | **⚠️ 假设证伪归档（2026-07-13）** · 无独立 alpha · 主题目录已整体搬入归档批次 | [archive:...leak-chain-consolidated/theme-va-asymmetry-composite/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-va-asymmetry-composite/) |
 | ~~poc-value-area-asymmetry~~ | **⚠️ 已归档（2026-07-13）** · va-asymmetry 错误链条上游 · Stage 1-4 数字全部作废（daily 特征泄漏）· 仅分类器 v4.0 6 阵营坐标切分结构可作方法论继承 | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
-| ~~structural-shaping-alpha~~ | **冻结归档（2026-07-24）** · 主命题四阶段完成 · 通道 A/B 双通道兑现 · KF-27 参数优化器交付 · 稳定数学契约提炼至 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md) | [archive:2026-07-24-structural-shaping-alpha-freeze](../research/archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/freeze-summary.md) |
+| ~~structural-shaping-alpha~~ | **冻结归档（2026-07-24）** · 主命题四阶段完成 · 通道 A/B 双通道兑现 · KF-27 参数优化器交付 · 稳定数学契约提炼至 [theorems/theory-library/structural-shaping-alpha/](./theorems/theory-library/structural-shaping-alpha/README.md) | [archive:2026-07-24-structural-shaping-alpha-freeze](../research/archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/freeze-summary.md) |
 | ~~strength-factor-screening~~ | **冻结归档（2026-07-17）** / 核心假设证伪 · 8 候选全 L4 · 强度不比方向容易识别 | [archive:2026-07-17-strength-factor-screening-freeze](../research/archived-notes/2026/07/2026-07-17-strength-factor-screening-freeze/freeze-summary.md) |
 | ~~value_area_reacceptance~~ | **冻结归档（2026-07-03）** / feature-only 降级 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
 | ~~value_area_rolling_reacceptance~~ | **冻结归档（2026-07-05）** / 主题假设完全证伪 | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
@@ -89,7 +89,7 @@ previously 冻结:
 **当前活跃策略主题**：`time-barrier-selection`（2026-07-28 立题）——从塑形理论 `theorem:structural-shaping-alpha#when-barrier-shaping-yields-alpha` 派生，专注单合约时间维 $T$ 决策，首个实验对象玉米 5m。工具/方法论主题保留：
 
 - 分类器结构参考（数字作废，仅结构可继承，**已归档**）：archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/
-- 塑形工具资产（**已归档**）：`archive:2026-07-24-structural-shaping-alpha-freeze`（稳定数学契约见 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md)）
+- 塑形工具资产（**已归档**）：`archive:2026-07-24-structural-shaping-alpha-freeze`（稳定数学契约见 [theorems/theory-library/structural-shaping-alpha/](./theorems/theory-library/structural-shaping-alpha/README.md)）
 
 ## 3. 当前基础设施
 
@@ -146,7 +146,7 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 **当前状态**：活跃主题 `time-barrier-selection`（2026-07-28 立题）。近期路径：
 
 1. **Stage 1 玉米 5m 持仓周期扫描**：详见 [theme:time-barrier-selection#experiment-plan](./themes/time-barrier-selection/experiment-plan.md)
-2. **同步维护**塑形工具资产（structural-shaping-alpha 已冻结归档，稳定数学契约在 [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md)）
+2. **同步维护**塑形工具资产（structural-shaping-alpha 已冻结归档，稳定数学契约在 [theorems/theory-library/structural-shaping-alpha/](./theorems/theory-library/structural-shaping-alpha/README.md)）
 
 **任何新主题必须遵守的方法论前置约束**（继承自 value-area 家族 + va-asymmetry 家族证伪 + 前序主题教训）：
 
@@ -179,7 +179,7 @@ low_volatility_restart               → archive:2026-06-29-structural-alpha-ran
 | 当前状态入口 | 本文件 |
 | **va-asymmetry 错误路径归并封装（必读）** | [archive:...leak-chain-consolidated](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/README.md) |
 | poc-value-area-asymmetry（**已归档** · 只读只做方法论参考） | [archive:...leak-chain-consolidated/theme-poc-value-area-asymmetry/](../research/archived-notes/2026/07/2026-07-13-va-asymmetry-leak-chain-consolidated/theme-poc-value-area-asymmetry/README.md) |
-| structural-shaping-alpha（塑形工具资产 · **已归档**） | [archive:2026-07-24-structural-shaping-alpha-freeze](../research/archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/freeze-summary.md) · [theorems/structural-shaping-alpha/](./theorems/structural-shaping-alpha/README.md) |
+| structural-shaping-alpha（塑形工具资产 · **已归档**） | [archive:2026-07-24-structural-shaping-alpha-freeze](../research/archived-notes/2026/07/2026-07-24-structural-shaping-alpha-freeze/freeze-summary.md) · [theorems/theory-library/structural-shaping-alpha/](./theorems/theory-library/structural-shaping-alpha/README.md) |
 | value_area 家族总结（**已归档**） | [archive:2026-07-17-value-area-family-consolidated](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/README.md) |
 | value_area_reacceptance（**已归档**） | [archive:2026-07-17-value-area-family-consolidated/value-area-reacceptance/](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/value-area-reacceptance/README.md) |
 | value_area_rolling_reacceptance（**已归档**） | [archive:2026-07-17-value-area-family-consolidated/value-area-rolling-reacceptance/](../research/archived-notes/2026/07/2026-07-17-value-area-family-consolidated/value-area-rolling-reacceptance/README.md) |

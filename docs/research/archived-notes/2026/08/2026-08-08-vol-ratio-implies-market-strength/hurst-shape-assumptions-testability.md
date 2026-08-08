@@ -73,7 +73,7 @@ $$H(\tau) := \frac{d \ln \sigma_\tau}{d \ln \tau}$$
 
 ### 2.2 估计口径分歧
 
-[hurst-evolution 附录 B.6](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 指出三种估计口径给出不同的 $H$：
+[hurst-evolution 附录 B.6](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 指出三种估计口径给出不同的 $H$：
 
 | 口径 | 方法 | 实测值 | 原理 |
 |------|------|--------|------|
@@ -147,7 +147,7 @@ $$r \ge (b/a)^{H^\ast(c)}$$
 
 ### 4.6 预期
 
-[hurst-evolution 附录 B.6](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 已指出 $H_\sigma \approx 0.448$ 与 $H_{\text{RS}} \approx 0.60$ 显著不同，**P0 大概率被拒绝**。
+[hurst-evolution 附录 B.6](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 已指出 $H_\sigma \approx 0.448$ 与 $H_{\text{RS}} \approx 0.60$ 显著不同，**P0 大概率被拒绝**。
 
 ---
 
@@ -430,7 +430,7 @@ Step 5: P4 贝叶斯
 
 ### 12.1 预期 P0 被拒绝
 
-依据：[hurst-evolution 附录 B.6](../theorems/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 已指出 $H_\sigma \approx 0.448 \ne H_{\text{RS}} \approx 0.60$。
+依据：[hurst-evolution 附录 B.6](../../../../theorems/theory-library/structural-shaping-alpha/hurst-evolution-and-trend-alpha-decay.md#L313) 已指出 $H_\sigma \approx 0.448 \ne H_{\text{RS}} \approx 0.60$。
 
 ### 12.2 预期 P1 部分可用
 

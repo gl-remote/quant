@@ -97,7 +97,7 @@ time-barrier-selection 主题三轮实证结论：
 
 ### 4.4 同步更新的 theorem 文件（不在本批次内，保留在活跃目录）
 
-- `docs/research/theorems/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md` §10.5 新增：方向概率 p-混合闭式（命题 10.6/10.7/10.8）+ 玉米 1h p-敏感性实证锚点表
+- `docs/research/theorems/theory-library/structural-shaping-alpha/when-barrier-shaping-yields-alpha.md` §10.5 新增：方向概率 p-混合闭式（命题 10.6/10.7/10.8）+ 玉米 1h p-敏感性实证锚点表
 - 这是本次主题对上游塑形理论的反向贡献（KF-9 已沉淀到 theorem）
 
 ## 5. 方法论遗产（跨主题可复用）
