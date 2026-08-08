@@ -1,9 +1,10 @@
 # 因子库 Factor Library
 
-> 可复用的量化因子定义、证据与边界。每个因子一个子目录，包含：
+> 可复用的量化因子定义、证据、边界与应用条件。每个因子一个子目录，包含：
 > - `definition.md`：数学定义，可直接编码；
 > - `evidence.md`：关键统计证据（IC、mean、样本量、消融）；
-> - `boundary.md`：适用边界、失效条件、未验证假设。
+> - `boundary.md`：适用边界、失效条件、未验证假设；
+> - `application.md`（可选）：因子的应用条件与可盈利门槛，当因子从描述性升级为条件性可应用时添加。
 >
 > 这里只放**蒸馏后的最终规格**。探索过程、证伪记录、中间实验保留在 `docs/research/themes/`。
 
@@ -13,7 +14,7 @@
 
 | 因子 | 一句话 | 状态 | 目录 |
 |---|---|---|---|
-| ATR Cross-Timeframe Ratio | 跨周期 ATR 比（1h/15m）做四象限状态分类；稳健的风险制度标签，不是方向 alpha | 已归档（商品期货 1h, 2022–2026） | [atr-cross-timeframe-ratio/](atr-cross-timeframe-ratio/) |
+| ATR Cross-Timeframe Ratio | 跨周期 ATR 比（1h/15m, 1h/1d）做四象限状态分类；描述性风险制度标签，1h/1d 尺度下 4h 塑形有 27.8% 基率可盈利 | 已归档 + 应用条件（商品期货 1h, 2022–2026） | [atr-cross-timeframe-ratio/](atr-cross-timeframe-ratio/) |
 | Volume Spike × MADEV | 价格远离长期均线时，放量触发向均线的双向回归；适合作为趋势持仓减仓过滤器，不是独立 alpha | 已归档（商品期货 1h, 2024–2026） | [volume-spike/](volume-spike/) |
 
 ---

@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-08-08T09:56:12.668531",
+  "P0_accepted": false,
+  "P1_accepted": false,
+  "P2_accepted": null,
+  "P2_verdict": "inconclusive (need >=3 scale points)",
+  "recommended_assumption": "P1 (with caveats) — P2 inconclusive",
+  "rationale": "P0 拒绝。P1 L̂ 中位数=0.0416（小），但 r* 覆盖率不足（最佳=0.0%）。P2 无法判定（需 ≥3 尺度点）。建议：P1 可作为描述性假设使用，但可盈利门槛需更优成本参数。",
+  "metrics": {
+    "P0_mean_H_range": 0.06039021387480503,
+    "P0_rejection_rate": 0.4665461121157324,
+    "P0_wilcoxon_p": 2.5140768213427288e-51,
+    "P1_L_hat_median": 0.041573762999094946,
+    "P1_L_hat_cv": 1.1369049566237208,
+    "P1_cross_symbol_ratio": 12.51293293439736,
+    "P1_best_r_star_coverage": 0.0,
+    "P1_base_r_star_coverage": 0.0,
+    "P2_dominant_direction": "increasing",
+    "P2_frac_increasing": 0.8028933092224232
+  }
+}
