@@ -158,9 +158,9 @@
 
 ## 7. 相关研究索引
 
-- 原始设计：[atr-timeframe-ratio.md](../../../../docs/research/workbench/atr-timeframe-ratio/atr-timeframe-ratio.md)
-- 全周期画像：[quadrant-profile.md](../../../../docs/research/workbench/atr-timeframe-ratio/quadrant-profile.md)
-- 路径分析：[transition-paths.md](../../../../docs/research/workbench/atr-timeframe-ratio/transition-paths.md)
-- 证伪记录：[archive/h_only_signal_research/](../../../../docs/research/workbench/atr-timeframe-ratio/archive/h_only_signal_research/)
-- 5m/15m 对比：[compare_5m_15m.md](./compare_5m_15m.md)（输出 CSV）
-- F 组跨期限：[term_structure 输出](../../../../docs/research/workbench/atr-timeframe-ratio/outputs/term_structure/)
+- 原始设计：[atr-timeframe-ratio.md](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio.md)
+- 全周期画像：[quadrant-profile.md](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/quadrant-profile.md)
+- 路径分析：[transition-paths.md](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/transition-paths.md)
+- 证伪记录：[archive/h_only_signal_research/](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/archive/h_only_signal_research/)
+- 5m/15m 对比：[compare_5m_15m/](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/outputs/compare_5m_15m/)（输出 JSON + figures）
+- F 组跨期限：[term_structure 输出](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/outputs/term_structure/)

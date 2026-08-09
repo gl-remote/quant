@@ -495,7 +495,7 @@ $$
 
 ## 附录 A · 静态一致性检查
 
-按 [quant-math-spec](../../../../.trae/skills/quant-math-spec/SKILL.md) 检查清单本轮结果：
+按 [quant-math-spec](../../../../../.trae/skills/quant-math-spec/SKILL.md) 检查清单本轮结果：
 
 | 类别 | 结论 |
 |------|------|

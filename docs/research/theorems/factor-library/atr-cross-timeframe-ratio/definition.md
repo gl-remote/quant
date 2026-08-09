@@ -4,10 +4,10 @@
 > 日期：2026-08-07
 > 状态：已归档（描述性/风险因子，不是独立 alpha）
 > 适用：商品期货 1h/15m；可扩展到 5m/1h、1h/日线
-> 原始研究：[workbench/atr-timeframe-ratio/](../../../../docs/research/workbench/atr-timeframe-ratio/)
->   - [quadrant-profile.md](../../../../docs/research/workbench/atr-timeframe-ratio/quadrant-profile.md)
->   - [transition-paths.md](../../../../docs/research/workbench/atr-timeframe-ratio/transition-paths.md)
->   - [archive/h_only_signal_research/](../../../../docs/research/workbench/atr-timeframe-ratio/archive/h_only_signal_research/)（证伪记录）
+> 原始研究：[archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/)
+>   - [quadrant-profile.md](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/quadrant-profile.md)
+>   - [transition-paths.md](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/transition-paths.md)
+>   - [archive/h_only_signal_research/](../../../archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/archive/h_only_signal_research/)（证伪记录）
 >
 > 本文件只承载可直接编码的数学定义。证据数字见 `evidence.md`，失效条件见 `boundary.md`。
 
@@ -143,10 +143,10 @@ $$
 
 | 组件 | 脚本 |
 |---|---|
-| 因子计算（15m/1h） | `workbench/atr-timeframe-ratio/scripts/profile_quadrants_full.py` |
-| 5m/15m/1h 多周期对比 | `workbench/atr-timeframe-ratio/scripts/compare_5m_15m.py` |
-| F 组跨期限结构 | `workbench/atr-timeframe-ratio/scripts/term_structure.py` |
-| 路径识别 | `workbench/atr-timeframe-ratio/scripts/transition_paths.py` |
-| 熊市数据下载 | `workbench/atr-timeframe-ratio/scripts/fetch_bear_market.py` |
+| 因子计算（15m/1h） | `archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/scripts/profile_quadrants_full.py` |
+| 5m/15m/1h 多周期对比 | `archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/scripts/compare_5m_15m.py` |
+| F 组跨期限结构 | `archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/scripts/term_structure.py` |
+| 路径识别 | `archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/scripts/transition_paths.py` |
+| 熊市数据下载 | `archived-notes/2026/08/2026-08-07-atr-cross-timeframe-ratio/atr-timeframe-ratio/scripts/fetch_bear_market.py` |
 
 输入数据：TQSDK 商品期货 1h/15m K 线 CSV，列 `datetime, open, high, low, close, volume, open_oi`。
